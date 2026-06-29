@@ -43,6 +43,12 @@ const BODY = 'var(--font-quicksand), var(--font-dm-sans), system-ui, sans-serif'
 
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
 const priceOf = (p: any) => (p.isPromo && p.promoPrice ? p.promoPrice : p.price);
+// Precio "Desde" para productos con variantes: menor precio de variante > 0; si no
+// hay variantes con precio, cae al precio base (evita mostrar "Desde $0").
+const priceFrom = (p: any): { value: number; from: boolean } => {
+  const vs = (p.variants || []).map((v: any) => Number(v.price)).filter((n: number) => n > 0);
+  return vs.length ? { value: Math.min(...vs), from: true } : { value: priceOf(p), from: false };
+};
 
 // La portada (hero) se sube a 1600px (mode=hero); servimos f_auto/q_auto sin
 // recortar. URLs ajenas a Cloudinary se devuelven intactas.
@@ -80,6 +86,7 @@ const isShippingCat = (name?: string | null) => !!name && /env[ií]o/i.test(name
 type Info = {
   id: string; name: string; slug: string; logo: string | null; hasWebStore: boolean;
   whatsappNumber: string | null; minOrderAmount?: number; estimatedDelivery?: number;
+  isOpen?: boolean;
   onlinePayment?: boolean; delivery?: DeliveryConfig; heroImageUrl?: string | null;
   themeConfig: { theme?: string; primaryColor?: string } | null;
 };
@@ -340,6 +347,17 @@ function Header({ info, accent, waNumber, quantity, total, query, setQuery, orde
           ) : <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 font-extrabold text-white" style={{ background: accent, fontFamily: DISP }}>{info.name.trim().charAt(0)}</div>}
           <h1 className="text-[20px] leading-none truncate" style={{ fontFamily: DISP, fontWeight: 800, color: INK }}>{info.name?.trim() || 'Mi Tienda'}</h1>
 
+          {/* Estado de la tienda. Solo se monta el tema cuando está abierta
+              (page.tsx corta en isOpen===false), así que el chip siempre dice
+              "Abierto"; el tiempo es de ENTREGA, solo aplica en modo DELIVERY. */}
+          {info.isOpen !== false && (
+            <span className="flex items-center gap-1.5 shrink-0 px-2.5 h-7 rounded-full text-[11px] font-bold" style={{ background: '#16a34a14', color: '#15803d', border: '1px solid #16a34a40' }}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#16a34a' }} />
+              Abierto
+              {orderMode === 'DELIVERY' && info.estimatedDelivery ? <span className="hidden sm:inline font-semibold opacity-80">· ~{info.estimatedDelivery} min</span> : null}
+            </span>
+          )}
+
           {/* Buscador (desktop) */}
           <div className="hidden md:flex items-center gap-2 px-4 h-11 rounded-full flex-1 max-w-md ml-2" style={{ background: '#fff', border: `1.5px solid ${CARD_BD}` }}>
             <Search className="w-4 h-4 shrink-0" style={{ color: FAINT }} />
@@ -532,6 +550,7 @@ function ProductCard({ p, accent, onOpen }: { p: any; accent: string; onOpen: ()
   const remove = useCart(s => s.remove);
   const line = lines.find(l => l.id === p.id);
   const price = priceOf(p);
+  const pf = priceFrom(p);
 
   return (
     <article className="group relative rounded-[26px] p-3 flex flex-col transition-all hover:-translate-y-1" style={{ background: CREAM, border: `1px solid ${CARD_BD}`, boxShadow: '0 10px 26px rgba(123,79,214,0.10)' }}>
@@ -554,10 +573,12 @@ function ProductCard({ p, accent, onOpen }: { p: any; accent: string; onOpen: ()
 
       <div className="mt-auto pt-3 flex items-end justify-between gap-2">
         <div className="flex flex-col leading-none min-w-0">
-          {p.isPromo && <span className="text-[10px] line-through font-bold" style={{ color: FAINT }}>{fmt(p.price)}</span>}
-          <span className="font-extrabold text-[18px]" style={{ color: PINK, fontFamily: DISP }}>{fmt(price)}</span>
+          {pf.from
+            ? <span className="text-[9px] font-bold uppercase tracking-wide leading-none mb-0.5" style={{ color: FAINT }}>Desde</span>
+            : (p.isPromo && <span className="text-[10px] line-through font-bold" style={{ color: FAINT }}>{fmt(p.price)}</span>)}
+          <span className="font-extrabold text-[18px]" style={{ color: PINK, fontFamily: DISP }}>{fmt(pf.value)}</span>
         </div>
-        {line ? (
+        {line && !needsModal(p) ? (
           <div className="flex items-center gap-1 rounded-full px-1 py-1 shrink-0" style={{ background: LAV_SOFT, border: `1px solid ${CARD_BD}` }}>
             <button onClick={() => remove(p.id)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: '#fff', color: INK2 }} aria-label="Quitar">
               {line.quantity > 1 ? <Minus className="w-3.5 h-3.5" /> : <Trash2 className="w-3.5 h-3.5" />}
