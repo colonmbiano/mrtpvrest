@@ -34,32 +34,43 @@ async function generateDueRecurring({ restaurantId = null, now = new Date() } = 
 
   let generated = 0;
   for (const t of due) {
-    const next = advanceDue(t.nextDueAt, t.frequency, t.dayOfMonth);
-    // Idempotente: el WHERE condicional sobre nextDueAt evita doble generacion
-    // si el cron y un disparo manual coinciden.
-    const ok = await prisma.$transaction(async (tx) => {
-      const upd = await tx.recurringExpense.updateMany({
-        where: { id: t.id, nextDueAt: t.nextDueAt },
-        data: { nextDueAt: next, lastGeneratedAt: now },
+    // Aislamiento de fallas: una plantilla corrupta (locationId null, FK
+    // colgante en categoria/proveedor, etc.) NO debe abortar la corrida del
+    // resto de tenants. Se loguea y se continua.
+    try {
+      if (!t.locationId) {
+        console.warn(`[recurring] plantilla ${t.id} (rest ${t.restaurantId}) sin locationId; omitida`);
+        continue;
+      }
+      const next = advanceDue(t.nextDueAt, t.frequency, t.dayOfMonth);
+      // Idempotente: el WHERE condicional sobre nextDueAt evita doble generacion
+      // si el cron y un disparo manual coinciden.
+      const ok = await prisma.$transaction(async (tx) => {
+        const upd = await tx.recurringExpense.updateMany({
+          where: { id: t.id, nextDueAt: t.nextDueAt },
+          data: { nextDueAt: next, lastGeneratedAt: now },
+        });
+        if (upd.count === 0) return false;
+        await tx.operatingExpense.create({
+          data: {
+            restaurantId: t.restaurantId,
+            locationId: t.locationId,
+            categoryId: t.categoryId || null,
+            supplierId: t.supplierId || null,
+            concept: t.concept,
+            amount: t.amount,
+            paymentMethod: 'TRANSFER',     // intencion; se define al liquidar
+            settlementStatus: 'PENDING',
+            dueDate: t.nextDueAt,
+            notes: 'Generado de gasto recurrente',
+          },
+        });
+        return true;
       });
-      if (upd.count === 0) return false;
-      await tx.operatingExpense.create({
-        data: {
-          restaurantId: t.restaurantId,
-          locationId: t.locationId,
-          categoryId: t.categoryId || null,
-          supplierId: t.supplierId || null,
-          concept: t.concept,
-          amount: t.amount,
-          paymentMethod: 'TRANSFER',     // intencion; se define al liquidar
-          settlementStatus: 'PENDING',
-          dueDate: t.nextDueAt,
-          notes: 'Generado de gasto recurrente',
-        },
-      });
-      return true;
-    });
-    if (ok) generated++;
+      if (ok) generated++;
+    } catch (e) {
+      console.error(`[recurring] error en plantilla ${t.id} (rest ${t.restaurantId}):`, e.message);
+    }
   }
   return { generated, scanned: due.length };
 }

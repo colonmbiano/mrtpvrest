@@ -48,6 +48,14 @@ export function GastoScreen({ onBack, onSave }: GastoScreenProps) {
   const [desc, setDesc]   = useState('');
   // Gasto a crédito: NO baja tu corte; queda como cuenta por pagar del negocio.
   const [pending, setPending] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (saving || !amount || !cat) return;
+    setSaving(true);
+    try { await onSave(cat, amount, desc, pending); }
+    finally { setSaving(false); }
+  };
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: C.fontBody }}>
@@ -176,15 +184,15 @@ export function GastoScreen({ onBack, onSave }: GastoScreenProps) {
 
         {/* Guardar */}
         <button
-          onClick={() => amount && cat && onSave(cat, amount, desc, pending)}
-          disabled={!amount || !cat}
+          onClick={handleSave}
+          disabled={!amount || !cat || saving}
           style={{
             ...S.btnPrimary,
-            background: (amount && cat) ? C.amber : C.amberSoft,
-            color: (amount && cat) ? '#090909' : 'rgba(255,184,77,0.35)',
-            boxShadow: (amount && cat) ? '0 16px 48px rgba(255,184,77,0.28)' : 'none',
+            background: (amount && cat && !saving) ? C.amber : C.amberSoft,
+            color: (amount && cat && !saving) ? '#090909' : 'rgba(255,184,77,0.35)',
+            boxShadow: (amount && cat && !saving) ? '0 16px 48px rgba(255,184,77,0.28)' : 'none',
           }}
-        >{!cat ? 'ELIGE UNA CATEGORÍA' : 'GUARDAR MOVIMIENTO'}</button>
+        >{saving ? 'GUARDANDO…' : !cat ? 'ELIGE UNA CATEGORÍA' : 'GUARDAR MOVIMIENTO'}</button>
       </div>
     </div>
   );

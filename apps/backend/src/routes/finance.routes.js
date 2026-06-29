@@ -824,8 +824,11 @@ router.get('/cost-vs-purchases', async (req, res) => {
 
     // Compras de repartidor (categoría COMPRAS). DriverCashMovement no tiene
     // restaurantId: acotamos por los repartidores del restaurant/sucursal.
+    // location: { restaurantId } SIEMPRE presente (no o-exclusivo): un locationId
+    // de otro tenant no debe abrir esta consulta cross-tenant. Employee no está
+    // en SCOPED_MODELS, así que el guard no re-scopea aquí.
     const drivers = await prisma.employee.findMany({
-      where: { role: 'DELIVERY', ...(locationId ? { locationId } : { location: { restaurantId } }) },
+      where: { role: 'DELIVERY', location: { restaurantId }, ...(locationId ? { locationId } : {}) },
       select: { id: true },
     })
     const driverIds = drivers.map((d) => d.id)

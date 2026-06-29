@@ -209,7 +209,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
 
   async function handleAddMovement(e: React.FormEvent) {
     e.preventDefault();
-    if (!driver || !amount || isNaN(Number(amount))) return;
+    if (!driver || !(Number(amount) > 0)) { alert("Monto inválido"); return; }
     if (!category) { alert("Selecciona una categoría"); return; }
 
     try {
@@ -227,8 +227,9 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
       setPendingDebt(false);
       fetchMovements();
       onRefresh();
-    } catch {
-      alert("Error al registrar movimiento");
+    } catch (err: unknown) {
+      const e2 = err as { response?: { data?: { error?: string } } };
+      alert(e2?.response?.data?.error || "Error al registrar movimiento");
     } finally {
       setAdding(false);
     }
