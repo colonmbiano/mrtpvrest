@@ -1,0 +1,19 @@
+{
+  "name": "@mrtpvrest/gsc-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Servidor MCP para Google Search Console: propiedades, rendimiento, sitemaps e inspeccion de URLs.",
+  "bin": {
+    "gsc-mcp": "src/server.js"
+  },
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "googleapis": "^165.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,5 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
+const otaDisabled = process.env.CAPACITOR_OTA_DISABLED === 'true';
+
 const config: CapacitorConfig = {
   appId: 'com.mrtpvrest.kiosk',
   appName: 'MRTPV Kiosk',
@@ -15,6 +17,14 @@ const config: CapacitorConfig = {
   plugins: {
     CapacitorHttp: {
       enabled: true,
+    },
+    CapacitorUpdater: {
+      autoUpdate: !otaDisabled,
+      updateUrl: 'https://api.mrtpvrest.com/api/ota/check',
+      defaultChannel: 'production',
+      directUpdate: false,
+      resetWhenUpdate: true,
+      allowModifyUrl: false,
     },
   },
 };

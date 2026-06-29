@@ -1,0 +1,111 @@
+name: Meseros Lite OTA Release
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/meseros-lite/**'
+      - 'packages/config/**'
+      - 'packages/types/**'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel
+        type: choice
+        options: [production, beta, dev]
+        default: production
+      notes:
+        description: Release notes (optional)
+        required: false
+
+concurrency:
+  group: meseros-lite-ota-release-${{ github.event.inputs.channel || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build + publish OTA bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 9.15.0
+          run_install: false
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Compute version
+        id: ver
+        run: |
+          MAJOR_MINOR=$(node -p "require('./apps/meseros-lite/package.json').version.split('.').slice(0,2).join('.')")
+          PATCH=$(git rev-list --count HEAD -- apps/meseros-lite/)
+          VERSION="${MAJOR_MINOR}.${PATCH}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "::notice::Meseros Lite OTA version=$VERSION"
+
+      - name: Build Meseros Lite
+        env:
+          CAPACITOR_BUILD: 'true'
+          NEXT_PUBLIC_API_URL: https://api.mrtpvrest.com
+        run: pnpm --filter @mrtpvrest/meseros-lite build
+
+      - name: Zip out/
+        run: |
+          cd apps/meseros-lite
+          zip -qr /tmp/bundle.zip out/
+          ls -lh /tmp/bundle.zip
+
+      - name: Resolve channel and notes
+        id: meta
+        run: |
+          CHANNEL="${{ github.event.inputs.channel }}"
+          [ -z "$CHANNEL" ] && CHANNEL="production"
+          NOTES="${{ github.event.inputs.notes }}"
+          [ -z "$NOTES" ] && NOTES=$(git log -1 --pretty=%s)
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to /api/ota/publish
+        env:
+          OTA_PUBLISH_TOKEN: ${{ secrets.OTA_PUBLISH_TOKEN }}
+          OTA_BUILD_SECRET: ${{ secrets.OTA_BUILD_SECRET }}
+        run: |
+          set -o pipefail
+          if [ -n "$OTA_PUBLISH_TOKEN" ]; then
+            HEADER_NAME="Authorization"
+            HEADER_VALUE="Bearer $OTA_PUBLISH_TOKEN"
+          elif [ -n "$OTA_BUILD_SECRET" ]; then
+            HEADER_NAME="X-OTA-Build-Token"
+            HEADER_VALUE="$OTA_BUILD_SECRET"
+          else
+            echo "::error::Missing OTA_PUBLISH_TOKEN or OTA_BUILD_SECRET."
+            exit 1
+          fi
+          curl -fsSL -X POST https://api.mrtpvrest.com/api/ota/publish \
+            -H "$HEADER_NAME: $HEADER_VALUE" \
+            -F "appId=com.mrtpvrest.meseroslite" \
+            -F "version=${{ steps.ver.outputs.version }}" \
+            -F "channel=${{ steps.meta.outputs.channel }}" \
+            --form-string "notes=${{ steps.meta.outputs.notes }}" \
+            -F "bundle=@/tmp/bundle.zip" \
+            | tee /tmp/publish.json
+          echo "::notice::Published v${{ steps.ver.outputs.version }} on ${{ steps.meta.outputs.channel }}"

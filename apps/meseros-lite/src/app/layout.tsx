@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Schibsted_Grotesk, Onest, DM_Mono } from "next/font/google";
 import OfflineSyncInitializer from "@/components/OfflineSyncInitializer";
+import OtaUpdater from "@/components/OtaUpdater";
 import PrinterConfigInitializer from "@/components/PrinterConfigInitializer";
 import SessionGate from "@/components/SessionGate";
 import "./globals.css";
@@ -59,6 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es" className={`${schibsted.variable} ${onest.variable} ${dmMono.variable}`}>
       <body className="min-h-screen overflow-hidden bg-[var(--bg)] font-sans text-[var(--text-primary)]">
         <script dangerouslySetInnerHTML={{__html: NUMBER_WHEEL_GUARD_SCRIPT}} />
+        <OtaUpdater />
         <OfflineSyncInitializer />
         <PrinterConfigInitializer />
         <SessionGate>{children}</SessionGate>
