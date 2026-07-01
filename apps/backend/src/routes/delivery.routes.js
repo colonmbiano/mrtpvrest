@@ -203,6 +203,23 @@ router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_RO
   } catch (e) { console.error('PUT /delivery/assign:', e); res.status(500).json({ error: 'Error interno' }); }
 });
 
+router.put('/unassign', authenticate, requireTenantAccess, requireRole(...STAFF_ROLES), async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const order = await prisma.order.update({
+      where: { id: orderId, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
+      data: { deliveryDriverId: null, status: 'READY' },
+      include: { items: { include: { menuItem: true } }, user: true },
+    });
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
+    }
+    res.json(order);
+  } catch (e) { console.error('PUT /delivery/unassign:', e); res.status(500).json({ error: 'Error interno' }); }
+});
+
 router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAccess, async (req, res) => {
   try {
     const driver = await assertDriverAccess(req, res);
