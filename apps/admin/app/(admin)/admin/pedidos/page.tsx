@@ -65,10 +65,11 @@ function timeAgo(date: string) {
 }
 
 /* ── order card ──────────────────────────────────────────────────── */
-function OrderCard({ order, drivers, onStatusChange, onAssignDriver }: {
+function OrderCard({ order, drivers, onStatusChange, onAssignDriver, onUnassignDriver }: {
   order: Order; drivers: Driver[];
   onStatusChange: (id: string, status: string) => void;
   onAssignDriver: (orderId: string, driverId: string) => void;
+  onUnassignDriver: (orderId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const meta = STATUS_META[order.status];
@@ -140,15 +141,28 @@ function OrderCard({ order, drivers, onStatusChange, onAssignDriver }: {
           {order.orderType === "DELIVERY" && ["READY", "ON_THE_WAY"].includes(order.status) && (
             <div className="mt-1">
               <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Repartidor</div>
-              <select
-                value={order.deliveryDriverId || ""}
-                onChange={(e) => { if (e.target.value) onAssignDriver(order.id, e.target.value); }}
-                className="w-full rounded-xl px-3 py-2 text-xs outline-none"
-                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
-              >
-                <option value="">— Seleccionar repartidor —</option>
-                {drivers.map((d) => <option key={d.id} value={d.id}>{d.name} {d.phone ? `(${d.phone})` : ""}</option>)}
-              </select>
+              <div className="flex gap-2">
+                <select
+                  value={order.deliveryDriverId || ""}
+                  onChange={(e) => { if (e.target.value) onAssignDriver(order.id, e.target.value); }}
+                  className="flex-1 rounded-xl px-3 py-2 text-xs outline-none"
+                  style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
+                >
+                  <option value="">— Seleccionar repartidor —</option>
+                  {drivers.map((d) => <option key={d.id} value={d.id}>{d.name} {d.phone ? `(${d.phone})` : ""}</option>)}
+                </select>
+                {order.deliveryDriverId && (
+                  <button
+                    type="button"
+                    onClick={() => onUnassignDriver(order.id)}
+                    aria-label="Desasignar repartidor"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-xl"
+                    style={{ background: "var(--err-soft)", color: "var(--err)" }}
+                  >
+                    <X size={14} strokeWidth={2.4} />
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -272,6 +286,17 @@ export default function PedidosPage() {
     } catch (e) {
       const err = e as { response?: { data?: { error?: string } } };
       alert(err?.response?.data?.error || "Error al asignar repartidor");
+    }
+  }
+
+  async function unassignDriver(orderId: string) {
+    try {
+      await api.put("/api/delivery/unassign", { orderId });
+      setOrders((prev) => prev.map((o) =>
+        o.id === orderId ? { ...o, deliveryDriverId: undefined, status: "READY" } : o));
+    } catch (e) {
+      const err = e as { response?: { data?: { error?: string } } };
+      alert(err?.response?.data?.error || "Error al desasignar repartidor");
     }
   }
 
@@ -402,7 +427,7 @@ export default function PedidosPage() {
                   ) : (
                     colOrders.map((o) => (
                       <OrderCard key={o.id} order={o} drivers={drivers}
-                        onStatusChange={changeStatus} onAssignDriver={assignDriver} />
+                        onStatusChange={changeStatus} onAssignDriver={assignDriver} onUnassignDriver={unassignDriver} />
                     ))
                   )}
                 </div>
@@ -416,7 +441,7 @@ export default function PedidosPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((o) => (
               <OrderCard key={o.id} order={o} drivers={drivers}
-                onStatusChange={changeStatus} onAssignDriver={assignDriver} />
+                onStatusChange={changeStatus} onAssignDriver={assignDriver} onUnassignDriver={unassignDriver} />
             ))}
           </div>
         )}
