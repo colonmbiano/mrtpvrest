@@ -93,3 +93,7 @@ apps/*.pen
 *.pen
 .vercel
 open-design
+
+# Sesión de WhatsApp del bot (whatsapp-web.js) — credenciales, NUNCA commitear
+.wwebjs_auth/
+.wwebjs_cache/
