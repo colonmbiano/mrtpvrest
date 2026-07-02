@@ -69,11 +69,13 @@ async function expandSubRecipeToIngredients(prisma, subRecipeId, qtyRequested, v
 //   5. Expansión recursiva de SubRecipe: si un RecipeItem apunta a una
 //      SubRecipe, se calcula el consumo proporcional de cada ingrediente
 //      hoja (incluyendo nested SubRecipes hasta profundidad 5).
-// resolveRecipeFlatItems · resuelve la receta de un MenuItem (variante embebida
-// en `nameForMatch`, con fallback a la base/legacy) y devuelve la lista plana de
-// ingredientes a consumir POR UNIDAD. Compartido por discountInventory para el
-// header del platillo O para cada componente de un combo — misma lógica.
-async function resolveRecipeFlatItems(prisma, menuItemId, nameForMatch, restaurantId) {
+// resolveRecipeFlatItems · resuelve la receta de un MenuItem (variante en el
+// nombre "Producto (Grande)" y/o en notes "Variantes: X" — se parsea con el
+// helper central lib/parse-variant, con fallback a la base/legacy) y devuelve la
+// lista plana de ingredientes a consumir POR UNIDAD. Compartido por
+// discountInventory para el header del platillo O para cada componente de un
+// combo — misma lógica.
+async function resolveRecipeFlatItems(prisma, menuItemId, nameForMatch, restaurantId, notesForMatch) {
   const recipes = await prisma.recipe.findMany({
     where: { menuItemId, restaurantId, isActive: true },
     select: { id: true, variantId: true, variant: { select: { name: true } } },
@@ -82,9 +84,19 @@ async function resolveRecipeFlatItems(prisma, menuItemId, nameForMatch, restaura
   if (recipes.length > 0) {
     const variantRecipes = recipes.filter((r) => r.variantId && r.variant);
     if (variantRecipes.length > 0) {
-      const nm = (nameForMatch || '').toLowerCase();
-      const match = variantRecipes.find((r) => nm.includes(r.variant.name.toLowerCase()));
       const base = recipes.find((r) => !r.variantId);
+      // 1) Match exacto contra las variantes registradas en la línea (nombre
+      //    "(Grande)" o notes "Variantes: Grande") — cubre el multi-select,
+      //    que solo vive en notes y el includes() legacy nunca casaba.
+      const parsed = parseVariantsFromItem(nameForMatch, notesForMatch).map((v) => v.toLowerCase());
+      let match = parsed.length
+        ? variantRecipes.find((r) => parsed.includes(r.variant.name.toLowerCase()))
+        : null;
+      // 2) Heurística legacy: nombre de la variante contenido en el nombre.
+      if (!match) {
+        const nm = (nameForMatch || '').toLowerCase();
+        match = nm ? variantRecipes.find((r) => nm.includes(r.variant.name.toLowerCase())) : null;
+      }
       chosenRecipeId = (match || base || recipes[0]).id;
     } else {
       chosenRecipeId = recipes[0].id; // solo receta base
@@ -139,7 +151,7 @@ async function discountInventory(prisma, orderItems, orderId, restaurantId, loca
           if (r.recipeIdSnap && !recipeIdSnap) recipeIdSnap = r.recipeIdSnap;
         }
       } else {
-        const r = await resolveRecipeFlatItems(prisma, oi.menuItemId, oi.name, restaurantId);
+        const r = await resolveRecipeFlatItems(prisma, oi.menuItemId, oi.name, restaurantId, oi.notes);
         flatItems.push(...r.flatItems);
         recipeIdSnap = r.recipeIdSnap;
       }
@@ -280,10 +292,10 @@ async function assertStockAvailable(prisma, resolvedItems, restaurantId) {
     // normal: su propia receta (variante embebida en line.name). Misma lógica de
     // receta/subreceta que discountInventory vía resolveRecipeFlatItems.
     const recipeSources = (line._comboSelections && line._comboSelections.length)
-      ? line._comboSelections.map((s) => ({ menuItemId: s.optionMenuItemId, name: '' }))
-      : [{ menuItemId: line.menuItemId, name: line.name }];
+      ? line._comboSelections.map((s) => ({ menuItemId: s.optionMenuItemId, name: '', notes: '' }))
+      : [{ menuItemId: line.menuItemId, name: line.name, notes: line.notes }];
     for (const src of recipeSources) {
-      const { flatItems } = await resolveRecipeFlatItems(prisma, src.menuItemId, src.name, restaurantId);
+      const { flatItems } = await resolveRecipeFlatItems(prisma, src.menuItemId, src.name, restaurantId, src.notes);
       for (const fi of flatItems) addNeed(fi.ingredient, fi.qtyToConsumePerUnit * multiplier);
     }
 
@@ -385,6 +397,7 @@ const { requireActiveShift } = require('../middleware/shift.middleware');
 const { validateBody } = require('../lib/validate');
 const { resolveVariantSelection, resolveComboSelection, applyFreeModifiers, computeOrderTotals, computeEmployeeDiscount, normalizeTenders, round2 } = require('../lib/money');
 const { canTransition } = require('../lib/order-status');
+const { parseVariantsFromItem } = require('../lib/parse-variant');
 const { requireModule, MODULES } = require('../lib/modules');
 const { computeBulkPromoDiscount, loadActiveBulkPromos } = require('../lib/bulk-promo');
 const { nextOrderNumber } = require('../lib/order-number');
@@ -2832,3 +2845,4 @@ module.exports = router;
 // Exportar discountInventory para tests E2E sin levantar el servidor HTTP.
 module.exports.discountInventory = discountInventory;
 module.exports.restoreInventoryForCancelledOrder = restoreInventoryForCancelledOrder;
+module.exports.resolveRecipeFlatItems = resolveRecipeFlatItems;
