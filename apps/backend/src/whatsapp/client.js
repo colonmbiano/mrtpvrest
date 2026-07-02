@@ -170,7 +170,9 @@ function initWhatsApp(io) {
     }
 
     // Procesar con Gemini
+    console.log(`[WhatsApp Bot] Procesando con Gemini (phone=${phone}, invalid=${isInvalidPhone}, tenant=${restaurant.id})...`);
     const geminiResponse = await processWhatsAppMessage(phone, messageText, restaurant.id, history, activeOrderId, isInvalidPhone);
+    console.log(`[WhatsApp Bot] Gemini status=${geminiResponse?.status}, reply=${!!geminiResponse?.replyMessage}`);
 
     // Actualizar historial localmente
     history.push({ role: 'user', text: messageText });
@@ -185,8 +187,16 @@ function initWhatsApp(io) {
     }
 
     // Enviar respuesta al cliente (sanitizada: nunca exponer IDs internos).
+    // sendMessage (no msg.reply) es más robusto con chats @lid; awaited y con
+    // captura de error para no tragarnos fallos de envío silenciosamente.
     if (geminiResponse.replyMessage) {
-      msg.reply(sanitizeReply(geminiResponse.replyMessage));
+      const out = sanitizeReply(geminiResponse.replyMessage);
+      try {
+        await whatsappClient.sendMessage(msg.from, out);
+        console.log(`[WhatsApp Bot] Respuesta enviada a ${msg.from}`);
+      } catch (err) {
+        console.error('[WhatsApp Bot] Error enviando respuesta:', err?.message || err);
+      }
     }
 
     // Si el JSON indica que se confirmó un pedido, lo procesamos
