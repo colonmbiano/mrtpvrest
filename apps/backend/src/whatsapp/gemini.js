@@ -1,7 +1,27 @@
 const axios = require('axios');
 const { prisma } = require('@mrtpvrest/database');
+// Estado abierto/cerrado: misma fuente de verdad que el storefront y el
+// endpoint POST /api/store/orders (que rechaza pedidos con tienda cerrada).
+const { computeOpenState } = require('../utils/storeHours');
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+
+const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+
+// Convierte el JSON businessHours (una franja por día) a texto legible para el
+// prompt. Agrupa nada: una línea por día habilitado. Silencioso si no parsea.
+function formatBusinessHours(businessHoursJson) {
+  try {
+    const arr = JSON.parse(businessHoursJson || '[]');
+    if (!Array.isArray(arr) || arr.length === 0) return '';
+    const lines = arr
+      .filter(d => d && d.enabled && d.open && d.close)
+      .map(d => `${DIAS[d.day] || `día ${d.day}`}: ${d.open}–${d.close}`);
+    return lines.join('; ');
+  } catch {
+    return '';
+  }
+}
 
 /**
  * Handles the conversation with Gemini directly via Axios.
@@ -17,6 +37,18 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
         modifierGroups: { include: { modifiers: true } }
       }
     });
+
+    // Identidad + contexto del negocio (multi-tenant: sale de la BD, NO
+    // hardcodeado). Da calidez y datos reales (dirección, horario, envío) sin
+    // desfasarse cuando el admin los cambia.
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { name: true },
+    });
+    const config = await prisma.restaurantConfig.findUnique({ where: { restaurantId } });
+    const openState = config ? computeOpenState(config) : { isOpen: true, message: '' };
+    const businessName = restaurant?.name || 'nuestro restaurante';
+    const horarioTexto = config ? formatBusinessHours(config.businessHours) : '';
 
     // Determinar qué día es hoy en México
     const todayStr = new Date().toLocaleString('es-MX', { weekday: 'long', timeZone: 'America/Mexico_City' }).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -54,9 +86,21 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
     }).join('\n\n');
 
     const systemPrompt = `
-      Eres un amable mesero virtual para el restaurante. Tu objetivo es tomar el pedido del cliente por WhatsApp y lograr la mejor conversión de ventas.
+      Eres el asistente virtual de ${businessName}, atendiendo por WhatsApp. Tu objetivo es dar una atención cálida y tomar el pedido del cliente logrando la mejor conversión de ventas.
+
+      ## Contexto del negocio (úsalo para responder dudas; NO lo repitas entero a menos que lo pregunten)
+      - Nombre: ${businessName}
+      ${config?.address ? `- Dirección: ${config.address}` : ''}
+      ${(config?.whatsappNumber || config?.phone) ? `- Teléfono: ${config.whatsappNumber || config.phone}` : ''}
+      ${horarioTexto ? `- Horario: ${horarioTexto}` : ''}
+      - Estado ahora mismo: ${openState.isOpen ? 'ABIERTO ✅' : 'CERRADO ⛔'}${!openState.isOpen && openState.message ? ` (${openState.message})` : ''}
+      - Tiempo estimado de entrega: ~${config?.estimatedDelivery || 40} minutos.
+      - Formas de pago: efectivo, tarjeta o transferencia (si hay duda de pago, dile que un asesor lo confirma).
+      - Un asesor humano confirma el pedido y el tiempo de entrega.
+
       Reglas:
-      1. Sé cordial, persuasivo, conciso y directo.
+      1. TONO empático y cálido: saluda con calidez ("¡Qué gusto saludarte!", "Con mucho gusto te ayudo"), muestra interés genuino y usa emojis con MODERACIÓN (🍔🌮🥤). Cercano pero respetuoso, conciso y directo.
+      ${!openState.isOpen ? '1b. ESTAMOS CERRADOS AHORA MISMO: NO confirmes pedidos (nunca uses "CONFIRMED"). Informa amablemente el horario e invita al cliente a ordenar cuando abramos. Usa "CONVERSING".' : ''}
       2. Si el cliente pide el menú, muéstrale los platos disponibles. IMPORTANTE: ¡NUNCA muestres los [ID: ...], [variantId: ...] ni [modifierId: ...] al cliente en el texto! Esos IDs son exclusivamente para tu uso interno en el JSON final.
       3. TÉCNICAS DE VENTA (UPSELLING): Antes de confirmar el pedido, sugiere amablemente algún complemento, bebida o postre que combine con lo que el cliente pidió (ej. "¿Te gustaría agregar papas o un refresco a tu orden?").
       4. TOMA DE DATOS OBLIGATORIA: Antes de confirmar la orden, debes preguntarle al cliente:
