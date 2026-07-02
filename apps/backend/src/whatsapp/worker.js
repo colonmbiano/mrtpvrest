@@ -25,7 +25,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { initWhatsApp, getWhatsAppClient, getLatestQr, getIgnoredGroupInfo, refreshIgnoredGroup } = require('./client');
+const { initWhatsApp, getWhatsAppClient, getLatestQr, getSessionState, getIgnoredGroupInfo, refreshIgnoredGroup } = require('./client');
 
 // Al correr con volumen persistente, Chromium deja archivos Singleton* (lock del
 // perfil) en el userDataDir dentro del volumen. Como cada deploy es un contenedor
@@ -97,12 +97,31 @@ const healthServer = http.createServer((req, res) => {
     return res.end(qrPageHtml());
   }
   if (url === '/healthz') {
+    // Healthcheck de DEPLOY de Railway: 200 mientras el PROCESO viva (no acopla
+    // la salud de la SESIÓN, para no romper la fase QR del primer deploy).
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     return res.end('ok');
   }
+  if (url === '/livez') {
+    // LIVENESS de la SESIÓN para monitoreo EXTERNO (UptimeRobot). 200 solo si el
+    // bot está operando; 503 si necesita atención (esperando QR / sesión perdida).
+    // Configura UptimeRobot con confirmación tras varios fallos para no alertar
+    // por el boot inicial.
+    const state = getSessionState();
+    const ok = state === 'ready';
+    res.writeHead(ok ? 200 : 503, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ ok, state }));
+  }
   // Diagnóstico del grupo ignorado: cuántos miembros detectó + una muestra.
-  // ?refresh=1 fuerza una recarga del grupo antes de responder.
+  // GATEADO por token (expone teléfonos del staff). Requiere ?token= que iguale
+  // WHATSAPP_BOT_DEBUG_TOKEN; sin la env, el endpoint queda deshabilitado.
   if (url === '/debug/ignore-group') {
+    const token = process.env.WHATSAPP_BOT_DEBUG_TOKEN;
+    const given = new URLSearchParams((req.url || '').split('?')[1] || '').get('token');
+    if (!token || given !== token) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'forbidden', hint: 'set WHATSAPP_BOT_DEBUG_TOKEN y pasa ?token=' }));
+    }
     const doRespond = () => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(getIgnoredGroupInfo(), null, 2));
