@@ -1,0 +1,50 @@
+FROM node:22
+
+WORKDIR /app
+
+# Chromium del sistema + librerías que puppeteer/whatsapp-web.js necesitan.
+# Usamos el Chromium de Debian (no el bundled de puppeteer) → build más liviano
+# y estable en contenedor. node:22 = Debian bookworm (paquete `chromium`).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    fonts-liberation \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdrm2 \
+    libgbm1 \
+    libasound2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libxshmfence1 \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# No descargar el Chromium bundled de puppeteer (usamos el del sistema).
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+# pnpm
+RUN npm install -g pnpm@9.15.0
+
+# Copiar el monorepo (contexto = raíz del repo, igual que el Dockerfile del API)
+COPY . .
+
+# Eliminar node_modules de Windows si se coló
+RUN rm -rf node_modules apps/backend/node_modules packages/database/node_modules
+
+# Instalar dependencias
+RUN pnpm install --no-frozen-lockfile
+
+# Generar cliente de Prisma (el worker consulta la BD directamente)
+RUN pnpm --filter @mrtpvrest/database exec prisma generate
+
+# Puerto del health/QR server (Railway inyecta PORT; 3005 por defecto)
+EXPOSE 3005
+
+# El worker NO corre migraciones: de eso se encarga el servicio API. Solo
+# levanta el bot + el servidor de salud/QR.
+CMD ["node", "apps/backend/src/whatsapp/worker.js"]

@@ -6,6 +6,11 @@ const { prisma } = require('@mrtpvrest/database');
 
 let whatsappClient = null;
 
+// Último QR emitido (string). Lo usa el worker de Railway para exponerlo en un
+// endpoint HTTP y poder escanearlo sin depender de los logs. Se limpia al
+// conectar ('ready') o al autenticar.
+let latestQr = null;
+
 // Mapa para guardar el historial corto de conversaciones por número
 // Formato: { "5215551234567": [ { role: "user", text: "hola" }, { role: "model", text: "Hola soy el mesero" } ] }
 const chatHistory = new Map();
@@ -30,28 +35,53 @@ function initWhatsApp(io) {
   console.log('[WhatsApp Bot] Inicializando cliente...');
 
   whatsappClient = new Client({
-    authStrategy: new LocalAuth({ clientId: "mrtpvrest-bot" }),
+    // dataPath: en el worker de Railway apunta a un VOLUMEN persistente
+    // (WWEBJS_DATA_PATH, p.ej. /data) para que la sesión sobreviva a los
+    // redeploys y no haya que re-escanear el QR. Sin la env, LocalAuth usa el
+    // cwd (comportamiento local de siempre).
+    authStrategy: new LocalAuth({
+      clientId: "mrtpvrest-bot",
+      ...(process.env.WWEBJS_DATA_PATH ? { dataPath: process.env.WWEBJS_DATA_PATH } : {}),
+    }),
     puppeteer: {
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    }
+      // executablePath: en contenedor usamos el Chromium del sistema
+      // (PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium) en vez del bundled.
+      ...(process.env.PUPPETEER_EXECUTABLE_PATH ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH } : {}),
+      // Flags container-safe: sin sandbox (root en Docker) y sin /dev/shm
+      // (limitado en contenedores → Chromium crashea sin --disable-dev-shm-usage).
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+      ],
+    },
   });
 
   whatsappClient.on('qr', (qr) => {
+    latestQr = qr;
     console.log('[WhatsApp Bot] Escanea este código QR con tu WhatsApp:');
     qrcode.generate(qr, { small: true });
-    
+
     // Generar un link para verlo en el navegador (útil si la consola lo corta)
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
     console.log('\n[WhatsApp Bot] Si no puedes escanearlo en consola, abre este enlace en tu navegador:');
     console.log(qrUrl, '\n');
-    
+
     // Opcional: Emitir el QR vía socket para mostrarlo en el panel TPV de Admin
     if (io) {
       io.emit('whatsapp:qr', qr);
     }
   });
 
+  whatsappClient.on('authenticated', () => {
+    latestQr = null;
+  });
+
   whatsappClient.on('ready', () => {
+    latestQr = null;
     console.log('[WhatsApp Bot] Cliente WhatsApp listo y conectado!');
     if (io) {
       io.emit('whatsapp:ready');
@@ -172,5 +202,6 @@ function initWhatsApp(io) {
 
 module.exports = {
   initWhatsApp,
-  getWhatsAppClient: () => whatsappClient
+  getWhatsAppClient: () => whatsappClient,
+  getLatestQr: () => latestQr,
 };

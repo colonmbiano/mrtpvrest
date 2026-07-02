@@ -5,6 +5,7 @@
    "scripts": {
       "dev": "nodemon src/index.js",
       "start": "node src/index.js",
+      "bot:worker": "node src/whatsapp/worker.js",
       "build": "prisma generate --schema=../../packages/database/prisma/schema.prisma",
       "db:migrate": "npx prisma migrate dev --schema=../../packages/database/prisma/schema.prisma",
       "db:seed": "node ../../packages/database/prisma/seed.js",

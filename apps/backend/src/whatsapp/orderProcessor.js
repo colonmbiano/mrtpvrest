@@ -12,6 +12,16 @@ const crypto = require('crypto');
 // auditable como el bot.
 const botEmployeeCache = new Map(); // restaurantId → employeeId
 
+// Base del API para crear/editar pedidos. Cuando el bot corre como servicio
+// SEPARADO (worker de Railway) localhost NO apunta al backend: se resuelve por
+// WHATSAPP_BOT_API_BASE (p.ej. https://api.mrtpvrest.com). Si no está seteada
+// (bot dentro del mismo proceso del backend, dev local) cae al localhost del
+// puerto dado. Se le quita el slash final para no generar `//api`.
+function apiBase(port) {
+  const base = process.env.WHATSAPP_BOT_API_BASE;
+  return base ? base.replace(/\/+$/, '') : `http://localhost:${port}`;
+}
+
 async function getBotEmployeeId(restaurantId) {
   const cached = botEmployeeCache.get(restaurantId);
   if (cached) return cached;
@@ -86,8 +96,8 @@ async function createOrderFromGemini(restaurantId, parsedJson, port = 3001) {
       }))
     };
 
-    // Hacer la petición interna al mismo backend
-    const response = await axios.post(`http://localhost:${port}/api/store/orders`, payload, {
+    // Petición al backend (mismo proceso en dev; servicio API en el worker).
+    const response = await axios.post(`${apiBase(port)}/api/store/orders`, payload, {
       headers: {
         'x-restaurant-id': restaurantId
       }
@@ -143,7 +153,7 @@ async function addItemsToOrder(orderId, parsedJson, restaurantId, port = 3001) {
       { expiresIn: '2m' }
     );
 
-    const response = await axios.post(`http://localhost:${port}/api/orders/${orderId}/items`, payload, {
+    const response = await axios.post(`${apiBase(port)}/api/orders/${orderId}/items`, payload, {
       headers: {
         'x-restaurant-id': restaurantId,
         'x-location-id': order.locationId,
