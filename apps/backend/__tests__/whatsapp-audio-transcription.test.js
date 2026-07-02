@@ -3,6 +3,7 @@ const {
   isSupportedAudioMime,
   isAudioMessage,
   mediaFilenameForMime,
+  buildGeminiTranscriptionBody,
   transcribeWhatsAppAudio,
 } = require('../src/whatsapp/audioTranscription');
 
@@ -19,7 +20,19 @@ describe('whatsapp audio transcription helpers', () => {
     expect(isAudioMessage({ type: 'image', _data: { mimetype: 'image/png' } })).toBe(false);
   });
 
-  test('transcribes downloaded media using provided client', async () => {
+  test('builds Gemini content with inline audio data', () => {
+    const body = buildGeminiTranscriptionBody('audio/ogg', 'base64-audio');
+
+    expect(body.contents[0].parts[1]).toEqual({
+      inlineData: {
+        mimeType: 'audio/ogg',
+        data: 'base64-audio',
+      },
+    });
+    expect(body.generationConfig.temperature).toBe(0);
+  });
+
+  test('transcribes downloaded media using provided Gemini client', async () => {
     const msg = {
       type: 'ptt',
       downloadMedia: jest.fn().mockResolvedValue({
@@ -28,21 +41,19 @@ describe('whatsapp audio transcription helpers', () => {
       }),
     };
     const client = {
-      audio: {
-        transcriptions: {
-          create: jest.fn().mockResolvedValue({ text: 'quiero dos tacos y una coca' }),
-        },
-      },
+      generateContent: jest.fn().mockResolvedValue({
+        candidates: [{ content: { parts: [{ text: 'quiero dos tacos y una coca' }] } }],
+      }),
     };
 
     const result = await transcribeWhatsAppAudio(msg, { client, maxBytes: 1024 });
 
     expect(result.ok).toBe(true);
     expect(result.text).toBe('quiero dos tacos y una coca');
-    expect(client.audio.transcriptions.create).toHaveBeenCalledWith(expect.objectContaining({
-      model: 'gpt-4o-mini-transcribe',
-      language: 'es',
-      response_format: 'json',
+    expect(result.provider).toBe('gemini');
+    expect(client.generateContent).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'gemini-2.5-flash',
+      body: expect.objectContaining({ contents: expect.any(Array) }),
     }));
   });
 

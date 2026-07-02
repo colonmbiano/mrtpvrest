@@ -1,8 +1,8 @@
-const OpenAI = require('openai');
-const { toFile } = require('openai');
+const axios = require('axios');
 
-const DEFAULT_MODEL = 'gpt-4o-mini-transcribe';
-const DEFAULT_MAX_BYTES = 24 * 1024 * 1024;
+const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_MAX_BYTES = 14 * 1024 * 1024;
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const AUDIO_TYPES = new Set(['audio', 'ptt', 'voice']);
 const MIME_EXTENSIONS = new Map([
@@ -45,8 +45,57 @@ function resolveMaxBytes() {
   return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_MAX_BYTES;
 }
 
+function buildGeminiTranscriptionBody(mimeType, data) {
+  return {
+    contents: [{
+      role: 'user',
+      parts: [
+        {
+          text: [
+            'Transcribe esta nota de voz de WhatsApp de un cliente de restaurante.',
+            'Devuelve solo el texto transcrito en espanol de Mexico.',
+            'Cuida productos, cantidades, direccion, telefono, referencias y forma de pago.',
+            'No inventes datos que no se escuchan.',
+          ].join(' '),
+        },
+        {
+          inlineData: {
+            mimeType,
+            data,
+          },
+        },
+      ],
+    }],
+    generationConfig: {
+      temperature: 0,
+    },
+  };
+}
+
+function extractGeminiText(payload) {
+  const parts = payload?.candidates?.[0]?.content?.parts || [];
+  return parts
+    .map((part) => part?.text || '')
+    .join('\n')
+    .trim();
+}
+
+async function callGeminiTranscription({ apiKey, model, mimeType, data, client }) {
+  const body = buildGeminiTranscriptionBody(mimeType, data);
+  if (client?.generateContent) {
+    return client.generateContent({ model, body });
+  }
+
+  const url = `${GEMINI_API_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const response = await axios.post(url, body, {
+    headers: { 'Content-Type': 'application/json' },
+    timeout: 45_000,
+  });
+  return response.data;
+}
+
 async function transcribeWhatsAppAudio(msg, options = {}) {
-  const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
+  const apiKey = options.apiKey || process.env.GOOGLE_AI_API_KEY;
   const model = options.model || process.env.WHATSAPP_AUDIO_TRANSCRIPTION_MODEL || DEFAULT_MODEL;
   const maxBytes = options.maxBytes || resolveMaxBytes();
 
@@ -79,25 +128,23 @@ async function transcribeWhatsAppAudio(msg, options = {}) {
   }
 
   if (!apiKey && !options.client) {
-    return { ok: false, code: 'OPENAI_API_KEY_MISSING', text: '', mimeType };
+    return { ok: false, code: 'GOOGLE_AI_API_KEY_MISSING', text: '', mimeType };
   }
 
   try {
-    const client = options.client || new OpenAI({ apiKey });
-    const file = await toFile(buffer, mediaFilenameForMime(mimeType), { type: mimeType });
-    const result = await client.audio.transcriptions.create({
-      file,
+    const result = await callGeminiTranscription({
+      apiKey,
       model,
-      language: 'es',
-      response_format: 'json',
-      prompt: 'Pedido de restaurante en espanol de Mexico. Transcribe productos, cantidades, direccion, telefono y forma de pago con cuidado.',
+      mimeType,
+      data: media.data,
+      client: options.client,
     });
-    const text = String(result?.text || '').trim();
+    const text = extractGeminiText(result);
     return text
-      ? { ok: true, code: 'OK', text, mimeType, model }
-      : { ok: false, code: 'EMPTY_TRANSCRIPT', text: '', mimeType, model };
+      ? { ok: true, code: 'OK', text, mimeType, model, provider: 'gemini' }
+      : { ok: false, code: 'EMPTY_TRANSCRIPT', text: '', mimeType, model, provider: 'gemini' };
   } catch (err) {
-    return { ok: false, code: 'TRANSCRIPTION_FAILED', text: '', mimeType, model, error: err };
+    return { ok: false, code: 'TRANSCRIPTION_FAILED', text: '', mimeType, model, provider: 'gemini', error: err };
   }
 }
 
@@ -108,5 +155,7 @@ module.exports = {
   isSupportedAudioMime,
   isAudioMessage,
   mediaFilenameForMime,
+  buildGeminiTranscriptionBody,
+  extractGeminiText,
   transcribeWhatsAppAudio,
 };
