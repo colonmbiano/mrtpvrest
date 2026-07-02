@@ -1,5 +1,12 @@
 # Chatbot de WhatsApp — Toma de pedidos
 
+> Decision operativa Master Burguers (2026-07): para conservar WhatsApp en el
+> celular, el camino activo del bot es `apps/backend/src/whatsapp` con
+> `whatsapp-web.js` y sesion vinculada por QR. La ruta webhook WHAPI/META de
+> este documento queda como implementacion legado/futura para negocios que si
+> quieran operar por proveedor oficial o Cloud API. No migrar el numero principal
+> de Master Burguers a Cloud API clasica sin aprobacion explicita.
+
 Asistente conversacional que toma pedidos de **delivery** y **pickup** dentro de
 WhatsApp, los crea en el sistema (mismo modelo `Order` que la tienda web y el
 TPV) y los notifica en tiempo real a cocina/admin vía Socket.io.
