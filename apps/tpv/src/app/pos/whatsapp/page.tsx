@@ -175,16 +175,20 @@ export default function WhatsappCapturePage() {
     let cancelled = false;
 
     // Pinta de inmediato la cache si existe (mismo key que el POS principal).
-    try {
-      const cached = localStorage.getItem(CATALOG_CACHE_KEY);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        const items: Product[] = parsed?.items || parsed?.products || [];
-        if (Array.isArray(items) && items.length) setProducts(items);
+    // Arranque diferido (ver impresoras): evita set-state-in-effect.
+    queueMicrotask(() => {
+      if (cancelled) return;
+      try {
+        const cached = localStorage.getItem(CATALOG_CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const items: Product[] = parsed?.items || parsed?.products || [];
+          if (Array.isArray(items) && items.length) setProducts(items);
+        }
+      } catch {
+        /* cache corrupta — ignorar */
       }
-    } catch {
-      /* cache corrupta — ignorar */
-    }
+    });
 
     api
       .get("/api/menu/items?admin=true")
@@ -547,7 +551,7 @@ export default function WhatsappCapturePage() {
             {lines.length === 0 && (
               <div className="rounded-3xl border border-dashed p-8 text-center" style={{ borderColor: "var(--border)" }}>
                 <MessageCircle size={28} className="mx-auto mb-2 text-white/20" />
-                <p className="text-sm font-bold text-white/40">Pega un pedido y toca "Detectar", o agrega productos a mano.</p>
+                <p className="text-sm font-bold text-white/40">Pega un pedido y toca &ldquo;Detectar&rdquo;, o agrega productos a mano.</p>
               </div>
             )}
 
@@ -644,11 +648,16 @@ function LineCard({
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Arranque diferido (ver impresoras): evita set-state-in-effect.
   useEffect(() => {
-    if (pickerOpen) {
+    if (!pickerOpen) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
       setQuery(line.product ? "" : line.productQuery);
       setTimeout(() => inputRef.current?.focus(), 30);
-    }
+    });
+    return () => { cancelled = true; };
   }, [pickerOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const results = useMemo(() => {
