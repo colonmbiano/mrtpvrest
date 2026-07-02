@@ -4,6 +4,37 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
+const MAX_ORDER_ITEMS = 15;
+const MAX_ITEM_QUANTITY = 20;
+
+function normalizeBotItems(items) {
+  return (Array.isArray(items) ? items : [])
+    .filter(item => item && item.menuItemId)
+    .slice(0, MAX_ORDER_ITEMS)
+    .map(item => ({
+      menuItemId: item.menuItemId,
+      variantId: item.variantId || null,
+      quantity: Math.max(1, Math.min(MAX_ITEM_QUANTITY, parseInt(item.quantity, 10) || 1)),
+      modifierIds: Array.isArray(item.modifierIds) ? item.modifierIds : [],
+      notes: item.notes || ''
+    }));
+}
+
+function normalizePaymentMethod(method, orderType = 'DELIVERY') {
+  const value = String(method || '').toUpperCase();
+  if (['TRANSFER', 'SPEI', 'BANK_TRANSFER', 'TRANSFERENCIA'].includes(value)) return 'TRANSFER';
+  if (['CARD', 'CARD_PRESENT', 'TARJETA', 'CREDIT_CARD', 'DEBIT_CARD'].includes(value)) return 'CARD';
+  if (['CASH', 'CASH_ON_DELIVERY', 'EFECTIVO'].includes(value)) {
+    return orderType === 'DELIVERY' ? 'CASH_ON_DELIVERY' : 'CASH';
+  }
+  return orderType === 'DELIVERY' ? 'CASH_ON_DELIVERY' : 'CASH';
+}
+
+function normalizeCustomerPhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  return /^\d{10,14}$/.test(digits) ? digits : null;
+}
+
 // Empleado de servicio del bot, por restaurante. authenticate SIEMPRE resuelve
 // el actor contra la BD (User/Employee por id) — un JWT con id inventado
 // ('whatsapp-bot') da 401 "Sesión no válida". El fix honesto: un Employee REAL
@@ -64,7 +95,8 @@ async function getBotEmployeeId(restaurantId) {
  * Recibe el JSON de Gemini y crea la orden en el TPV
  */
 async function createOrderFromGemini(restaurantId, parsedJson, port = 3001) {
-  if (parsedJson.status !== 'CONFIRMED' || !parsedJson.items || parsedJson.items.length === 0) {
+  const items = normalizeBotItems(parsedJson.items);
+  if (parsedJson.status !== 'CONFIRMED' || items.length === 0) {
     return null;
   }
 
@@ -76,24 +108,19 @@ async function createOrderFromGemini(restaurantId, parsedJson, port = 3001) {
     });
 
     // Formatear el payload para /api/store/orders
+    const orderType = parsedJson.orderType || 'DELIVERY';
     const payload = {
       customerName: parsedJson.customerName || "Cliente WhatsApp",
-      customerPhone: parsedJson.customerPhone,
-      orderType: parsedJson.orderType || 'DELIVERY',
+      customerPhone: normalizeCustomerPhone(parsedJson.customerPhone),
+      orderType,
       deliveryAddress: parsedJson.deliveryAddress || 'Dirección a confirmar por WhatsApp',
       deliveryLat: parsedJson.deliveryLat || null,
       deliveryLng: parsedJson.deliveryLng || null,
       locationId: primaryLocation?.id,
       source: 'WHATSAPP',
-      paymentMethod: 'CASH_ON_DELIVERY',
+      paymentMethod: normalizePaymentMethod(parsedJson.paymentMethod, orderType),
       notes: 'Pedido generado por asistente de IA de WhatsApp',
-      items: parsedJson.items.map(item => ({
-        menuItemId: item.menuItemId,
-        variantId: item.variantId || null,
-        quantity: item.quantity || 1,
-        modifierIds: item.modifierIds || [],
-        notes: item.notes || ''
-      }))
+      items
     };
 
     // Petición al backend (mismo proceso en dev; servicio API en el worker).
@@ -116,7 +143,8 @@ async function createOrderFromGemini(restaurantId, parsedJson, port = 3001) {
  * Agrega platillos a una orden existente
  */
 async function addItemsToOrder(orderId, parsedJson, restaurantId, port = 3001) {
-  if (parsedJson.status !== 'ADD_TO_ORDER' || !parsedJson.items || parsedJson.items.length === 0) {
+  const items = normalizeBotItems(parsedJson.items);
+  if (parsedJson.status !== 'ADD_TO_ORDER' || items.length === 0) {
     return null;
   }
 
@@ -133,15 +161,7 @@ async function addItemsToOrder(orderId, parsedJson, restaurantId, port = 3001) {
       return null;
     }
 
-    const payload = {
-      items: parsedJson.items.map(item => ({
-        menuItemId: item.menuItemId,
-        variantId: item.variantId || null,
-        quantity: item.quantity || 1,
-        modifierIds: item.modifierIds || [],
-        notes: item.notes || ''
-      }))
-    };
+    const payload = { items };
 
     // JWT del empleado de servicio REAL del bot (authenticate lo resuelve en
     // BD; un id inventado daba 401). Rol CASHIER: suficiente para
@@ -171,5 +191,8 @@ async function addItemsToOrder(orderId, parsedJson, restaurantId, port = 3001) {
 
 module.exports = {
   createOrderFromGemini,
-  addItemsToOrder
+  addItemsToOrder,
+  normalizeBotItems,
+  normalizePaymentMethod,
+  normalizeCustomerPhone
 };
