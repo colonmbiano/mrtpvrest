@@ -726,6 +726,63 @@ router.post('/orders', async (req, res) => {
       });
     }
 
+    // ── Dedupe anti doble-submit ────────────────────────────────────────────
+    // El bot de WhatsApp crea la orden cuando Gemini responde status=CONFIRMED;
+    // si el modelo REEMITE CONFIRMED (el cliente responde "sí" y luego "gracias"
+    // y el LLM vuelve a confirmar) se dispararía POST /orders dos veces con el
+    // MISMO carrito → pedido duplicado. Igual el storefront si el cliente pulsa
+    // "Confirmar pedido" varias veces. A diferencia del TPV aquí no hay
+    // clientOrderId, así que dedupeamos por firma EXACTA dentro de una ventana:
+    // mismo restaurante+sucursal+source+tipo+cliente+teléfono+items+subtotal. Se
+    // corre ANTES de la $transaction para no re-consumir cupón/puntos. Dos
+    // pedidos legítimos idénticos del mismo cliente en <30s son, en la práctica,
+    // imposibles de teclear. Ver defensa gemela del TPV en orders.routes.js.
+    const DEDUP_WINDOW_MS = 30_000;
+    const buildStoreItemSig = (its, modsOf) => its
+      .map((it) => {
+        const mods = (modsOf(it) || []).filter(Boolean).sort().join('+');
+        return `${it.menuItemId}:${it.quantity}:${Number(it.price).toFixed(2)}:${mods}`;
+      })
+      .sort()
+      .join('|');
+    // itemsData: los modificadores viven en `.modifiers.create[].modifierId`.
+    const newSig = buildStoreItemSig(itemsData, (it) => (it.modifiers?.create || []).map(m => m.modifierId));
+    const recentCandidates = await prisma.order.findMany({
+      where: {
+        restaurantId: restaurant.id,
+        locationId: resolvedLocationId,
+        source,
+        orderType: resolvedOrderType,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone?.trim() || null,
+        createdAt: { gte: new Date(Date.now() - DEDUP_WINDOW_MS) },
+      },
+      include: { items: { include: { modifiers: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
+    const dup = recentCandidates.find((cand) => {
+      if (Math.abs(Number(cand.subtotal) - subtotal) >= 0.01) return false;
+      const candSig = buildStoreItemSig(cand.items, (it) => (it.modifiers || []).map(m => m.modifierId));
+      return candSig === newSig;
+    });
+    if (dup) {
+      res.setHeader('X-Dedup-Replay', 'true');
+      return res.status(201).json({
+        id:          dup.id,
+        orderNumber: dup.orderNumber,
+        status:      dup.status,
+        total:       dup.total,
+        discount:    dup.discount,
+        pointsUsed:  dup.pointsUsed || 0,
+        pointsDiscount: 0,
+        tip:         dup.tip,
+        estimatedMinutes: dup.estimatedMinutes || 30,
+        couponWarnings: [],
+        deduped: true,
+      });
+    }
+
     // Envío: calculado en el backend (fuente de verdad). Para DELIVERY usa el
     // modo configurado (FLAT o DISTANCE) con las coordenadas del cliente.
     let deliveryFee = 0;
