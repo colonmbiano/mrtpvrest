@@ -89,8 +89,21 @@ function initWhatsApp(io) {
   });
 
   whatsappClient.on('message', async msg => {
-    // Ignorar mensajes de grupos y estados
-    if (msg.from.includes('@g.us') || msg.from === 'status@broadcast') return;
+    // El bot es ESTRICTAMENTE SOLO-RESPONDER: nunca inicia, solo contesta un
+    // mensaje 1-a-1 recibido. Todo lo demás se ignora (reduce el riesgo de
+    // baneo de whatsapp-web.js, que se dispara con actividad no solicitada).
+    //  - fromMe: jamás reaccionar a mensajes propios (evita cualquier bucle).
+    //  - grupos (@g.us), estados (status@broadcast), difusiones (@broadcast) y
+    //    canales/newsletters (@newsletter): no son clientes 1-a-1.
+    if (msg.fromMe) return;
+    if (
+      msg.from.includes('@g.us') ||
+      msg.from === 'status@broadcast' ||
+      msg.from.includes('@broadcast') ||
+      msg.from.includes('@newsletter')
+    ) return;
+    // Solo chats individuales (@c.us). Cualquier otro tipo de remitente se ignora.
+    if (!msg.from.endsWith('@c.us')) return;
 
     // Obtener texto o ubicación
     let messageText = msg.body;

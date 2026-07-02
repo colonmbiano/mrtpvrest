@@ -49,6 +49,10 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
     const openState = config ? computeOpenState(config) : { isOpen: true, message: '' };
     const businessName = restaurant?.name || 'nuestro restaurante';
     const horarioTexto = config ? formatBusinessHours(config.businessHours) : '';
+    // Instrucciones extra AFINABLES sin reconstruir la imagen: se editan en la
+    // variable de entorno del servicio (WHATSAPP_BOT_EXTRA_INSTRUCTIONS) y con
+    // un restart toman efecto. Para ir ajustando tono/políticas en caliente.
+    const extraInstructions = (process.env.WHATSAPP_BOT_EXTRA_INSTRUCTIONS || '').trim();
 
     // Determinar qué día es hoy en México
     const todayStr = new Date().toLocaleString('es-MX', { weekday: 'long', timeZone: 'America/Mexico_City' }).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -153,7 +157,10 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
       
       SIEMPRE responde estrictamente en JSON válido con esa estructura.
       IMPORTANTE: Si escribes texto largo en "replyMessage", usa \\n para los saltos de línea. NUNCA uses saltos de línea reales (enter) dentro de las cadenas de texto del JSON, porque romperás el formato.
-      
+      ${extraInstructions ? `
+      ## Instrucciones adicionales del negocio (prioritarias)
+      ${extraInstructions}
+      ` : ''}
       Menú disponible hoy:
       ${menuString}
     `;
