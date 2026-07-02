@@ -184,6 +184,19 @@ app.use(
 
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ limit: '50mb', extended: true }))
+
+// Decimal de Prisma → number en TODAS las respuestas JSON (Etapa 0 del plan
+// docs/plan-decimal-migration.md): al migrar columnas Float→Decimal el
+// contrato HTTP de los frontends no cambia (siguen recibiendo number).
+// OJO: JSON.stringify llama toJSON() ANTES del replacer (Decimal.toJSON
+// devuelve string), así que hay que mirar el valor CRUDO en this[key].
+app.set('json replacer', function (key, value) {
+  const raw = this ? this[key] : undefined
+  if (raw && typeof raw === 'object' && raw.constructor?.name === 'Decimal') {
+    return Number(raw)
+  }
+  return value
+})
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 
 // Rutas públicas (sin tenantMiddleware)

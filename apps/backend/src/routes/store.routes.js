@@ -761,13 +761,15 @@ router.post('/orders', async (req, res) => {
       } else if (coupon.maxUses && coupon.usedCount >= coupon.maxUses) {
         couponWarnings.push('Cupón agotado, ignorado');
         coupon = null;
-      } else if (subtotal < (coupon.minOrderAmount || 0)) {
-        couponWarnings.push(`Cupón requiere mínimo $${coupon.minOrderAmount}, ignorado`);
+      } else if (subtotal < Number(coupon.minOrderAmount || 0)) {
+        couponWarnings.push(`Cupón requiere mínimo $${Number(coupon.minOrderAmount)}, ignorado`);
         coupon = null;
       } else {
+        // Number(): discountValue/minOrderAmount son Decimal desde la Etapa 1
+        // de la migración Float→Decimal.
         discount = coupon.discountType === 'PERCENTAGE'
-          ? subtotal * (coupon.discountValue / 100)
-          : Math.min(coupon.discountValue, subtotal);
+          ? subtotal * (Number(coupon.discountValue) / 100)
+          : Math.min(Number(coupon.discountValue), subtotal);
         discount = Math.round(discount * 100) / 100;
       }
     }
@@ -1176,12 +1178,13 @@ router.post('/coupon/validate', async (req, res) => {
     if (coupon.maxUses && coupon.usedCount >= coupon.maxUses) {
       return res.status(400).json({ error: 'Cupón agotado' });
     }
-    if (orderAmount < (coupon.minOrderAmount || 0)) {
-      return res.status(400).json({ error: `Compra mínima $${coupon.minOrderAmount || 0}` });
+    if (orderAmount < Number(coupon.minOrderAmount || 0)) {
+      return res.status(400).json({ error: `Compra mínima $${Number(coupon.minOrderAmount || 0)}` });
     }
+    // Number(): campos Decimal desde la Etapa 1 de la migración Float→Decimal.
     const discount = coupon.discountType === 'PERCENTAGE'
-      ? orderAmount * (coupon.discountValue / 100)
-      : coupon.discountValue;
+      ? orderAmount * (Number(coupon.discountValue) / 100)
+      : Number(coupon.discountValue);
     res.json({
       valid: true,
       coupon: { id: coupon.id, code: coupon.code, description: coupon.description },

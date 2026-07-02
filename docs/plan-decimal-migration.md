@@ -17,7 +17,7 @@
 
 ## Estrategia recomendada: serialización centralizada + migración por etapas
 
-### Etapa 0 — Salvaguarda de serialización (sin tocar la BD)
+### Etapa 0 — Salvaguarda de serialización (sin tocar la BD) ✅ HECHA 2026-07-01
 En el backend, registrar un replacer global que convierta Decimal → number
 al serializar (Express `app.set('json replacer', ...)` o un util `toJSON`):
 ```js
@@ -32,7 +32,7 @@ app.set('json replacer', function (key, value) {
 Con esto, cambiar el tipo de una columna NO cambia el contrato HTTP.
 Desplegar y verificar que nada cambió (es no-op mientras no haya Decimals).
 
-### Etapa 1 — Piloto de bajo riesgo
+### Etapa 1 — Piloto de bajo riesgo ✅ HECHA 2026-07-01 (migración 20260701140000_coupon_money_to_decimal)
 Migrar UN modelo de bajo tráfico y verificar end-to-end:
 - Candidato: `Coupon.discountValue` + `Coupon.minOrderAmount`.
 - Migración: `ALTER TABLE ... TYPE DECIMAL(12,2) USING round(col::numeric, 2)`.
