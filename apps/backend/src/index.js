@@ -368,6 +368,17 @@ startWhatsappBotReportJob()
 const { startDemoExpiryJob } = require('./jobs/demoExpiry.job')
 startDemoExpiryJob()
 
+// WhatsApp Bot — requiere flag propio ADEMÁS de la key de Gemini: Railway
+// tiene GOOGLE_AI_API_KEY (visión) y sin el flag el backend de prod
+// intentaría levantar Chromium/puppeteer en cada deploy. El bot corre donde
+// WHATSAPP_BOT_ENABLED=true (hoy: la PC local).
+if (process.env.WHATSAPP_BOT_ENABLED === 'true' && process.env.GOOGLE_AI_API_KEY) {
+  const { initWhatsApp } = require('./whatsapp/client')
+  initWhatsApp(io)
+} else if (process.env.GOOGLE_AI_API_KEY) {
+  console.log('[WhatsApp Bot] Deshabilitado (setea WHATSAPP_BOT_ENABLED=true para activarlo)')
+}
+
 const PORT = process.env.PORT || 3001
 server.listen(PORT,'0.0.0.0', () => {
   console.log('┌─────────────────────────────────┐')
