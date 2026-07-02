@@ -2,6 +2,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { processWhatsAppMessage } = require('./gemini');
 const { createOrderFromGemini } = require('./orderProcessor');
+const { isAudioMessage, transcribeWhatsAppAudio } = require('./audioTranscription');
 const { prisma } = require('@mrtpvrest/database');
 
 let whatsappClient = null;
@@ -338,6 +339,18 @@ function initWhatsApp(io) {
     // dejamos pasar cualquier chat individual (@c.us o @lid).
     if (!isCustomerChatId(chatKey)) return;
 
+    // EnvÃ­o robusto (sendMessage anda mejor con @lid que msg.reply).
+    const safeSend = async (text) => {
+      try {
+        rememberBotOutgoingIntent(chatKey, text);
+        const sent = await whatsappClient.sendMessage(msg.from, text);
+        rememberBotSentMessage(sent);
+        console.log(`[WhatsApp Bot] Respuesta enviada a ${msg.from}`);
+      } catch (err) {
+        console.error('[WhatsApp Bot] Error enviando respuesta:', err?.message || err);
+      }
+    };
+
     // Obtener texto o ubicación
     let messageText = msg.body;
     let locationData = null;
@@ -392,6 +405,18 @@ function initWhatsApp(io) {
     if (!allowMessage(phone)) {
       console.warn(`[WhatsApp Bot] Rate limit para ${phone}; se ignora este mensaje.`);
       return;
+    }
+
+    if (isAudioMessage(msg)) {
+      console.log(`[WhatsApp Bot] Audio recibido de ${msg.from}; transcribiendo...`);
+      const transcription = await transcribeWhatsAppAudio(msg);
+      if (!transcription.ok) {
+        console.warn(`[WhatsApp Bot] No se pudo transcribir audio de ${msg.from}: ${transcription.code}`);
+        await safeSend('No pude escuchar bien el audio 🙏. ¿Me escribes tu pedido en texto? Así no se me va ningún producto.');
+        return;
+      }
+      messageText = transcription.text;
+      console.log(`[WhatsApp Bot] Audio transcrito de ${msg.from}: ${messageText}`);
     }
 
     const detectedPhone = extractPhoneFromText(messageText);
@@ -453,18 +478,6 @@ function initWhatsApp(io) {
 
     // Mantener memoria suficiente para pedidos grandes sin crecer sin límite.
     pruneHistory(history);
-
-    // Envío robusto (sendMessage anda mejor con @lid que msg.reply).
-    const safeSend = async (text) => {
-      try {
-        rememberBotOutgoingIntent(chatKey, text);
-        const sent = await whatsappClient.sendMessage(msg.from, text);
-        rememberBotSentMessage(sent);
-        console.log(`[WhatsApp Bot] Respuesta enviada a ${msg.from}`);
-      } catch (err) {
-        console.error('[WhatsApp Bot] Error enviando respuesta:', err?.message || err);
-      }
-    };
 
     const status = geminiResponse.status;
     const items = Array.isArray(geminiResponse.items) ? geminiResponse.items : [];
