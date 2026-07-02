@@ -18,7 +18,27 @@
  */
 
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { initWhatsApp, getWhatsAppClient, getLatestQr } = require('./client');
+
+// Al correr con volumen persistente, Chromium deja archivos Singleton* (lock del
+// perfil) en el userDataDir dentro del volumen. Como cada deploy es un contenedor
+// nuevo (otra "máquina"), el nuevo Chromium ve el lock del anterior y se niega a
+// lanzar: "The profile appears to be in use by another Chromium process". La
+// sesión de WhatsApp NO se corrompe; solo hay que borrar el lock rancio al boot.
+function limpiarLocksChromium(dir) {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    if (/^Singleton(Lock|Cookie|Socket)$/.test(e.name)) {
+      try { fs.rmSync(full, { force: true }); console.log(`[WhatsApp Worker] Lock rancio removido: ${full}`); } catch {}
+    } else if (e.isDirectory()) {
+      limpiarLocksChromium(full);
+    }
+  }
+}
 
 // ── Validación de entorno (fail-fast y ruidoso) ──────────────────────────────
 if (!process.env.GOOGLE_AI_API_KEY) {
@@ -91,6 +111,8 @@ healthServer.listen(PORT, '0.0.0.0', () => {
 // ── Arranque del bot ─────────────────────────────────────────────────────────
 // io = null: no hay Socket.io en el worker; el QR se ve por logs y por /qr.
 console.log('[WhatsApp Worker] Iniciando bot Cajero Estrella…');
+// Limpia locks de Chromium del deploy anterior antes de lanzar el navegador.
+limpiarLocksChromium(process.env.WWEBJS_DATA_PATH || '.');
 initWhatsApp(null);
 
 // ── Apagado limpio ───────────────────────────────────────────────────────────
