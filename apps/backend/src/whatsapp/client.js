@@ -45,6 +45,69 @@ function isIgnoredNumber(phone) {
   return list.includes(p);
 }
 
+// ── Ignorar por GRUPO ────────────────────────────────────────────────────────
+// WHATSAPP_BOT_IGNORE_GROUP_NAME = nombre de un grupo (p.ej. "Master Burguers
+// works"). El bot carga sus miembros y no responde a ninguno. Se refresca solo,
+// así que agregar/quitar a alguien del grupo lo activa/desactiva sin tocar nada.
+// Guardamos DOS llaves por miembro para casar tanto @lid como @c.us: el id
+// serializado y los últimos 10 dígitos del "user".
+let ignoredGroup = { name: null, ids: new Set(), phones: new Set(), count: 0, loadedAt: 0, error: null };
+
+async function refreshIgnoredGroup() {
+  const name = (process.env.WHATSAPP_BOT_IGNORE_GROUP_NAME || '').trim();
+  if (!name || !whatsappClient) {
+    ignoredGroup = { name: null, ids: new Set(), phones: new Set(), count: 0, loadedAt: Date.now(), error: null };
+    return;
+  }
+  try {
+    const chats = await whatsappClient.getChats();
+    const group = chats.find(c => c.isGroup && String(c.name || '').trim().toLowerCase() === name.toLowerCase());
+    if (!group) {
+      const availableGroups = chats.filter(c => c.isGroup).map(c => c.name).slice(0, 50);
+      ignoredGroup = { name, ids: new Set(), phones: new Set(), count: 0, loadedAt: Date.now(), error: 'grupo no encontrado', availableGroups };
+      console.warn(`[WhatsApp Bot] Grupo a ignorar "${name}" no encontrado. Grupos: ${availableGroups.join(' | ')}`);
+      return;
+    }
+    const ids = new Set();
+    const phones = new Set();
+    for (const part of (group.participants || [])) {
+      const sid = part.id?._serialized;
+      if (sid) ids.add(sid);
+      const ph = last10Digits(part.id?.user || sid || '');
+      if (ph.length >= 10) phones.add(ph);
+    }
+    ignoredGroup = { name, ids, phones, count: (group.participants || []).length, loadedAt: Date.now(), error: null };
+    console.log(`[WhatsApp Bot] Grupo ignorado "${name}": ${ignoredGroup.count} miembros (${ids.size} ids, ${phones.size} tel).`);
+  } catch (e) {
+    ignoredGroup.error = e.message;
+    console.error('[WhatsApp Bot] Error cargando el grupo a ignorar:', e.message);
+  }
+}
+
+// ¿El remitente pertenece al grupo ignorado? Casa por id serializado (msg.from o
+// el id del contacto) o por los últimos 10 dígitos del teléfono resuelto.
+function isInIgnoredGroup(msgFrom, contactId, phone) {
+  if (ignoredGroup.ids.size === 0 && ignoredGroup.phones.size === 0) return false;
+  if (msgFrom && ignoredGroup.ids.has(msgFrom)) return true;
+  if (contactId && ignoredGroup.ids.has(contactId)) return true;
+  const p = last10Digits(phone);
+  return p.length >= 10 && ignoredGroup.phones.has(p);
+}
+
+function getIgnoredGroupInfo() {
+  return {
+    name: ignoredGroup.name,
+    count: ignoredGroup.count,
+    ids: ignoredGroup.ids.size,
+    phones: ignoredGroup.phones.size,
+    loadedAt: ignoredGroup.loadedAt,
+    error: ignoredGroup.error,
+    availableGroups: ignoredGroup.availableGroups || undefined,
+    sampleIds: Array.from(ignoredGroup.ids).slice(0, 5),
+    samplePhones: Array.from(ignoredGroup.phones).slice(0, 5),
+  };
+}
+
 function initWhatsApp(io) {
   console.log('[WhatsApp Bot] Inicializando cliente...');
 
@@ -100,6 +163,10 @@ function initWhatsApp(io) {
     if (io) {
       io.emit('whatsapp:ready');
     }
+    // Cargar el grupo a ignorar y refrescarlo cada 10 min (recoge altas/bajas
+    // de miembros sin redeploy). Best-effort: si falla, el bot sigue operando.
+    refreshIgnoredGroup();
+    setInterval(refreshIgnoredGroup, 10 * 60 * 1000).unref?.();
   });
 
   whatsappClient.on('message', async msg => {
@@ -135,24 +202,33 @@ function initWhatsApp(io) {
     
     // Obtener número limpio usando la API de contactos de WhatsApp
     let phone = msg.from.replace('@c.us', '');
+    let contactId = null;
     try {
       const contact = await msg.getContact();
-      if (contact && contact.number) {
-        // WhatsApp en México a veces agrega un '1' después del 52. Lo limpiamos si es necesario,
-        // o simplemente usamos el contact.number directo.
-        phone = contact.number;
-        if (phone.startsWith('521') && phone.length === 13) {
-          phone = '52' + phone.substring(3);
+      if (contact) {
+        contactId = contact.id?._serialized || null;
+        if (contact.number) {
+          // WhatsApp en México a veces agrega un '1' después del 52. Lo limpiamos si es necesario,
+          // o simplemente usamos el contact.number directo.
+          phone = contact.number;
+          if (phone.startsWith('521') && phone.length === 13) {
+            phone = '52' + phone.substring(3);
+          }
         }
       }
     } catch (e) {
       console.error('[WhatsApp Bot] No se pudo obtener el contacto limpio', e);
     }
 
-    // Lista negra: si el número está en WHATSAPP_BOT_IGNORE_NUMBERS, el bot NO
-    // responde (lo atiendes tú a mano). Se evalúa con el teléfono ya resuelto.
+    // Ignorados: por lista de números (WHATSAPP_BOT_IGNORE_NUMBERS) o por
+    // pertenecer al grupo ignorado (WHATSAPP_BOT_IGNORE_GROUP_NAME). En ambos
+    // casos el bot NO responde (lo atiendes tú a mano).
     if (isIgnoredNumber(phone)) {
       console.log(`[WhatsApp Bot] Número en lista de ignorados (${phone}); no se responde.`);
+      return;
+    }
+    if (isInIgnoredGroup(msg.from, contactId, phone)) {
+      console.log(`[WhatsApp Bot] Remitente pertenece al grupo ignorado "${ignoredGroup.name}" (${msg.from}); no se responde.`);
       return;
     }
 
@@ -251,4 +327,6 @@ module.exports = {
   initWhatsApp,
   getWhatsAppClient: () => whatsappClient,
   getLatestQr: () => latestQr,
+  getIgnoredGroupInfo,
+  refreshIgnoredGroup,
 };

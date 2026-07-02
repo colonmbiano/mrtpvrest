@@ -20,7 +20,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { initWhatsApp, getWhatsAppClient, getLatestQr } = require('./client');
+const { initWhatsApp, getWhatsAppClient, getLatestQr, getIgnoredGroupInfo, refreshIgnoredGroup } = require('./client');
 
 // Al correr con volumen persistente, Chromium deja archivos Singleton* (lock del
 // perfil) en el userDataDir dentro del volumen. Como cada deploy es un contenedor
@@ -94,6 +94,19 @@ const healthServer = http.createServer((req, res) => {
   if (url === '/healthz') {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     return res.end('ok');
+  }
+  // Diagnóstico del grupo ignorado: cuántos miembros detectó + una muestra.
+  // ?refresh=1 fuerza una recarga del grupo antes de responder.
+  if (url === '/debug/ignore-group') {
+    const doRespond = () => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(getIgnoredGroupInfo(), null, 2));
+    };
+    if ((req.url || '').includes('refresh=1')) {
+      refreshIgnoredGroup().then(doRespond).catch(doRespond);
+      return;
+    }
+    return doRespond();
   }
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
