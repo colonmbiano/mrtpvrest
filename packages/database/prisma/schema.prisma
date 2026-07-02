@@ -1896,6 +1896,8 @@ model Employee {
   payProfile   EmployeePayProfile?
   payrollItems PayrollItem[]
   charges      EmployeeCharge[]
+  // Pagos de sueldo asignados a este empleado (gastos categoría SUELDOS).
+  salaryPayments OperatingExpense[] @relation("EmployeeSalaryExpense")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3914,6 +3916,16 @@ model OperatingExpense {
   settledShiftId   String?              // turno donde se liquidó (si fue CASH_DRAWER)
   settledMethod    ExpensePaymentMethod?
 
+  // ── Pago de sueldo (nómina simple) ──
+  // Cuando categoría=SUELDOS y el pago se asigna a un trabajador: liga el gasto
+  // al empleado y guarda el detalle del cálculo (días × tarifa) para el reporte
+  // por trabajador. Null en gastos que no son sueldos. onDelete SetNull: el
+  // registro histórico del pago sobrevive si el empleado se elimina.
+  employeeId  String?
+  employee    Employee? @relation("EmployeeSalaryExpense", fields: [employeeId], references: [id], onDelete: SetNull)
+  payrollDays Float?    // días pagados (capturados/editables al pagar)
+  payrollRate Float?    // tarifa diaria aplicada al momento del pago
+
   // Si paymentMethod=CASH_DRAWER, el turno activo donde se descontó.
   cashShiftId String?
   cashShift   CashShift? @relation("OperatingExpenseCashShift", fields: [cashShiftId], references: [id])
@@ -3935,6 +3947,7 @@ model OperatingExpense {
   @@index([cashShiftId])
   @@index([settlementStatus])
   @@index([supplierId])
+  @@index([employeeId])
   @@map("operating_expenses")
 }
 

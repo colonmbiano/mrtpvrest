@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { X, Wallet, ShoppingBag, Plus, Trash2, Camera, Loader2, AlertTriangle, CheckCircle2, Sparkles, FileWarning, History, RefreshCw } from "lucide-react";
+import { X, Wallet, ShoppingBag, Plus, Trash2, Camera, Loader2, AlertTriangle, CheckCircle2, Sparkles, FileWarning, History, RefreshCw, HandCoins, ChevronLeft, Users } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
@@ -56,8 +56,16 @@ function findBestIngredient(
 // Pago en efectivo (CASH_DRAWER) requiere CashShift abierto — el backend
 // valida y devuelve 409 NO_OPEN_SHIFT. El UI muestra el mensaje.
 
-type Tab = "expense" | "purchase" | "history";
+type Tab = "expense" | "purchase" | "salary" | "history";
 type PaymentMethod = "CASH_DRAWER" | "CORPORATE_CARD" | "TRANSFER";
+
+interface PayrollEmployee {
+  id: string;
+  name: string;
+  role: string;
+  payType: string | null;
+  dailyRate: number | null;
+}
 
 // Item del historial — unifica gasto y compra para mostrar en una lista.
 interface HistoryItem {
@@ -137,6 +145,19 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [lines, setLines] = useState<PurchaseLine[]>([]);
 
+  // SUELDOS
+  const [employees, setEmployees] = useState<PayrollEmployee[]>([]);
+  const [selectedEmp, setSelectedEmp] = useState<PayrollEmployee | null>(null);
+  const [salaryDays, setSalaryDays] = useState("1");
+  const [salaryAmount, setSalaryAmount] = useState("");   // sugerido (tarifa×días), editable
+  const [salaryMethod, setSalaryMethod] = useState<PaymentMethod>("CASH_DRAWER");
+  const [paidToday, setPaidToday] = useState<any[]>([]);
+  // Reporte histórico por trabajador
+  const [showReport, setShowReport] = useState(false);
+  const [reportRange, setReportRange] = useState<"week" | "month">("week");
+  const [report, setReport] = useState<any | null>(null);
+  const [loadingReport, setLoadingReport] = useState(false);
+
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -152,7 +173,14 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
     api.get<ExpenseCategory[]>("/api/expenses/categories").then((r) => setCategories(r.data || [])).catch(() => setCategories([]));
     api.get<Supplier[]>("/api/purchases/lookup/suppliers").then((r) => setSuppliers(r.data || [])).catch(() => setSuppliers([]));
     api.get<Ingredient[]>("/api/purchases/lookup/ingredients").then((r) => setIngredients(r.data || [])).catch(() => setIngredients([]));
+    api.get<PayrollEmployee[]>("/api/expenses/payroll-employees").then((r) => setEmployees(r.data || [])).catch(() => setEmployees([]));
   }, [isOpen]);
+
+  // Cargar los sueldos pagados hoy al entrar al tab "salary".
+  useEffect(() => {
+    if (!isOpen || tab !== "salary") return;
+    loadPaidToday();
+  }, [isOpen, tab]);
 
   // Cargar historial cuando entras al tab "history".
   useEffect(() => {
@@ -228,6 +256,10 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
       setSupplierId("");
       setLines([]);
       setNotes("");
+      setSelectedEmp(null);
+      setSalaryDays("1");
+      setSalaryAmount("");
+      setSalaryMethod("CASH_DRAWER");
     }
   }
 
@@ -341,6 +373,99 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
   function onScanFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file) scanReceipt(file);
+  }
+
+  // ── SUELDOS ──
+  async function loadPaidToday() {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const r = await api.get<any[]>(`/api/expenses?from=${encodeURIComponent(today.toISOString())}`);
+      setPaidToday((r.data || []).filter((e: any) => e.employeeId));
+    } catch {
+      setPaidToday([]);
+    }
+  }
+
+  // Reporte histórico por trabajador (semana = 7 días, mes = 30 días).
+  async function loadReport(range: "week" | "month") {
+    setReportRange(range);
+    setLoadingReport(true);
+    try {
+      const from = new Date();
+      from.setDate(from.getDate() - (range === "week" ? 6 : 29));
+      from.setHours(0, 0, 0, 0);
+      const r = await api.get(`/api/expenses/salary-report?from=${encodeURIComponent(from.toISOString())}`);
+      setReport(r.data);
+    } catch {
+      setReport(null);
+    } finally {
+      setLoadingReport(false);
+    }
+  }
+
+  function openReport() {
+    setShowReport(true);
+    loadReport(reportRange);
+  }
+
+  // Selecciona un trabajador y precarga el monto sugerido (tarifa × días).
+  function pickEmployee(emp: PayrollEmployee) {
+    setSelectedEmp(emp);
+    const d = parseFloat(salaryDays) || 1;
+    setSalaryAmount(emp.dailyRate != null ? String(round2(emp.dailyRate * d)) : "");
+  }
+
+  // Al cambiar los días, recalcula la sugerencia (si el trabajador tiene tarifa).
+  function changeSalaryDays(v: string) {
+    setSalaryDays(v);
+    const d = parseFloat(v);
+    if (selectedEmp?.dailyRate != null && Number.isFinite(d) && d > 0) {
+      setSalaryAmount(String(round2(selectedEmp.dailyRate * d)));
+    }
+  }
+  // Redondeo a 2 decimales local (el frontend no importa lib/money del backend).
+  function round2(n: number) {
+    return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+  }
+
+  async function submitSalary() {
+    if (!selectedEmp) return toast.error("Elige un trabajador");
+    const amt = parseFloat(salaryAmount);
+    if (!Number.isFinite(amt) || amt <= 0) return toast.error("Monto inválido");
+    const days = parseFloat(salaryDays);
+    const sueldos = categories.find((c) => c.name === "SUELDOS");
+    const daysLabel = Number.isFinite(days) && days > 0 ? ` (${days} día${days === 1 ? "" : "s"})` : "";
+
+    setSubmitting(true);
+    try {
+      await api.post("/api/expenses", {
+        categoryId: sueldos?.id || null,
+        concept: `Sueldo: ${selectedEmp.name.trim()}${daysLabel}`,
+        amount: amt,
+        paymentMethod: salaryMethod,
+        settlementStatus: "PAID",
+        employeeId: selectedEmp.id,
+        payrollDays: Number.isFinite(days) && days > 0 ? days : null,
+        payrollRate: selectedEmp.dailyRate ?? null,
+      });
+      toast.success(`Pagado a ${selectedEmp.name.trim()}: $${amt.toFixed(2)}`);
+      setSelectedEmp(null);
+      setSalaryDays("1");
+      setSalaryAmount("");
+      loadPaidToday();
+    } catch (err: any) {
+      const code = err?.response?.data?.code;
+      if (code === "NO_OPEN_SHIFT") {
+        toast.error("No hay turno de caja abierto. Ábrelo antes de pagar en efectivo.");
+      } else if (code === "ADMIN_AUTH_REQUIRED") {
+        toast.error("El pago excede tu límite de cajero. Pide autorización de admin.");
+      } else {
+        toast.error("Error: " + (err?.response?.data?.error || err?.message));
+      }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function submitExpense() {
@@ -460,6 +585,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
             [
               { id: "expense", label: "Gasto", icon: Wallet },
               { id: "purchase", label: "Compra", icon: ShoppingBag },
+              { id: "salary", label: "Sueldos", icon: HandCoins },
               { id: "history", label: "Hoy", icon: History },
             ] as const
           ).map((t) => {
@@ -516,6 +642,31 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
               scanning={scanning}
             />
           )}
+          {tab === "salary" && (
+            <SalaryTab
+              employees={employees}
+              selectedEmp={selectedEmp}
+              onPick={pickEmployee}
+              onBack={() => setSelectedEmp(null)}
+              salaryDays={salaryDays}
+              onChangeDays={changeSalaryDays}
+              salaryAmount={salaryAmount}
+              setSalaryAmount={setSalaryAmount}
+              salaryMethod={salaryMethod}
+              setSalaryMethod={setSalaryMethod}
+              onPay={submitSalary}
+              submitting={submitting}
+              paidToday={paidToday}
+              onRefreshPaid={loadPaidToday}
+              showReport={showReport}
+              onOpenReport={openReport}
+              onCloseReport={() => setShowReport(false)}
+              report={report}
+              reportRange={reportRange}
+              loadingReport={loadingReport}
+              onChangeReportRange={loadReport}
+            />
+          )}
           {tab === "history" && (
             <HistoryTab
               items={history}
@@ -534,7 +685,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
           />
 
           {/* Estado de pago — Pagado ahora vs Pendiente (cuenta por pagar) */}
-          {tab !== "history" && (
+          {(tab === "expense" || tab === "purchase") && (
           <div className="mt-6">
             <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 mb-2">Estado de pago</p>
             <div className="grid grid-cols-2 gap-2">
@@ -596,7 +747,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
           )}
 
           {/* Método de pago — solo cuando se paga ahora (no en pendiente) */}
-          {tab !== "history" && settlement === "PAID" && (
+          {(tab === "expense" || tab === "purchase") && settlement === "PAID" && (
           <div className="mt-6">
             <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 mb-2">Método de pago</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -637,7 +788,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
           >
             Cerrar
           </button>
-          {tab !== "history" && (
+          {(tab === "expense" || tab === "purchase") && (
             <button
               type="button"
               onClick={tab === "expense" ? submitExpense : submitPurchase}
@@ -1050,6 +1201,308 @@ function SummaryCard({
     <div className={`p-3 rounded-xl border ${tone}`}>
       <p className="text-[9px] font-semibold uppercase tracking-[0.14em] opacity-70">{label}</p>
       <p className="text-lg font-black tabular-nums mt-0.5">${amount.toFixed(2)}</p>
+    </div>
+  );
+}
+
+// ── SalaryTab · pago de sueldo asignado a un trabajador ──────────────────
+const SALARY_ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Admin", OWNER: "Dueño", MANAGER: "Gerente", CASHIER: "Cajero",
+  WAITER: "Mesero", DELIVERY: "Repartidor", COOK: "Cocina", KITCHEN: "Cocina",
+};
+
+function SalaryTab(props: {
+  employees: PayrollEmployee[];
+  selectedEmp: PayrollEmployee | null;
+  onPick: (e: PayrollEmployee) => void;
+  onBack: () => void;
+  salaryDays: string;
+  onChangeDays: (v: string) => void;
+  salaryAmount: string;
+  setSalaryAmount: (v: string) => void;
+  salaryMethod: PaymentMethod;
+  setSalaryMethod: (m: PaymentMethod) => void;
+  onPay: () => void;
+  submitting: boolean;
+  paidToday: any[];
+  onRefreshPaid: () => void;
+  showReport: boolean;
+  onOpenReport: () => void;
+  onCloseReport: () => void;
+  report: any | null;
+  reportRange: "week" | "month";
+  loadingReport: boolean;
+  onChangeReportRange: (r: "week" | "month") => void;
+}) {
+  const emp = props.selectedEmp;
+  const nameById = new Map(props.employees.map((e) => [e.id, e.name.trim()]));
+  const paidTotal = props.paidToday.reduce((s, p) => s + Number(p.amount || 0), 0);
+
+  // Vista 3 · reporte histórico por trabajador
+  if (props.showReport) {
+    return (
+      <SalaryReport
+        report={props.report}
+        range={props.reportRange}
+        loading={props.loadingReport}
+        onChangeRange={props.onChangeReportRange}
+        onBack={props.onCloseReport}
+      />
+    );
+  }
+
+  // Vista 1 · elegir trabajador
+  if (!emp) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-white/50">
+            <Users size={14} />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em]">Elige un trabajador</p>
+          </div>
+          <button
+            type="button"
+            onClick={props.onOpenReport}
+            className="h-8 px-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-[10px] font-semibold uppercase tracking-[0.1em] flex items-center gap-1 active:scale-95"
+          >
+            <History size={12} /> Histórico
+          </button>
+        </div>
+        {props.employees.length === 0 ? (
+          <div className="rounded-2xl bg-white/5 border border-dashed border-white/10 p-8 text-center">
+            <p className="text-[12px] text-white/40">No hay trabajadores activos.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {props.employees.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => props.onPick(e)}
+                className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-white/5 border border-white/10 active:scale-[0.98] transition-transform text-left"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-white truncate">{e.name.trim()}</p>
+                  <p className="text-[10px] text-white/40 uppercase tracking-wider">{SALARY_ROLE_LABEL[e.role] || e.role}</p>
+                </div>
+                <span className={`text-[11px] font-bold tabular-nums shrink-0 ${e.dailyRate != null ? "text-[var(--brand)]" : "text-white/30"}`}>
+                  {e.dailyRate != null ? `$${e.dailyRate.toFixed(0)}/día` : "sin tarifa"}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        <PaidTodayList items={props.paidToday} nameById={nameById} total={paidTotal} onRefresh={props.onRefreshPaid} />
+      </div>
+    );
+  }
+
+  // Vista 2 · capturar y pagar
+  return (
+    <div className="space-y-5">
+      <button
+        type="button"
+        onClick={props.onBack}
+        className="flex items-center gap-1.5 text-[11px] font-semibold text-white/50 uppercase tracking-[0.15em] active:scale-95"
+      >
+        <ChevronLeft size={14} /> Elegir otro
+      </button>
+
+      <div className="rounded-2xl bg-[var(--brand-soft)] border border-[var(--brand)] p-4">
+        <p className="text-lg font-black text-white">{emp.name.trim()}</p>
+        <p className="text-[10px] text-white/50 uppercase tracking-wider">
+          {SALARY_ROLE_LABEL[emp.role] || emp.role}
+          {emp.dailyRate != null ? ` · tarifa $${emp.dailyRate.toFixed(2)}/día` : " · sin tarifa configurada"}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Días">
+          <input
+            type="number"
+            inputMode="decimal"
+            value={props.salaryDays}
+            onChange={(e) => props.onChangeDays(e.target.value)}
+            step="0.5"
+            min="0"
+            className="w-full h-12 bg-white/5 border border-white/10 rounded-xl px-4 text-sm text-white outline-none focus:border-[var(--brand)] tabular-nums"
+          />
+        </Field>
+        <Field label="Monto a pagar">
+          <div className="relative">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--brand)] font-semibold">$</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={props.salaryAmount}
+              onChange={(e) => props.setSalaryAmount(e.target.value)}
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 text-sm text-white outline-none focus:border-[var(--brand)] tabular-nums"
+            />
+          </div>
+        </Field>
+      </div>
+      {emp.dailyRate != null && (
+        <p className="-mt-3 text-[10px] text-white/40">
+          Sugerido: ${emp.dailyRate.toFixed(2)} × {props.salaryDays || 0} día(s). Puedes editar el monto libremente.
+        </p>
+      )}
+
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 mb-2">Método de pago</p>
+        <div className="grid grid-cols-2 gap-2">
+          {(([["CASH_DRAWER", "Efectivo de caja"], ["TRANSFER", "Transferencia"]]) as [PaymentMethod, string][]).map(([m, label]) => {
+            const active = props.salaryMethod === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => props.setSalaryMethod(m)}
+                className={`h-12 rounded-2xl border text-[11px] font-semibold uppercase tracking-[0.1em] transition-all ${
+                  active ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]" : "bg-white/5 border-white/10 text-white/60"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {props.salaryMethod === "CASH_DRAWER" && (
+          <p className="mt-2 text-[10px] text-[var(--warning)] flex items-center gap-1.5">
+            <AlertTriangle size={12} /> Se descuenta del turno de caja abierto. Requiere turno activo.
+          </p>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={props.onPay}
+        disabled={props.submitting}
+        className="w-full h-12 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] text-[12px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-[0_4px_20px_var(--brand-glow)] active:scale-95 disabled:opacity-50"
+      >
+        {props.submitting ? (
+          <><Loader2 size={14} className="animate-spin" /> Pagando…</>
+        ) : (
+          <><HandCoins size={14} /> Pagar sueldo{props.salaryAmount ? ` · $${(parseFloat(props.salaryAmount) || 0).toFixed(2)}` : ""}</>
+        )}
+      </button>
+
+      <PaidTodayList items={props.paidToday} nameById={nameById} total={paidTotal} onRefresh={props.onRefreshPaid} />
+    </div>
+  );
+}
+
+function PaidTodayList({
+  items,
+  nameById,
+  total,
+  onRefresh,
+}: {
+  items: any[];
+  nameById: Map<string, string>;
+  total: number;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="pt-3 border-t border-white/5 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">
+          Pagados hoy ({items.length}) · ${total.toFixed(2)}
+        </span>
+        <button type="button" onClick={onRefresh} className="text-white/40 active:scale-95">
+          <RefreshCw size={12} />
+        </button>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-[11px] text-white/30">Aún no has pagado sueldos hoy.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {items.map((p) => (
+            <div key={p.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
+              <span className="text-[12px] text-white/80 truncate">{nameById.get(p.employeeId) || p.concept}</span>
+              <span className="text-[12px] font-bold tabular-nums text-white shrink-0">${Number(p.amount || 0).toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── SalaryReport · histórico de sueldos pagados por trabajador ───────────
+function SalaryReport({
+  report,
+  range,
+  loading,
+  onChangeRange,
+  onBack,
+}: {
+  report: any | null;
+  range: "week" | "month";
+  loading: boolean;
+  onChangeRange: (r: "week" | "month") => void;
+  onBack: () => void;
+}) {
+  const rows: any[] = report?.employees || [];
+  return (
+    <div className="space-y-4">
+      <button
+        type="button"
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-[11px] font-semibold text-white/50 uppercase tracking-[0.15em] active:scale-95"
+      >
+        <ChevronLeft size={14} /> Volver
+      </button>
+
+      <div className="flex items-center gap-2">
+        {(["week", "month"] as const).map((r) => (
+          <button
+            key={r}
+            type="button"
+            onClick={() => onChangeRange(r)}
+            className={`h-9 px-4 rounded-xl border text-[11px] font-semibold uppercase tracking-[0.1em] ${
+              range === r ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]" : "bg-white/5 border-white/10 text-white/60"
+            }`}
+          >
+            {r === "week" ? "7 días" : "30 días"}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-14 rounded-xl bg-white/5 border border-white/10 animate-pulse" />
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-2xl bg-white/5 border border-dashed border-white/10 p-8 text-center">
+          <p className="text-[12px] text-white/40">Sin pagos de sueldo en el periodo.</p>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Total pagado</span>
+            <span className="text-lg font-black tabular-nums text-[var(--brand)]">${Number(report?.totalPaid || 0).toFixed(2)}</span>
+          </div>
+          <div className="space-y-2">
+            {rows.map((r) => (
+              <div key={r.employeeId} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-white truncate">{r.name}</p>
+                  <p className="text-[10px] text-white/40">
+                    {r.payments} pago{r.payments === 1 ? "" : "s"}
+                    {r.totalDays ? ` · ${r.totalDays} día${r.totalDays === 1 ? "" : "s"}` : ""}
+                  </p>
+                </div>
+                <span className="text-sm font-black tabular-nums text-white shrink-0">${Number(r.totalPaid || 0).toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

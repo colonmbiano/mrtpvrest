@@ -98,6 +98,9 @@ router.post('/', async (req, res) => {
       settlementStatus,
       supplierId,
       dueDate,
+      employeeId,
+      payrollDays,
+      payrollRate,
     } = req.body || {};
 
     // Validaciones
@@ -128,6 +131,21 @@ router.post('/', async (req, res) => {
       });
       if (!supplier) return res.status(400).json({ error: 'Proveedor no pertenece a este restaurant' });
     }
+
+    // Pago de sueldo asignado a un trabajador: validar que el empleado sea del
+    // restaurante (por su location) antes de ligar el gasto. Anti-IDOR
+    // cross-tenant, mismo patrón que payroll.routes.
+    let salaryEmployeeId = null;
+    if (employeeId) {
+      const emp = await prisma.employee.findFirst({
+        where: { id: String(employeeId), location: { restaurantId } },
+        select: { id: true },
+      });
+      if (!emp) return res.status(400).json({ error: 'Trabajador no pertenece a este restaurante' });
+      salaryEmployeeId = emp.id;
+    }
+    const days = payrollDays != null && Number.isFinite(Number(payrollDays)) ? Number(payrollDays) : null;
+    const rate = payrollRate != null && Number.isFinite(Number(payrollRate)) ? Number(payrollRate) : null;
 
     // Tope para cashier — si excede, debe haber sido autorizado por admin
     // (frontend pide PIN y vuelve a postear con header x-admin-authorized).
@@ -195,6 +213,9 @@ router.post('/', async (req, res) => {
           settlementStatus: settlement,
           supplierId: supplierId || null,
           dueDate: dueDate ? new Date(dueDate) : null,
+          employeeId: salaryEmployeeId,
+          payrollDays: days,
+          payrollRate: rate,
         },
       });
 
@@ -353,6 +374,88 @@ router.post('/:id/settle', async (req, res) => {
   } catch (e) {
     console.error('POST /api/expenses/:id/settle:', e);
     res.status(500).json({ error: 'Error al liquidar gasto: ' + e.message });
+  }
+});
+
+// ── GET /api/expenses/payroll-employees ──────────────────────────────────
+// Trabajadores activos del restaurante con su tarifa diaria (si tienen perfil
+// de pago). Lo consume la pestaña "Sueldos" del TPV para sugerir el monto
+// (tarifa × días). No exige el módulo payroll ni manage_users: pagar el sueldo
+// es parte del flujo de caja (mismo gate que registrar un gasto). El tope de
+// cajero + PIN admin de POST / sigue protegiendo montos grandes.
+router.get('/payroll-employees', async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const employees = await prisma.employee.findMany({
+      where: { isActive: true, location: { restaurantId } },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true, name: true, role: true,
+        payProfile: { select: { payType: true, dailyRate: true } },
+      },
+    });
+    res.json(employees.map((e) => ({
+      id: e.id,
+      name: e.name,
+      role: e.role,
+      payType: e.payProfile?.payType || null,
+      dailyRate: e.payProfile?.dailyRate != null ? Number(e.payProfile.dailyRate) : null,
+    })));
+  } catch (e) {
+    console.error('GET /api/expenses/payroll-employees:', e);
+    res.status(500).json({ error: 'Error al listar trabajadores: ' + e.message });
+  }
+});
+
+// ── GET /api/expenses/salary-report?from=&to= ────────────────────────────
+// Total pagado por trabajador (gastos ligados a un empleado) en el rango.
+// Agrupa por employeeId sumando monto y días. Ordena de mayor a menor pagado.
+router.get('/salary-report', async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const { from, to } = req.query;
+    const where = { restaurantId, employeeId: { not: null } };
+    if (from || to) {
+      where.occurredAt = {};
+      if (from) where.occurredAt.gte = new Date(String(from));
+      if (to)   where.occurredAt.lte = new Date(String(to));
+    }
+
+    const grouped = await prisma.operatingExpense.groupBy({
+      by: ['employeeId'],
+      where,
+      _sum: { amount: true, payrollDays: true },
+      _count: { _all: true },
+    });
+
+    const ids = grouped.map((g) => g.employeeId).filter(Boolean);
+    const emps = ids.length
+      ? await prisma.employee.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, role: true } })
+      : [];
+    const byId = new Map(emps.map((e) => [e.id, e]));
+
+    const rows = grouped.map((g) => ({
+      employeeId: g.employeeId,
+      name: byId.get(g.employeeId)?.name || '—',
+      role: byId.get(g.employeeId)?.role || null,
+      totalPaid: round2(Number(g._sum.amount || 0)),
+      totalDays: Number(g._sum.payrollDays || 0),
+      payments: g._count._all,
+    })).sort((a, b) => b.totalPaid - a.totalPaid);
+
+    res.json({
+      from: from || null,
+      to: to || null,
+      totalPaid: round2(rows.reduce((s, r) => s + r.totalPaid, 0)),
+      employees: rows,
+    });
+  } catch (e) {
+    console.error('GET /api/expenses/salary-report:', e);
+    res.status(500).json({ error: 'Error al generar reporte de sueldos: ' + e.message });
   }
 });
 
