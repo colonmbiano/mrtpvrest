@@ -27,8 +27,9 @@ router.post('/coupon/validate', async (req, res) => {
     if (!coupon || !coupon.isActive) return res.status(404).json({ error: 'Cupon no valido' })
     if (coupon.expiresAt && coupon.expiresAt < new Date()) return res.status(400).json({ error: 'Cupon expirado' })
     if (coupon.maxUses && coupon.usedCount >= coupon.maxUses) return res.status(400).json({ error: 'Cupon agotado' })
-    if (orderAmount < coupon.minOrderAmount) return res.status(400).json({ error: `Minimo $${coupon.minOrderAmount}` })
-    const discount = coupon.discountType === 'PERCENTAGE' ? orderAmount * (coupon.discountValue / 100) : coupon.discountValue
+    if (orderAmount < Number(coupon.minOrderAmount)) return res.status(400).json({ error: `Minimo $${Number(coupon.minOrderAmount)}` })
+    // Number(): campos Decimal desde la Etapa 1 de la migración Float→Decimal.
+    const discount = coupon.discountType === 'PERCENTAGE' ? orderAmount * (Number(coupon.discountValue) / 100) : Number(coupon.discountValue)
     res.json({ valid: true, coupon: { id: coupon.id, code: coupon.code }, discountMXN: discount })
   } catch (e) { res.status(500).json({ error: 'Error al validar cupon' }) }
 })

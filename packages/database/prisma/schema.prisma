@@ -1224,8 +1224,11 @@ model Coupon {
   code           String       @unique
   description    String
   discountType   DiscountType
-  discountValue  Float
-  minOrderAmount Float        @default(0)
+  // Etapa 1 de la migración Float→Decimal (docs/plan-decimal-migration.md):
+  // piloto de bajo riesgo. El replacer JSON global del backend serializa
+  // Decimal como number, así que el contrato HTTP no cambia.
+  discountValue  Decimal      @db.Decimal(12, 2)
+  minOrderAmount Decimal      @default(0) @db.Decimal(12, 2)
   maxUses        Int?
   usedCount      Int          @default(0)
   expiresAt      DateTime?
