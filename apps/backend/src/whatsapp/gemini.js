@@ -23,36 +23,30 @@ function formatBusinessHours(businessHoursJson) {
   }
 }
 
+// Caché de menú + contexto por restaurante (TTL 60s). Evita 3 queries y
+// reconstruir el menú completo en CADA mensaje. openState se recalcula por
+// mensaje (depende de la hora), no se cachea.
+const menuCache = new Map(); // restaurantId → { menuString, config, businessName, horarioTexto, ts }
+
 /**
  * Handles the conversation with Gemini directly via Axios.
  */
 async function processWhatsAppMessage(phone, text, restaurantId, conversationHistory, activeOrderId = null, isInvalidPhone = false) {
   try {
-    // Obtener menú del restaurante para el contexto (con variantes y complementos)
-    const menuItems = await prisma.menuItem.findMany({
-      where: { restaurantId, isAvailable: true },
-      include: {
-        variants: true,
-        complements: true,
-        modifierGroups: { include: { modifiers: true } }
-      }
-    });
-
-    // Identidad + contexto del negocio (multi-tenant: sale de la BD, NO
-    // hardcodeado). Da calidez y datos reales (dirección, horario, envío) sin
-    // desfasarse cuando el admin los cambia.
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-      select: { name: true },
-    });
-    const config = await prisma.restaurantConfig.findUnique({ where: { restaurantId } });
-    const openState = config ? computeOpenState(config) : { isOpen: true, message: '' };
-    const businessName = restaurant?.name || 'nuestro restaurante';
-    const horarioTexto = config ? formatBusinessHours(config.businessHours) : '';
-    // Instrucciones extra AFINABLES sin reconstruir la imagen: se editan en la
-    // variable de entorno del servicio (WHATSAPP_BOT_EXTRA_INSTRUCTIONS) y con
-    // un restart toman efecto. Para ir ajustando tono/políticas en caliente.
-    const extraInstructions = (process.env.WHATSAPP_BOT_EXTRA_INSTRUCTIONS || '').trim();
+    // Menú + contexto del negocio cacheados por restaurante (TTL 60s). Antes se
+    // consultaban 3 tablas y se reconstruía el menú COMPLETO en CADA mensaje
+    // (hasta un "gracias"). Peor caso: un cambio de menú/config tarda ≤60s en
+    // reflejarse. openState y extraInstructions SÍ se calculan por mensaje.
+    let ctx = menuCache.get(restaurantId);
+    if (!ctx || Date.now() - ctx.ts > 60 * 1000) {
+      const [menuItems, restaurant, cfg] = await Promise.all([
+        prisma.menuItem.findMany({
+          where: { restaurantId, isAvailable: true },
+          include: { variants: true, complements: true, modifierGroups: { include: { modifiers: true } } },
+        }),
+        prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { name: true } }),
+        prisma.restaurantConfig.findUnique({ where: { restaurantId } }),
+      ]);
 
     // Determinar qué día es hoy en México
     const todayStr = new Date().toLocaleString('es-MX', { weekday: 'long', timeZone: 'America/Mexico_City' }).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -88,6 +82,21 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
 
       return str;
     }).join('\n\n');
+
+      ctx = {
+        menuString,
+        config: cfg,
+        businessName: restaurant?.name || 'nuestro restaurante',
+        horarioTexto: cfg ? formatBusinessHours(cfg.businessHours) : '',
+        ts: Date.now(),
+      };
+      menuCache.set(restaurantId, ctx);
+    }
+    const { menuString, config, businessName, horarioTexto } = ctx;
+    // Estado abierto/cerrado: SIEMPRE fresco (depende de la hora actual).
+    const openState = config ? computeOpenState(config) : { isOpen: true, message: '' };
+    // Instrucciones extra afinables por env (sin rebuild), leídas por mensaje.
+    const extraInstructions = (process.env.WHATSAPP_BOT_EXTRA_INSTRUCTIONS || '').trim();
 
     const systemPrompt = `
       Eres el asistente virtual de ${businessName}, atendiendo por WhatsApp. Tu objetivo es dar una atención cálida y tomar el pedido del cliente logrando la mejor conversión de ventas.
@@ -176,7 +185,14 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
     const body = {
       system_instruction: { parts: [{ text: systemPrompt }] },
       contents: contents,
-      generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: "application/json",
+        // Apaga el "thinking" de gemini-2.5-flash: para clasificar
+        // CONVERSING/CONFIRMED/ADD_TO_ORDER no hace falta razonamiento extendido,
+        // y esos tokens se facturan como output (los más caros) + suman latencia.
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     };
 
     // Resiliencia: reintentos con backoff ante 429/503/500 y errores de red, con
