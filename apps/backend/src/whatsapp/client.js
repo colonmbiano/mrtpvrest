@@ -12,6 +12,38 @@ let whatsappClient = null;
 // conectar ('ready') o al autenticar.
 let latestQr = null;
 
+// Estado REAL de la sesión (client.info queda rancio tras desconectar, así que
+// no sirve para saber si el bot está vivo). Lo usa /livez del worker para que un
+// monitor externo (UptimeRobot) avise si el bot necesita atención.
+// 'connecting' → arrancando | 'qr' → esperando escaneo | 'ready' → operando |
+// 'lost' → sesión caída (antes de reiniciar).
+let sessionState = 'connecting';
+
+// Alerta best-effort al dueño cuando el bot necesita atención (sesión perdida /
+// QR requerido). Se dispara a un webhook configurable WHATSAPP_BOT_ALERT_WEBHOOK
+// (Slack/Discord/Telegram/n8n). Throttled por tipo para no spamear con el QR que
+// rota. Si la env no está seteada, no hace nada.
+const alertThrottle = new Map();
+async function notifyAlert(event, detail) {
+  const url = process.env.WHATSAPP_BOT_ALERT_WEBHOOK;
+  if (!url) return;
+  const now = Date.now();
+  if (now - (alertThrottle.get(event) || 0) < 5 * 60 * 1000) return; // máx 1/5min por tipo
+  alertThrottle.set(event, now);
+  const text = `⚠️ Bot WhatsApp (${process.env.WHATSAPP_BOT_RESTAURANT_ID || 'restaurante'}): ${event}${detail ? ` — ${detail}` : ''}`;
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // text=Slack, content=Discord: cubre ambos sin configurar.
+      body: JSON.stringify({ text, content: text, event, detail: String(detail || '') }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (e) {
+    console.error('[WhatsApp Bot] No se pudo enviar alerta:', e?.message || e);
+  }
+}
+
 // Mapa para guardar el historial corto de conversaciones por número
 // Formato: { "5215551234567": [ { role: "user", text: "hola" }, { role: "model", text: "Hola soy el mesero" } ] }
 const chatHistory = new Map();
@@ -293,6 +325,10 @@ function initWhatsApp(io) {
 
   whatsappClient.on('qr', (qr) => {
     latestQr = qr;
+    sessionState = 'qr';
+    // En prod con sesión en volumen NO debería aparecer QR salvo desvinculación:
+    // avisar (throttled) para que alguien lo escanee en /qr.
+    notifyAlert('QR requerido — escanéalo en /qr', null);
     console.log('[WhatsApp Bot] Escanea este código QR con tu WhatsApp:');
     qrcode.generate(qr, { small: true });
 
@@ -313,6 +349,7 @@ function initWhatsApp(io) {
 
   whatsappClient.on('ready', async () => {
     latestQr = null;
+    sessionState = 'ready';
     console.log('[WhatsApp Bot] Cliente WhatsApp listo y conectado!');
     if (io) {
       io.emit('whatsapp:ready');
@@ -614,10 +651,14 @@ function initWhatsApp(io) {
   // salimos con código 1 para que Railway reinicie; LocalAuth reintenta con la
   // sesión del volumen y, si fue desvinculación real, /qr mostrará QR nuevo.
   whatsappClient.on('disconnected', (reason) => {
+    sessionState = 'lost';
+    notifyAlert('Sesión desconectada', reason);
     console.error('[WhatsApp Bot] DESCONECTADO:', reason, '→ saliendo para que Railway reinicie.');
     setTimeout(() => process.exit(1), 1500);
   });
   whatsappClient.on('auth_failure', (m) => {
+    sessionState = 'lost';
+    notifyAlert('Fallo de autenticación', m);
     console.error('[WhatsApp Bot] AUTH_FAILURE:', m, '→ saliendo para reintentar/re-vincular.');
     setTimeout(() => process.exit(1), 1500);
   });
@@ -632,6 +673,7 @@ module.exports = {
   initWhatsApp,
   getWhatsAppClient: () => whatsappClient,
   getLatestQr: () => latestQr,
+  getSessionState: () => sessionState,
   getIgnoredGroupInfo,
   refreshIgnoredGroup,
 };

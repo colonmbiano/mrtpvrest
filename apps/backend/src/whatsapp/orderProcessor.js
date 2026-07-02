@@ -53,6 +53,27 @@ function apiBase(port) {
   return base ? base.replace(/\/+$/, '') : `http://localhost:${port}`;
 }
 
+// POST con timeout (10s) y reintentos opcionales ante red/429/5xx. Sin timeout,
+// un blip lento del API dejaba el pedido colgado para siempre. Reintentar el
+// CREATE es seguro: el backend dedupea /api/store/orders por firma exacta en
+// ventana de 30s (los reintentos caen dentro). El add-items NO se reintenta
+// (no hay dedupe → evita doble round).
+async function postWithRetry(url, body, config = {}, retries = 0) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await axios.post(url, body, { timeout: 10000, ...config });
+    } catch (err) {
+      lastErr = err;
+      const code = err?.response?.status;
+      const retriable = !err.response || code === 429 || (code >= 500 && code < 600);
+      if (attempt === retries || !retriable) throw err;
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 async function getBotEmployeeId(restaurantId) {
   const cached = botEmployeeCache.get(restaurantId);
   if (cached) return cached;
@@ -124,11 +145,12 @@ async function createOrderFromGemini(restaurantId, parsedJson, port = 3001) {
     };
 
     // Petición al backend (mismo proceso en dev; servicio API en el worker).
-    const response = await axios.post(`${apiBase(port)}/api/store/orders`, payload, {
+    // Con 2 reintentos: seguro por el dedupe server-side del endpoint.
+    const response = await postWithRetry(`${apiBase(port)}/api/store/orders`, payload, {
       headers: {
         'x-restaurant-id': restaurantId
       }
-    });
+    }, 2);
 
     console.log(`[WhatsApp Bot] Orden creada exitosamente: ${response.data.orderNumber}`);
     return response.data;
@@ -173,13 +195,14 @@ async function addItemsToOrder(orderId, parsedJson, restaurantId, port = 3001) {
       { expiresIn: '2m' }
     );
 
-    const response = await axios.post(`${apiBase(port)}/api/orders/${orderId}/items`, payload, {
+    // Sin reintento (no hay dedupe de rounds → evitar doble agregado); solo timeout.
+    const response = await postWithRetry(`${apiBase(port)}/api/orders/${orderId}/items`, payload, {
       headers: {
         'x-restaurant-id': restaurantId,
         'x-location-id': order.locationId,
         'Authorization': `Bearer ${token}`
       }
-    });
+    }, 0);
 
     console.log(`[WhatsApp Bot] Items agregados exitosamente a la orden ${orderId}`);
     return response.data;
