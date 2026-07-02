@@ -31,6 +31,20 @@ function sanitizeReply(text) {
     .replace(/[ \t]{2,}/g, ' ');
 }
 
+// Lista negra: números que el bot NO debe contestar (staff, proveedores,
+// contactos que atiendes a mano). Se configuran en WHATSAPP_BOT_IGNORE_NUMBERS
+// (separados por coma) y se comparan por los ÚLTIMOS 10 DÍGITOS (tolera lada
+// 52/521 y formatos varios). Se lee por-mensaje para que un cambio de la
+// variable aplique con solo reiniciar (sin tocar código).
+function last10Digits(s) { return String(s || '').replace(/\D/g, '').slice(-10); }
+function isIgnoredNumber(phone) {
+  const p = last10Digits(phone);
+  if (p.length < 10) return false;
+  const list = (process.env.WHATSAPP_BOT_IGNORE_NUMBERS || '')
+    .split(',').map(last10Digits).filter(d => d.length >= 10);
+  return list.includes(p);
+}
+
 function initWhatsApp(io) {
   console.log('[WhatsApp Bot] Inicializando cliente...');
 
@@ -133,6 +147,13 @@ function initWhatsApp(io) {
       }
     } catch (e) {
       console.error('[WhatsApp Bot] No se pudo obtener el contacto limpio', e);
+    }
+
+    // Lista negra: si el número está en WHATSAPP_BOT_IGNORE_NUMBERS, el bot NO
+    // responde (lo atiendes tú a mano). Se evalúa con el teléfono ya resuelto.
+    if (isIgnoredNumber(phone)) {
+      console.log(`[WhatsApp Bot] Número en lista de ignorados (${phone}); no se responde.`);
+      return;
     }
 
     const isInvalidPhone = !/^\d{10,14}$/.test(phone);
