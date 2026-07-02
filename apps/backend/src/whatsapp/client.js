@@ -14,6 +14,8 @@ let latestQr = null;
 // Mapa para guardar el historial corto de conversaciones por número
 // Formato: { "5215551234567": [ { role: "user", text: "hola" }, { role: "model", text: "Hola soy el mesero" } ] }
 const chatHistory = new Map();
+const customerProfiles = new Map();
+const MAX_HISTORY_MESSAGES = 24;
 
 // Mapa para guardar órdenes recientes confirmadas por número. Permite añadir items.
 // Formato: { "5215551234567": { orderId: "abc", timestamp: 123456789 } }
@@ -50,6 +52,34 @@ function sanitizeReply(text) {
     .replace(/\bcomplement:[a-z0-9]+\b/gi, '')
     .replace(/\bcm[a-z0-9]{20,}\b/g, '')
     .replace(/[ \t]{2,}/g, ' ');
+}
+
+function isValidPhoneNumber(phone) {
+  return /^\d{10,14}$/.test(String(phone || '').replace(/\D/g, ''));
+}
+
+function extractPhoneFromText(text) {
+  const match = String(text || '').match(/(?:\+?\d[\d\s().-]{8,}\d)/);
+  if (!match) return null;
+  const digits = match[0].replace(/\D/g, '');
+  return isValidPhoneNumber(digits) ? digits : null;
+}
+
+function updateCustomerProfile(phone, patch = {}) {
+  const current = customerProfiles.get(phone) || {};
+  const next = { ...current };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== null && value !== undefined && String(value).trim?.() !== '') next[key] = value;
+  }
+  next.updatedAt = Date.now();
+  customerProfiles.set(phone, next);
+  return next;
+}
+
+function pruneHistory(history) {
+  if (history.length > MAX_HISTORY_MESSAGES) {
+    history.splice(0, history.length - MAX_HISTORY_MESSAGES);
+  }
 }
 
 // Lista negra: números que el bot NO debe contestar (staff, proveedores,
@@ -264,7 +294,12 @@ function initWhatsApp(io) {
       return;
     }
 
-    const isInvalidPhone = !/^\d{10,14}$/.test(phone);
+    const detectedPhone = extractPhoneFromText(messageText);
+    if (detectedPhone) updateCustomerProfile(phone, { customerPhone: detectedPhone });
+    const profile = customerProfiles.get(phone) || {};
+    const isLidChat = msg.from.includes('@lid') || String(contactId || '').includes('@lid');
+    const hasReliableChatPhone = !isLidChat && isValidPhoneNumber(phone);
+    const isInvalidPhone = !hasReliableChatPhone && !isValidPhoneNumber(profile.customerPhone);
     // Tenant del bot: FIJO por env (WHATSAPP_BOT_RESTAURANT_ID). El fallback
     // "primer restaurante activo" era una ruleta en prod (~85+ tenants: el más
     // viejo de la BD, no necesariamente el tuyo) — se conserva solo para dev
@@ -287,6 +322,12 @@ function initWhatsApp(io) {
       chatHistory.set(phone, []);
     }
     const history = chatHistory.get(phone);
+    if (profile.customerName && history.length === 0) {
+      history.push({
+        role: 'model',
+        text: `Contexto recordado: cliente ${profile.customerName}${profile.customerPhone ? `, telefono ${profile.customerPhone}` : ''}${profile.deliveryAddress ? `, ultima direccion ${profile.deliveryAddress}` : ''}${profile.paymentMethod ? `, ultimo pago ${profile.paymentMethod}` : ''}.`,
+      });
+    }
 
     // Revisar si tiene una orden reciente (menos de 15 minutos)
     let activeOrderId = null;
@@ -300,7 +341,7 @@ function initWhatsApp(io) {
 
     // Procesar con Gemini
     console.log(`[WhatsApp Bot] Procesando con Gemini (phone=${phone}, invalid=${isInvalidPhone}, tenant=${restaurant.id})...`);
-    const geminiResponse = await processWhatsAppMessage(phone, messageText, restaurant.id, history, activeOrderId, isInvalidPhone);
+    const geminiResponse = await processWhatsAppMessage(phone, messageText, restaurant.id, history, activeOrderId, isInvalidPhone, profile);
     console.log(`[WhatsApp Bot] Gemini status=${geminiResponse?.status}, reply=${!!geminiResponse?.replyMessage}`);
 
     // Actualizar historial localmente
@@ -310,10 +351,8 @@ function initWhatsApp(io) {
        history.push({ role: 'model', text: geminiResponse.replyMessage });
     }
 
-    // Mantener solo los últimos 10 mensajes para ahorrar tokens
-    if (history.length > 10) {
-      history.splice(0, history.length - 10);
-    }
+    // Mantener memoria suficiente para pedidos grandes sin crecer sin límite.
+    pruneHistory(history);
 
     // Envío robusto (sendMessage anda mejor con @lid que msg.reply).
     const safeSend = async (text) => {
@@ -337,9 +376,20 @@ function initWhatsApp(io) {
       const orderCreated = await createOrderFromGemini(restaurant.id, geminiResponse, process.env.PORT || 3001);
       if (orderCreated && orderCreated.id) {
         recentOrders.set(phone, { orderId: orderCreated.id, timestamp: Date.now() });
-        chatHistory.delete(phone);
+        updateCustomerProfile(phone, {
+          customerName: geminiResponse.customerName,
+          customerPhone: extractPhoneFromText(geminiResponse.customerPhone) || detectedPhone || profile.customerPhone,
+          orderType: geminiResponse.orderType,
+          deliveryAddress: geminiResponse.deliveryAddress,
+          paymentMethod: geminiResponse.paymentMethod,
+        });
         const totalLine = orderCreated.total != null ? `\n💵 Total: $${orderCreated.total} (incluye envío si aplica)` : '';
         const mins = orderCreated.estimatedMinutes || 30;
+        history.push({
+          role: 'model',
+          text: `Pedido registrado en TPV: folio ${orderCreated.orderNumber}, total ${orderCreated.total ?? 'pendiente'}, pago ${geminiResponse.paymentMethod || 'no especificado'}.`,
+        });
+        pruneHistory(history);
         await safeSend(`✅ ¡Pedido confirmado! Folio *#${orderCreated.orderNumber}*${totalLine}\n⏱️ Tiempo estimado: ~${mins} min.\n¡Gracias por tu compra! 🍔`);
       } else {
         // Falla al registrar: NUNCA decir "confirmado". Dejar el hilo abierto.
@@ -354,7 +404,6 @@ function initWhatsApp(io) {
         const addResponse = await require('./orderProcessor').addItemsToOrder(activeOrderId, geminiResponse, restaurant.id, process.env.PORT || 3001);
         if (addResponse) {
           recentOrders.set(phone, { orderId: activeOrderId, timestamp: Date.now() });
-          chatHistory.delete(phone);
           await safeSend(geminiResponse.replyMessage ? sanitizeReply(geminiResponse.replyMessage) : '¡Listo! Lo agregué a tu pedido. 🍔');
         } else {
           console.error(`[WhatsApp Bot] FALLO al agregar items a la orden ${activeOrderId} de ${phone}.`);

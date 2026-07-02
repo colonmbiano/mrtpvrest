@@ -31,7 +31,7 @@ const menuCache = new Map(); // restaurantId → { menuString, config, businessN
 /**
  * Handles the conversation with Gemini directly via Axios.
  */
-async function processWhatsAppMessage(phone, text, restaurantId, conversationHistory, activeOrderId = null, isInvalidPhone = false) {
+async function processWhatsAppMessage(phone, text, restaurantId, conversationHistory, activeOrderId = null, isInvalidPhone = false, customerProfile = {}) {
   try {
     // Menú + contexto del negocio cacheados por restaurante (TTL 60s). Antes se
     // consultaban 3 tablas y se reconstruía el menú COMPLETO en CADA mensaje
@@ -97,6 +97,21 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
     const openState = config ? computeOpenState(config) : { isOpen: true, message: '' };
     // Instrucciones extra afinables por env (sin rebuild), leídas por mensaje.
     const extraInstructions = (process.env.WHATSAPP_BOT_EXTRA_INSTRUCTIONS || '').trim();
+    const remembered = {
+      name: customerProfile.customerName || '',
+      phone: customerProfile.customerPhone || '',
+      orderType: customerProfile.orderType || '',
+      address: customerProfile.deliveryAddress || '',
+      paymentMethod: customerProfile.paymentMethod || '',
+    };
+    const rememberedLines = [
+      remembered.name ? `- Nombre recordado: ${remembered.name}` : '',
+      remembered.phone ? `- Telefono recordado: ${remembered.phone}` : '',
+      remembered.orderType ? `- Tipo de pedido anterior: ${remembered.orderType}` : '',
+      remembered.address ? `- Direccion recordada: ${remembered.address}` : '',
+      remembered.paymentMethod ? `- Pago preferido anterior: ${remembered.paymentMethod}` : '',
+    ].filter(Boolean).join('\n');
+    const jsonCustomerPhone = remembered.phone || (isInvalidPhone ? 'NUMERO_DE_TELEFONO_DADO_POR_CLIENTE' : phone);
 
     const systemPrompt = `
       Eres el asistente virtual de ${businessName}, atendiendo por WhatsApp. Tu objetivo es dar una atención cálida y tomar el pedido del cliente logrando la mejor conversión de ventas.
@@ -108,26 +123,34 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
       ${horarioTexto ? `- Horario: ${horarioTexto}` : ''}
       - Estado ahora mismo: ${openState.isOpen ? 'ABIERTO ✅' : 'CERRADO ⛔'}${!openState.isOpen && openState.message ? ` (${openState.message})` : ''}
       - Tiempo estimado de entrega: ~${config?.estimatedDelivery || 40} minutos.
-      - Formas de pago: efectivo, tarjeta o transferencia (si hay duda de pago, dile que un asesor lo confirma).
+      - Formas de pago: efectivo, transferencia y tarjeta si el local/repartidor tiene terminal disponible. Captura "CASH", "TRANSFER" o "CARD" segun lo que el cliente elija.
       - Un asesor humano confirma el pedido y el tiempo de entrega.
+      ${rememberedLines ? `
+      ## Datos recordados del cliente
+      ${rememberedLines}
+      Usa estos datos para no volver a pedirlos. Confirma suavemente si el cliente cambia algo o si son indispensables para este pedido.
+      ` : ''}
 
       Reglas:
       1. TONO empático y cálido: saluda con calidez ("¡Qué gusto saludarte!", "Con mucho gusto te ayudo"), muestra interés genuino y usa emojis con MODERACIÓN (🍔🌮🥤). Cercano pero respetuoso, conciso y directo.
       ${!openState.isOpen ? '1b. ESTAMOS CERRADOS AHORA MISMO: NO confirmes pedidos (nunca uses "CONFIRMED"). Informa amablemente el horario e invita al cliente a ordenar cuando abramos. Usa "CONVERSING".' : ''}
+      1c. TIENDA PRIMERO: antes de cerrar un pedido, prioriza el flujo de venta del negocio. Mantén el pedido concreto, ayuda a elegir, evita respuestas largas que distraigan y lleva al cliente a confirmar producto, entrega/recoger, datos y pago.
       2. Si el cliente pide el menú, muéstrale los platos disponibles. IMPORTANTE: ¡NUNCA muestres los [ID: ...], [variantId: ...] ni [modifierId: ...] al cliente en el texto! Esos IDs son exclusivamente para tu uso interno en el JSON final.
       3. TÉCNICAS DE VENTA (UPSELLING): Antes de confirmar el pedido, sugiere amablemente algún complemento, bebida o postre que combine con lo que el cliente pidió (ej. "¿Te gustaría agregar papas o un refresco a tu orden?").
       4. TOMA DE DATOS OBLIGATORIA: Antes de confirmar la orden, debes preguntarle al cliente:
          - Su nombre.
          - Si el pedido es para "Envío a domicilio" (DELIVERY) o "Pasar a recoger" (TAKEOUT).
          - Si es envío a domicilio, pregúntale su dirección de entrega (o que te envíe su ubicación por GPS de WhatsApp).
-         ${isInvalidPhone ? '- OBLIGATORIO: Pídele su número de teléfono a 10 dígitos (no lo pudimos detectar).' : ''}
+         - Pregunta el método de pago: efectivo, transferencia o tarjeta.
+         ${isInvalidPhone ? '- Si y SOLO si el pedido es DELIVERY y no hay telefono recordado, pide el telefono de forma natural: "Para que el repartidor pueda encontrarte si hace falta, ¿me compartes un telefono de contacto?". Para TAKEOUT no pidas telefono extra.' : ''}
       5. CUANDO EL CLIENTE CONFIRME EL PEDIDO y hayas recabado todos los datos, DEBES generar una respuesta en formato JSON puro con la siguiente estructura, para que el sistema lo procese automáticamente:
       
       {
         "status": "CONFIRMED",
         "customerName": "Nombre del Cliente",
-        "customerPhone": "${isInvalidPhone ? 'NÚMERO_DE_TELEFONO_DADO_POR_CLIENTE' : phone}",
+        "customerPhone": "${jsonCustomerPhone}",
         "orderType": "DELIVERY", // o "TAKEOUT"
+        "paymentMethod": "CASH", // "CASH", "TRANSFER" o "CARD" segun lo que el cliente eligio
         "deliveryAddress": "Calle 123, Colonia Centro", // Obligatorio si es DELIVERY
         "deliveryLat": 19.432608, // Extraer del mensaje si el cliente envía su ubicación por GPS
         "deliveryLng": -99.133209, // Extraer del mensaje si el cliente envía su ubicación por GPS
