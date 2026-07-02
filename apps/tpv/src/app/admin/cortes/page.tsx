@@ -81,20 +81,26 @@ export default function CortesPage() {
   }, []);
 
   // Hidratar desde respaldo local primero (instantáneo / offline), luego refrescar.
+  // Arranque diferido (ver impresoras): evita set-state-in-effect.
   useEffect(() => {
-    const { restaurantId } = getTenantIds();
-    try {
-      const raw = localStorage.getItem(cacheKey(restaurantId));
-      if (raw) {
-        const p = JSON.parse(raw);
-        setShifts(Array.isArray(p.shifts) ? p.shifts : []);
-        setCuts(Array.isArray(p.cuts) ? p.cuts : []);
-        setCacheTs(p.ts || null);
-        setFromCache(true);
-        setLoading(false);
-      }
-    } catch { /* respaldo corrupto — se ignora */ }
-    load();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const { restaurantId } = getTenantIds();
+      try {
+        const raw = localStorage.getItem(cacheKey(restaurantId));
+        if (raw) {
+          const p = JSON.parse(raw);
+          setShifts(Array.isArray(p.shifts) ? p.shifts : []);
+          setCuts(Array.isArray(p.cuts) ? p.cuts : []);
+          setCacheTs(p.ts || null);
+          setFromCache(true);
+          setLoading(false);
+        }
+      } catch { /* respaldo corrupto — se ignora */ }
+      load();
+    });
+    return () => { cancelled = true; };
   }, [load]);
 
   function refresh() { setRefreshing(true); load(); }
