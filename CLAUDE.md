@@ -42,7 +42,7 @@ Detalle y estado: `docs/AUDITORIA-VALIDACION.md`.
 
 **API**
 - Nunca `data: req.body` directo a Prisma: usar `pick(req.body, [...campos])` de `lib/validate.js` (mass assignment).
-- Replays del outbox del TPV se dedupean por header `Idempotency-Key` (`idempotency.middleware.js`, in-memory TTL 1h — migrar a Redis si Railway escala a multi-instancia).
+- Replays del outbox del TPV se dedupean por header `Idempotency-Key` (`idempotency.middleware.js`, TTL 1h). Con `REDIS_URL` seteada usa Redis (apto multi-instancia) con fallback a memoria si Redis cae; sin ella, memoria local. Al escalar Railway a multi-instancia: provisionar Redis y setear `REDIS_URL`.
 
 **Sockets (lib/socket-guard.js)**
 - Handlers de eventos entrantes nuevos: gatear con `allowEvent()` (rate limit) y validar contra la BD que el id del payload pertenece al restaurante del socket (`orderBelongsToRestaurant` / `locationBelongsToRestaurant`).
