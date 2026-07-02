@@ -5,6 +5,7 @@
    "scripts": {
       "dev": "nodemon src/index.js",
       "start": "node src/index.js",
+      "bot:worker": "node src/whatsapp/worker.js",
       "build": "prisma generate --schema=../../packages/database/prisma/schema.prisma",
       "db:migrate": "npx prisma migrate dev --schema=../../packages/database/prisma/schema.prisma",
       "db:seed": "node ../../packages/database/prisma/seed.js",
@@ -39,10 +40,12 @@
       "nodemailer": "^8.0.7",
       "openai": "^6.33.0",
       "prisma": "^7.8.0",
+      "qrcode-terminal": "^0.12.0",
       "resend": "^6.10.0",
       "socket.io": "^4.7.4",
       "stripe": "^17.5.0",
       "web-push": "^3.6.7",
+      "whatsapp-web.js": "^1.34.7",
       "zod": "^3.22.4"
    },
    "devDependencies": {
