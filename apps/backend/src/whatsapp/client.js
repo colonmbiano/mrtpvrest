@@ -549,6 +549,13 @@ function initWhatsApp(io) {
         });
         pruneHistory(history);
         await safeSend(`✅ ¡Pedido confirmado! Folio *#${orderCreated.orderNumber}*${totalLine}\n⏱️ Tiempo estimado: ~${mins} min.\n¡Gracias por tu compra! 🍔`);
+        // Recompensa por hitos de compra (el backend la genera cada N compras).
+        const reward = orderCreated.reward;
+        if (reward && reward.couponCode) {
+          const pct = reward.discountValue;
+          const vence = reward.expiresAt ? new Date(reward.expiresAt).toLocaleDateString('es-MX') : '';
+          await safeSend(`🎉 ¡Y esta es tu compra #${reward.ordersCount} con nosotros! Te ganaste un cupón:\n🎟️ *${reward.couponCode}* — ${pct}% de descuento en tu próximo pedido${vence ? `\n📅 Vence el ${vence}` : ''}.\n¡Gracias por tu preferencia! 🙌`);
+        }
       } else {
         // Falla al registrar: NUNCA decir "confirmado". Dejar el hilo abierto.
         console.error(`[WhatsApp Bot] FALLO al crear orden CONFIRMED de ${phone}. items=${JSON.stringify(items)}`);
