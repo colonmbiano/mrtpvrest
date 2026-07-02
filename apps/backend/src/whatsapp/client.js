@@ -96,14 +96,17 @@ function initWhatsApp(io) {
     //  - grupos (@g.us), estados (status@broadcast), difusiones (@broadcast) y
     //    canales/newsletters (@newsletter): no son clientes 1-a-1.
     if (msg.fromMe) return;
+    // DENYLIST (no allowlist): excluimos lo que NO es un cliente 1-a-1. Un
+    // allowlist estricto a @c.us rompía las respuestas, porque WhatsApp entrega
+    // muchos DMs como @lid (linked-device id), no @c.us → se caían todos los
+    // mensajes. Aquí solo bloqueamos grupos/estados/difusiones/canales y
+    // dejamos pasar cualquier chat individual (@c.us o @lid).
     if (
       msg.from.includes('@g.us') ||
       msg.from === 'status@broadcast' ||
       msg.from.includes('@broadcast') ||
       msg.from.includes('@newsletter')
     ) return;
-    // Solo chats individuales (@c.us). Cualquier otro tipo de remitente se ignora.
-    if (!msg.from.endsWith('@c.us')) return;
 
     // Obtener texto o ubicación
     let messageText = msg.body;
