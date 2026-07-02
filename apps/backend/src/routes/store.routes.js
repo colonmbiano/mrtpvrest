@@ -31,6 +31,7 @@ const { sendOrderPaidEmail } = require('../lib/order-confirmation-mailer');
 const { computeOpenState } = require('../utils/storeHours');
 const { authenticate } = require('../middleware/auth.middleware');
 const { addLoyaltyPoints, genLoyaltyQr } = require('../services/loyalty.service');
+const { isMilestoneEnabled, processCustomerMilestone } = require('../services/loyalty-milestone.service');
 const { runOrderDictationSmart } = require('../services/order-dictation.service');
 const router = express.Router();
 
@@ -1053,6 +1054,26 @@ router.post('/orders', async (req, res) => {
       }
     }
 
+    // Registro por cliente (Customer) + recompensa por hitos de compra. GATEADO
+    // por env (LOYALTY_MILESTONE_RESTAURANT_IDS), APAGADO por defecto → cero
+    // impacto en otros tenants. Best-effort: la orden ya está creada, esto nunca
+    // la afecta. El cupón (si se generó) viaja en `reward` para que el bot de
+    // WhatsApp (o el storefront) se lo comunique al cliente.
+    let milestoneReward = null;
+    if (isMilestoneEnabled(restaurant.id)) {
+      try {
+        const r = await processCustomerMilestone(restaurant.id, {
+          phone: customerPhone,
+          name: customerName,
+          total: Number(order.total) || 0,
+          orderId: order.id,
+        });
+        milestoneReward = r?.reward || null;
+      } catch (e) {
+        console.error('[store] milestone reward error:', e.message);
+      }
+    }
+
     res.status(201).json({
       id:          order.id,
       orderNumber: order.orderNumber,
@@ -1064,6 +1085,7 @@ router.post('/orders', async (req, res) => {
       tip:         order.tip,
       estimatedMinutes: order.estimatedMinutes || 30,
       couponWarnings,
+      reward: milestoneReward,
     });
   } catch (e) {
     console.error('[store] POST /orders error:', e.message);
