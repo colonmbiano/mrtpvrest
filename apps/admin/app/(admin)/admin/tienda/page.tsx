@@ -71,6 +71,160 @@ const DEFAULT_HOUR: Omit<BusinessHour, "day"> = { enabled: false, open: "09:00",
 const INPUT_CLS = "min-h-12 w-full rounded-xl px-4 text-sm font-medium outline-none transition-colors focus:border-[var(--brand-primary)]";
 const INPUT_STYLE = { background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
 
+// ── Recompensas por puntos (lealtad Fase 3) ─────────────────────────────────
+// CRUD contra /api/loyalty/rewards. Una recompensa da un producto gratis o un
+// descuento fijo en $; el cliente la canjea en el checkout de la tienda online.
+type Reward = {
+  id: string;
+  name: string;
+  description?: string | null;
+  pointsCost: number;
+  menuItemId?: string | null;
+  menuItem?: { id: string; name: string } | null;
+  discountAmount?: string | number | null;
+  isActive: boolean;
+};
+
+function RewardsManager() {
+  const [rewards, setRewards] = useState<Reward[]>([]);
+  const [menuItems, setMenuItems] = useState<Array<{ id: string; name: string }>>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  // Form de alta
+  const [name, setName] = useState("");
+  const [pointsCost, setPointsCost] = useState(100);
+  const [kind, setKind] = useState<"PRODUCT" | "DISCOUNT">("PRODUCT");
+  const [menuItemId, setMenuItemId] = useState("");
+  const [discountAmount, setDiscountAmount] = useState(50);
+
+  const load = () => {
+    Promise.all([api.get("/api/loyalty/rewards"), api.get("/api/menu/items?admin=true")])
+      .then(([rw, mi]) => {
+        setRewards(Array.isArray(rw.data) ? rw.data : []);
+        const items = Array.isArray(mi.data) ? mi.data : (mi.data?.items || []);
+        setMenuItems(items.map((i: any) => ({ id: i.id, name: i.name })));
+      })
+      .catch(() => setMsg("No se pudieron cargar las recompensas"))
+      .finally(() => setLoaded(true));
+  };
+  useEffect(load, []);
+
+  const create = async () => {
+    setMsg("");
+    if (!name.trim()) { setMsg("Ponle nombre a la recompensa"); return; }
+    if (kind === "PRODUCT" && !menuItemId) { setMsg("Elige el producto que regala"); return; }
+    setSaving(true);
+    try {
+      await api.post("/api/loyalty/rewards", {
+        name: name.trim(),
+        pointsCost,
+        menuItemId: kind === "PRODUCT" ? menuItemId : undefined,
+        discountAmount: kind === "DISCOUNT" ? discountAmount : undefined,
+      });
+      setName(""); setMenuItemId("");
+      load();
+    } catch (e: any) {
+      setMsg(e?.response?.data?.error || "No se pudo crear la recompensa");
+    } finally { setSaving(false); }
+  };
+
+  const toggle = async (r: Reward) => {
+    try {
+      await api.put(`/api/loyalty/rewards/${r.id}`, {
+        name: r.name,
+        description: r.description || undefined,
+        pointsCost: r.pointsCost,
+        menuItemId: r.menuItemId || undefined,
+        discountAmount: r.menuItemId ? undefined : Number(r.discountAmount || 0),
+        isActive: !r.isActive,
+      });
+      load();
+    } catch (e: any) { setMsg(e?.response?.data?.error || "No se pudo actualizar"); }
+  };
+
+  const remove = async (r: Reward) => {
+    if (!confirm(`¿Eliminar la recompensa "${r.name}"?`)) return;
+    try { await api.delete(`/api/loyalty/rewards/${r.id}`); load(); }
+    catch (e: any) { setMsg(e?.response?.data?.error || "No se pudo eliminar"); }
+  };
+
+  return (
+    <div className="mt-6 border-t pt-5" style={{ borderColor: "var(--bd-1)" }}>
+      <div className="mb-3 flex items-center gap-2">
+        <Trophy size={14} className="shrink-0 text-tx-mid" />
+        <p className="text-[13px] font-extrabold text-tx-hi">Recompensas canjeables</p>
+      </div>
+
+      {loaded && rewards.length > 0 && (
+        <div className="mb-4 space-y-2">
+          {rewards.map((r) => (
+            <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl px-4 py-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-tx-hi">
+                  {r.name}
+                  {!r.isActive && <span className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold text-tx-mut" style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>Pausada</span>}
+                </p>
+                <p className="truncate text-[12px] text-tx-mut">
+                  {r.menuItem ? `${r.menuItem.name} gratis` : `−$${Number(r.discountAmount || 0)} de descuento`} · {r.pointsCost} pts
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button type="button" onClick={() => toggle(r)} className="rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-tx-mid" style={{ border: "1px solid var(--bd-1)" }}>
+                  {r.isActive ? "Pausar" : "Activar"}
+                </button>
+                <button type="button" onClick={() => remove(r)} className="rounded-lg p-1.5 text-tx-mut" title="Eliminar" style={{ border: "1px solid var(--bd-1)" }}>
+                  <X size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {loaded && rewards.length === 0 && (
+        <p className="mb-4 text-[12px] text-tx-mut">Sin recompensas todavía. Crea la primera: tus clientes las canjean con sus puntos en la tienda online.</p>
+      )}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <FieldLabel>Nombre</FieldLabel>
+          <input type="text" value={name} placeholder="Ej. Hamburguesa de regalo" onChange={(e) => setName(e.target.value)} className={INPUT_CLS} style={INPUT_STYLE} />
+        </div>
+        <div>
+          <FieldLabel>Cuesta (puntos)</FieldLabel>
+          <input type="number" min="1" value={pointsCost} onChange={(e) => setPointsCost(Math.max(1, parseInt(e.target.value) || 1))} className={INPUT_CLS} style={INPUT_STYLE} />
+        </div>
+        <div>
+          <FieldLabel>Qué otorga</FieldLabel>
+          <select value={kind} onChange={(e) => setKind(e.target.value as "PRODUCT" | "DISCOUNT")} className={INPUT_CLS} style={INPUT_STYLE}>
+            <option value="PRODUCT">Producto gratis</option>
+            <option value="DISCOUNT">Descuento fijo ($)</option>
+          </select>
+        </div>
+        {kind === "PRODUCT" ? (
+          <div>
+            <FieldLabel>Producto</FieldLabel>
+            <select value={menuItemId} onChange={(e) => setMenuItemId(e.target.value)} className={INPUT_CLS} style={INPUT_STYLE}>
+              <option value="">Elegir…</option>
+              {menuItems.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+        ) : (
+          <div>
+            <FieldLabel>Descuento ($)</FieldLabel>
+            <input type="number" min="1" step="any" value={discountAmount} onChange={(e) => setDiscountAmount(Math.max(1, Number(e.target.value) || 1))} className={INPUT_CLS} style={INPUT_STYLE} />
+          </div>
+        )}
+      </div>
+      {msg && <p className="mt-2 text-[12px] font-bold text-amber-600">{msg}</p>}
+      <button type="button" onClick={create} disabled={saving} className="mt-3 rounded-xl px-4 py-2.5 text-[12px] font-extrabold text-white disabled:opacity-50" style={{ background: "var(--brand-primary)" }}>
+        {saving ? "Creando…" : "Agregar recompensa"}
+      </button>
+    </div>
+  );
+}
+
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return <div className="mb-1.5 font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">{children}</div>;
 }
@@ -679,6 +833,7 @@ export default function TiendaConfigPage() {
               <input type="number" min="0" step="any" value={config.pointsValuePesos} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({ ...p, pointsValuePesos: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
             </div>
           </div>
+          <RewardsManager />
         </WtCard>
 
         <PrimaryBtn icon={Store} onClick={handleSave} disabled={saving}>

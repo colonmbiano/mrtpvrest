@@ -45,6 +45,83 @@ router.get('/customers', requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al obtener clientes' }) }
 })
 
+// ── Recompensas (Fase 3): catálogo canjeable por puntos ───────────────────
+// Una recompensa otorga producto gratis (menuItemId) O descuento fijo en $
+// (discountAmount) — exactamente uno. El canje real vive en el checkout web
+// (store.routes.js /orders, param redeemRewardId).
+
+function normalizeRewardBody(body) {
+  const name = typeof body.name === 'string' ? body.name.trim() : ''
+  const description = typeof body.description === 'string' ? (body.description.trim() || null) : null
+  const pointsCost = Math.floor(Number(body.pointsCost))
+  const menuItemId = typeof body.menuItemId === 'string' && body.menuItemId ? body.menuItemId : null
+  const rawDiscount = body.discountAmount != null && body.discountAmount !== '' ? Number(body.discountAmount) : null
+  const discountAmount = rawDiscount != null && Number.isFinite(rawDiscount) && rawDiscount > 0
+    ? Math.round(rawDiscount * 100) / 100
+    : null
+  const sortOrder = Number.isFinite(Number(body.sortOrder)) ? Math.floor(Number(body.sortOrder)) : 0
+  const isActive = body.isActive === undefined ? true : Boolean(body.isActive)
+
+  if (!name) return { error: 'Nombre requerido' }
+  if (!Number.isFinite(pointsCost) || pointsCost <= 0) return { error: 'pointsCost debe ser un entero > 0' }
+  if (!menuItemId && discountAmount == null) return { error: 'La recompensa debe dar un producto (menuItemId) o un descuento (discountAmount)' }
+  if (menuItemId && discountAmount != null) return { error: 'Producto y descuento son excluyentes: manda solo uno' }
+  return { data: { name, description, pointsCost, menuItemId, discountAmount, sortOrder, isActive } }
+}
+
+router.get('/rewards', requireAdmin, async (req, res) => {
+  try {
+    const rewards = await prisma.loyaltyReward.findMany({
+      where: { restaurantId: req.user.restaurantId },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      include: { menuItem: { select: { id: true, name: true, price: true } } },
+    })
+    res.json(rewards)
+  } catch (e) { res.status(500).json({ error: 'Error al obtener recompensas' }) }
+})
+
+router.post('/rewards', requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const norm = normalizeRewardBody(req.body || {})
+    if (norm.error) return res.status(400).json({ error: norm.error })
+    if (norm.data.menuItemId) {
+      const mi = await prisma.menuItem.findFirst({ where: { id: norm.data.menuItemId, restaurantId } })
+      if (!mi) return res.status(400).json({ error: 'El producto no pertenece a este restaurante' })
+    }
+    const reward = await prisma.loyaltyReward.create({ data: { ...norm.data, restaurantId } })
+    res.status(201).json(reward)
+  } catch (e) { res.status(500).json({ error: 'Error al crear recompensa' }) }
+})
+
+router.put('/rewards/:id', requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const norm = normalizeRewardBody(req.body || {})
+    if (norm.error) return res.status(400).json({ error: norm.error })
+    if (norm.data.menuItemId) {
+      const mi = await prisma.menuItem.findFirst({ where: { id: norm.data.menuItemId, restaurantId } })
+      if (!mi) return res.status(400).json({ error: 'El producto no pertenece a este restaurante' })
+    }
+    const updated = await prisma.loyaltyReward.updateMany({
+      where: { id: req.params.id, restaurantId },
+      data: norm.data,
+    })
+    if (updated.count === 0) return res.status(404).json({ error: 'Recompensa no encontrada' })
+    res.json(await prisma.loyaltyReward.findFirst({ where: { id: req.params.id, restaurantId } }))
+  } catch (e) { res.status(500).json({ error: 'Error al actualizar recompensa' }) }
+})
+
+router.delete('/rewards/:id', requireAdmin, async (req, res) => {
+  try {
+    const deleted = await prisma.loyaltyReward.deleteMany({
+      where: { id: req.params.id, restaurantId: req.user.restaurantId },
+    })
+    if (deleted.count === 0) return res.status(404).json({ error: 'Recompensa no encontrada' })
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: 'Error al eliminar recompensa' }) }
+})
+
 router.post('/coupons', requireAdmin, async (req, res) => {
   try {
     const { code, description, discountType, discountValue, minOrderAmount, maxUses, expiresAt } = req.body
