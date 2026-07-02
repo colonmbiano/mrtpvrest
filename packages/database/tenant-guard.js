@@ -50,6 +50,7 @@ const SCOPED_MODELS = new Set([
   'IntegrationConfig',
   'Location',
   'LoyaltyAccount',
+  'LoyaltyReward',
   'MenuItem',
   'ModifierIngredient',
   'OperatingExpense',

@@ -473,6 +473,7 @@ router.post('/orders', async (req, res) => {
     couponCode: rawCouponCode,
     loyaltyQrCode: rawLoyaltyQr,
     redeemPoints: rawRedeemPoints,
+    redeemRewardId: rawRedeemRewardId,
   } = req.body;
   const deliveryLat = (rawLat != null && !Number.isNaN(Number(rawLat))) ? Number(rawLat) : null;
   const deliveryLng = (rawLng != null && !Number.isNaN(Number(rawLng))) ? Number(rawLng) : null;
@@ -488,6 +489,8 @@ router.post('/orders', async (req, res) => {
   const loyaltyQrCode = typeof rawLoyaltyQr === 'string' ? rawLoyaltyQr.trim() : '';
   // Fase 2 lealtad: puntos que el cliente quiere canjear como descuento.
   const redeemPoints = Math.max(0, Math.floor(Number(rawRedeemPoints) || 0));
+  // Fase 3 lealtad: recompensa del catálogo (producto gratis o descuento fijo).
+  const redeemRewardId = typeof rawRedeemRewardId === 'string' ? rawRedeemRewardId.trim() : '';
 
   const VALID_ORDER_TYPES = ['DELIVERY', 'TAKEOUT', 'DINE_IN'];
   const resolvedOrderType = VALID_ORDER_TYPES.includes(orderType) ? orderType : 'DELIVERY';
@@ -802,6 +805,47 @@ router.post('/orders', async (req, res) => {
         pointsDiscount = Math.round(pointsUsed * ppv * 100) / 100;
       }
     }
+
+    // Fase 3: recompensa del catálogo. Requiere cliente identificado y saldo
+    // suficiente (pre-check en READ; el consumo real va condicional en la tx,
+    // junto con el canje genérico si lo hay). Inválida → warning, no bloquea.
+    let reward = null;
+    let rewardDiscount = 0;
+    if (redeemRewardId) {
+      const found = loyaltyUserId
+        ? await prisma.loyaltyReward.findFirst({
+            where: { id: redeemRewardId, restaurantId: restaurant.id, isActive: true },
+            include: { menuItem: { select: { id: true, name: true, isAvailable: true } } },
+          })
+        : null;
+      if (!loyaltyUserId) {
+        couponWarnings.push('Identifícate para canjear recompensas, ignorada');
+      } else if (!found) {
+        couponWarnings.push('Recompensa no disponible, ignorada');
+      } else {
+        if (!redeemAccount) {
+          redeemAccount = await prisma.loyaltyAccount.findUnique({
+            where: { userId_restaurantId: { userId: loyaltyUserId, restaurantId: restaurant.id } },
+            select: { id: true, points: true },
+          });
+        }
+        if (!redeemAccount || redeemAccount.points < found.pointsCost + pointsUsed) {
+          couponWarnings.push('Puntos insuficientes para la recompensa, ignorada');
+        } else if (found.menuItemId && (!found.menuItem || found.menuItem.isAvailable === false)) {
+          couponWarnings.push('El producto de la recompensa no está disponible, ignorada');
+        } else {
+          reward = found;
+          if (!found.menuItemId) {
+            // Descuento fijo, topado a lo cobrable restante de productos.
+            rewardDiscount = Math.min(
+              Number(found.discountAmount || 0),
+              Math.max(0, subtotal - discount - pointsDiscount),
+            );
+            rewardDiscount = Math.round(rewardDiscount * 100) / 100;
+          }
+        }
+      }
+    }
     // Crear la orden CON el consumo de cupón y puntos en la misma transacción:
     // si algo falla, no queda orden con descuento aplicado pero cupón/puntos
     // sin consumir (ni al revés). Los consumos son condicionales en el WHERE
@@ -825,19 +869,38 @@ router.post('/orders', async (req, res) => {
         }
       }
 
-      if (pointsUsed > 0 && redeemAccount) {
+      // Canje genérico (Fase 2) + recompensa (Fase 3) en UN solo decremento
+      // condicional: o alcanzan los puntos para todo, o se cancela todo el
+      // canje (sin estados a medias).
+      const rewardPoints = reward ? reward.pointsCost : 0;
+      const totalPointsToRedeem = pointsUsed + rewardPoints;
+      if (totalPointsToRedeem > 0 && redeemAccount) {
         const redeemed = await tx.loyaltyAccount.updateMany({
-          where: { id: redeemAccount.id, points: { gte: pointsUsed } },
-          data: { points: { decrement: pointsUsed } },
+          where: { id: redeemAccount.id, points: { gte: totalPointsToRedeem } },
+          data: { points: { decrement: totalPointsToRedeem } },
         });
         if (redeemed.count === 0) {
           couponWarnings.push('Puntos insuficientes, canje ignorado');
           pointsUsed = 0;
           pointsDiscount = 0;
+          reward = null;
+          rewardDiscount = 0;
         }
       }
 
-      const finalDiscount = Math.round((discount + pointsDiscount) * 100) / 100;
+      // Producto gratis de la recompensa: línea $0 con nota para cocina/ticket.
+      const finalItemsData = (reward && reward.menuItemId && reward.menuItem)
+        ? [...itemsData, {
+            menuItemId: reward.menuItem.id,
+            name: reward.menuItem.name,
+            price: 0,
+            quantity: 1,
+            subtotal: 0,
+            notes: `Recompensa: ${reward.name}`,
+          }]
+        : itemsData;
+
+      const finalDiscount = Math.round((discount + pointsDiscount + rewardDiscount) * 100) / 100;
       const finalTotal = Math.max(0, subtotal - finalDiscount + deliveryFee + tip);
 
       // Folio secuencial continuo por restaurante (misma serie que el TPV),
@@ -870,19 +933,24 @@ router.post('/orders', async (req, res) => {
           deliveryDistanceKm: resolvedOrderType === 'DELIVERY' ? deliveryDistanceKm : null,
           notes:           notes?.trim() || null,
           userId:          loyaltyUserId,
-          pointsUsed,
-          items: { create: itemsData },
+          pointsUsed:      pointsUsed + (reward ? reward.pointsCost : 0),
+          items: { create: finalItemsData },
         },
         include: {
           items: { include: { menuItem: { select: { name: true } } } },
         },
       });
 
-      // Movimiento REDEEMED en la misma tx que el decremento de saldo: si
+      // Movimientos REDEEMED en la misma tx que el decremento de saldo: si
       // falla, el rollback también devuelve los puntos.
       if (pointsUsed > 0 && redeemAccount) {
         await tx.loyaltyTransaction.create({
           data: { accountId: redeemAccount.id, type: 'REDEEMED', points: -pointsUsed, description: `Canje en pedido ${created.orderNumber}`, orderId: created.id },
+        });
+      }
+      if (reward && redeemAccount) {
+        await tx.loyaltyTransaction.create({
+          data: { accountId: redeemAccount.id, type: 'REDEEMED', points: -reward.pointsCost, description: `Recompensa "${reward.name}" en pedido ${created.orderNumber}`, orderId: created.id },
         });
       }
 
@@ -1053,6 +1121,33 @@ router.post('/loyalty/lookup', async (req, res) => {
       points: account.points,
       tier: account.tier,
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/store/rewards ───────────────────────────────────────────────
+// Catálogo público de recompensas activas (lealtad Fase 3). El storefront lo
+// muestra cuando el cliente se identifica (QR o sesión); el canje real va en
+// /orders con redeemRewardId.
+router.get('/rewards', async (req, res) => {
+  const store = await resolveStore(req, res);
+  if (!store) return;
+  const { restaurant } = store;
+  try {
+    const rewards = await prisma.loyaltyReward.findMany({
+      where: { restaurantId: restaurant.id, isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        id: true, name: true, description: true, pointsCost: true,
+        discountAmount: true,
+        menuItem: { select: { id: true, name: true, imageUrl: true } },
+      },
+    });
+    res.json(rewards.map((r) => ({
+      ...r,
+      discountAmount: r.discountAmount != null ? Number(r.discountAmount) : null,
+    })));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

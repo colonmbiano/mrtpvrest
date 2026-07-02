@@ -311,6 +311,7 @@ model Restaurant {
   menuItems        MenuItem[]
   variantTemplates VariantTemplate[]
   loyaltyAccounts  LoyaltyAccount[]
+  loyaltyRewards   LoyaltyReward[]
   coupons          Coupon[]
   integrations     IntegrationConfig[]
   orders           Order[]
@@ -652,6 +653,8 @@ model MenuItem {
   // FASE INVENTARIO/COSTEO · escandallos. Receta base (variantId NULL) y/o
   // recetas por variante. Era 1:1; ahora 1:N para soportar receta por variante.
   recipes Recipe[]
+
+  loyaltyRewards LoyaltyReward[]
 
   printerGroups MenuItemPrinterGroup[]
 
@@ -1188,6 +1191,30 @@ model LoyaltyTransaction {
   createdAt   DateTime       @default(now())
 
   @@map("loyalty_transactions")
+}
+
+// Catálogo de recompensas canjeables por puntos (lealtad Fase 3). Una
+// recompensa otorga UN producto gratis (menuItemId) O un descuento fijo en $
+// (discountAmount) — exactamente uno de los dos. El canje vive en
+// store.routes.js /orders (mismo patrón transaccional que el canje genérico
+// de puntos: decremento condicional en el WHERE).
+model LoyaltyReward {
+  id             String     @id @default(cuid())
+  restaurantId   String
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  pointsCost     Int
+  menuItemId     String?
+  menuItem       MenuItem?  @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  discountAmount Decimal?   @db.Decimal(12, 2)
+  isActive       Boolean    @default(true)
+  sortOrder      Int        @default(0)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([restaurantId])
+  @@map("loyalty_rewards")
 }
 
 model Coupon {

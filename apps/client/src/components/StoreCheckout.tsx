@@ -75,6 +75,24 @@ export default function StoreCheckout({
   const [loyalty, setLoyalty] = useState<{ name: string; points: number; qrCode: string } | null>(null);
   const [loyaltyMsg, setLoyaltyMsg] = useState('');
 
+  // Recompensas canjeables por puntos (lealtad Fase 3). Se cargan al
+  // identificarse el cliente; el canje real lo valida y consume el backend.
+  type StoreReward = {
+    id: string; name: string; description?: string | null; pointsCost: number;
+    discountAmount: number | null; menuItem: { id: string; name: string } | null;
+  };
+  const [rewards, setRewards] = useState<StoreReward[]>([]);
+  const [rewardId, setRewardId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!loyalty) { setRewards([]); setRewardId(null); return; }
+    let cancelled = false;
+    fetch(`${API}/api/store/rewards?r=${encodeURIComponent(slug)}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(data => { if (!cancelled && Array.isArray(data)) setRewards(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [loyalty, slug]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState<any>(null);
@@ -219,6 +237,7 @@ export default function StoreCheckout({
           tip,
           couponCode: coupon?.code || undefined,
           loyaltyQrCode: loyalty?.qrCode || undefined,
+          redeemRewardId: (loyalty && rewardId) || undefined,
           items: lines.map(l => ({
             menuItemId: l.menuItemId,
             variantId: l.variantId || undefined,
@@ -421,6 +440,39 @@ export default function StoreCheckout({
               )}
               {loyaltyMsg && <p className="text-amber-600 text-xs font-bold mt-1">{loyaltyMsg}</p>}
             </div>
+
+            {/* Recompensas por puntos (lealtad Fase 3) */}
+            {loyalty && rewards.length > 0 && (
+              <div>
+                <p className={sectionTitle}>Canjea tus puntos</p>
+                <div className="space-y-2">
+                  {rewards.map(rw => {
+                    const afford = loyalty.points >= rw.pointsCost;
+                    const selected = rewardId === rw.id;
+                    return (
+                      <button
+                        key={rw.id} type="button" disabled={!afford}
+                        onClick={() => setRewardId(selected ? null : rw.id)}
+                        className="w-full flex items-center justify-between gap-2 rounded-2xl border-2 p-3 text-left transition-all disabled:opacity-45"
+                        style={{ borderColor: selected ? primary : '#e5e7eb', background: selected ? `${primary}14` : 'transparent' }}
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-bold truncate" style={{ color: selected ? primary : '#374151' }}>
+                            {rw.menuItem ? `${rw.menuItem.name} gratis` : `−${fmt(rw.discountAmount || 0)} de descuento`}
+                          </span>
+                          <span className="block text-xs text-gray-500 truncate">
+                            {rw.name}{afford ? '' : ' · te faltan puntos'}
+                          </span>
+                        </span>
+                        <span className="text-xs font-bold shrink-0" style={{ color: selected ? primary : '#9ca3af' }}>
+                          {rw.pointsCost} pts
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Cupón */}
             <div>
