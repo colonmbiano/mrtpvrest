@@ -1,9 +1,3 @@
-// Scaffolding de tests del KDS. Para HABILITARLO (correrlo en CI/local) falta
-// instalar las deps en este paquete, lo que actualiza pnpm-lock.yaml:
-//   pnpm add -D jest @types/jest jest-environment-jsdom --filter @mrtpvrest/kds
-// y agregar el script "test": "jest --passWithNoTests". Se dejaron fuera del
-// package.json para no romper `pnpm install --frozen-lockfile` del E2E sin tocar
-// el lockfile. La lógica de production-summary ya está verificada (tsc + node).
 /** @type {import('jest').Config} */
 const nextJest = require("next/jest");
 
@@ -16,6 +10,9 @@ module.exports = createJestConfig({
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
   },
-  testMatch: ["<rootDir>/src/**/__tests__/**/*.test.ts"],
+  // Regex en vez de glob: los globs con <rootDir> se rompen cuando el repo
+  // vive bajo un directorio con punto (p.ej. worktrees en .claude\worktrees:
+  // jest deja el "\." del path como escape y micromatch ya no casa nada).
+  testRegex: "/src/.*/__tests__/.*\\.test\\.ts$",
   collectCoverageFrom: ["src/lib/**/*.ts", "!src/**/*.d.ts"],
 });
