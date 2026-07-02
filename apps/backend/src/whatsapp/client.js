@@ -170,6 +170,7 @@ function initWhatsApp(io) {
   });
 
   whatsappClient.on('message', async msg => {
+   try {
     // El bot es ESTRICTAMENTE SOLO-RESPONDER: nunca inicia, solo contesta un
     // mensaje 1-a-1 recibido. Todo lo demás se ignora (reduce el riesgo de
     // baneo de whatsapp-web.js, que se dispara con actividad no solicitada).
@@ -283,43 +284,80 @@ function initWhatsApp(io) {
       history.splice(0, history.length - 10);
     }
 
-    // Enviar respuesta al cliente (sanitizada: nunca exponer IDs internos).
-    // sendMessage (no msg.reply) es más robusto con chats @lid; awaited y con
-    // captura de error para no tragarnos fallos de envío silenciosamente.
-    if (geminiResponse.replyMessage) {
-      const out = sanitizeReply(geminiResponse.replyMessage);
+    // Envío robusto (sendMessage anda mejor con @lid que msg.reply).
+    const safeSend = async (text) => {
       try {
-        await whatsappClient.sendMessage(msg.from, out);
+        await whatsappClient.sendMessage(msg.from, text);
         console.log(`[WhatsApp Bot] Respuesta enviada a ${msg.from}`);
       } catch (err) {
         console.error('[WhatsApp Bot] Error enviando respuesta:', err?.message || err);
       }
-    }
+    };
 
-    // Si el JSON indica que se confirmó un pedido, lo procesamos
-    if (geminiResponse.status === 'CONFIRMED' && geminiResponse.items && geminiResponse.items.length > 0) {
+    const status = geminiResponse.status;
+    const items = Array.isArray(geminiResponse.items) ? geminiResponse.items : [];
+
+    if (status === 'CONFIRMED' && items.length > 0) {
+      // CREAR LA ORDEN PRIMERO; confirmar SOLO si el TPV la registró. Antes se
+      // enviaba "¡confirmado!" y DESPUÉS se creaba: si el POST fallaba, el
+      // cliente esperaba un pedido que nunca existió. Además el folio y el total
+      // se arman en CÓDIGO desde la respuesta del server (nunca lo que alucine
+      // Gemini) — cumple "totales siempre server-side".
       const orderCreated = await createOrderFromGemini(restaurant.id, geminiResponse, process.env.PORT || 3001);
       if (orderCreated && orderCreated.id) {
-        // Guardamos el ID de la orden en memoria por 15 minutos para permitir agregar platillos
         recentOrders.set(phone, { orderId: orderCreated.id, timestamp: Date.now() });
-        // Limpiamos el historial de charla para que empiece de cero, pero el prompt recordará que tiene una orden activa
         chatHistory.delete(phone);
+        const totalLine = orderCreated.total != null ? `\n💵 Total: $${orderCreated.total} (incluye envío si aplica)` : '';
+        const mins = orderCreated.estimatedMinutes || 30;
+        await safeSend(`✅ ¡Pedido confirmado! Folio *#${orderCreated.orderNumber}*${totalLine}\n⏱️ Tiempo estimado: ~${mins} min.\n¡Gracias por tu compra! 🍔`);
+      } else {
+        // Falla al registrar: NUNCA decir "confirmado". Dejar el hilo abierto.
+        console.error(`[WhatsApp Bot] FALLO al crear orden CONFIRMED de ${phone}. items=${JSON.stringify(items)}`);
+        await safeSend('Uy, tuve un detalle registrando tu pedido 🙏. Un asesor te confirma en un momento; si gustas, escríbeme de nuevo tu pedido para reintentar.');
+      }
+    } else if (status === 'ADD_TO_ORDER' && items.length > 0) {
+      if (!activeOrderId) {
+        // Gemini quiso agregar pero ya no hay orden activa (expiró / restart).
+        await safeSend('No encuentro un pedido activo reciente para agregarle 🙏. ¿Te lo confirmo como un pedido nuevo?');
+      } else {
+        const addResponse = await require('./orderProcessor').addItemsToOrder(activeOrderId, geminiResponse, restaurant.id, process.env.PORT || 3001);
+        if (addResponse) {
+          recentOrders.set(phone, { orderId: activeOrderId, timestamp: Date.now() });
+          chatHistory.delete(phone);
+          await safeSend(geminiResponse.replyMessage ? sanitizeReply(geminiResponse.replyMessage) : '¡Listo! Lo agregué a tu pedido. 🍔');
+        } else {
+          console.error(`[WhatsApp Bot] FALLO al agregar items a la orden ${activeOrderId} de ${phone}.`);
+          await safeSend('No pude agregarlo a tu pedido anterior 🙏. ¿Te lo pongo como un pedido nuevo?');
+        }
+      }
+    } else {
+      // CONVERSING (o cualquier otro estado): responder normal, sanitizado.
+      if (geminiResponse.replyMessage) {
+        await safeSend(sanitizeReply(geminiResponse.replyMessage));
       }
     }
-    
-    // Si el JSON indica que quiere agregar items a un pedido existente
-    if (geminiResponse.status === 'ADD_TO_ORDER' && geminiResponse.items && geminiResponse.items.length > 0 && activeOrderId) {
-      const addResponse = await require('./orderProcessor').addItemsToOrder(activeOrderId, geminiResponse, restaurant.id, process.env.PORT || 3001);
-      if (addResponse) {
-        // Refrescamos el tiempo
-        recentOrders.set(phone, { orderId: activeOrderId, timestamp: Date.now() });
-        chatHistory.delete(phone);
-      }
-    }
+   } catch (handlerErr) {
+      // Red de seguridad: un throw aquí (p.ej. blip de Prisma) sería
+      // unhandledRejection y en Node 22 MATA el proceso. Lo contenemos.
+      console.error('[WhatsApp Bot] Error no capturado en el handler de mensaje:', handlerErr?.message || handlerErr);
+   }
+  });
+
+  // Sesión perdida (WhatsApp desvinculó el dispositivo, o cerró el navegador):
+  // salimos con código 1 para que Railway reinicie; LocalAuth reintenta con la
+  // sesión del volumen y, si fue desvinculación real, /qr mostrará QR nuevo.
+  whatsappClient.on('disconnected', (reason) => {
+    console.error('[WhatsApp Bot] DESCONECTADO:', reason, '→ saliendo para que Railway reinicie.');
+    setTimeout(() => process.exit(1), 1500);
+  });
+  whatsappClient.on('auth_failure', (m) => {
+    console.error('[WhatsApp Bot] AUTH_FAILURE:', m, '→ saliendo para reintentar/re-vincular.');
+    setTimeout(() => process.exit(1), 1500);
   });
 
   whatsappClient.initialize().catch(err => {
-    console.error('[WhatsApp Bot] Error al inicializar:', err);
+    console.error('[WhatsApp Bot] Error al inicializar:', err, '→ saliendo para que Railway reintente.');
+    setTimeout(() => process.exit(1), 1500);
   });
 }
 

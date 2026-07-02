@@ -146,3 +146,15 @@ async function shutdown(signal) {
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+// Redes de seguridad: en Node 22 un unhandledRejection/uncaughtException MATA el
+// proceso por defecto. Los logueamos para no caernos por un error operacional
+// transitorio (un blip de red/BD no debe tumbar el bot). Errores realmente
+// fatales igual se notarán en logs; el ciclo de vida del cliente lo cubren los
+// handlers 'disconnected'/'auth_failure' en client.js.
+process.on('unhandledRejection', (reason) => {
+  console.error('[WhatsApp Worker] unhandledRejection (contenido, no se cae):', reason?.message || reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[WhatsApp Worker] uncaughtException (contenido, no se cae):', err?.message || err);
+});
