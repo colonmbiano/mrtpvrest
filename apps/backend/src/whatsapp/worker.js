@@ -1,6 +1,11 @@
 /**
  * worker.js — Entrypoint STANDALONE del bot "Cajero Estrella".
  *
+ * Decision operativa Master Burguers: se usa WhatsApp Web vinculado por QR para
+ * conservar WhatsApp en el celular. No reemplazar este worker por Cloud API,
+ * WHAPI u otro proveedor oficial para el numero principal sin aprobacion
+ * explicita del negocio.
+ *
  * Corre en un servicio Railway APARTE del backend API (whatsapp-web.js necesita
  * Chromium + una sesión persistente single-instance; no queremos eso dentro del
  * contenedor del API ni acoplar su ciclo de vida a cada deploy). Este proceso:

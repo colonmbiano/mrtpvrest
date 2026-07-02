@@ -2,6 +2,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { processWhatsAppMessage } = require('./gemini');
 const { createOrderFromGemini } = require('./orderProcessor');
+const { isAudioMessage, transcribeWhatsAppAudio } = require('./audioTranscription');
 const { prisma } = require('@mrtpvrest/database');
 
 let whatsappClient = null;
@@ -14,10 +15,19 @@ let latestQr = null;
 // Mapa para guardar el historial corto de conversaciones por número
 // Formato: { "5215551234567": [ { role: "user", text: "hola" }, { role: "model", text: "Hola soy el mesero" } ] }
 const chatHistory = new Map();
+const customerProfiles = new Map();
+const MAX_HISTORY_MESSAGES = 24;
 
 // Mapa para guardar órdenes recientes confirmadas por número. Permite añadir items.
 // Formato: { "5215551234567": { orderId: "abc", timestamp: 123456789 } }
 const recentOrders = new Map();
+const recentOrderChats = new Map();
+const humanHandoffs = new Map();
+const botOutgoingIntents = new Map();
+const botSentMessages = new Map();
+const HUMAN_HANDOFF_MS = 60 * 60 * 1000;
+const BOT_OUTGOING_INTENT_MS = 2 * 60 * 1000;
+const PROFILE_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 días: perfiles inactivos se purgan
 
 // Rate-limit por remitente: corta ráfagas (un troll, o un loop bot-contra-bot).
 // Al exceder se IGNORA en silencio — responder alimentaría el loop, y al dejar
@@ -52,12 +62,135 @@ function sanitizeReply(text) {
     .replace(/[ \t]{2,}/g, ' ');
 }
 
+function isValidPhoneNumber(phone) {
+  return /^\d{10,14}$/.test(String(phone || '').replace(/\D/g, ''));
+}
+
+function extractPhoneFromText(text) {
+  const match = String(text || '').match(/(?:\+?\d[\d\s().-]{8,}\d)/);
+  if (!match) return null;
+  const digits = match[0].replace(/\D/g, '');
+  return isValidPhoneNumber(digits) ? digits : null;
+}
+
+function updateCustomerProfile(phone, patch = {}) {
+  const current = customerProfiles.get(phone) || {};
+  const next = { ...current };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== null && value !== undefined && String(value).trim?.() !== '') next[key] = value;
+  }
+  next.updatedAt = Date.now();
+  customerProfiles.set(phone, next);
+  return next;
+}
+
+function pruneHistory(history) {
+  if (history.length > MAX_HISTORY_MESSAGES) {
+    history.splice(0, history.length - MAX_HISTORY_MESSAGES);
+  }
+}
+
 // Lista negra: números que el bot NO debe contestar (staff, proveedores,
 // contactos que atiendes a mano). Se configuran en WHATSAPP_BOT_IGNORE_NUMBERS
 // (separados por coma) y se comparan por los ÚLTIMOS 10 DÍGITOS (tolera lada
 // 52/521 y formatos varios). Se lee por-mensaje para que un cambio de la
 // variable aplique con solo reiniciar (sin tocar código).
 function last10Digits(s) { return String(s || '').replace(/\D/g, '').slice(-10); }
+
+function chatKeyForMessage(msg) {
+  return msg?.fromMe ? (msg.to || msg.from || '') : (msg.from || msg.to || '');
+}
+
+function isCustomerChatId(chatId) {
+  return !!chatId &&
+    !chatId.includes('@g.us') &&
+    chatId !== 'status@broadcast' &&
+    !chatId.includes('@broadcast') &&
+    !chatId.includes('@newsletter');
+}
+
+function phoneHandoffKey(phone) {
+  const p = last10Digits(phone);
+  return p.length >= 10 ? `phone:${p}` : null;
+}
+
+function rememberRecentOrderChat(chatKey, phone, orderId) {
+  if (!chatKey) return;
+  recentOrderChats.set(chatKey, { phone, orderId, timestamp: Date.now() });
+}
+
+function cleanupExpiredHandoffs() {
+  const now = Date.now();
+  for (const [key, entry] of humanHandoffs.entries()) {
+    if (!entry?.until || entry.until <= now) humanHandoffs.delete(key);
+  }
+}
+
+function pauseBotForChat(chatKey, phone, reason = 'human_message_after_order') {
+  const until = Date.now() + HUMAN_HANDOFF_MS;
+  const entry = { phone, reason, until };
+  if (chatKey) humanHandoffs.set(chatKey, entry);
+  const phoneKey = phoneHandoffKey(phone);
+  if (phoneKey) humanHandoffs.set(phoneKey, entry);
+  return entry;
+}
+
+function getActiveHandoff(chatKey, phone) {
+  cleanupExpiredHandoffs();
+  const phoneKey = phoneHandoffKey(phone);
+  return humanHandoffs.get(chatKey) || (phoneKey ? humanHandoffs.get(phoneKey) : null) || null;
+}
+
+function messageId(msg) {
+  return msg?.id?._serialized || msg?.id?.id || null;
+}
+
+function outgoingIntentKey(chatKey, body) {
+  return `${chatKey || ''}::${String(body || '').slice(0, 800)}`;
+}
+
+function rememberBotOutgoingIntent(chatKey, body) {
+  if (!chatKey) return;
+  botOutgoingIntents.set(outgoingIntentKey(chatKey, body), Date.now());
+}
+
+function rememberBotSentMessage(msg) {
+  const id = messageId(msg);
+  if (id) botSentMessages.set(id, Date.now());
+}
+
+function isBotAuthoredOutgoing(msg, chatKey) {
+  const id = messageId(msg);
+  if (id && botSentMessages.has(id)) return true;
+  const key = outgoingIntentKey(chatKey, msg?.body);
+  const timestamp = botOutgoingIntents.get(key);
+  if (!timestamp) return false;
+  if (Date.now() - timestamp > BOT_OUTGOING_INTENT_MS) {
+    botOutgoingIntents.delete(key);
+    return false;
+  }
+  botOutgoingIntents.delete(key);
+  return true;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  cleanupExpiredHandoffs();
+  for (const [key, timestamp] of botOutgoingIntents.entries()) {
+    if (now - timestamp > BOT_OUTGOING_INTENT_MS) botOutgoingIntents.delete(key);
+  }
+  for (const [key, timestamp] of botSentMessages.entries()) {
+    if (now - timestamp > BOT_OUTGOING_INTENT_MS) botSentMessages.delete(key);
+  }
+  for (const [key, entry] of recentOrderChats.entries()) {
+    if (!entry?.timestamp || now - entry.timestamp > HUMAN_HANDOFF_MS) recentOrderChats.delete(key);
+  }
+  // Perfiles de cliente: purgar inactivos para que el Map no crezca sin límite.
+  for (const [key, entry] of customerProfiles.entries()) {
+    if (!entry?.updatedAt || now - entry.updatedAt > PROFILE_TTL_MS) customerProfiles.delete(key);
+  }
+}, 10 * 60 * 1000).unref?.();
+
 function isIgnoredNumber(phone) {
   const p = last10Digits(phone);
   if (p.length < 10) return false;
@@ -203,17 +336,25 @@ function initWhatsApp(io) {
     //  - grupos (@g.us), estados (status@broadcast), difusiones (@broadcast) y
     //    canales/newsletters (@newsletter): no son clientes 1-a-1.
     if (msg.fromMe) return;
+    const chatKey = chatKeyForMessage(msg);
     // DENYLIST (no allowlist): excluimos lo que NO es un cliente 1-a-1. Un
     // allowlist estricto a @c.us rompía las respuestas, porque WhatsApp entrega
     // muchos DMs como @lid (linked-device id), no @c.us → se caían todos los
     // mensajes. Aquí solo bloqueamos grupos/estados/difusiones/canales y
     // dejamos pasar cualquier chat individual (@c.us o @lid).
-    if (
-      msg.from.includes('@g.us') ||
-      msg.from === 'status@broadcast' ||
-      msg.from.includes('@broadcast') ||
-      msg.from.includes('@newsletter')
-    ) return;
+    if (!isCustomerChatId(chatKey)) return;
+
+    // EnvÃ­o robusto (sendMessage anda mejor con @lid que msg.reply).
+    const safeSend = async (text) => {
+      try {
+        rememberBotOutgoingIntent(chatKey, text);
+        const sent = await whatsappClient.sendMessage(msg.from, text);
+        rememberBotSentMessage(sent);
+        console.log(`[WhatsApp Bot] Respuesta enviada a ${msg.from}`);
+      } catch (err) {
+        console.error('[WhatsApp Bot] Error enviando respuesta:', err?.message || err);
+      }
+    };
 
     // Obtener texto o ubicación
     let messageText = msg.body;
@@ -259,12 +400,36 @@ function initWhatsApp(io) {
     }
 
     // Rate-limit: cortar ráfagas / loops. Al exceder, silencio (rompe el loop).
+    const activeHandoff = getActiveHandoff(chatKey, phone);
+    if (activeHandoff) {
+      const minutesLeft = Math.ceil((activeHandoff.until - Date.now()) / 60000);
+      console.log(`[WhatsApp Bot] Chat en handoff humano (${chatKey}); silencio ${minutesLeft} min restantes.`);
+      return;
+    }
+
     if (!allowMessage(phone)) {
       console.warn(`[WhatsApp Bot] Rate limit para ${phone}; se ignora este mensaje.`);
       return;
     }
 
-    const isInvalidPhone = !/^\d{10,14}$/.test(phone);
+    if (isAudioMessage(msg)) {
+      console.log(`[WhatsApp Bot] Audio recibido de ${msg.from}; transcribiendo...`);
+      const transcription = await transcribeWhatsAppAudio(msg);
+      if (!transcription.ok) {
+        console.warn(`[WhatsApp Bot] No se pudo transcribir audio de ${msg.from}: ${transcription.code}`);
+        await safeSend('No pude escuchar bien el audio 🙏. ¿Me escribes tu pedido en texto? Así no se me va ningún producto.');
+        return;
+      }
+      messageText = transcription.text;
+      console.log(`[WhatsApp Bot] Audio transcrito de ${msg.from}: ${messageText}`);
+    }
+
+    const detectedPhone = extractPhoneFromText(messageText);
+    if (detectedPhone) updateCustomerProfile(phone, { customerPhone: detectedPhone });
+    const profile = customerProfiles.get(phone) || {};
+    const isLidChat = msg.from.includes('@lid') || String(contactId || '').includes('@lid');
+    const hasReliableChatPhone = !isLidChat && isValidPhoneNumber(phone);
+    const isInvalidPhone = !hasReliableChatPhone && !isValidPhoneNumber(profile.customerPhone);
     // Tenant del bot: FIJO por env (WHATSAPP_BOT_RESTAURANT_ID). El fallback
     // "primer restaurante activo" era una ruleta en prod (~85+ tenants: el más
     // viejo de la BD, no necesariamente el tuyo) — se conserva solo para dev
@@ -287,6 +452,12 @@ function initWhatsApp(io) {
       chatHistory.set(phone, []);
     }
     const history = chatHistory.get(phone);
+    if (profile.customerName && history.length === 0) {
+      history.push({
+        role: 'model',
+        text: `Contexto recordado: cliente ${profile.customerName}${profile.customerPhone ? `, telefono ${profile.customerPhone}` : ''}${profile.deliveryAddress ? `, ultima direccion ${profile.deliveryAddress}` : ''}${profile.paymentMethod ? `, ultimo pago ${profile.paymentMethod}` : ''}.`,
+      });
+    }
 
     // Revisar si tiene una orden reciente (menos de 15 minutos)
     let activeOrderId = null;
@@ -300,7 +471,7 @@ function initWhatsApp(io) {
 
     // Procesar con Gemini
     console.log(`[WhatsApp Bot] Procesando con Gemini (phone=${phone}, invalid=${isInvalidPhone}, tenant=${restaurant.id})...`);
-    const geminiResponse = await processWhatsAppMessage(phone, messageText, restaurant.id, history, activeOrderId, isInvalidPhone);
+    const geminiResponse = await processWhatsAppMessage(phone, messageText, restaurant.id, history, activeOrderId, isInvalidPhone, profile);
     console.log(`[WhatsApp Bot] Gemini status=${geminiResponse?.status}, reply=${!!geminiResponse?.replyMessage}`);
 
     // Actualizar historial localmente
@@ -310,20 +481,8 @@ function initWhatsApp(io) {
        history.push({ role: 'model', text: geminiResponse.replyMessage });
     }
 
-    // Mantener solo los últimos 10 mensajes para ahorrar tokens
-    if (history.length > 10) {
-      history.splice(0, history.length - 10);
-    }
-
-    // Envío robusto (sendMessage anda mejor con @lid que msg.reply).
-    const safeSend = async (text) => {
-      try {
-        await whatsappClient.sendMessage(msg.from, text);
-        console.log(`[WhatsApp Bot] Respuesta enviada a ${msg.from}`);
-      } catch (err) {
-        console.error('[WhatsApp Bot] Error enviando respuesta:', err?.message || err);
-      }
-    };
+    // Mantener memoria suficiente para pedidos grandes sin crecer sin límite.
+    pruneHistory(history);
 
     const status = geminiResponse.status;
     const items = Array.isArray(geminiResponse.items) ? geminiResponse.items : [];
@@ -337,9 +496,21 @@ function initWhatsApp(io) {
       const orderCreated = await createOrderFromGemini(restaurant.id, geminiResponse, process.env.PORT || 3001);
       if (orderCreated && orderCreated.id) {
         recentOrders.set(phone, { orderId: orderCreated.id, timestamp: Date.now() });
-        chatHistory.delete(phone);
+        rememberRecentOrderChat(chatKey, phone, orderCreated.id);
+        updateCustomerProfile(phone, {
+          customerName: geminiResponse.customerName,
+          customerPhone: extractPhoneFromText(geminiResponse.customerPhone) || detectedPhone || profile.customerPhone,
+          orderType: geminiResponse.orderType,
+          deliveryAddress: geminiResponse.deliveryAddress,
+          paymentMethod: geminiResponse.paymentMethod,
+        });
         const totalLine = orderCreated.total != null ? `\n💵 Total: $${orderCreated.total} (incluye envío si aplica)` : '';
         const mins = orderCreated.estimatedMinutes || 30;
+        history.push({
+          role: 'model',
+          text: `Pedido registrado en TPV: folio ${orderCreated.orderNumber}, total ${orderCreated.total ?? 'pendiente'}, pago ${geminiResponse.paymentMethod || 'no especificado'}.`,
+        });
+        pruneHistory(history);
         await safeSend(`✅ ¡Pedido confirmado! Folio *#${orderCreated.orderNumber}*${totalLine}\n⏱️ Tiempo estimado: ~${mins} min.\n¡Gracias por tu compra! 🍔`);
       } else {
         // Falla al registrar: NUNCA decir "confirmado". Dejar el hilo abierto.
@@ -354,7 +525,6 @@ function initWhatsApp(io) {
         const addResponse = await require('./orderProcessor').addItemsToOrder(activeOrderId, geminiResponse, restaurant.id, process.env.PORT || 3001);
         if (addResponse) {
           recentOrders.set(phone, { orderId: activeOrderId, timestamp: Date.now() });
-          chatHistory.delete(phone);
           await safeSend(geminiResponse.replyMessage ? sanitizeReply(geminiResponse.replyMessage) : '¡Listo! Lo agregué a tu pedido. 🍔');
         } else {
           console.error(`[WhatsApp Bot] FALLO al agregar items a la orden ${activeOrderId} de ${phone}.`);
@@ -387,6 +557,28 @@ function initWhatsApp(io) {
     tail.then(() => { if (chatLocks.get(key) === tail) chatLocks.delete(key); });
     return run;
   };
+
+  whatsappClient.on('message_create', (msg) => {
+    try {
+      if (!msg.fromMe) return;
+      const chatKey = chatKeyForMessage(msg);
+      if (!isCustomerChatId(chatKey)) return;
+      if (isBotAuthoredOutgoing(msg, chatKey)) return;
+
+      const recent = recentOrderChats.get(chatKey);
+      if (!recent) return;
+      if (Date.now() - recent.timestamp > HUMAN_HANDOFF_MS) {
+        recentOrderChats.delete(chatKey);
+        return;
+      }
+
+      const handoff = pauseBotForChat(chatKey, recent.phone, 'human_message_after_order');
+      const until = new Date(handoff.until).toISOString();
+      console.log(`[WhatsApp Bot] Intervencion humana detectada en ${chatKey}; bot pausado hasta ${until}.`);
+    } catch (err) {
+      console.error('[WhatsApp Bot] Error detectando handoff humano:', err?.message || err);
+    }
+  });
 
   whatsappClient.on('message', (msg) => { handleIncomingMessage(msg); });
 
