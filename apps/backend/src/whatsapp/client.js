@@ -19,6 +19,27 @@ const chatHistory = new Map();
 // Formato: { "5215551234567": { orderId: "abc", timestamp: 123456789 } }
 const recentOrders = new Map();
 
+// Rate-limit por remitente: corta ráfagas (un troll, o un loop bot-contra-bot).
+// Al exceder se IGNORA en silencio — responder alimentaría el loop, y al dejar
+// de responder el ping-pong se muere. Ventanas: 10/min y 60/hora por número.
+const rateBuckets = new Map(); // phone → number[] (timestamps ms)
+function allowMessage(phone) {
+  const now = Date.now();
+  const arr = (rateBuckets.get(phone) || []).filter(t => now - t < 60 * 60 * 1000);
+  arr.push(now);
+  rateBuckets.set(phone, arr);
+  const lastMin = arr.filter(t => now - t < 60 * 1000).length;
+  return lastMin <= 10 && arr.length <= 60;
+}
+// Limpieza periódica para que rateBuckets no crezca sin límite.
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, arr] of rateBuckets.entries()) {
+    const keep = arr.filter(t => now - t < 60 * 60 * 1000);
+    if (keep.length === 0) rateBuckets.delete(k); else rateBuckets.set(k, keep);
+  }
+}, 10 * 60 * 1000).unref?.();
+
 // Red de seguridad: aunque el prompt le prohíbe a Gemini mostrar los IDs
 // internos, a veces los copia al texto (clientes reales vieron
 // "PROMO kfc 2 X 110: $110 (ID: cmpvrw5xl...)"). Se limpian SIEMPRE antes
@@ -173,7 +194,7 @@ function initWhatsApp(io) {
 
   // Procesa UN mensaje entrante. Se usa desde el evento 'message' y desde el
   // backfill de no-leídos al reconectar (misma lógica, sin duplicar).
-  const handleIncomingMessage = async (msg) => {
+  const processMessage = async (msg) => {
    try {
     // El bot es ESTRICTAMENTE SOLO-RESPONDER: nunca inicia, solo contesta un
     // mensaje 1-a-1 recibido. Todo lo demás se ignora (reduce el riesgo de
@@ -234,6 +255,12 @@ function initWhatsApp(io) {
     }
     if (isInIgnoredGroup(msg.from, contactId, phone)) {
       console.log(`[WhatsApp Bot] Remitente pertenece al grupo ignorado "${ignoredGroup.name}" (${msg.from}); no se responde.`);
+      return;
+    }
+
+    // Rate-limit: cortar ráfagas / loops. Al exceder, silencio (rompe el loop).
+    if (!allowMessage(phone)) {
+      console.warn(`[WhatsApp Bot] Rate limit para ${phone}; se ignora este mensaje.`);
       return;
     }
 
@@ -345,6 +372,20 @@ function initWhatsApp(io) {
       // unhandledRejection y en Node 22 MATA el proceso. Lo contenemos.
       console.error('[WhatsApp Bot] Error no capturado en el handler de mensaje:', handlerErr?.message || handlerErr);
    }
+  };
+
+  // Mutex por chat: serializa los mensajes del MISMO remitente para que dos
+  // mensajes casi simultáneos no corran en paralelo mutando el mismo historial
+  // ni disparen doble CONFIRMED (orden duplicada). Encadena por msg.from.
+  const chatLocks = new Map();
+  const handleIncomingMessage = (msg) => {
+    const key = msg.from || 'unknown';
+    const prev = chatLocks.get(key) || Promise.resolve();
+    const run = prev.then(() => processMessage(msg), () => processMessage(msg));
+    const tail = run.catch(() => {});
+    chatLocks.set(key, tail);
+    tail.then(() => { if (chatLocks.get(key) === tail) chatLocks.delete(key); });
+    return run;
   };
 
   whatsappClient.on('message', (msg) => { handleIncomingMessage(msg); });
