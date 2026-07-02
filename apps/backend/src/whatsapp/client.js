@@ -157,19 +157,23 @@ function initWhatsApp(io) {
     latestQr = null;
   });
 
-  whatsappClient.on('ready', () => {
+  whatsappClient.on('ready', async () => {
     latestQr = null;
     console.log('[WhatsApp Bot] Cliente WhatsApp listo y conectado!');
     if (io) {
       io.emit('whatsapp:ready');
     }
-    // Cargar el grupo a ignorar y refrescarlo cada 10 min (recoge altas/bajas
-    // de miembros sin redeploy). Best-effort: si falla, el bot sigue operando.
-    refreshIgnoredGroup();
+    // Cargar el grupo a ignorar ANTES del backfill (para no responder a staff),
+    // y refrescarlo cada 10 min (recoge altas/bajas de miembros sin redeploy).
+    await refreshIgnoredGroup();
     setInterval(refreshIgnoredGroup, 10 * 60 * 1000).unref?.();
+    // Atender lo que entró mientras el bot estuvo caído (redeploy/restart).
+    await backfillUnread();
   });
 
-  whatsappClient.on('message', async msg => {
+  // Procesa UN mensaje entrante. Se usa desde el evento 'message' y desde el
+  // backfill de no-leídos al reconectar (misma lógica, sin duplicar).
+  const handleIncomingMessage = async (msg) => {
    try {
     // El bot es ESTRICTAMENTE SOLO-RESPONDER: nunca inicia, solo contesta un
     // mensaje 1-a-1 recibido. Todo lo demás se ignora (reduce el riesgo de
@@ -341,7 +345,37 @@ function initWhatsApp(io) {
       // unhandledRejection y en Node 22 MATA el proceso. Lo contenemos.
       console.error('[WhatsApp Bot] Error no capturado en el handler de mensaje:', handlerErr?.message || handlerErr);
    }
-  });
+  };
+
+  whatsappClient.on('message', (msg) => { handleIncomingMessage(msg); });
+
+  // Backfill de no-leídos al reconectar: whatsapp-web.js NO emite 'message' por
+  // el backlog anterior a que se registre el listener, así que los mensajes que
+  // entran durante un redeploy/restart se PERDERÍAN. Aquí, tras conectar, se
+  // procesan los chats individuales con no-leídos RECIENTES (< 30 min) por el
+  // mismo pipeline y se marcan como vistos. Esto elimina la pérdida de pedidos
+  // en cada deploy.
+  const backfillUnread = async () => {
+    try {
+      const chats = await whatsappClient.getChats();
+      const cutoffSec = Math.floor(Date.now() / 1000) - 30 * 60; // wwebjs: timestamp en segundos
+      let procesados = 0;
+      for (const chat of chats) {
+        if (chat.isGroup || (chat.unreadCount || 0) <= 0) continue;
+        let msgs = [];
+        try { msgs = await chat.fetchMessages({ limit: Math.min(chat.unreadCount, 10) }); } catch { continue; }
+        for (const m of msgs) {
+          if (m.fromMe || (m.timestamp || 0) < cutoffSec) continue;
+          await handleIncomingMessage(m);
+          procesados++;
+        }
+        try { await chat.sendSeen(); } catch {}
+      }
+      if (procesados > 0) console.log(`[WhatsApp Bot] Backfill: ${procesados} mensaje(s) no leído(s) atendido(s) tras reconectar.`);
+    } catch (e) {
+      console.error('[WhatsApp Bot] Error en backfill de no-leídos:', e?.message || e);
+    }
+  };
 
   // Sesión perdida (WhatsApp desvinculó el dispositivo, o cerró el navegador):
   // salimos con código 1 para que Railway reinicie; LocalAuth reintenta con la
