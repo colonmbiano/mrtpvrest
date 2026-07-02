@@ -173,22 +173,49 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
 
     contents.push({ role: 'user', parts: [{ text }] });
 
-    const response = await axios.post(
-      `${GEMINI_API_URL}?key=${process.env.GOOGLE_AI_API_KEY}`,
-      {
-        system_instruction: {
-          parts: [{ text: systemPrompt }]
-        },
-        contents: contents,
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json"
-        }
-      },
-      { headers: { 'Content-Type': 'application/json' } }
-    );
+    const body = {
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: contents,
+      generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
+    };
 
-    const replyText = response.data.candidates[0].content.parts[0].text;
+    // Resiliencia: reintentos con backoff ante 429/503/500 y errores de red, con
+    // fallback a un modelo alterno, y timeout para no dejar al cliente colgado si
+    // Gemini no responde. La key va en header (x-goog-api-key), no en la URL, para
+    // no filtrarla en logs de error.
+    const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let response = null;
+    let lastErr = null;
+    outer:
+    for (const model of MODELS) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          response = await axios.post(url, body, {
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GOOGLE_AI_API_KEY },
+            timeout: 30000,
+          });
+          break outer;
+        } catch (err) {
+          lastErr = err;
+          const code = err?.response?.status;
+          const retriable = code === 429 || code === 503 || code === 500 || !err.response; // red/timeout sin response
+          console.warn(`[Gemini] ${model} intento ${attempt + 1} falló (${code || err.code || 'red'})${retriable ? ', reintentando…' : ', paso a fallback'}`);
+          if (!retriable) break; // no transitorio → probar el siguiente modelo
+          await sleep(1000 * Math.pow(2, attempt) + Math.floor(Math.random() * 300));
+        }
+      }
+    }
+    if (!response) throw lastErr || new Error('Gemini sin respuesta');
+
+    // Blindaje ante bloqueo por safety o respuesta sin texto (candidates vacío).
+    const cand = response.data?.candidates?.[0];
+    const replyText = cand?.content?.parts?.[0]?.text;
+    if (!replyText) {
+      console.error('Gemini sin texto (posible safety block):', JSON.stringify(response.data?.promptFeedback || response.data || {}).slice(0, 500));
+      throw new Error('Gemini respuesta vacía');
+    }
     let parsedReply;
     try {
       parsedReply = JSON.parse(replyText.replace(/```json/g, '').replace(/```/g, '').trim());
