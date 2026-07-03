@@ -11,6 +11,7 @@ import {
   WtScreen, PageHeader, WtCard, SectionHead, Toggle, PrimaryBtn,
   StatTile,
 } from "@/components/warmtech";
+import { MapLocationPicker } from "@/components/MapLocationPicker";
 
 type BusinessHour = { day: number; enabled: boolean; open: string; close: string };
 
@@ -779,6 +780,10 @@ export default function TiendaConfigPage() {
                 </PrimaryBtn>
               </div>
               {geoStatus === "error" && <p className="text-[11px] font-bold text-err">No se pudo obtener la ubicación. Permite el acceso al GPS o ingrésala manualmente.</p>}
+              <MapLocationPicker
+                value={config.originLat != null && config.originLng != null ? { lat: config.originLat, lng: config.originLng } : null}
+                onChange={({ lat, lng }) => setConfig(p => ({ ...p, originLat: lat, originLng: lng }))}
+              />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <FieldLabel>Latitud</FieldLabel>
