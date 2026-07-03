@@ -788,18 +788,28 @@ router.post('/orders', async (req, res) => {
     // modo configurado (FLAT o DISTANCE) con las coordenadas del cliente.
     let deliveryFee = 0;
     let deliveryDistanceKm = null;
+    // Pedidos de WhatsApp SIN ubicación GPS: NO cobramos un envío "adivinado".
+    // Se crea el pedido con envío $0 y se marca en notes para que el negocio lo
+    // asigne a mano (el cliente no recibe un total de envío). El cajero cotiza
+    // según la dirección de texto. Solo aplica a source=WHATSAPP: la tienda web
+    // (ONLINE) y el kiosko no cambian de comportamiento.
+    let deliveryFeePending = false;
     if (resolvedOrderType === 'DELIVERY') {
       const dest = (deliveryLat != null && deliveryLng != null) ? { lat: deliveryLat, lng: deliveryLng } : null;
-      const calc = computeDeliveryFee(config, subtotal, dest);
-      if (calc.error === 'OUT_OF_RANGE') {
-        return res.status(400).json({
-          error: 'Tu ubicación está fuera del área de cobertura de envío.',
-          code: 'OUT_OF_DELIVERY_RANGE',
-          distanceKm: calc.distanceKm,
-        });
+      if (source === 'WHATSAPP' && !dest) {
+        deliveryFeePending = true;
+      } else {
+        const calc = computeDeliveryFee(config, subtotal, dest);
+        if (calc.error === 'OUT_OF_RANGE') {
+          return res.status(400).json({
+            error: 'Tu ubicación está fuera del área de cobertura de envío.',
+            code: 'OUT_OF_DELIVERY_RANGE',
+            distanceKm: calc.distanceKm,
+          });
+        }
+        deliveryFee = calc.fee;
+        deliveryDistanceKm = calc.distanceKm;
       }
-      deliveryFee = calc.fee;
-      deliveryDistanceKm = calc.distanceKm;
     }
 
     // Cupón opcional. Si es inválido, NO bloquea el pedido — solo se ignora
@@ -991,7 +1001,9 @@ router.post('/orders', async (req, res) => {
           deliveryLat:     resolvedOrderType === 'DELIVERY' ? deliveryLat : null,
           deliveryLng:     resolvedOrderType === 'DELIVERY' ? deliveryLng : null,
           deliveryDistanceKm: resolvedOrderType === 'DELIVERY' ? deliveryDistanceKm : null,
-          notes:           notes?.trim() || null,
+          notes:           deliveryFeePending
+            ? [notes?.trim(), '⚠️ ENVÍO POR ASIGNAR: el cliente no compartió ubicación GPS. Cotizar y cobrar el envío manualmente.'].filter(Boolean).join(' — ')
+            : (notes?.trim() || null),
           userId:          loyaltyUserId,
           pointsUsed:      pointsUsed + (reward ? reward.pointsCost : 0),
           items: { create: finalItemsData },
