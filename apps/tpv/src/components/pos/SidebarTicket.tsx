@@ -9,7 +9,7 @@ import GuestCountModal from "@/components/pos/GuestCountModal";
 import ConfirmModal from "@/components/pos/ConfirmModal";
 import ManagerOverrideModal from "@/components/ManagerOverrideModal";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
-import { buildOrderItemsPayload } from "@/lib/modifiers";
+import { buildOrderItemsPayload, comboPartsFromCartItem, comboPartsFromOrderItem } from "@/lib/modifiers";
 import { useAuthStore } from "@/store/authStore";
 import { useTicketStore, type CartItem } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
@@ -453,6 +453,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         seatNumber: it.seatNumber ?? null,
         printerGroupIds,
         kitchenDetail: comboKitchenDetail(it),
+        // Partes del combo (si lo es) para que la comanda las rutee cada una a
+        // su estación. [] en productos normales → se imprime como una línea.
+        comboParts: comboPartsFromCartItem(it),
         modifiers: (it.modifiers || []).map((m) => ({ name: m.name, priceAdd: m.priceAdd })),
       };
     });
@@ -482,6 +485,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       notes: item.notes || null,
       seatNumber: item.seatNumber ?? null,
       printerGroupIds: itemOverride.length > 0 ? itemOverride : categoryDefault,
+      // Si el item anulado es un combo, la anulación también se explota por
+      // estación: cada área recibe el aviso de cancelar SU parte.
+      comboParts: comboPartsFromOrderItem(item),
       modifiers: (item.modifiers || []).map((m: any) => ({
         name: m.modifier?.name || m.name || "",
         priceAdd: Number(m.modifier?.priceAdd ?? m.priceAdd ?? 0),
@@ -1087,6 +1093,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       notes: it.notes,
       seatNumber: it.seatNumber ?? null,
       kitchenDetail: comboKitchenDetail(it.menuItem),
+      comboParts: comboPartsFromOrderItem(it),
       modifiers: (it.modifiers || []).map((m: any) => ({ name: m.name || m.modifier?.name, priceAdd: m.priceAdd || m.modifier?.priceAdd })),
     }));
   };

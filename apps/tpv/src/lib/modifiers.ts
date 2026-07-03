@@ -13,10 +13,13 @@
  * cuyo componente quedó muerto (el configurador vive inline en la página).
  */
 import type {
+  ComboComponent,
+  ComboPart,
   MenuItemVariant,
   Modifier,
   ModifierGroup,
   ModifierSelection,
+  PrinterGroupRef,
   Product,
 } from "@/store/ticketStore";
 
@@ -190,6 +193,66 @@ export function buildOrderItemsPayload(items: OrderItemPayloadInput[]) {
     notes: item.notes || "",
     seatNumber: item.seatNumber ?? null,
     ...splitModifierSelections(item.modifiers || []),
+  }));
+}
+
+// Resuelve la estación (printerGroupIds) de un producto: override item-level si
+// existe, si no el default heredado de su categoría. Mismo criterio que
+// buildTicketItems para los productos normales.
+function resolvePrinterGroupIds(
+  mi: { printerGroups?: PrinterGroupRef[]; category?: { printerGroups?: PrinterGroupRef[] } } | undefined,
+): string[] {
+  const pick = (refs?: PrinterGroupRef[]) =>
+    (refs ?? []).map((m) => m.printerGroup?.id).filter((id): id is string => Boolean(id));
+  const override = pick(mi?.printerGroups);
+  return override.length > 0 ? override : pick(mi?.category?.printerGroups);
+}
+
+// Convierte las opciones de combo elegidas (guardadas en el carrito como
+// modificadores "combo:<comp>:<opt>") en partes listas para la comanda: cada
+// una con el producto real y su estación. La explosión por estación en
+// printer-tcp usa esto para mandar cada componente a su área (alitas→Freidora,
+// papas→Cocina, refresco→Barra). Devuelve [] si el item no es combo o no tiene
+// selecciones — en ese caso el item se imprime como una sola línea (fallback).
+export function comboPartsFromCartItem(item: {
+  isCombo?: boolean;
+  comboComponents?: ComboComponent[];
+  modifiers?: ModifierSelection[];
+}): ComboPart[] {
+  if (!item.isCombo || !item.comboComponents?.length || !item.modifiers?.length) return [];
+  const parts: ComboPart[] = [];
+  for (const sel of item.modifiers) {
+    if (!sel.id.startsWith(COMBO_MODIFIER_PREFIX)) continue;
+    const rest = sel.id.slice(COMBO_MODIFIER_PREFIX.length);
+    const idx = rest.indexOf(":");
+    if (idx < 0) continue;
+    const componentId = rest.slice(0, idx);
+    const optionId = rest.slice(idx + 1);
+    const opt = item.comboComponents
+      .find((c) => c.id === componentId)
+      ?.options.find((o) => o.id === optionId);
+    if (!opt) continue;
+    parts.push({
+      name: opt.optionMenuItem?.name || sel.name || "Componente",
+      quantity: 1,
+      printerGroupIds: resolvePrinterGroupIds(opt.optionMenuItem),
+    });
+  }
+  return parts;
+}
+
+// Igual que comboPartsFromCartItem pero desde un pedido YA guardado (reimpresión
+// / anulación). La estación de cada componente la resuelve el backend
+// (attachComboStations → comboSelections[].printerGroupIds); aquí solo se mapea.
+export function comboPartsFromOrderItem(orderItem: {
+  comboSelections?: Array<{ name?: string; printerGroupIds?: string[] }> | null;
+}): ComboPart[] {
+  const sels = orderItem.comboSelections;
+  if (!sels?.length) return [];
+  return sels.map((s) => ({
+    name: s.name || "Componente",
+    quantity: 1,
+    printerGroupIds: Array.isArray(s.printerGroupIds) ? s.printerGroupIds : [],
   }));
 }
 

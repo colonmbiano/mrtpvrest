@@ -6,6 +6,7 @@ import {
   type PrinterRecord,
   type TicketItem,
   type KitchenTicketConfig,
+  type ComboPart,
 } from "@/lib/printer-tcp";
 import { toast } from "sonner";
 
@@ -16,6 +17,8 @@ export interface ReprintCandidateItem {
   notes?: string | null;
   /** Desglose de combo/promo para la comanda (sub-línea entre paréntesis). */
   kitchenDetail?: string | null;
+  /** Partes de combo para explotar por estación al reimprimir. */
+  comboParts?: ComboPart[] | null;
   printerGroupIds?: string[];
   modifiers?: { name: string; priceAdd?: number }[];
   seatNumber?: number | null;
@@ -97,6 +100,7 @@ const ReprintKitchenModal: React.FC<ReprintKitchenModalProps> = ({
         price: 0, // cocina no muestra precios
         notes: it.notes || null,
         kitchenDetail: it.kitchenDetail || null,
+        comboParts: it.comboParts ?? null,
         modifiers: it.modifiers || [],
         printerGroupIds: it.printerGroupIds || [],
         seatNumber: it.seatNumber ?? null,

@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
-import { buildOrderItemsPayload } from "@/lib/modifiers";
+import { buildOrderItemsPayload, comboPartsFromOrderItem } from "@/lib/modifiers";
 import api from "@/lib/api";
 import {
   readPaidTicketsCache,
@@ -593,6 +593,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         notes: it.notes || null,
         seatNumber: typeof it.seatNumber === "number" ? it.seatNumber : null,
         kitchenDetail: comboKitchenDetail(it.menuItem),
+        comboParts: comboPartsFromOrderItem(it),
         modifiers: (it.modifiers || []).map((m: any) => ({
           name: m.name || m.modifier?.name || "",
           priceAdd: Number(m.priceAdd ?? m.price ?? 0),
@@ -1486,6 +1487,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
               quantity: Number(it.quantity ?? 1),
               notes: it.notes || null,
               kitchenDetail: comboKitchenDetail(it.menuItem),
+              comboParts: comboPartsFromOrderItem(it),
               printerGroupIds:
                 itemOverride.length > 0 ? itemOverride : categoryDefault,
               modifiers: (it.modifiers || []).map((m: any) => ({
