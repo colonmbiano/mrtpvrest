@@ -7,8 +7,15 @@
 
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const axios = require('axios');
 const { prisma } = require('@mrtpvrest/database');
 const { botAuth } = require('../lib/bot-auth.middleware');
+
+// Base para self-call interno (reusa handlers probados con su cadena de middleware).
+const selfBase = () => `http://127.0.0.1:${process.env.PORT || 3001}`;
 
 // Todas las rutas exigen el token del bot → req.restaurantId es el tenant del token.
 router.use(botAuth);
@@ -157,6 +164,65 @@ router.get('/config', (req, res) => {
     ignoreNumbers: Array.isArray(cfg.ignoreNumbers) ? cfg.ignoreNumbers : [],
     ignoreGroupName: typeof cfg.ignoreGroupName === 'string' ? cfg.ignoreGroupName : '',
   });
+});
+
+// ── Agregar items a una orden (ADD_TO_ORDER) ─────────────────────────────────
+// Mueve al BACKEND lo que hoy hace orderProcessor.addItemsToOrder (el único punto
+// que forja un JWT y necesita JWT_SECRET). Así el bot deja de necesitar el secreto.
+// Resuelve el empleado-bot + la sucursal server-side y reusa el handler probado
+// /api/orders/:id/items vía self-call interno (misma validación de siempre).
+const botEmployeeCache = new Map(); // restaurantId → employeeId
+
+async function resolveBotEmployeeId(restaurantId) {
+  const cached = botEmployeeCache.get(restaurantId);
+  if (cached) return cached;
+  const location = await prisma.location.findFirst({
+    where: { restaurantId, isActive: true }, orderBy: { createdAt: 'asc' }, select: { id: true },
+  });
+  if (!location) throw new Error(`Sin sucursal activa para ${restaurantId}`);
+  let emp = await prisma.employee.findFirst({
+    where: { locationId: location.id, name: 'Bot WhatsApp' }, select: { id: true, isActive: true },
+  });
+  if (emp && !emp.isActive) await prisma.employee.update({ where: { id: emp.id }, data: { isActive: true } });
+  if (!emp) {
+    emp = await prisma.employee.create({
+      data: {
+        locationId: location.id, name: 'Bot WhatsApp', role: 'CASHIER',
+        // PIN irrecuperable (hash de 32 bytes aleatorios): el campo es obligatorio
+        // pero no habilita login por PIN.
+        pin: bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 10),
+        isActive: true, canTakeDelivery: true, canTakeTakeout: true,
+      },
+    });
+  }
+  botEmployeeCache.set(restaurantId, emp.id);
+  return emp.id;
+}
+
+router.post('/orders/:id/items', async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId;
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length) return res.status(400).json({ error: 'items requerido' });
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, restaurantId }, select: { locationId: true },
+    });
+    if (!order || !order.locationId) return res.status(404).json({ error: 'Orden no encontrada o sin sucursal' });
+
+    const botEmployeeId = await resolveBotEmployeeId(restaurantId);
+    const token = jwt.sign({ id: botEmployeeId, restaurantId, role: 'CASHIER' }, process.env.JWT_SECRET, { expiresIn: '2m' });
+    const r = await axios.post(`${selfBase()}/api/orders/${encodeURIComponent(req.params.id)}/items`, { items }, {
+      headers: { 'x-restaurant-id': restaurantId, 'x-location-id': order.locationId, 'Authorization': `Bearer ${token}` },
+      timeout: 12000,
+    });
+    res.json(r.data);
+  } catch (e) {
+    const code = e?.response?.status;
+    console.error('[bot] add-items error:', code || '', e?.response?.data || e?.message || e);
+    // Propaga 4xx del handler (validación); el resto → 502.
+    res.status(code && code >= 400 && code < 500 ? code : 502)
+      .json({ error: 'No se pudieron agregar los items', detail: e?.response?.data?.error });
+  }
 });
 
 module.exports = router;
