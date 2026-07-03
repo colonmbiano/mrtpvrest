@@ -3,8 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { RotateCw, Settings, ShoppingBag } from "lucide-react";
+import { RotateCw, Settings, ShoppingBag, UsersRound } from "lucide-react";
+import AppHeader, { type ConnectionStatus } from "@/components/AppHeader";
+import StatusBadge, { type OperationalStatus } from "@/components/StatusBadge";
 import api from "@/lib/api";
+import { useOnlineStatus } from "@/lib/useOnlineStatus";
+import { useOfflineQueueStore } from "@/store/useOfflineQueueStore";
 import { type AssignedTable, useWaiterOrderStore } from "@/store/useWaiterOrderStore";
 
 interface ApiTable {
@@ -20,6 +24,14 @@ interface ApiTable {
 type LoadState = "idle" | "loading" | "ready" | "offline" | "error";
 
 const tablesCacheKey = "meseros-lite-real-tables";
+
+function money(value: number) {
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    maximumFractionDigits: 0,
+  }).format(value || 0);
+}
 
 function tableStatus(status: ApiTable["status"]): AssignedTable["status"] {
   if (status === "AVAILABLE") return "free";
@@ -58,17 +70,42 @@ function mapTables(rows: ApiTable[]): AssignedTable[] {
   }));
 }
 
+function badgeFor(table: AssignedTable): { status: OperationalStatus; label: string } {
+  if (table.status === "ready") return { status: "cleaning", label: "Por limpiar" };
+  if (table.status === "blocked") return { status: "urgent", label: "Bloqueada" };
+  if (table.status === "open") {
+    return {
+      status: table.activeOrderItemCount && table.activeOrderItemCount > 6 ? "kitchen" : "open",
+      label: table.activeOrderItemCount && table.activeOrderItemCount > 6 ? "En cocina" : "Cuenta abierta",
+    };
+  }
+  return { status: "free", label: "Libre" };
+}
+
+function sortPriority(table: AssignedTable) {
+  if (table.status === "blocked") return 0;
+  if (table.status === "ready") return 1;
+  if (table.status === "open") return 2;
+  return 3;
+}
+
 export default function MesasPage() {
   const router = useRouter();
+  const online = useOnlineStatus();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [error, setError] = useState("");
   const assignedTables = useWaiterOrderStore((state) => state.assignedTables);
   const activeTableId = useWaiterOrderStore((state) => state.activeTableId);
   const setActiveTable = useWaiterOrderStore((state) => state.setActiveTable);
   const setAssignedTables = useWaiterOrderStore((state) => state.setAssignedTables);
+  const pendingCount = useOfflineQueueStore(
+    (state) => state.queue.filter((t) => !t.synced && !t.failedPermanently).length,
+  );
+  const failedCount = useOfflineQueueStore(
+    (state) => state.queue.filter((t) => t.failedPermanently).length,
+  );
+  const syncing = useOfflineQueueStore((state) => state.syncInProgress);
 
-  // Fetch puro: sin setState síncrono antes del primer await, para que el
-  // effect de montaje no dispare react-hooks/set-state-in-effect.
   const applyTables = async () => {
     try {
       const { data } = await api.get<ApiTable[]>("/api/tables");
@@ -100,7 +137,6 @@ export default function MesasPage() {
     }
   };
 
-  // Wrapper para eventos (botón refrescar / reintentar): muestra el flash.
   const loadTables = () => {
     setLoadState("loading");
     setError("");
@@ -110,85 +146,96 @@ export default function MesasPage() {
   useEffect(() => {
     const cached = readCachedTables();
     if (cached.length > 0) setAssignedTables(cached);
-    // applyTables sólo hace setState tras el await del fetch (microtask), no
-    // es un cascading render síncrono; el rule lo marca por análisis estático.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void applyTables();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const connectionStatus: ConnectionStatus = !online
+    ? "offline"
+    : failedCount > 0
+      ? "error"
+      : syncing || pendingCount > 0
+        ? "syncing"
+        : "online";
+
   const groupedTables = useMemo(() => {
-    return assignedTables.reduce<Record<string, AssignedTable[]>>((acc, table) => {
-      const zone = table.zone || "Sin zona";
-      acc[zone] = [...(acc[zone] || []), table];
-      return acc;
-    }, {});
+    return [...assignedTables]
+      .sort((a, b) => sortPriority(a) - sortPriority(b) || (b.activeOrderTotal || 0) - (a.activeOrderTotal || 0))
+      .reduce<Record<string, AssignedTable[]>>((acc, table) => {
+        const zone = table.zone || "Sin zona";
+        acc[zone] = [...(acc[zone] || []), table];
+        return acc;
+      }, {});
   }, [assignedTables]);
 
   const stats = {
     total: assignedTables.length,
-    free: assignedTables.filter((table) => table.status === "free").length,
     open: assignedTables.filter((table) => table.status === "open").length,
+    attention: assignedTables.filter((table) => table.status === "ready" || table.status === "blocked").length,
   };
 
   return (
-    <section className="min-h-screen bg-[var(--bg)] px-5 py-5 pb-28 text-[var(--text-primary)]">
-      <header className="mb-5 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-sm font-bold uppercase tracking-wide text-[var(--brand)]">Piso real</p>
-          <h1 className="truncate text-3xl font-black text-[var(--text-primary)]">Mapa de salon</h1>
+    <section className="min-h-screen bg-[var(--bg)] px-4 py-5 pb-28 text-[var(--text-primary)]">
+      <AppHeader
+        title="Mis mesas"
+        subtitle="Ana · Mesero"
+        connectionStatus={connectionStatus}
+        rightAction={
+          <button
+            type="button"
+            onClick={loadTables}
+            className="flex min-h-[52px] min-w-[52px] items-center justify-center rounded-soft border border-[var(--border)] bg-[var(--surface-1)] text-[var(--text-primary)] active:scale-95 transition-all duration-150"
+            aria-label="Actualizar mesas"
+          >
+            <RotateCw size={23} className={loadState === "loading" ? "animate-spin" : undefined} />
+          </button>
+        }
+      />
+
+      {(loadState === "offline" || !online || pendingCount > 0) && (
+        <div className="mb-4 rounded-card border border-[var(--warning)] bg-[rgba(246,178,59,0.1)] p-3">
+          <StatusBadge status="offline" label={pendingCount > 0 ? `${pendingCount} en cola` : "Sin WiFi"} />
+          <p className="mt-2 text-sm font-bold text-[var(--text-secondary)]">
+            Las rondas se guardan localmente y se enviaran al reconectar.
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={loadTables}
-          className="flex min-h-[64px] min-w-[64px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-1)] text-[var(--brand)] active:scale-95 transition-all duration-150"
-          aria-label="Actualizar mesas"
-        >
-          <RotateCw size={26} />
-        </button>
-      </header>
+      )}
 
       <div className="mb-4 grid grid-cols-3 gap-2">
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3">
+        <article className="rounded-card border border-[var(--border)] bg-[var(--surface-1)] p-3">
           <p className="text-xs font-black uppercase text-[var(--text-muted)]">Total</p>
-          <p className="text-2xl font-black text-[var(--text-primary)]">{stats.total}</p>
-        </div>
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3">
-          <p className="text-xs font-black uppercase text-[var(--text-muted)]">Libres</p>
-          <p className="text-2xl font-black text-[var(--brand)]">{stats.free}</p>
-        </div>
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3">
+          <p className="mt-1 text-2xl font-black">{stats.total}</p>
+        </article>
+        <article className="rounded-card border border-[var(--border)] bg-[var(--surface-1)] p-3">
           <p className="text-xs font-black uppercase text-[var(--text-muted)]">Abiertas</p>
-          <p className="text-2xl font-black text-[var(--brand)]">{stats.open}</p>
-        </div>
+          <p className="mt-1 text-2xl font-black text-[var(--warning)]">{stats.open}</p>
+        </article>
+        <article className="rounded-card border border-[var(--border)] bg-[var(--surface-1)] p-3">
+          <p className="text-xs font-black uppercase text-[var(--text-muted)]">Atencion</p>
+          <p className="mt-1 text-2xl font-black text-[var(--danger)]">{stats.attention}</p>
+        </article>
       </div>
 
-      {/* Pedido para llevar: arranca una comanda SIN mesa (orderType TAKEOUT).
-          Limpia cualquier mesa/ticket activo para empezar en limpio. */}
       <button
         type="button"
         onClick={() => {
           setActiveTable(null);
           router.push("/menu");
         }}
-        className="mb-4 flex min-h-[68px] w-full items-center justify-center gap-3 rounded-lg border border-[var(--brand)] bg-[var(--brand)] text-xl font-black text-[var(--brand-fg)] active:scale-95 transition-all duration-150"
+        className="mb-4 flex min-h-[64px] w-full items-center justify-center gap-3 rounded-card border border-[var(--brand)] bg-[var(--brand)] text-lg font-black text-[var(--brand-fg)] shadow-soft active:scale-[0.99] transition-all duration-150"
       >
-        <ShoppingBag size={26} strokeWidth={2.4} />
+        <ShoppingBag size={24} strokeWidth={2.4} />
         Pedido para llevar
       </button>
 
-      {loadState === "offline" && (
-        <p className="mb-4 rounded-lg border border-[var(--brand)] bg-[var(--surface-1)] p-4 text-base font-black text-[var(--brand)]">
-          Mostrando mesas guardadas localmente.
-        </p>
-      )}
-
       {loadState === "error" && (
-        <div className="grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
-          <p className="text-base font-black text-[var(--brand)]">{error}</p>
+        <div className="grid gap-3 rounded-card border border-[var(--danger)] bg-[var(--surface-1)] p-4">
+          <StatusBadge status="error" label="Error sync" />
+          <p className="text-base font-black text-[var(--text-primary)]">{error}</p>
           <Link
             href="/setup"
-            className="flex min-h-[64px] items-center justify-center rounded-lg border border-[var(--brand)] bg-[var(--brand)] px-4 text-lg font-black text-[var(--brand-fg)] active:scale-95 transition-all duration-150"
+            className="flex min-h-[60px] items-center justify-center rounded-soft border border-[var(--brand)] bg-[var(--brand)] px-4 text-lg font-black text-[var(--brand-fg)] active:scale-95 transition-all duration-150"
           >
             Configurar tablet
           </Link>
@@ -196,9 +243,9 @@ export default function MesasPage() {
       )}
 
       {loadState !== "error" && assignedTables.length === 0 && (
-        <div className="grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-5 text-center">
-          <Settings className="mx-auto text-[var(--brand)]" size={34} />
-          <p className="text-xl font-black text-[var(--text-primary)]">No hay mesas configuradas</p>
+        <div className="grid gap-3 rounded-card border border-[var(--border)] bg-[var(--surface-1)] p-5 text-center">
+          <Settings className="mx-auto text-[var(--text-muted)]" size={34} />
+          <p className="text-xl font-black">No hay mesas configuradas</p>
           <p className="text-base font-bold text-[var(--text-secondary)]">
             Crea mesas y zonas en el TPV completo, en Admin / Mesas y Zonas.
           </p>
@@ -209,15 +256,17 @@ export default function MesasPage() {
         {Object.entries(groupedTables).map(([zone, tables]) => (
           <section key={zone}>
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="truncate text-lg font-black uppercase tracking-wide text-[var(--text-primary)]">
+              <h2 className="truncate text-sm font-black uppercase tracking-widest text-[var(--text-muted)]">
                 {zone}
               </h2>
               <p className="shrink-0 text-sm font-black text-[var(--text-muted)]">{tables.length} mesas</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-3">
               {tables.map((table) => {
                 const selected = table.id === activeTableId;
+                const badge = badgeFor(table);
+                const isOpen = table.status === "open";
                 return (
                   <button
                     key={table.id}
@@ -234,31 +283,42 @@ export default function MesasPage() {
                             }
                           : null,
                       );
-                      // Mesa con cuenta abierta → ver primero lo ya pedido
-                      // (items + total) y desde ahí "Agregar mas". Mesa libre
-                      // → directo a la comanda nueva.
                       router.push(table.status === "open" ? "/cuenta" : "/menu");
                     }}
                     className={[
-                      "min-h-[112px] rounded-lg border bg-[var(--surface-1)] p-4 text-left",
-                      "active:scale-95 transition-all duration-150",
-                      selected ? "border-[var(--brand)]" : "border-[var(--border)]",
+                      "min-h-[104px] rounded-card border bg-[var(--surface-1)] p-4 text-left shadow-soft",
+                      "active:scale-[0.99] transition-all duration-150",
+                      selected ? "border-[var(--brand)] bg-[var(--surface-3)]" : "border-[var(--border)]",
                     ].join(" ")}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="text-xl font-black text-[var(--text-primary)]">{table.name}</p>
-                      <span className="rounded-md border border-[var(--border)] bg-[var(--surface-3)] px-2 py-1 text-xs font-black text-[var(--text-secondary)]">
-                        {table.guests || 4}p
-                      </span>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-2xl font-black">{table.name}</p>
+                          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-3)] px-2 py-1 text-xs font-black text-[var(--text-secondary)]">
+                            <UsersRound size={13} /> {table.guests || 4}
+                          </span>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <StatusBadge status={badge.status} label={badge.label} />
+                          <span className="text-sm font-bold text-[var(--text-secondary)]">
+                            {isOpen
+                              ? `${table.activeOrderItemCount || 0} productos`
+                              : table.status === "free"
+                                ? "Toca para abrir"
+                                : "Revisar antes de abrir"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-xs font-black uppercase text-[var(--text-muted)]">
+                          {isOpen ? "Total" : zone}
+                        </p>
+                        <p className="mt-1 text-xl font-black tnum">
+                          {isOpen ? money(table.activeOrderTotal || 0) : ""}
+                        </p>
+                      </div>
                     </div>
-                    <p className="mt-2 text-sm font-bold text-[var(--text-secondary)]">{zone}</p>
-                    <p className="mt-3 text-sm font-black uppercase text-[var(--brand)]">
-                      {table.status === "free"
-                        ? "Libre"
-                        : table.status === "ready"
-                          ? "Por limpiar"
-                          : "Cuenta abierta"}
-                    </p>
                   </button>
                 );
               })}

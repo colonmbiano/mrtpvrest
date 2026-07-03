@@ -405,7 +405,7 @@ export default function MenuPage() {
           });
 
       if (!result.ok) {
-        throw new Error(result.error || "No se pudo guardar la comanda.");
+        throw new Error(result.error || "No se pudo enviar la ronda.");
       }
 
       // Auto-impresión local (LAN). Se hace ANTES de limpiar el ticket y
@@ -417,10 +417,8 @@ export default function MenuPage() {
       setLastAddedName(null);
       setTakeoutName("");
       const baseMessage = result.queued
-        ? `${activeOrderId ? "Nueva ronda" : "Comanda"} en cola. Se enviara al volver internet.`
-        : activeOrderId
-          ? "Nueva ronda agregada a la cuenta."
-          : "Comanda guardada.";
+        ? "Ronda en cola. Se enviara al volver internet."
+        : "Ronda enviada a cocina.";
       setSaveMessage(baseMessage + printNote);
       window.setTimeout(() => router.replace("/mesas"), 600);
     } catch (err: unknown) {
@@ -432,7 +430,7 @@ export default function MenuPage() {
         "response" in err &&
         typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === "string"
           ? (err as { response: { data: { error: string } } }).response.data.error
-          : directMessage || "No se pudo guardar la comanda. Revisa sesion, sucursal y turno.";
+          : directMessage || "No se pudo enviar la ronda. Revisa sesion, sucursal y turno.";
       const isTokenError = message.toLowerCase().includes("token");
       const friendlyMessage = isTokenError
         ? "Sesion vencida. Vuelve a ingresar tu PIN para continuar (no hace falta reconfigurar la tablet)."
@@ -454,7 +452,7 @@ export default function MenuPage() {
       <header className="mb-3 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--brand)]">
-            {activeTableId ? "Comanda" : "Pedido para llevar"}
+            {activeTableId ? "Toma de pedido" : "Pedido para llevar"}
           </p>
           <h1 className="truncate text-xl font-black leading-tight text-[var(--text-primary)]">
             {activeTableName || (activeTableId ? `Mesa ${activeTableId.replace("mesa-", "")}` : "Para llevar")}
@@ -592,15 +590,20 @@ export default function MenuPage() {
           </div>
 
           {status === "offline" && (
-            <div className="mb-3 flex min-h-[64px] items-center gap-3 rounded-lg border border-[var(--brand)] bg-[var(--surface-1)] px-4 text-[var(--brand)]">
+            <div className="mb-3 flex min-h-[64px] items-center gap-3 rounded-lg border border-[var(--warning)] bg-[var(--surface-1)] px-4 text-[var(--warning)]">
               <WifiOff size={24} />
               <p className="text-base font-black">Catalogo local activo</p>
             </div>
           )}
 
           {(saveError || saveMessage) && (
-            <div className="mb-3 rounded-lg border border-[var(--brand)] bg-[var(--surface-1)] p-4">
-              <p className="text-base font-black text-[var(--brand)]">
+            <div
+              className={[
+                "mb-3 rounded-lg border bg-[var(--surface-1)] p-4",
+                saveError ? "border-[var(--danger)]" : "border-[var(--success)]",
+              ].join(" ")}
+            >
+              <p className={["text-base font-black", saveError ? "text-[var(--danger)]" : "text-[var(--success)]"].join(" ")}>
                 {saveError || saveMessage}
               </p>
             </div>
@@ -719,7 +722,7 @@ export default function MenuPage() {
                   : "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]",
               ].join(" ")}
             >
-              {saving ? "Guardando..." : activeOrderId ? "Agregar nueva ronda" : "Guardar comanda"}
+              {saving ? "Enviando..." : "Enviar ronda"}
             </button>
           </div>
         </aside>
@@ -821,10 +824,17 @@ export default function MenuPage() {
                 : "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]",
             ].join(" ")}
           >
-            {saving ? "Guardando..." : activeOrderId ? "Agregar nueva ronda" : "Guardar comanda"}
+            {saving ? "Enviando..." : "Enviar ronda"}
           </button>
           {(saveError || saveMessage) && (
-            <p className="mt-2 rounded-lg border border-[var(--brand)] bg-[var(--surface-3)] p-3 text-center text-sm font-black text-[var(--brand)]">
+            <p
+              className={[
+                "mt-2 rounded-lg border bg-[var(--surface-3)] p-3 text-center text-sm font-black",
+                saveError
+                  ? "border-[var(--danger)] text-[var(--danger)]"
+                  : "border-[var(--success)] text-[var(--success)]",
+              ].join(" ")}
+            >
               {saveError || saveMessage}
             </p>
           )}
@@ -964,11 +974,11 @@ function LiteProductConfigurator({
   );
 
   return (
-    <div className="fixed inset-0 z-[80] bg-[var(--bg)] text-[var(--text-primary)]">
-      <div className="flex h-screen flex-col">
+    <div className="fixed inset-0 z-[80] flex items-end bg-black/55 text-[var(--text-primary)]">
+      <div className="flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-[32px] border border-[var(--border-strong)] bg-[var(--bg)] shadow-strong">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-1)] p-4">
           <div className="min-w-0">
-            <p className="text-xs font-black uppercase text-[var(--brand)]">Configurar producto</p>
+            <p className="text-xs font-black uppercase text-[var(--ready)]">Opciones</p>
             <h2 className="truncate text-2xl font-black text-[var(--text-primary)]">{product.name}</h2>
           </div>
           <button
@@ -981,7 +991,7 @@ function LiteProductConfigurator({
           </button>
         </header>
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-4 pb-40">
+        <div className="flex-1 space-y-5 overflow-y-auto p-4 pb-4">
           {variants.length > 0 && (
             <section>
               <div className="mb-3 flex items-center justify-between gap-3">
@@ -1103,7 +1113,7 @@ function LiteProductConfigurator({
           </label>
         </div>
 
-        <footer className="fixed bottom-20 left-0 right-0 z-[90] border-t border-[var(--border)] bg-[var(--surface-1)] p-3">
+        <footer className="shrink-0 border-t border-[var(--border)] bg-[var(--surface-1)] p-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
           {validationError && (
             <p className="mb-2 rounded-lg border border-[var(--brand)] bg-[var(--surface-3)] p-3 text-center text-sm font-black text-[var(--brand)]">
               {validationError}
@@ -1139,7 +1149,7 @@ function LiteProductConfigurator({
                 : "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]",
             ].join(" ")}
           >
-            Agregar al ticket
+            Agregar a comanda
           </button>
         </footer>
       </div>
