@@ -59,6 +59,10 @@ const recentOrderChats = new Map();
 const humanHandoffs = new Map();
 const botOutgoingIntents = new Map();
 const botSentMessages = new Map();
+// Anti-spam / anti-baneo: último texto enviado por chat { chatKey: {text, at} }.
+// safeSend lo usa para NO reenviar el mismo mensaje al mismo chat en una ventana
+// corta (evita ráfagas de idénticos que disparan el bloqueo de whatsapp-web.js).
+const lastBotSendByChat = new Map();
 const HUMAN_HANDOFF_MS = 60 * 60 * 1000;
 const BOT_OUTGOING_INTENT_MS = 2 * 60 * 1000;
 const PROFILE_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 días: perfiles inactivos se purgan
@@ -438,6 +442,15 @@ function initWhatsApp(io) {
     // EnvÃ­o robusto (sendMessage anda mejor con @lid que msg.reply).
     const safeSend = async (text) => {
       try {
+        // Anti-baneo: no reenviar el MISMO texto al mismo chat dentro de 60s.
+        // Corta las rafagas de mensajes identicos (p.ej. varios "problema
+        // tecnico" seguidos al reprocesar no-leidos), que disparan el bloqueo.
+        const prevSend = lastBotSendByChat.get(chatKey);
+        if (prevSend && prevSend.text === text && Date.now() - prevSend.at < 60000) {
+          console.log(`[WhatsApp Bot] Envio duplicado suprimido (anti-spam) a ${msg.from}`);
+          return;
+        }
+        lastBotSendByChat.set(chatKey, { text, at: Date.now() });
         rememberBotOutgoingIntent(chatKey, text);
         const sent = await whatsappClient.sendMessage(msg.from, text);
         rememberBotSentMessage(sent);
@@ -770,9 +783,13 @@ function initWhatsApp(io) {
         if (chat.isGroup || (chat.unreadCount || 0) <= 0) continue;
         let msgs = [];
         try { msgs = await chat.fetchMessages({ limit: Math.min(chat.unreadCount, 10) }); } catch { continue; }
-        for (const m of msgs) {
-          if (m.fromMe || (m.timestamp || 0) < cutoffSec) continue;
-          await handleIncomingMessage(m);
+        // Solo el mensaje MAS RECIENTE del cliente: reprocesar TODOS los no-leidos
+        // (p.ej. "menu, menu, menu") solo genera respuestas repetidas y ráfagas.
+        // El ultimo captura la intencion actual. fetchMessages: mas viejo → nuevo.
+        const relevantes = msgs.filter((m) => !m.fromMe && (m.timestamp || 0) >= cutoffSec);
+        const ultimo = relevantes[relevantes.length - 1];
+        if (ultimo) {
+          await handleIncomingMessage(ultimo);
           procesados++;
         }
         try { await chat.sendSeen(); } catch {}
