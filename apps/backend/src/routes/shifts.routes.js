@@ -782,16 +782,21 @@ async function shiftDriverLiquidation(shift) {
       },
     }),
   ]);
-  // Porción en efectivo de una orden (los métodos no-efectivo no pasan por las
-  // manos del responsable). Mismo criterio de tenders que summarizePayments.
-  const cashOf = (o) => {
+  // Cobros de una orden por método. El EFECTIVO pasa por las manos del
+  // responsable (debe entregarlo); transferencia/tarjeta van directo al banco —
+  // se reportan en su rendición para VERIFICARLOS, pero no suman al total a
+  // entregar físico. Mismo criterio de tenders que summarizePayments.
+  const CASH_METHODS = ['CASH', 'CASH_ON_DELIVERY'];
+  const TRANSFER_METHODS = ['TRANSFER', 'SPEI', 'OXXO'];
+  const CARD_METHODS = ['CARD', 'CARD_PRESENT'];
+  const sumMethods = (o, methods) => {
     const tenders = (o.payments || []).filter((p) => p && p.status !== 'FAILED' && p.status !== 'REFUNDED');
     if (tenders.length > 0) {
       return tenders
-        .filter((p) => p.method === 'CASH' || p.method === 'CASH_ON_DELIVERY')
+        .filter((p) => methods.includes(p.method))
         .reduce((s, p) => s + (Number(p.amount) || 0), 0);
     }
-    return o.paymentMethod === 'CASH' || o.paymentMethod === 'CASH_ON_DELIVERY' ? Number(o.total) || 0 : 0;
+    return methods.includes(o.paymentMethod) ? Number(o.total) || 0 : 0;
   };
   return drivers
     .map((d) => {
@@ -799,7 +804,9 @@ async function shiftDriverLiquidation(shift) {
       const fondo = round2(dm.filter((m) => m.type === 'FLOAT').reduce((s, m) => s + m.amount, 0));
       const compras = round2(dm.filter((m) => m.type === 'EXPENSE').reduce((s, m) => s + m.amount, 0));
       const dOrders = orders.filter((o) => o.deliveryDriverId === d.id);
-      const cobros = round2(dOrders.reduce((s, o) => s + cashOf(o), 0));
+      const cobros = round2(dOrders.reduce((s, o) => s + sumMethods(o, CASH_METHODS), 0));
+      const cobrosTransfer = round2(dOrders.reduce((s, o) => s + sumMethods(o, TRANSFER_METHODS), 0));
+      const cobrosTarjeta = round2(dOrders.reduce((s, o) => s + sumMethods(o, CARD_METHODS), 0));
       const sobrante = round2(fondo - compras);
       return {
         driverId: d.id,
@@ -808,13 +815,15 @@ async function shiftDriverLiquidation(shift) {
         compras,
         sobrante,
         cobros,
+        cobrosTransfer,
+        cobrosTarjeta,
         pedidos: dOrders.length,
         totalAEntregar: round2(cobros + sobrante),
         entregadoReal: null,
         diferencia: null,
       };
     })
-    .filter((l) => l.fondo !== 0 || l.compras !== 0 || l.cobros !== 0);
+    .filter((l) => l.fondo !== 0 || l.compras !== 0 || l.cobros !== 0 || l.cobrosTransfer !== 0 || l.cobrosTarjeta !== 0);
 }
 
 // ── GET liquidación por responsable de un turno (scoped a sucursal) ──────
