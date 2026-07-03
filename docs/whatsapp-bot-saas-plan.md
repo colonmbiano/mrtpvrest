@@ -259,9 +259,75 @@ Texto sugerido para que el tenant acepte antes de activar el bot estándar:
 
 ---
 
-## 8. Siguiente paso concreto
+## 8. Estado
 
-Arrancar **Fase 1**: conexión por-tenant (QR + estado en el admin) + gate del add-on
-+ provisión semi-manual, para vender a los primeros 3-5. Cuando esté validado,
-construir el orquestador (Fase 2). La modalidad Cloud API (§5) se puede ofrecer en
-paralelo como tier premium reutilizando `gemini.js`/`orderProcessor.js`.
+- **Fase 1 — HECHA** (master `a4a9959`): conexión por-tenant (QR + estado en el
+  admin) + endpoint de provisión + piloto vinculado. Ver `project_whatsapp_bot_saas`.
+- **Fase 2 — diseño en §9**, pendiente de construir.
+
+---
+
+## 9. Diseño técnico Fase 2 — bot **API-only** + token por-tenant
+
+Meta: (1) que el bot **nunca toque la BD directo** ni tenga secretos de la
+plataforma, para poder correr el fleet más seguro **y** permitir auto-hospedaje;
+(2) orquestar muchas sesiones. Todo debe construirse **aditivamente** para no
+romper el bot en producción (Master Burguer's) hasta cortar a propósito.
+
+### 9.1 El problema que resuelve
+Hoy el bot importa `prisma` y necesita `DATABASE_URL` + `JWT_SECRET` +
+`GOOGLE_AI_API_KEY`. Darle eso a un tenant = darle acceso a TODA la BD y poder
+firmar tokens. Inaceptable. Accesos directos a BD que hay que eliminar del bot:
+
+| Archivo | Query directo | Reemplazo API |
+|---|---|---|
+| `gemini.js` | `menuItem.findMany`, `restaurant.findUnique`, `restaurantConfig.findUnique` | `GET /api/bot/context` |
+| `client.js` | `restaurant.findFirst` (tenant), `order.findFirst` (ticket) | `GET /api/bot/context`, `GET /api/bot/orders/:id` |
+| `botConfig.js` | `integrationConfig.findUnique/create` | `GET /api/bot/config` (seed pasa al server) |
+| `orderProcessor.js` | `location/employee.*` (crea empleado-bot), `order.findFirst` | server resuelve el actor por el token; `GET /api/bot/orders/:id` |
+
+### 9.2 Token por-tenant (SIN migración)
+- Al provisionar, se genera un token `bt_<restaurantId>.<secret-aleatorio>`. Se
+  guarda **solo el hash** (sha256 del secret) en `IntegrationConfig.config.botTokenHash`.
+  El token completo se muestra **una vez** para ponerlo en el env del bot
+  (`WHATSAPP_BOT_TOKEN`).
+- **Middleware `botAuth`** (`lib/bot-auth.middleware.js`): lee `Authorization: Bearer bt_<rid>.<secret>`, saca `restaurantId` del prefijo, hace `findUnique` de esa fila, compara `sha256(secret)` con `botTokenHash`. Si casa → `req.restaurantId = rid` (scope de UN tenant), `req.botAuthed = true`. O(1), sin iterar.
+- **Revocable**: rotar el token (nuevo hash) invalida al bot viejo al instante.
+- **Rotación**: `POST /api/admin/whatsapp-assistant/rotate-token` (super-admin) →
+  devuelve el token nuevo una vez.
+
+### 9.3 Superficie `/api/bot/*` (toda con `botAuth`)
+- `GET /api/bot/context` → `{ restaurant:{name,phone,address}, config:{businessHours,estimatedDelivery,paymentMethods,openState}, menu:<string o estructurado> }`. Reúne server-side lo que hoy arma `gemini.js` (con su caché de 60s, movido al backend o con `Cache-Control`).
+- `GET /api/bot/config` → `{ active, extraInstructions, ignoreNumbers, ignoreGroupName }` (la fila WHATSAPP_ASSISTANT). El **self-seed pasa al server** (o se elimina; el bot solo lee).
+- `POST /api/bot/orders` → crea la orden (reusa la lógica de `/api/store/orders`), pero el **actor bot** se resuelve del token (el backend crea/usa el empleado-bot; el bot ya no llama a `getBotEmployeeId`).
+- `POST /api/bot/orders/:id/items` → agrega items (reusa add-round).
+- `GET /api/bot/orders/:id` → detalle con items + **modifiers + notes** (para el ticket con variantes/extras — ya lo hace `fetchOrderTicketDetail`, se mueve al server).
+- `GET /api/bot/whoami` → `{ restaurantId, name }` (diagnóstico/healthcheck del token).
+
+### 9.4 Llave de IA por-tenant (opcional, para escala/aislamiento)
+- Guardar `geminiApiKey` (cifrada) en la config del tenant. `GET /api/bot/context`
+  puede devolverla (o el bot self-hosted trae la suya en env). Aísla cuota y
+  permite atribuir costo por tenant. Si no hay, cae a la key global.
+
+### 9.5 Orquestador multi-sesión (necesita migración)
+- **Tabla `BotSession`** (migración, agregar a `SCOPED_MODELS`): `{ id, restaurantId,
+  phoneNumber, status(PENDING_QR|CONNECTING|READY|LOST|DISABLED), workerId,
+  sessionPath, lastReadyAt, lastQrAt }`.
+- **Worker multi-sesión**: refactor de `client.js` para instanciar **N clientes**
+  whatsapp-web.js (hoy uno con `clientId="mrtpvrest-bot"`), cada uno con su
+  `clientId`/carpeta y su `WHATSAPP_BOT_TOKEN`. Al arrancar, levanta las sesiones
+  que le asignó el control plane.
+- **Provisión/QR self-service**: al activar el add-on, el control plane crea la
+  `BotSession`, la asigna a un worker con cupo, y el QR aparece en el admin (§Fase 1).
+- **Recuperación**: LOST → alerta + re-QR. Ya hay base (`notifyAlert`, `/livez`).
+
+### 9.6 Orden de construcción (seguro, sin romper prod)
+1. **A — Backend aditivo**: `botAuth` + `/api/bot/*` + emisión/rotación de token.
+   No toca el bot vivo. Testeable solo con curl + un token de prueba.
+2. **B — Bot API-only**: nuevo cliente que usa `WHATSAPP_BOT_TOKEN` + `/api/bot/*`
+   en vez de prisma. Desplegar como servicio NUEVO apuntado a un tenant de prueba.
+3. **C — Cortar el piloto** a API-only y **quitar `DATABASE_URL`/`JWT_SECRET`** del
+   env del bot. A partir de aquí el bot es hospedable afuera sin secretos.
+4. **D — Orquestador**: `BotSession` + worker multi-sesión + auto-provisión.
+
+Increment A es el siguiente paso.

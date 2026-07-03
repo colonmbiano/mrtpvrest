@@ -204,6 +204,9 @@ app.use('/api/public', require('./routes/menu.routes'))
 app.use('/api/store',  require('./routes/store.routes'))
 app.use('/api/bot-alert', require('./routes/bot-alert.routes'))
 app.use('/api/bot-metrics', require('./routes/bot-metrics.routes'))
+// Bot de WhatsApp API-only (Fase 2 SaaS): auth por token por-tenant (botAuth),
+// sin tenantMiddleware (el tenant sale del token). Ver bot.routes.js.
+app.use('/api/bot',         require('./routes/bot.routes'))
 app.use('/api/payments/terminal', require('./routes/terminal.routes'))
 app.use('/api/kiosk/webhook',     require('./routes/kiosk-webhook.routes'))
 // Chatbot de WhatsApp — webhook público multi-tenant (resuelve restaurante por
