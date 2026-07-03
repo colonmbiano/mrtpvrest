@@ -32,7 +32,7 @@ const menuCache = new Map(); // restaurantId → { menuString, config, businessN
 /**
  * Handles the conversation with Gemini directly via Axios.
  */
-async function processWhatsAppMessage(phone, text, restaurantId, conversationHistory, activeOrderId = null, isInvalidPhone = false, customerProfile = {}) {
+async function processWhatsAppMessage(phone, text, restaurantId, conversationHistory, activeOrderId = null, isInvalidPhone = false, customerProfile = {}, activeOrderInfo = null) {
   try {
     // Menú + contexto del negocio cacheados por restaurante (TTL 60s). Antes se
     // consultaban 3 tablas y se reconstruía el menú COMPLETO en CADA mensaje
@@ -184,17 +184,19 @@ ${promosHoy ? `
       }
       
       ${activeOrderId ? `
-      6. IMPORTANTE (PEDIDO ACTIVO): El cliente ya acaba de hacer un pedido recientemente. Si el cliente pide AGREGAR MÁS COSAS a su pedido, debes usar el estado "ADD_TO_ORDER" en lugar de "CONFIRMED", e incluir SOLAMENTE los platillos NUEVOS que está agregando.
-      Ejemplo si el cliente dice "Mejor agregale unas papas y un chesco":
+      6. ⚠️ EL CLIENTE YA TIENE UN PEDIDO CONFIRMADO — NO LO VUELVAS A TOMAR NI A PEDIR SUS DATOS.
+      ${activeOrderInfo ? `Su pedido actual: folio #${activeOrderInfo.orderNumber || '—'}${activeOrderInfo.summary ? ` (${activeOrderInfo.summary})` : ''}${activeOrderInfo.total != null ? `, total $${activeOrderInfo.total}` : ''}.` : ''}
+      Ya se tomaron TODOS sus datos (nombre, tipo de entrega, dirección y pago). Reglas ESTRICTAS:
+      - JAMÁS uses "CONFIRMED" de nuevo (crearías un pedido DUPLICADO). JAMÁS vuelvas a preguntarle su nombre, si es envío o para recoger, ni su dirección: eso YA está.
+      - Si manda su COMPROBANTE de pago, dice que ya pagó/transfirió, o pregunta por el pago: responde con "CONVERSING", agradece y dile que enseguida validan su pago. Si pide los DATOS DE TRANSFERENCIA, dáselos (están en el contexto del negocio de arriba). NUNCA reinicies la toma del pedido.
+      - Si pregunta por el estatus o el tiempo de entrega: responde "CONVERSING" con el tiempo estimado.
+      - SOLO si pide AGREGAR productos NUEVOS a su pedido, usa "ADD_TO_ORDER" con SOLAMENTE los platillos nuevos (no repitas los que ya tiene). Ejemplo "agrégame un refresco":
       {
         "status": "ADD_TO_ORDER",
-        "items": [
-          { "menuItemId": "ID_PAPAS", "quantity": 1 },
-          { "menuItemId": "ID_REFRESCO", "quantity": 1 }
-        ],
-        "replyMessage": "¡Listo! He agregado las papas y el refresco a tu pedido en cocina."
+        "items": [ { "menuItemId": "ID_REFRESCO", "quantity": 1 } ],
+        "replyMessage": "¡Listo! Agregué el refresco a tu pedido${activeOrderInfo && activeOrderInfo.orderNumber ? ` #${activeOrderInfo.orderNumber}` : ''}."
       }
-      
+
       7. CIERRE DE CONVERSACIÓN: Si el cliente simplemente dice "Gracias", "Ok", "Vale" o se despide, NO le ofrezcas el menú ni le intentes vender más. Simplemente usa el estado "CONVERSING" para despedirte amablemente.
       ` : ''}
 
