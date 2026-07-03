@@ -506,14 +506,19 @@ function initWhatsApp(io) {
       });
     }
 
-    // Revisar si tiene una orden reciente (menos de 15 minutos)
+    // Orden reciente de este teléfono. DOS ventanas:
+    //  - activeOrderId (15 min): para ADD_TO_ORDER (agregar items al mismo ticket).
+    //  - recentConfirmedId (45 min): guarda ANTI-DUPLICADO. Es más larga porque el
+    //    comprobante de pago suele llegar bastante después de ordenar (el incidente
+    //    Gissel 2026-07-02 fueron 16 min → una ventana de 15 lo dejaba pasar).
     let activeOrderId = null;
+    let recentConfirmedId = null;
     const recentOrder = recentOrders.get(phone);
-    if (recentOrder && (Date.now() - recentOrder.timestamp < 15 * 60 * 1000)) {
-      activeOrderId = recentOrder.orderId;
-    } else if (recentOrder) {
-      // Expiró
-      recentOrders.delete(phone);
+    if (recentOrder) {
+      const age = Date.now() - recentOrder.timestamp;
+      if (age < 15 * 60 * 1000) activeOrderId = recentOrder.orderId;
+      if (age < 45 * 60 * 1000) recentConfirmedId = recentOrder.orderId;
+      else recentOrders.delete(phone); // expiró del todo
     }
 
     // COMPROBANTE DE PAGO / imagen: el bot NO lee imágenes ni PDFs. Si ya hay un
@@ -522,9 +527,9 @@ function initWhatsApp(io) {
     // orden — incidente Gissel 2026-07-02). Con la guarda de arriba tampoco se
     // duplicaría, pero así el cliente recibe una respuesta útil en vez de que
     // Gemini reaccione raro a una imagen "vacía".
-    if ((msg.type === 'image' || msg.type === 'document') && activeOrderId) {
-      console.log(`[WhatsApp Bot] Imagen/documento con pedido activo ${activeOrderId} de ${phone}; se acusa recibo sin reprocesar.`);
-      recentOrders.set(phone, { orderId: activeOrderId, timestamp: Date.now() });
+    if ((msg.type === 'image' || msg.type === 'document') && recentConfirmedId) {
+      console.log(`[WhatsApp Bot] Imagen/documento con pedido reciente ${recentConfirmedId} de ${phone}; se acusa recibo sin reprocesar.`);
+      recentOrders.set(phone, { orderId: recentConfirmedId, timestamp: Date.now() });
       await safeSend('¡Gracias! Recibí tu comprobante 🙌. Tu pedido ya está registrado y en preparación; enseguida validamos el pago. Si necesitas algo más, aquí estoy.');
       return;
     }
@@ -547,18 +552,18 @@ function initWhatsApp(io) {
     const status = geminiResponse.status;
     const items = Array.isArray(geminiResponse.items) ? geminiResponse.items : [];
 
-    if (status === 'CONFIRMED' && items.length > 0 && activeOrderId) {
-      // GUARDA ANTI-DUPLICADO: ya hay un pedido activo reciente (<15 min) para
-      // este teléfono y Gemini devolvió OTRO CONFIRMED. Es casi siempre un eco,
-      // no un pedido nuevo: p.ej. el cliente manda su COMPROBANTE DE PAGO y, como
-      // el bot no lee imágenes, Gemini re-resume el pedido desde el historial y lo
+    if (status === 'CONFIRMED' && items.length > 0 && recentConfirmedId) {
+      // GUARDA ANTI-DUPLICADO: ya hay un pedido reciente (<45 min) para este
+      // teléfono y Gemini devolvió OTRO CONFIRMED. Es casi siempre un eco, no un
+      // pedido nuevo: p.ej. el cliente manda su COMPROBANTE DE PAGO y, como el bot
+      // no lee imágenes, Gemini re-resume el pedido desde el historial y lo
       // re-confirma. Antes esto creaba una orden duplicada (incidente Gissel
-      // 2026-07-02: pedido ya en cocina + comprobante → 2ª orden). NO crear otra;
-      // acusar recibo del pedido existente. Si de verdad quiere agregar algo,
-      // Gemini usa ADD_TO_ORDER (rama de abajo); un 2º pedido genuino en <15 min
-      // lo toma un humano (mejor eso que duplicar).
-      console.warn(`[WhatsApp Bot] CONFIRMED con pedido activo ${activeOrderId} para ${phone}; se ignora para NO duplicar (posible comprobante/eco).`);
-      recentOrders.set(phone, { orderId: activeOrderId, timestamp: Date.now() });
+      // 2026-07-02: pedido ya en cocina + comprobante 16 min después → 2ª orden).
+      // NO crear otra; acusar recibo del pedido existente. Si de verdad quiere
+      // agregar algo, Gemini usa ADD_TO_ORDER (rama de abajo); un 2º pedido genuino
+      // en <45 min lo toma un humano (mejor eso que duplicar).
+      console.warn(`[WhatsApp Bot] CONFIRMED con pedido reciente ${recentConfirmedId} para ${phone}; se ignora para NO duplicar (posible comprobante/eco).`);
+      recentOrders.set(phone, { orderId: recentConfirmedId, timestamp: Date.now() });
       await safeSend('¡Tu pedido ya está registrado y en preparación! 🙌 Si quieres agregar algo más, dime qué y lo sumo al mismo pedido. Si mandaste tu comprobante, ¡gracias! Enseguida validamos el pago.');
     } else if (status === 'CONFIRMED' && items.length > 0) {
       // CREAR LA ORDEN PRIMERO; confirmar SOLO si el TPV la registró. Antes se
