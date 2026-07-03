@@ -141,6 +141,115 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
   } catch (e) { res.status(500).json({ error: 'Error al guardar configuracion' }) }
 })
 
+// ── BOT DE WHATSAPP (Cajero Estrella) ─────────────────────────────────────
+// Config editable del asistente que corre como worker separado en Railway. Se
+// guarda en IntegrationConfig (type WHATSAPP_ASSISTANT) → sin migración. El bot
+// la lee de la MISMA BD (con fallback a sus env vars). `enabled` = pausa global
+// del bot (apagar/encender sin tocar Railway). `config` (JSON) sobreescribe las
+// env WHATSAPP_BOT_* cuando trae valores. Si NUNCA se guardó, no hay fila y el
+// bot sigue con env (cero regresión).
+const WA_ASSISTANT_TYPE = 'WHATSAPP_ASSISTANT';
+
+function parseAssistantConfig(row) {
+  let cfg = {};
+  try { cfg = row?.config ? JSON.parse(row.config) : {}; } catch { cfg = {}; }
+  return {
+    extraInstructions: typeof cfg.extraInstructions === 'string' ? cfg.extraInstructions : '',
+    ignoreNumbers: Array.isArray(cfg.ignoreNumbers) ? cfg.ignoreNumbers : [],
+    ignoreGroupName: typeof cfg.ignoreGroupName === 'string' ? cfg.ignoreGroupName : '',
+  };
+}
+
+router.get('/whatsapp-assistant', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const row = await prisma.integrationConfig.findUnique({
+      where: { restaurantId_type: { restaurantId, type: WA_ASSISTANT_TYPE } },
+    });
+    res.set('Cache-Control', 'no-store');
+    // Sin fila configurada aún → el bot opera con sus env vars: reflejamos
+    // enabled:true para que el toggle muestre el estado real (encendido).
+    res.json({
+      configured: !!row,
+      enabled: row ? row.enabled : true,
+      updatedAt: row?.updatedAt || null,
+      config: parseAssistantConfig(row),
+    });
+  } catch (e) {
+    console.error('whatsapp-assistant GET error:', e?.message || e);
+    res.status(500).json({ error: 'Error al obtener la configuración del bot' });
+  }
+});
+
+router.put('/whatsapp-assistant', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const body = req.body || {};
+    const cfgIn = body.config || {};
+
+    const ignoreNumbers = Array.isArray(cfgIn.ignoreNumbers)
+      ? cfgIn.ignoreNumbers.map((s) => String(s || '').trim()).filter(Boolean).slice(0, 200)
+      : [];
+    const config = JSON.stringify({
+      extraInstructions: String(cfgIn.extraInstructions || '').slice(0, 4000),
+      ignoreNumbers,
+      ignoreGroupName: String(cfgIn.ignoreGroupName || '').trim().slice(0, 120),
+    });
+    const enabled = body.enabled !== false; // default true
+
+    await prisma.integrationConfig.upsert({
+      where: { restaurantId_type: { restaurantId, type: WA_ASSISTANT_TYPE } },
+      update: { enabled, config, lastSync: new Date() },
+      create: { restaurantId, type: WA_ASSISTANT_TYPE, enabled, mode: 'production', config, lastSync: new Date() },
+    });
+    res.json({ ok: true, message: 'Configuración del bot de WhatsApp guardada' });
+  } catch (e) {
+    console.error('whatsapp-assistant PUT error:', e?.message || e);
+    res.status(500).json({ error: 'Error al guardar la configuración del bot' });
+  }
+});
+
+// Métricas + estado en vivo del bot para la página del admin. Métricas: reusa
+// computeBotMetrics (mismo cálculo del correo diario). Estado: consulta el
+// health del worker si WHATSAPP_BOT_STATUS_URL está seteada (best-effort, 4s).
+router.get('/whatsapp-assistant/metrics', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { computeBotMetrics } = require('../services/whatsapp-bot-metrics.service');
+
+    let metrics = null;
+    try { metrics = await computeBotMetrics(restaurantId); }
+    catch (e) { console.error('bot metrics error:', e?.message || e); }
+
+    let status = { reachable: false, ready: null, hasQr: null, qrUrl: null, url: null };
+    const statusUrl = process.env.WHATSAPP_BOT_STATUS_URL;
+    if (statusUrl) {
+      status.url = statusUrl.replace(/\/+$/, '');
+      try {
+        const axios = require('axios');
+        const r = await axios.get(status.url, { timeout: 4000 });
+        status.reachable = true;
+        status.ready = r.data?.ready ?? null;
+        status.hasQr = r.data?.hasQr ?? null;
+        // qrUrl del worker es una ruta ('/qr'): resolverla contra el origin del
+        // status URL (robusto aunque el status URL traiga path como '/healthz').
+        try { status.qrUrl = r.data?.qrUrl ? new URL(r.data.qrUrl, status.url).href : null; }
+        catch { status.qrUrl = null; }
+      } catch (e) {
+        status.error = e?.code || e?.message || 'no alcanzable';
+      }
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json({ metrics, status });
+  } catch (e) {
+    console.error('whatsapp-assistant metrics error:', e?.message || e);
+    res.status(500).json({ error: 'Error al obtener métricas del bot' });
+  }
+});
+
 // ── BITÁCORA DE ACCESO ─────────────────────────────────────────────────
 // BUG-13 (QA): la pantalla /admin/seguridad consume GET /api/admin/access-log
 // para mostrar los últimos N eventos. Antes el endpoint no existía y devolvía
