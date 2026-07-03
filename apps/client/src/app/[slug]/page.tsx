@@ -6,6 +6,7 @@ import { BentoTheme } from '@/components/themes/BentoTheme';
 import { PocketTheme } from '@/components/themes/PocketTheme';
 import { WagbaTheme } from '@/components/themes/WagbaTheme';
 import { getApiUrl } from '@/lib/config';
+import { withFallbackStoreImages } from '@/lib/productImages';
 import StorefrontClient from './StorefrontClient';
 import InstallPWABanner from '@/components/InstallPWABanner';
 
@@ -191,6 +192,7 @@ export default async function StorefrontPage({
 
   const primary = store.primaryColor || store.themeConfig?.primaryColor || '#ff5c35';
   const theme = normalizeTheme(store.storefrontTheme || store.themeConfig?.theme);
+  const menuWithImages = withFallbackStoreImages(menu);
 
   // Tienda cerrada: bloqueamos el catálogo para TODOS los temas y mostramos el
   // mensaje configurado. Así "activar/desactivar tienda" desde el admin tiene
@@ -265,7 +267,7 @@ export default async function StorefrontPage({
   // Los componentes de tema tipan info.themeConfig; lo sintetizamos a partir
   // de los campos planos para mantener compatibilidad de tipos y runtime.
   const info = { ...store, themeConfig: { theme, primaryColor: primary } };
-  const data = { info, menu, locations };
+  const data = { info, menu: menuWithImages, locations };
 
   // Store base para el cliente legacy (temas Kawaii/Halo/Brutalist con checkout).
   const legacyStore = {
@@ -294,7 +296,7 @@ export default async function StorefrontPage({
         <div style={{ ['--primary' as string]: primary } as React.CSSProperties}>
           <StorefrontClient
             store={legacyStore}
-            categories={menu.categories || []}
+            categories={menuWithImages.categories || []}
           />
         </div>
       )}
