@@ -1388,17 +1388,51 @@ router.put('/items/:itemId', authenticate, requireTenantAccess, requireRole('ADM
     if (orderItem.order.locationId && req.locationId && orderItem.order.locationId !== req.locationId) {
       return res.status(403).json({ error: 'Item de otra sucursal' });
     }
-    if (['DELIVERED', 'CANCELLED'].includes(orderItem.order.status)) {
-      return res.status(400).json({ error: 'La orden ya está cerrada' });
+    // Edición SOLO de nota: texto informativo que no toca dinero ni stock, así
+    // que se permite aun en órdenes pagadas/entregadas (p.ej. anotar algo en un
+    // pedido de la tienda ya cobrado). Los cambios de cantidad/peso siguen
+    // bloqueados tras el cierre o el pago. Una orden CANCELADA no se edita.
+    const isNotesOnly = notes !== undefined && quantity === undefined && weightKg === undefined;
+    if (orderItem.order.status === 'CANCELLED') {
+      return res.status(400).json({ error: 'La orden ya está cancelada' });
     }
-    if (orderItem.order.paymentStatus === 'PAID') {
-      return res.status(400).json({ error: 'La orden ya fue pagada' });
+    if (!isNotesOnly) {
+      if (orderItem.order.status === 'DELIVERED') {
+        return res.status(400).json({ error: 'La orden ya está cerrada' });
+      }
+      if (orderItem.order.paymentStatus === 'PAID') {
+        return res.status(400).json({ error: 'La orden ya fue pagada' });
+      }
     }
 
     // Validar inputs. Si no viene quantity/notes válido, no-op para ese campo.
     const newNotes = notes !== undefined
       ? (typeof notes === 'string' ? notes.slice(0, 200) : null)
       : orderItem.notes;
+
+    // Nota-only: actualiza únicamente el texto y NO recalcula totales, para no
+    // pisar el total server-side (impuestos/propina/cupón) de un pedido ya
+    // cobrado con la fórmula simple de este endpoint. Emite order:updated igual.
+    if (isNotesOnly) {
+      await prisma.orderItem.update({
+        where: { id: req.params.itemId },
+        data: { notes: newNotes },
+      });
+      const fullOrder = await prisma.order.findUnique({
+        where: { id: orderItem.orderId },
+        include: {
+          items: { include: { menuItem: { select: { name: true, categoryId: true } }, modifiers: true } },
+          rounds: { orderBy: { roundNumber: 'asc' } },
+          table: true,
+        },
+      });
+      const io = req.app.get('io');
+      if (io && fullOrder?.locationId) {
+        io.to(`restaurant:${restaurantId}:location:${fullOrder.locationId}:admins`)
+          .emit('order:updated', fullOrder);
+      }
+      return res.json(fullOrder);
+    }
 
     // Línea por peso: se edita weightKg (decimal), quantity queda en 1 y el
     // subtotal = price/kg × kg. Línea por pieza: se edita quantity (entero).
