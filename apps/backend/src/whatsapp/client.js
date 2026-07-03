@@ -5,6 +5,7 @@ const { createOrderFromGemini } = require('./orderProcessor');
 const { isAudioMessage, transcribeWhatsAppAudio } = require('./audioTranscription');
 const { prisma } = require('@mrtpvrest/database');
 const botConfig = require('./botConfig');
+const botApi = require('./botApi');
 
 let whatsappClient = null;
 
@@ -303,6 +304,7 @@ function getIgnoredGroupInfo() {
 // por restaurantId para cumplir el tenant-guard.
 async function fetchOrderTicketDetail(orderId, restaurantId) {
   try {
+    if (botApi.useApi()) return await botApi.getOrderDetail(orderId);
     return await prisma.order.findFirst({
       where: { id: orderId, restaurantId },
       select: {
@@ -524,9 +526,17 @@ function initWhatsApp(io) {
     // viejo de la BD, no necesariamente el tuyo) — se conserva solo para dev
     // con BD limpia, con advertencia.
     const pinnedRestaurantId = process.env.WHATSAPP_BOT_RESTAURANT_ID;
-    const restaurant = pinnedRestaurantId
-      ? await prisma.restaurant.findFirst({ where: { id: pinnedRestaurantId, isActive: true } })
-      : await prisma.restaurant.findFirst({ where: { isActive: true }, orderBy: { createdAt: 'asc' } });
+    let restaurant;
+    if (botApi.useApi()) {
+      // API-only: el tenant sale del token (sin BD). El nombre real lo usa el
+      // prompt vía /context (businessName); aquí solo se necesita id.
+      const rid = botApi.restaurantId();
+      restaurant = rid ? { id: rid, name: 'tu negocio', isActive: true } : null;
+    } else {
+      restaurant = pinnedRestaurantId
+        ? await prisma.restaurant.findFirst({ where: { id: pinnedRestaurantId, isActive: true } })
+        : await prisma.restaurant.findFirst({ where: { isActive: true }, orderBy: { createdAt: 'asc' } });
+    }
 
     if (!restaurant) {
       console.log('[WhatsApp Bot] No se encontró un restaurante activo' + (pinnedRestaurantId ? ` con id ${pinnedRestaurantId}.` : '.'));

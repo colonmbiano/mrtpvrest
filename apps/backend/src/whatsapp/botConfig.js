@@ -16,6 +16,7 @@
 //  - Campo vacío en BD → cae al env (merge por-campo, no todo-o-nada).
 
 const { prisma } = require('@mrtpvrest/database');
+const botApi = require('./botApi');
 
 const TYPE = 'WHATSAPP_ASSISTANT';
 const REFRESH_MS = 60 * 1000;
@@ -56,7 +57,24 @@ function parseRow(row, envCfg) {
   };
 }
 
+// Modo API-only: la config viene del backend (GET /api/bot/config), sin BD.
+async function loadFromApi() {
+  try {
+    const c = await botApi.getConfig();
+    snapshot = {
+      active: c.active !== false,
+      extraInstructions: typeof c.extraInstructions === 'string' ? c.extraInstructions.trim() : '',
+      ignoreNumbers: Array.isArray(c.ignoreNumbers) ? c.ignoreNumbers.map((s) => String(s).trim()).filter(Boolean) : [],
+      ignoreGroupName: typeof c.ignoreGroupName === 'string' ? c.ignoreGroupName.trim() : '',
+    };
+  } catch (e) {
+    console.error('[botConfig] Error leyendo /api/bot/config:', e?.message || e);
+    // Conserva el snapshot previo (o el de env del primer arranque).
+  }
+}
+
 async function loadFromDb() {
+  if (botApi.useApi()) return loadFromApi();
   const rid = restaurantId();
   if (!rid) return; // sin tenant fijado: solo env (dev)
   const envCfg = fromEnv();

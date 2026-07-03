@@ -4,6 +4,7 @@ const { prisma } = require('@mrtpvrest/database');
 // endpoint POST /api/store/orders (que rechaza pedidos con tienda cerrada).
 const { computeOpenState } = require('../utils/storeHours');
 const botConfig = require('./botConfig');
+const botApi = require('./botApi');
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
@@ -40,6 +41,18 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
     // reflejarse. openState y extraInstructions SÍ se calculan por mensaje.
     let ctx = menuCache.get(restaurantId);
     if (!ctx || Date.now() - ctx.ts > 60 * 1000) {
+      if (botApi.useApi()) {
+        // API-only: menú + negocio del backend (menuString con el MISMO formato).
+        const c = await botApi.getContext();
+        ctx = {
+          menuString: c.menuString || '',
+          promosHoy: c.promosHoy || '',
+          config: c.config || null,
+          businessName: c.businessName || 'nuestro restaurante',
+          horarioTexto: c.config ? formatBusinessHours(c.config.businessHours) : '',
+          ts: Date.now(),
+        };
+      } else {
       const [menuItems, restaurant, cfg] = await Promise.all([
         prisma.menuItem.findMany({
           where: { restaurantId, isAvailable: true },
@@ -101,6 +114,7 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
         horarioTexto: cfg ? formatBusinessHours(cfg.businessHours) : '',
         ts: Date.now(),
       };
+      }
       menuCache.set(restaurantId, ctx);
     }
     const { menuString, promosHoy, config, businessName, horarioTexto } = ctx;
