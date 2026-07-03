@@ -38,7 +38,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#0e1512",
+  themeColor: "#07110D",
 };
 
 // Guard global contra el bug nativo de <input type="number">: con el campo

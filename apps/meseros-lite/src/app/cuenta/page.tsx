@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, RotateCw } from "lucide-react";
 import api from "@/lib/api";
+import StatusBadge from "@/components/StatusBadge";
 import { useWaiterOrderStore } from "@/store/useWaiterOrderStore";
 
 interface AccountModifier {
@@ -216,9 +217,12 @@ export default function CuentaPage() {
 
       {loadState === "ready" && order && (
         <div className="grid gap-4">
-          <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3">
-            <p className="text-xs font-black uppercase text-[var(--text-muted)]">Ticket</p>
-            <p className="text-sm font-black text-[var(--text-secondary)]">{order.orderNumber}</p>
+          <div className="flex items-center justify-between rounded-card border border-[var(--border)] bg-[var(--surface-1)] px-4 py-3">
+            <div>
+              <p className="text-xs font-black uppercase text-[var(--text-muted)]">Ticket</p>
+              <p className="text-sm font-black text-[var(--text-secondary)]">{order.orderNumber}</p>
+            </div>
+            <StatusBadge status="kitchen" label="Ya en cocina" />
           </div>
 
           {/* Resumen rapido para revisar que no falte nada en la mesa. */}
@@ -235,9 +239,12 @@ export default function CuentaPage() {
 
           {groupedList.map((group) => (
             <section key={group.label}>
-              <h2 className="mb-2 text-sm font-black uppercase tracking-wide text-[var(--text-muted)]">
-                {group.label}
-              </h2>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-black uppercase tracking-wide text-[var(--text-muted)]">
+                  {group.label}
+                </h2>
+                <StatusBadge status="served" label="Enviada" />
+              </div>
               <div className="grid gap-2">
                 {group.items.map((item) => (
                   <div
@@ -296,7 +303,7 @@ export default function CuentaPage() {
             onClick={() => router.push("/menu")}
             className="flex min-h-[68px] w-full items-center justify-center gap-2 rounded-lg border border-[var(--brand)] bg-[var(--brand)] text-xl font-black text-[var(--brand-fg)] active:scale-95 transition-all duration-150"
           >
-            <Plus size={26} /> Agregar mas
+            <Plus size={26} /> Agregar nueva ronda
           </button>
         </div>
       )}
