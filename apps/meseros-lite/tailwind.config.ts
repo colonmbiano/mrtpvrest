@@ -10,10 +10,6 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Tokens Fresco (mismos que el TPV). Se referencian como
-        // var(--token) en arbitrary values; estos alias son por comodidad.
-        // No usar modificadores de opacidad (bg-bg/50) sobre estos: el valor
-        // es hex, no canales RGB — rompería en Tailwind v3.
         bg: "var(--bg)",
         surface: "var(--surface-1)",
         "surface-2": "var(--surface-2)",
@@ -23,6 +19,18 @@ const config: Config = {
         success: "var(--success)",
         danger: "var(--danger)",
         warning: "var(--warning)",
+        info: "var(--info)",
+        cleaning: "var(--cleaning)",
+        ready: "var(--ready)",
+      },
+      borderRadius: {
+        soft: "var(--radius-md)",
+        card: "var(--radius-lg)",
+        panel: "var(--radius-xl)",
+      },
+      boxShadow: {
+        soft: "var(--shadow-soft)",
+        strong: "var(--shadow-strong)",
       },
       fontFamily: {
         sans: ["var(--font-onest)", "system-ui", "sans-serif"],

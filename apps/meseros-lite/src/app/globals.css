@@ -2,50 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ============================================================
-   MRTPVREST · Meseros Lite — tema "FRESCO" (verde) tokenizado
-   ------------------------------------------------------------
-   Mismos tokens de color que el TPV (paleta verde Fresco), pero
-   PLANO a propósito: sin glassmorphism, sin blur, sin glow, sin
-   sombras complejas. La app corre en tablets Android de gama
-   baja y debe mantener el render barato. Un solo tema (verde
-   oscuro), sin selector de paleta ni modo claro.
-   ============================================================ */
+/* Meseros Lite - Dark Operativo Pro. Tokens planos y baratos de renderizar. */
 
 :root {
-  /* superficies */
-  --bg: #0e1512;
-  --surface-1: #16211c;
-  --surface-2: #111a16;
-  --surface-3: #1c2a23;
+  --bg: #07110d;
+  --surface-1: #111c17;
+  --surface-2: #17231d;
+  --surface-3: #1e2b24;
 
-  /* texto */
-  --text-primary: #e8f0eb;
-  --text-secondary: #8da396;
-  --text-muted: #5e7268;
-  --text-disabled: #44544b;
+  --text-primary: #f5f7f6;
+  --text-secondary: #b6c1ba;
+  --text-muted: #7d8a84;
+  --text-disabled: #53635b;
 
-  /* bordes */
-  --border: #21302a;
-  --border-strong: rgba(232, 240, 235, 0.14);
+  --border: #26362e;
+  --border-strong: #3a4c42;
 
-  /* acento Fresco (verde) */
-  --brand: #34c988;
-  --brand-hover: #2bb678;
-  --brand-active: #25a06a;
-  --brand-soft: rgba(52, 201, 136, 0.14);
+  --brand: #36d68b;
+  --brand-hover: #2bc47d;
+  --brand-active: #20b875;
+  --brand-soft: rgba(54, 214, 139, 0.14);
   --brand-fg: #0b1410;
 
-  /* estados */
-  --success: #34c988;
-  --warning: #e0a22a;
-  --danger: #f2785a;
-  --info: #4fa3e0;
+  --success: #36d68b;
+  --warning: #f6b23b;
+  --danger: #ef4444;
+  --info: #38bdf8;
+  --cleaning: #94a3b8;
+  --ready: #a78bfa;
 
-  /* tipografía (los next/font de layout.tsx inyectan las familias) */
   --font-body: var(--font-onest), system-ui, sans-serif;
   --font-display: var(--font-schibsted), system-ui, sans-serif;
   --font-mono: var(--font-dm-mono), monospace;
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.22);
+  --shadow-strong: 0 18px 50px rgba(0, 0, 0, 0.35);
 }
 
 *,
@@ -73,7 +68,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -82,7 +78,6 @@ button {
   user-select: none;
 }
 
-/* cifras tabulares para totales/dinero */
 .mono,
 .tnum {
   font-family: var(--font-mono);
