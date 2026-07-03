@@ -5,12 +5,6 @@ WORKDIR /app
 # Instalar pnpm
 RUN npm install -g pnpm@9.15.0
 
-# Cache-bust: una capa que cambia por deploy invalida el COPY siguiente, para
-# no servir código viejo por caché de capa de Railway/BuildKit (incidente
-# 2026-07-02: rutas nuevas de admin.routes.js daban 404 con deploy "SUCCESS"
-# porque la capa `COPY . .` se reusaba cacheada). Bump este valor si reaparece.
-ARG CACHEBUST=2026-07-02-1
-
 # Copiar todo el código fuente
 COPY . .
 
