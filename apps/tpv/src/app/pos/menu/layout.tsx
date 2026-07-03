@@ -1044,6 +1044,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     itemsCount: Array.isArray(o.items) ? o.items.length : 0,
     driver: o.deliveryDriverName || undefined,
     needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
+    takenBy: o.createdByName || undefined,
   }));
 
   // Tickets cobrados → shape del drawer. El "createdAt" del tile muestra la

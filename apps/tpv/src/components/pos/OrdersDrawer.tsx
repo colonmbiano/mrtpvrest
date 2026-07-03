@@ -21,6 +21,7 @@ import {
   CreditCard,
   ArrowLeftRight,
   Undo2,
+  User,
 } from "lucide-react";
 import { hapticMedium } from "@/lib/haptics";
 
@@ -38,6 +39,9 @@ export interface DrawerOrder {
   itemsCount: number;
   driver?: string;
   needsDriver?: boolean;
+  /** Nombre del empleado (cajero/mesero) que tomó el pedido. Undefined en
+   *  pedidos ONLINE o previos a la atribución. */
+  takenBy?: string;
   /** Solo modo "Cobradas": método de pago crudo para el chip del tile. */
   paymentMethod?: string | null;
 }
@@ -697,6 +701,15 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                             <span className="inline-flex items-center gap-1 text-blue-300 truncate">
                               <Bike size={10} className="shrink-0" />
                               <span className="truncate normal-case">{order.driver}</span>
+                            </span>
+                          </>
+                        )}
+                        {order.takenBy && (
+                          <>
+                            <span className="text-white/20">·</span>
+                            <span className="inline-flex items-center gap-1 text-white/55 truncate">
+                              <User size={10} className="shrink-0" />
+                              <span className="truncate normal-case">{order.takenBy}</span>
                             </span>
                           </>
                         )}
