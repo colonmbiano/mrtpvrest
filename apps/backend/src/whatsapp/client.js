@@ -521,6 +521,17 @@ function initWhatsApp(io) {
       else recentOrders.delete(phone); // expiró del todo
     }
 
+    // Datos del pedido reciente para el prompt de Gemini: sin esto, cuando el
+    // historial se poda, Gemini "olvida" que el cliente YA tiene pedido y vuelve a
+    // pedirle nombre/dirección o lo re-toma (incidente Abraham 2026-07-02). Con
+    // esto le damos folio/resumen/total y le prohibimos re-tomar.
+    const activeOrderInfo = recentConfirmedId ? {
+      orderNumber: recentOrder?.orderNumber || null,
+      total: recentOrder?.total ?? null,
+      summary: recentOrder?.summary || '',
+      canAdd: !!activeOrderId, // solo dentro de 15 min entra ADD_TO_ORDER
+    } : null;
+
     // COMPROBANTE DE PAGO / imagen: el bot NO lee imágenes ni PDFs. Si ya hay un
     // pedido activo reciente, acusar recibo y NO mandar a Gemini (un mensaje vago
     // + el historial con el pedido hacía que Gemini re-confirmara y duplicara la
@@ -529,14 +540,14 @@ function initWhatsApp(io) {
     // Gemini reaccione raro a una imagen "vacía".
     if ((msg.type === 'image' || msg.type === 'document') && recentConfirmedId) {
       console.log(`[WhatsApp Bot] Imagen/documento con pedido reciente ${recentConfirmedId} de ${phone}; se acusa recibo sin reprocesar.`);
-      recentOrders.set(phone, { orderId: recentConfirmedId, timestamp: Date.now() });
+      recentOrders.set(phone, { ...recentOrder, orderId: recentConfirmedId, timestamp: Date.now() });
       await safeSend('¡Gracias! Recibí tu comprobante 🙌. Tu pedido ya está registrado y en preparación; enseguida validamos el pago. Si necesitas algo más, aquí estoy.');
       return;
     }
 
     // Procesar con Gemini
     console.log(`[WhatsApp Bot] Procesando con Gemini (phone=${phone}, invalid=${isInvalidPhone}, tenant=${restaurant.id})...`);
-    const geminiResponse = await processWhatsAppMessage(phone, messageText, restaurant.id, history, activeOrderId, isInvalidPhone, profile);
+    const geminiResponse = await processWhatsAppMessage(phone, messageText, restaurant.id, history, activeOrderId, isInvalidPhone, profile, activeOrderInfo);
     console.log(`[WhatsApp Bot] Gemini status=${geminiResponse?.status}, reply=${!!geminiResponse?.replyMessage}`);
 
     // Actualizar historial localmente
@@ -563,7 +574,7 @@ function initWhatsApp(io) {
       // agregar algo, Gemini usa ADD_TO_ORDER (rama de abajo); un 2º pedido genuino
       // en <45 min lo toma un humano (mejor eso que duplicar).
       console.warn(`[WhatsApp Bot] CONFIRMED con pedido reciente ${recentConfirmedId} para ${phone}; se ignora para NO duplicar (posible comprobante/eco).`);
-      recentOrders.set(phone, { orderId: recentConfirmedId, timestamp: Date.now() });
+      recentOrders.set(phone, { ...recentOrder, orderId: recentConfirmedId, timestamp: Date.now() });
       await safeSend('¡Tu pedido ya está registrado y en preparación! 🙌 Si quieres agregar algo más, dime qué y lo sumo al mismo pedido. Si mandaste tu comprobante, ¡gracias! Enseguida validamos el pago.');
     } else if (status === 'CONFIRMED' && items.length > 0) {
       // CREAR LA ORDEN PRIMERO; confirmar SOLO si el TPV la registró. Antes se
@@ -573,7 +584,7 @@ function initWhatsApp(io) {
       // Gemini) — cumple "totales siempre server-side".
       const orderCreated = await createOrderFromGemini(restaurant.id, geminiResponse, process.env.PORT || 3001);
       if (orderCreated && orderCreated.id) {
-        recentOrders.set(phone, { orderId: orderCreated.id, timestamp: Date.now() });
+        recentOrders.set(phone, { orderId: orderCreated.id, orderNumber: orderCreated.orderNumber, total: orderCreated.total ?? null, summary: '', timestamp: Date.now() });
         rememberRecentOrderChat(chatKey, phone, orderCreated.id);
         updateCustomerProfile(phone, {
           customerName: geminiResponse.customerName,
@@ -594,6 +605,11 @@ function initWhatsApp(io) {
         const detail = await require('./orderProcessor').fetchOrderDetail(orderCreated.id, process.env.PORT || 3001);
         let ticket;
         if (detail && Array.isArray(detail.items) && detail.items.length > 0) {
+          // Guardar resumen de items para el contexto de Gemini (seguimiento/ADD).
+          const cur = recentOrders.get(phone);
+          if (cur && cur.orderId === orderCreated.id) {
+            recentOrders.set(phone, { ...cur, summary: detail.items.map(it => `${it.quantity}x ${it.name}`).join(', '), total: detail.total ?? cur.total });
+          }
           const lineas = detail.items.map(it => `• ${it.quantity}x ${it.name} — $${it.subtotal}`).join('\n');
           const envioLn = Number(detail.deliveryFee) > 0 ? `\nEnvío: $${detail.deliveryFee}` : '';
           const descLn = Number(orderCreated.discount) > 0 ? `\nDescuento: -$${orderCreated.discount}` : '';
@@ -621,7 +637,7 @@ function initWhatsApp(io) {
       } else {
         const addResponse = await require('./orderProcessor').addItemsToOrder(activeOrderId, geminiResponse, restaurant.id, process.env.PORT || 3001);
         if (addResponse) {
-          recentOrders.set(phone, { orderId: activeOrderId, timestamp: Date.now() });
+          recentOrders.set(phone, { ...recentOrder, orderId: activeOrderId, timestamp: Date.now() });
           await safeSend(geminiResponse.replyMessage ? sanitizeReply(geminiResponse.replyMessage) : '¡Listo! Lo agregué a tu pedido. 🍔');
         } else {
           console.error(`[WhatsApp Bot] FALLO al agregar items a la orden ${activeOrderId} de ${phone}.`);
