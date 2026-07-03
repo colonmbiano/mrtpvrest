@@ -3,6 +3,7 @@ const { prisma } = require('@mrtpvrest/database');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const botApi = require('./botApi');
 
 const MAX_ORDER_ITEMS = 15;
 const MAX_ITEM_QUANTITY = 20;
@@ -135,11 +136,18 @@ async function createOrderFromGemini(restaurantId, parsedJson, port = 3001) {
   }
 
   try {
-    // Buscar la sucursal principal del restaurante para asignarle el pedido
-    const primaryLocation = await prisma.location.findFirst({
-      where: { restaurantId, isActive: true },
-      orderBy: { createdAt: 'asc' },
-    });
+    // Sucursal principal: en API-only viene de /api/bot/context (sin BD); en
+    // legacy se consulta directo. La creación va igual por /api/store/orders (público).
+    let locationId;
+    if (botApi.useApi()) {
+      try { locationId = (await botApi.getContext()).locationId; } catch { locationId = undefined; }
+    } else {
+      const primaryLocation = await prisma.location.findFirst({
+        where: { restaurantId, isActive: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      locationId = primaryLocation?.id;
+    }
 
     // Formatear el payload para /api/store/orders
     const orderType = parsedJson.orderType || 'DELIVERY';
@@ -150,7 +158,7 @@ async function createOrderFromGemini(restaurantId, parsedJson, port = 3001) {
       deliveryAddress: parsedJson.deliveryAddress || 'Dirección a confirmar por WhatsApp',
       deliveryLat: parsedJson.deliveryLat || null,
       deliveryLng: parsedJson.deliveryLng || null,
-      locationId: primaryLocation?.id,
+      locationId,
       source: 'WHATSAPP',
       paymentMethod: normalizePaymentMethod(parsedJson.paymentMethod, orderType),
       notes: 'Pedido generado por asistente de IA de WhatsApp',
@@ -181,6 +189,17 @@ async function addItemsToOrder(orderId, parsedJson, restaurantId, port = 3001) {
   const items = normalizeBotItems(parsedJson.items);
   if (parsedJson.status !== 'ADD_TO_ORDER' || items.length === 0) {
     return null;
+  }
+
+  // API-only: el backend resuelve empleado + sucursal y firma el JWT internamente.
+  // El bot NO necesita JWT_SECRET ni tocar la BD.
+  if (botApi.useApi()) {
+    try {
+      return await botApi.addItems(orderId, items);
+    } catch (error) {
+      console.error('[WhatsApp Bot] Error agregando items (API):', error?.response?.data || error.message);
+      return null;
+    }
   }
 
   try {
