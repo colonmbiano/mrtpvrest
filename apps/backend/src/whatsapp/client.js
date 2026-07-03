@@ -297,6 +297,48 @@ function getIgnoredGroupInfo() {
   };
 }
 
+// Detalle del pedido para el ticket de WhatsApp. Vía Prisma directo: el endpoint
+// /api/store/orders/:id OCULTA las notes y NO trae los modifiers sin "prueba de
+// teléfono", y justo ahí viven las variantes (término/sabor) y los extras. Filtra
+// por restaurantId para cumplir el tenant-guard.
+async function fetchOrderTicketDetail(orderId, restaurantId) {
+  try {
+    return await prisma.order.findFirst({
+      where: { id: orderId, restaurantId },
+      select: {
+        orderNumber: true, subtotal: true, deliveryFee: true, total: true, discount: true,
+        items: {
+          select: {
+            name: true, quantity: true, subtotal: true, notes: true,
+            modifiers: { select: { name: true, priceAdd: true } },
+          },
+        },
+      },
+    });
+  } catch (e) {
+    console.error('[WhatsApp Bot] No se pudo traer el detalle (Prisma) de la orden:', e?.message || e);
+    return null;
+  }
+}
+
+// Variantes/extras de una línea: junta los modifiers (término, sabor, extras que
+// viven como filas) con lo que venga en notes ("Complementos: X", "Variantes: Y",
+// o texto libre). Devuelve nombres únicos en orden.
+function itemExtrasText(it) {
+  const parts = [];
+  if (Array.isArray(it.modifiers)) {
+    for (const m of it.modifiers) if (m && m.name) parts.push(String(m.name).trim());
+  }
+  const n = (it.notes || '').trim();
+  if (n) {
+    n.split(/\n|;/).map((s) => s.trim()).filter(Boolean).forEach((seg) => {
+      const val = seg.replace(/^(Complementos?|Variantes?|Extras?|Modificadores?|Notas?)\s*:\s*/i, '').trim();
+      if (val) parts.push(val);
+    });
+  }
+  return [...new Set(parts.filter(Boolean))];
+}
+
 function initWhatsApp(io) {
   console.log('[WhatsApp Bot] Inicializando cliente...');
 
@@ -600,17 +642,25 @@ function initWhatsApp(io) {
           text: `Pedido registrado en TPV: folio ${orderCreated.orderNumber}, total ${orderCreated.total ?? 'pendiente'}, pago ${geminiResponse.paymentMethod || 'no especificado'}.`,
         });
         pruneHistory(history);
-        // Ticket DETALLADO: traemos el desglose real del backend (items con
-        // precio, subtotal, envío, total). Best-effort → si falla, resumen simple.
-        const detail = await require('./orderProcessor').fetchOrderDetail(orderCreated.id, process.env.PORT || 3001);
+        // Ticket DETALLADO con variantes (término/sabor) y extras. Vía Prisma
+        // (fetchOrderTicketDetail) porque el endpoint HTTP oculta notes/modifiers.
+        const detail = await fetchOrderTicketDetail(orderCreated.id, restaurant.id);
         let ticket;
         if (detail && Array.isArray(detail.items) && detail.items.length > 0) {
-          // Guardar resumen de items para el contexto de Gemini (seguimiento/ADD).
+          // Guardar resumen de items (con variantes) para el contexto de Gemini.
           const cur = recentOrders.get(phone);
           if (cur && cur.orderId === orderCreated.id) {
-            recentOrders.set(phone, { ...cur, summary: detail.items.map(it => `${it.quantity}x ${it.name}`).join(', '), total: detail.total ?? cur.total });
+            const sumText = detail.items.map(it => {
+              const ex = itemExtrasText(it);
+              return `${it.quantity}x ${it.name}${ex.length ? ` (${ex.join(', ')})` : ''}`;
+            }).join(', ');
+            recentOrders.set(phone, { ...cur, summary: sumText, total: detail.total ?? cur.total });
           }
-          const lineas = detail.items.map(it => `• ${it.quantity}x ${it.name} — $${it.subtotal}`).join('\n');
+          const lineas = detail.items.map(it => {
+            const ex = itemExtrasText(it);
+            const exLn = ex.length ? `\n   ↳ ${ex.join(', ')}` : '';
+            return `• ${it.quantity}x ${it.name} — $${it.subtotal}${exLn}`;
+          }).join('\n');
           const envioLn = Number(detail.deliveryFee) > 0 ? `\nEnvío: $${detail.deliveryFee}` : '';
           const descLn = Number(orderCreated.discount) > 0 ? `\nDescuento: -$${orderCreated.discount}` : '';
           ticket = `✅ *¡Pedido confirmado!* — Folio *#${orderCreated.orderNumber}*\n\n🧾 *Tu ticket:*\n${lineas}\n━━━━━━━━━━━━━\nSubtotal: $${detail.subtotal}${envioLn}${descLn}\n*Total: $${detail.total}*\n\n⏱️ Entrega estimada: ~${mins} min.\n¡Gracias por tu compra! 🍔`;
