@@ -3,6 +3,7 @@ const { prisma } = require('@mrtpvrest/database');
 // Estado abierto/cerrado: misma fuente de verdad que el storefront y el
 // endpoint POST /api/store/orders (que rechaza pedidos con tienda cerrada).
 const { computeOpenState } = require('../utils/storeHours');
+const botConfig = require('./botConfig');
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
@@ -105,8 +106,9 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
     const { menuString, promosHoy, config, businessName, horarioTexto } = ctx;
     // Estado abierto/cerrado: SIEMPRE fresco (depende de la hora actual).
     const openState = config ? computeOpenState(config) : { isOpen: true, message: '' };
-    // Instrucciones extra afinables por env (sin rebuild), leídas por mensaje.
-    const extraInstructions = (process.env.WHATSAPP_BOT_EXTRA_INSTRUCTIONS || '').trim();
+    // Instrucciones extra afinables desde el ADMIN (BD, fallback a env), en
+    // caliente y por mensaje. Ver botConfig.js.
+    const extraInstructions = botConfig.getExtraInstructions();
     const remembered = {
       name: customerProfile.customerName || '',
       phone: customerProfile.customerPhone || '',

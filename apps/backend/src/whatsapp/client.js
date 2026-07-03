@@ -4,6 +4,7 @@ const { processWhatsAppMessage } = require('./gemini');
 const { createOrderFromGemini } = require('./orderProcessor');
 const { isAudioMessage, transcribeWhatsAppAudio } = require('./audioTranscription');
 const { prisma } = require('@mrtpvrest/database');
+const botConfig = require('./botConfig');
 
 let whatsappClient = null;
 
@@ -226,8 +227,9 @@ setInterval(() => {
 function isIgnoredNumber(phone) {
   const p = last10Digits(phone);
   if (p.length < 10) return false;
-  const list = (process.env.WHATSAPP_BOT_IGNORE_NUMBERS || '')
-    .split(',').map(last10Digits).filter(d => d.length >= 10);
+  // Lista editable desde el admin (BD, fallback a env). Ver botConfig.js.
+  const list = botConfig.getIgnoreNumbers()
+    .map(last10Digits).filter(d => d.length >= 10);
   return list.includes(p);
 }
 
@@ -240,7 +242,8 @@ function isIgnoredNumber(phone) {
 let ignoredGroup = { name: null, ids: new Set(), phones: new Set(), count: 0, loadedAt: 0, error: null };
 
 async function refreshIgnoredGroup() {
-  const name = (process.env.WHATSAPP_BOT_IGNORE_GROUP_NAME || '').trim();
+  // Nombre del grupo editable desde el admin (BD, fallback a env). Ver botConfig.js.
+  const name = botConfig.getIgnoreGroupName();
   if (!name || !whatsappClient) {
     ignoredGroup = { name: null, ids: new Set(), phones: new Set(), count: 0, loadedAt: Date.now(), error: null };
     return;
@@ -354,6 +357,9 @@ function initWhatsApp(io) {
     if (io) {
       io.emit('whatsapp:ready');
     }
+    // Cargar la config editable del admin (BD, fallback a env; auto-siembra en
+    // el primer arranque) ANTES de leer el grupo a ignorar, que sale de ahí.
+    await botConfig.init();
     // Cargar el grupo a ignorar ANTES del backfill (para no responder a staff),
     // y refrescarlo cada 10 min (recoge altas/bajas de miembros sin redeploy).
     await refreshIgnoredGroup();
@@ -380,6 +386,10 @@ function initWhatsApp(io) {
     // mensajes. Aquí solo bloqueamos grupos/estados/difusiones/canales y
     // dejamos pasar cualquier chat individual (@c.us o @lid).
     if (!isCustomerChatId(chatKey)) return;
+
+    // Interruptor global desde el admin: si el bot está en pausa (enabled=false
+    // en IntegrationConfig), no responde a nadie hasta reactivarlo. Ver botConfig.js.
+    if (!botConfig.getActive()) return;
 
     // EnvÃ­o robusto (sendMessage anda mejor con @lid que msg.reply).
     const safeSend = async (text) => {
