@@ -548,7 +548,19 @@ function initWhatsApp(io) {
           text: `Pedido registrado en TPV: folio ${orderCreated.orderNumber}, total ${orderCreated.total ?? 'pendiente'}, pago ${geminiResponse.paymentMethod || 'no especificado'}.`,
         });
         pruneHistory(history);
-        await safeSend(`✅ ¡Pedido confirmado! Folio *#${orderCreated.orderNumber}*${totalLine}\n⏱️ Tiempo estimado: ~${mins} min.\n¡Gracias por tu compra! 🍔`);
+        // Ticket DETALLADO: traemos el desglose real del backend (items con
+        // precio, subtotal, envío, total). Best-effort → si falla, resumen simple.
+        const detail = await require('./orderProcessor').fetchOrderDetail(orderCreated.id, process.env.PORT || 3001);
+        let ticket;
+        if (detail && Array.isArray(detail.items) && detail.items.length > 0) {
+          const lineas = detail.items.map(it => `• ${it.quantity}x ${it.name} — $${it.subtotal}`).join('\n');
+          const envioLn = Number(detail.deliveryFee) > 0 ? `\nEnvío: $${detail.deliveryFee}` : '';
+          const descLn = Number(orderCreated.discount) > 0 ? `\nDescuento: -$${orderCreated.discount}` : '';
+          ticket = `✅ *¡Pedido confirmado!* — Folio *#${orderCreated.orderNumber}*\n\n🧾 *Tu ticket:*\n${lineas}\n━━━━━━━━━━━━━\nSubtotal: $${detail.subtotal}${envioLn}${descLn}\n*Total: $${detail.total}*\n\n⏱️ Entrega estimada: ~${mins} min.\n¡Gracias por tu compra! 🍔`;
+        } else {
+          ticket = `✅ ¡Pedido confirmado! Folio *#${orderCreated.orderNumber}*${totalLine}\n⏱️ Tiempo estimado: ~${mins} min.\n¡Gracias por tu compra! 🍔`;
+        }
+        await safeSend(ticket);
         // Recompensa por hitos de compra (el backend la genera cada N compras).
         const reward = orderCreated.reward;
         if (reward && reward.couponCode) {
