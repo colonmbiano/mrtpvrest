@@ -21,6 +21,12 @@ type DriverCut = {
   id: string; driverName: string; totalFloat: number; totalIncome: number; totalExpense: number;
   totalReturn: number; balance: number; movements: number; notes: string | null; createdAt: string;
 };
+// Liquidación por responsable (caja ÚNICA): rendición de cuentas de cada
+// repartidor dentro del turno — no es una caja contable separada.
+type Liquidation = {
+  driverId: string; driverName: string; fondo: number; compras: number; sobrante: number;
+  cobros: number; pedidos: number; totalAEntregar: number; entregadoReal: number | null; diferencia: number | null;
+};
 
 type Row =
   | { kind: "shift"; id: string; date: string; who: string; balance: number; data: CashShift }
@@ -90,7 +96,11 @@ export default function CortesUnificadosPage() {
     return {
       count: rows.length,
       ventasCaja: shiftRows.reduce((a, r) => a + (r.data.totalSales || 0), 0),
-      balanceRep: driverRows.reduce((a, r) => a + (r.data.balance || 0), 0),
+      // Venta real cobrada por repartidores (entregas) vs el fondo que traen en
+      // mano (dinero a comprobar, NO venta). Se separan a propósito: mezclarlos
+      // en un solo "entregado" inflaba el efectivo del día con el fondo.
+      cobradoRep: driverRows.reduce((a, r) => a + (r.data.totalIncome || 0), 0),
+      fondoRep: driverRows.reduce((a, r) => a + (r.data.totalFloat || 0), 0),
       faltante, sobrante,
     };
   }, [rows]);
@@ -143,7 +153,8 @@ export default function CortesUnificadosPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 18 }}>
         <StatTile icon={ScrollText} value={String(kpi.count)} label="Cortes" />
         <StatTile icon={Wallet} value={mny(kpi.ventasCaja)} label="Ventas en caja" />
-        <StatTile icon={Bike} value={mny(kpi.balanceRep)} label="Entregado repartidores" />
+        <StatTile icon={Bike} value={mny(kpi.cobradoRep)} label="Cobrado repartidores" />
+        <StatTile icon={Wallet} value={mny(kpi.fondoRep)} label="Fondo a comprobar" />
         <StatTile icon={kpi.faltante < 0 ? TrendingDown : TrendingUp} value={mny(kpi.faltante)} label="Faltantes en caja" />
         <StatTile value={mny(kpi.sobrante)} label="Sobrantes en caja" />
       </div>
@@ -182,7 +193,7 @@ function CorteCard({ row, open, onToggle }: { row: Row; open: boolean; onToggle:
         {isShift && (row.data as CashShift).isOpen && <Pill tone="warn">Abierto</Pill>}
         <div style={{ textAlign: "right" }}>
           <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 700, color: "var(--tx-hi)", fontSize: 15 }}>{mny(row.balance)}</div>
-          <div style={{ fontSize: 10.5, color: "var(--tx-mut)", letterSpacing: ".06em" }}>{isShift ? "EN CAJA" : "ENTREGADO"}</div>
+          <div style={{ fontSize: 10.5, color: "var(--tx-mut)", letterSpacing: ".06em" }}>{isShift ? "EN CAJA" : "A ENTREGAR"}</div>
         </div>
         {open ? <ChevronDown size={16} style={{ color: "var(--tx-mut)" }} /> : <ChevronRight size={16} style={{ color: "var(--tx-mut)" }} />}
       </button>
@@ -207,6 +218,15 @@ function Cell({ label, value, tone }: { label: string; value: string; tone?: "ok
 
 function ShiftDetail({ s }: { s: CashShift }) {
   const diff = (!s.isOpen && s.closingFloat != null && s.expectedCash != null) ? s.closingFloat - s.expectedCash : null;
+  // Liquidación por responsable — se carga al expandir el corte (lazy).
+  const [liq, setLiq] = useState<Liquidation[] | null>(null);
+  useEffect(() => {
+    let cancel = false;
+    api.get(`/api/shifts/${s.id}/liquidation`)
+      .then((r) => !cancel && setLiq(Array.isArray(r.data) ? r.data : []))
+      .catch(() => !cancel && setLiq([]));
+    return () => { cancel = true; };
+  }, [s.id]);
   return (
     <div style={{ paddingTop: 14, display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8 }}>
@@ -239,23 +259,92 @@ function ShiftDetail({ s }: { s: CashShift }) {
           ))}
         </div>
       )}
+
+      {/* Liquidación por responsable: rendición de cuentas dentro de la caja
+          única del turno — el fondo y su comprobación NO se mezclan con ventas. */}
+      {liq && liq.length > 0 && (
+        <div>
+          <SubLabel>Liquidación por responsable ({liq.length})</SubLabel>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {liq.map((l) => <LiquidationCard key={l.driverId} l={l} />)}
+          </div>
+        </div>
+      )}
       {s.notes && <Note>{s.notes}</Note>}
     </div>
   );
 }
 
 function DriverDetail({ c }: { c: DriverCut }) {
+  // Liquidación del repartidor, en el modelo de "una sola caja": todo el
+  // efectivo que manejó debe cuadrar entre venta (entregas) y fondo a comprobar
+  // (compras + sobrante). Ver la regla en el corte de caja principal.
+  //   Sobrante a devolver = Fondo entregado − Compras comprobadas
+  //   Total a entregar     = Cobrado en entregas + Sobrante − Devoluciones (= balance)
+  const sobrante = (c.totalFloat || 0) - (c.totalExpense || 0);
   return (
     <div style={{ paddingTop: 14, display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Venta REAL cobrada en entregas (esto sí es efectivo de venta) */}
+      <div>
+        <SubLabel>Venta cobrada en entregas</SubLabel>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8 }}>
+          <Cell label="Cobrado en entregas" value={mny(c.totalIncome)} tone="ok" />
+        </div>
+      </div>
+
+      {/* Fondo — dinero a comprobar, NO es venta */}
+      <div>
+        <SubLabel>Fondo (dinero a comprobar · no es venta)</SubLabel>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8 }}>
+          <Cell label="Fondo entregado" value={mny(c.totalFloat)} />
+          <Cell label="Compras comprobadas" value={mny(c.totalExpense)} />
+          <Cell label="Sobrante a devolver" value={mny(sobrante)} tone={sobrante < 0 ? "err" : undefined} />
+          {c.totalReturn > 0 && <Cell label="Devoluciones" value={mny(c.totalReturn)} />}
+        </div>
+      </div>
+
+      {/* Total que el repartidor debe entregar a la caja principal */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8 }}>
-        <Cell label="Fondo de cambio" value={mny(c.totalFloat)} />
-        <Cell label="Cobrado" value={mny(c.totalIncome)} />
-        <Cell label="Gastos" value={mny(c.totalExpense)} />
-        <Cell label="Devoluciones" value={mny(c.totalReturn)} />
-        <Cell label="Balance entregado" value={mny(c.balance)} tone="ok" />
+        <Cell label="Total a entregar a caja" value={mny(c.balance)} tone="ok" />
         <Cell label="Movimientos" value={String(c.movements)} />
       </div>
+
+      <Note>El fondo es dinero a comprobar (compras + sobrante), no venta. Total a entregar = cobrado en entregas + sobrante del fondo.</Note>
       {c.notes && <Note>{c.notes}</Note>}
+    </div>
+  );
+}
+
+/* Rendición de cuentas de UN responsable dentro de la caja única del turno.
+   Formato canónico (regla del dueño):
+     Sobrante de fondo = Fondo recibido − Compras comprobadas
+     Total a entregar  = Cobros de pedidos + Sobrante de fondo
+   El fondo es dinero a comprobar, NO venta — por eso va desglosado y no sumado
+   a los buckets de venta del corte (esos ya lo contemplan sin doble conteo). */
+function LiquidationCard({ l }: { l: Liquidation }) {
+  const row = (label: string, value: string, opts?: { bold?: boolean; tone?: "ok" | "err" }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--bd-1)" }}>
+      <span style={{ fontSize: 12.5, color: opts?.bold ? "var(--tx-hi)" : "var(--tx-mid)", fontWeight: opts?.bold ? 700 : 400 }}>{label}</span>
+      <span style={{
+        fontFamily: "'DM Mono',monospace", fontSize: 13, fontWeight: opts?.bold ? 700 : 600,
+        color: opts?.tone === "err" ? "var(--err)" : opts?.tone === "ok" ? "var(--ok)" : "var(--tx-hi)",
+      }}>{value}</span>
+    </div>
+  );
+  return (
+    <div style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", borderRadius: 10, padding: "10px 12px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <Bike size={13} style={{ color: "var(--tx-mut)" }} />
+        <span style={{ fontWeight: 700, fontSize: 13, color: "var(--tx-hi)" }}>{l.driverName}</span>
+        <span style={{ fontSize: 11, color: "var(--tx-mut)" }}>· {l.pedidos} pedido{l.pedidos === 1 ? "" : "s"}</span>
+      </div>
+      {row("Fondo recibido", mny(l.fondo))}
+      {row("Compras comprobadas", l.compras > 0 ? `-${mny(l.compras)}` : mny(0))}
+      {row("Sobrante de fondo", mny(l.sobrante), { tone: l.sobrante < 0 ? "err" : undefined })}
+      {row("Cobros de pedidos", mny(l.cobros))}
+      {row("Total a entregar", mny(l.totalAEntregar), { bold: true, tone: "ok" })}
+      {row("Entregado real", l.entregadoReal != null ? mny(l.entregadoReal) : "$____")}
+      {row("Diferencia", l.diferencia != null ? mny(l.diferencia) : "$____", l.diferencia != null && l.diferencia < 0 ? { tone: "err" } : undefined)}
     </div>
   );
 }

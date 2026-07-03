@@ -6,7 +6,7 @@ const { authenticate, requireAdmin, requireTenantAccess } = require('../middlewa
 const { requireModule, MODULES } = require('../lib/modules');
 const { validateBody } = require('../lib/validate');
 const { openShiftSchema, closeShiftSchema } = require('../schemas/shifts.schema');
-const { summarizePayments, cashCutSummary } = require('../lib/money');
+const { summarizePayments, cashCutSummary, round2 } = require('../lib/money');
 const { sendCashCutEmail } = require('../lib/cash-cut-mailer');
 const audit = require('../lib/audit-logger');
 const router = express.Router();
@@ -218,6 +218,42 @@ function emailRestaurantCashCut(req, closed) {
   });
 }
 
+// Where compartido de las órdenes que entran al corte de un turno. Lo usan el
+// cierre (performShiftClose) y el cálculo en vivo (liveShiftTotals) para no
+// desincronizarse. Regla de atribución del efectivo al turno:
+//  - NO-delivery (comer aquí / para llevar): pagan al momento, así que
+//    createdAt ≈ cobro. Se atribuyen por shiftId o, en su defecto, por fecha de
+//    creación dentro de la ventana del turno (criterio de siempre).
+//  - DELIVERY: el efectivo entra al cajón cuando el repartidor LIQUIDA, no
+//    cuando se creó la orden — a veces días después, en OTRO turno. Se atribuye
+//    por fecha de COBRO (paidAt) al turno abierto en ese momento. Atribuir por
+//    createdAt dejaba el efectivo de una entrega vieja cobrada hoy SIN turno
+//    (quedaba booked a un turno ya cerrado que no la capturó) → SOBRANTE
+//    FANTASMA en el cierre de hoy. Solo cuenta delivery ya PAGADO: una entrega
+//    repartida pero sin liquidar no tiene efectivo en el cajón todavía, así que
+//    no debe inflar el esperado.
+function shiftOrdersWhere(shift) {
+  const paidWindow = { gte: shift.openedAt };
+  // Turno ya cerrado (recompute histórico): acota el cobro a su ventana real
+  // para no barrer cobros de turnos posteriores.
+  if (shift.closedAt) paidWindow.lte = shift.closedAt;
+  return {
+    locationId: shift.locationId,
+    status: 'DELIVERED',
+    // Todas las fuentes de venta real entran al corte (TPV, mesero, tienda
+    // online, WhatsApp, kiosko). Dejarlas fuera hacía que su efectivo apareciera
+    // como sobrante inexplicable y las ventas totales salieran cortas.
+    source: { in: ['TPV', 'WAITER', 'ONLINE', 'WHATSAPP', 'KIOSK'] },
+    OR: [
+      { orderType: { not: 'DELIVERY' }, shiftId: shift.id },
+      // Fallback para órdenes no-delivery antiguas sin shiftId, dentro de la ventana.
+      { orderType: { not: 'DELIVERY' }, shiftId: null, createdAt: { gte: shift.openedAt } },
+      // Delivery: por fecha de cobro (liquidación del repartidor), no de creación.
+      { orderType: 'DELIVERY', paymentStatus: 'PAID', paidAt: paidWindow },
+    ],
+  };
+}
+
 // Helper compartido: ejecuta el cierre de un turno YA cargado (con
 // include {expenses, cashIns}). Lo usan POST /:id/close (turno por id) y
 // POST /current/close (turno abierto resuelto por sucursal, para la cola
@@ -246,21 +282,10 @@ async function performShiftClose(req, res, shift) {
       closedByEmployeeId = emp.id;
     }
 
-    // Solo órdenes de este turno (scoped por shiftId con fallback temporal)
+    // Órdenes de este turno. Atribución del efectivo por shiftOrdersWhere:
+    // no-delivery por turno/creación, delivery por fecha de cobro (paidAt).
     const orders = await prisma.order.findMany({
-      where: {
-        locationId: req.locationId,
-        status: 'DELIVERED',
-        OR: [
-          { shiftId: shift.id },
-          // Fallback para órdenes antiguas sin shiftId, dentro de la ventana del turno
-          { shiftId: null, createdAt: { gte: shift.openedAt } },
-        ],
-        // Todas las fuentes de venta real entran al corte. WhatsApp y Kiosko
-        // quedaban fuera, así que sus ventas en efectivo aparecían como sobrante
-        // inexplicable en el cajón y las ventas totales salían cortas.
-        source: { in: ['TPV', 'WAITER', 'ONLINE', 'WHATSAPP', 'KIOSK'] },
-      },
+      where: shiftOrdersWhere(shift),
       // Cobro mixto: traer el desglose para sumar la porción de cada método a su
       // bucket (sin esto, una orden MIXED no entraría a ningún bucket del corte).
       include: { payments: { select: { method: true, amount: true, status: true } } },
@@ -684,15 +709,7 @@ router.delete('/cash-ins/:id', requireLocation, async (req, res) => {
 // haya ventas cobradas. Sólo se llama para turnos abiertos (normalmente 1).
 async function liveShiftTotals(shift) {
   const orders = await prisma.order.findMany({
-    where: {
-      locationId: shift.locationId,
-      status: 'DELIVERED',
-      OR: [
-        { shiftId: shift.id },
-        { shiftId: null, createdAt: { gte: shift.openedAt } },
-      ],
-      source: { in: ['TPV', 'WAITER', 'ONLINE', 'WHATSAPP', 'KIOSK'] },
-    },
+    where: shiftOrdersWhere(shift),
     // Cobro mixto: el desglose por método permite sumar la porción en efectivo
     // de una orden MIXED al efectivo esperado (ver lib/money.summarizePayments).
     select: {
@@ -713,6 +730,104 @@ async function liveShiftTotals(shift) {
   });
   return { ...totals, totalExpenses, totalCashIn, totalSales, expectedCash, ordersCount: orders.length };
 }
+
+// ── Liquidación por responsable (modelo de CAJA ÚNICA) ───────────────────
+// No existen cajas contables separadas: el repartidor es solo un RESPONSABLE
+// temporal de movimientos de la caja única del turno. Esta función arma su
+// rendición de cuentas SIN crear cuentas nuevas ni doble-contar:
+//   - Fondo recibido    = movimientos FLOAT del responsable en la ventana
+//     (salida de caja única con responsable; ya reflejada vía cashIns/gastos).
+//   - Compras comprobadas = movimientos EXPENSE (ya restan del turno vía
+//     ShiftExpense espejado — aquí solo se ATRIBUYEN al responsable).
+//   - Cobros de pedidos  = porción en EFECTIVO de las órdenes DELIVERY que él
+//     entregó, cobradas en la ventana del turno (fuente: las ÓRDENES de la caja
+//     única — ya cuentan en totalCash; aquí solo se atribuyen, no se suman de
+//     nuevo). Se usa paidAt, igual que shiftOrdersWhere.
+//   Sobrante de fondo   = fondo − compras
+//   Total a entregar    = cobros + sobrante
+// entregadoReal/diferencia quedan null hasta que exista captura del conteo por
+// responsable al cierre (v2); la UI los muestra como "$____".
+async function shiftDriverLiquidation(shift) {
+  const end = shift.closedAt || new Date();
+  const drivers = await prisma.employee.findMany({
+    where: { locationId: shift.locationId, role: 'DELIVERY' },
+    select: { id: true, name: true },
+  });
+  if (drivers.length === 0) return [];
+  const ids = drivers.map((d) => d.id);
+  const [movs, orders] = await Promise.all([
+    prisma.driverCashMovement.findMany({
+      where: {
+        driverId: { in: ids },
+        type: { in: ['FLOAT', 'EXPENSE'] },
+        createdAt: { gte: shift.openedAt, lte: end },
+      },
+      select: { driverId: true, type: true, amount: true },
+    }),
+    prisma.order.findMany({
+      where: {
+        locationId: shift.locationId,
+        status: 'DELIVERED',
+        orderType: 'DELIVERY',
+        paymentStatus: 'PAID',
+        paidAt: { gte: shift.openedAt, lte: end },
+        deliveryDriverId: { in: ids },
+        source: { in: ['TPV', 'WAITER', 'ONLINE', 'WHATSAPP', 'KIOSK'] },
+      },
+      select: {
+        deliveryDriverId: true,
+        paymentMethod: true,
+        total: true,
+        payments: { select: { method: true, amount: true, status: true } },
+      },
+    }),
+  ]);
+  // Porción en efectivo de una orden (los métodos no-efectivo no pasan por las
+  // manos del responsable). Mismo criterio de tenders que summarizePayments.
+  const cashOf = (o) => {
+    const tenders = (o.payments || []).filter((p) => p && p.status !== 'FAILED' && p.status !== 'REFUNDED');
+    if (tenders.length > 0) {
+      return tenders
+        .filter((p) => p.method === 'CASH' || p.method === 'CASH_ON_DELIVERY')
+        .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    }
+    return o.paymentMethod === 'CASH' || o.paymentMethod === 'CASH_ON_DELIVERY' ? Number(o.total) || 0 : 0;
+  };
+  return drivers
+    .map((d) => {
+      const dm = movs.filter((m) => m.driverId === d.id);
+      const fondo = round2(dm.filter((m) => m.type === 'FLOAT').reduce((s, m) => s + m.amount, 0));
+      const compras = round2(dm.filter((m) => m.type === 'EXPENSE').reduce((s, m) => s + m.amount, 0));
+      const dOrders = orders.filter((o) => o.deliveryDriverId === d.id);
+      const cobros = round2(dOrders.reduce((s, o) => s + cashOf(o), 0));
+      const sobrante = round2(fondo - compras);
+      return {
+        driverId: d.id,
+        driverName: d.name,
+        fondo,
+        compras,
+        sobrante,
+        cobros,
+        pedidos: dOrders.length,
+        totalAEntregar: round2(cobros + sobrante),
+        entregadoReal: null,
+        diferencia: null,
+      };
+    })
+    .filter((l) => l.fondo !== 0 || l.compras !== 0 || l.cobros !== 0);
+}
+
+// ── GET liquidación por responsable de un turno (scoped a sucursal) ──────
+router.get('/:id/liquidation', requireLocation, async (req, res) => {
+  try {
+    const shift = await prisma.cashShift.findFirst({
+      where: { id: req.params.id, locationId: req.locationId },
+      select: { id: true, locationId: true, openedAt: true, closedAt: true },
+    });
+    if (!shift) return res.status(404).json({ error: 'Turno no encontrado en esta sucursal' });
+    res.json(await shiftDriverLiquidation(shift));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 router.get('/', requireAdmin, requireLocation, async (req, res) => {
   try {
@@ -747,3 +862,6 @@ router.get('/:id', requireLocation, async (req, res) => {
 });
 
 module.exports = router;
+// Exportado para pruebas unitarias de la regla de atribución del efectivo.
+module.exports.shiftOrdersWhere = shiftOrdersWhere;
+module.exports.shiftDriverLiquidation = shiftDriverLiquidation;
