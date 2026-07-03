@@ -25,7 +25,8 @@ type DriverCut = {
 // repartidor dentro del turno — no es una caja contable separada.
 type Liquidation = {
   driverId: string; driverName: string; fondo: number; compras: number; sobrante: number;
-  cobros: number; pedidos: number; totalAEntregar: number; entregadoReal: number | null; diferencia: number | null;
+  cobros: number; cobrosTransfer: number; cobrosTarjeta: number; pedidos: number;
+  totalAEntregar: number; entregadoReal: number | null; diferencia: number | null;
 };
 
 type Row =
@@ -341,8 +342,10 @@ function LiquidationCard({ l }: { l: Liquidation }) {
       {row("Fondo recibido", mny(l.fondo))}
       {row("Compras comprobadas", l.compras > 0 ? `-${mny(l.compras)}` : mny(0))}
       {row("Sobrante de fondo", mny(l.sobrante), { tone: l.sobrante < 0 ? "err" : undefined })}
-      {row("Cobros de pedidos", mny(l.cobros))}
-      {row("Total a entregar", mny(l.totalAEntregar), { bold: true, tone: "ok" })}
+      {row("Cobros en efectivo", mny(l.cobros))}
+      {l.cobrosTransfer > 0 && row("Cobros por transferencia (verificar en banco)", mny(l.cobrosTransfer))}
+      {l.cobrosTarjeta > 0 && row("Cobros con tarjeta (terminal)", mny(l.cobrosTarjeta))}
+      {row("Total a entregar (efectivo)", mny(l.totalAEntregar), { bold: true, tone: "ok" })}
       {row("Entregado real", l.entregadoReal != null ? mny(l.entregadoReal) : "$____")}
       {row("Diferencia", l.diferencia != null ? mny(l.diferencia) : "$____", l.diferencia != null && l.diferencia < 0 ? { tone: "err" } : undefined)}
     </div>

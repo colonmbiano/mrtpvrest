@@ -76,16 +76,32 @@ test('caso real: Mau (fondo+compras+cobros) y Kebra (solo cobros de pedidos viej
   expect(kebra).toMatchObject({ fondo: 0, compras: 0, sobrante: 0, cobros: 505, totalAEntregar: 505 });
 });
 
-test('cobro NO-efectivo (transfer/tarjeta) no cuenta como cobro en mano del responsable', async () => {
+test('transfer/tarjeta se REPORTAN en la rendición pero NO suman al efectivo a entregar', async () => {
   prisma.employee.findMany.mockResolvedValue([{ id: 'd1', name: 'Repa' }]);
   prisma.driverCashMovement.findMany.mockResolvedValue([]);
   prisma.order.findMany.mockResolvedValue([
     { deliveryDriverId: 'd1', paymentMethod: 'TRANSFER', total: 145, payments: [] },
+    { deliveryDriverId: 'd1', paymentMethod: 'CARD', total: 90, payments: [] },
     { deliveryDriverId: 'd1', paymentMethod: 'CASH', total: 200, payments: [] },
   ]);
   const [l] = await shiftDriverLiquidation(shift);
-  expect(l.cobros).toBe(200); // el transfer no pasa por sus manos
-  expect(l.pedidos).toBe(2);
+  expect(l.cobros).toBe(200); // solo el efectivo pasa por sus manos
+  expect(l.cobrosTransfer).toBe(145); // a verificar en banco
+  expect(l.cobrosTarjeta).toBe(90); // terminal
+  expect(l.totalAEntregar).toBe(200); // transfer/tarjeta NO se entregan físicamente
+  expect(l.pedidos).toBe(3);
+});
+
+test('responsable con SOLO transferencias sí aparece en la liquidación (hay que verificarlas)', async () => {
+  prisma.employee.findMany.mockResolvedValue([{ id: 'd1', name: 'Repa' }]);
+  prisma.driverCashMovement.findMany.mockResolvedValue([]);
+  prisma.order.findMany.mockResolvedValue([
+    { deliveryDriverId: 'd1', paymentMethod: 'TRANSFER', total: 145, payments: [] },
+  ]);
+  const liq = await shiftDriverLiquidation(shift);
+  expect(liq).toHaveLength(1);
+  expect(liq[0].cobrosTransfer).toBe(145);
+  expect(liq[0].totalAEntregar).toBe(0);
 });
 
 test('cobro MIXTO: solo la porción en efectivo de payments[] cuenta', async () => {
