@@ -49,7 +49,10 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
       ]);
 
     // Determinar qué día es hoy en México
-    const todayStr = new Date().toLocaleString('es-MX', { weekday: 'long', timeZone: 'America/Mexico_City' }).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    // D\u00eda de hoy en INGL\u00c9S may\u00fasculas (MONDAY, TUESDAY\u2026) para casar con el
+    // formato de MenuItem.activeDays en la BD. Antes usaba es-MX (LUNES\u2026) \u2192 NUNCA
+    // casaba y el bot ocultaba TODAS las promos. Mismo c\u00e1lculo que menu.routes.js.
+    const todayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Mexico_City', weekday: 'long' }).format(new Date()).toUpperCase();
 
     // Filtrar items y aplicar promos según el día
     const activeMenuItems = menuItems.filter(item => {
@@ -83,8 +86,15 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
       return str;
     }).join('\n\n');
 
+      // Promos activas HOY (para ofrecerlas activamente en el saludo/pedido).
+      const promosHoy = activeMenuItems
+        .filter((i) => i.isPromo)
+        .map((i) => `- ${i.name}: $${i.promoPrice || i.price}`)
+        .join('\n');
+
       ctx = {
         menuString,
+        promosHoy,
         config: cfg,
         businessName: restaurant?.name || 'nuestro restaurante',
         horarioTexto: cfg ? formatBusinessHours(cfg.businessHours) : '',
@@ -92,7 +102,7 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
       };
       menuCache.set(restaurantId, ctx);
     }
-    const { menuString, config, businessName, horarioTexto } = ctx;
+    const { menuString, promosHoy, config, businessName, horarioTexto } = ctx;
     // Estado abierto/cerrado: SIEMPRE fresco (depende de la hora actual).
     const openState = config ? computeOpenState(config) : { isOpen: true, message: '' };
     // Instrucciones extra afinables por env (sin rebuild), leídas por mensaje.
@@ -115,6 +125,11 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
 
     const systemPrompt = `
       Eres el asistente virtual de ${businessName}, atendiendo por WhatsApp. Tu objetivo es dar una atención cálida y tomar el pedido del cliente logrando la mejor conversión de ventas.
+${promosHoy ? `
+      ## 🔥 PROMOCIONES DE HOY (¡ofrécelas ACTIVAMENTE!)
+      ${promosHoy}
+      Menciona la(s) promoción(es) de HOY con entusiasmo al saludar y/o mientras armas el pedido (ej. "¡Hoy tenemos [promo] a solo $[precio]! ¿Te animas?"). NO inventes promociones que no estén en esta lista.
+` : ''}
 
       ## Contexto del negocio (úsalo para responder dudas; NO lo repitas entero a menos que lo pregunten)
       - Nombre: ${businessName}
