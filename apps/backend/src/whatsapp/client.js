@@ -751,14 +751,13 @@ function initWhatsApp(io) {
       if (!isCustomerChatId(chatKey)) return;
       if (isBotAuthoredOutgoing(msg, chatKey)) return;
 
+      // Intervención humana: si TÚ (u otro humano) respondes MANUALMENTE en un
+      // chat de cliente, el bot se calla 1h en ESE chat — con o sin pedido
+      // reciente. Antes solo pausaba dentro de 1h de un pedido que el bot había
+      // tomado (recentOrderChats); en chats atendidos a mano sin pedido, el bot
+      // seguía contestando encima del humano ("Gracias" → "De nada" repetido).
       const recent = recentOrderChats.get(chatKey);
-      if (!recent) return;
-      if (Date.now() - recent.timestamp > HUMAN_HANDOFF_MS) {
-        recentOrderChats.delete(chatKey);
-        return;
-      }
-
-      const handoff = pauseBotForChat(chatKey, recent.phone, 'human_message_after_order');
+      const handoff = pauseBotForChat(chatKey, recent?.phone || null, 'human_message');
       const until = new Date(handoff.until).toISOString();
       console.log(`[WhatsApp Bot] Intervencion humana detectada en ${chatKey}; bot pausado hasta ${until}.`);
     } catch (err) {
