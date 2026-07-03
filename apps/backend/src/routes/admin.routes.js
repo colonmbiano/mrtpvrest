@@ -150,14 +150,28 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
 // bot sigue con env (cero regresión).
 const WA_ASSISTANT_TYPE = 'WHATSAPP_ASSISTANT';
 
+function rawAssistantConfig(row) {
+  try { return row?.config ? JSON.parse(row.config) : {}; } catch { return {}; }
+}
+
 function parseAssistantConfig(row) {
-  let cfg = {};
-  try { cfg = row?.config ? JSON.parse(row.config) : {}; } catch { cfg = {}; }
+  const cfg = rawAssistantConfig(row);
   return {
     extraInstructions: typeof cfg.extraInstructions === 'string' ? cfg.extraInstructions : '',
     ignoreNumbers: Array.isArray(cfg.ignoreNumbers) ? cfg.ignoreNumbers : [],
     ignoreGroupName: typeof cfg.ignoreGroupName === 'string' ? cfg.ignoreGroupName : '',
   };
+}
+
+// La instancia de bot (multi-tenant, Fase SaaS) se vincula a cada tenant guardando
+// su health URL en la config (`statusUrl`). Es un campo de OPERADOR (super-admin);
+// el admin del tenant no lo edita, pero el GET/metrics lo usan para mostrarle el
+// estado/QR de SU bot. SIN fallback al env global a propósito: sería una fuga
+// cross-tenant (todos verían el bot del piloto). El piloto se vincula igual que
+// los demás, con /provision.
+function assistantStatusUrl(row) {
+  const cfg = rawAssistantConfig(row);
+  return (cfg.statusUrl && String(cfg.statusUrl).trim()) || null;
 }
 
 router.get('/whatsapp-assistant', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
@@ -167,12 +181,16 @@ router.get('/whatsapp-assistant', authenticate, requireTenantAccess, requireAdmi
     const row = await prisma.integrationConfig.findUnique({
       where: { restaurantId_type: { restaurantId, type: WA_ASSISTANT_TYPE } },
     });
+    const cfg = rawAssistantConfig(row);
     res.set('Cache-Control', 'no-store');
     // Sin fila configurada aún → el bot opera con sus env vars: reflejamos
     // enabled:true para que el toggle muestre el estado real (encendido).
     res.json({
       configured: !!row,
       enabled: row ? row.enabled : true,
+      // ¿ya tiene una instancia de bot asignada? (statusUrl propia o env piloto)
+      provisioned: !!assistantStatusUrl(row),
+      phoneNumber: cfg.phoneNumber || null,
       updatedAt: row?.updatedAt || null,
       config: parseAssistantConfig(row),
     });
@@ -192,10 +210,18 @@ router.put('/whatsapp-assistant', authenticate, requireTenantAccess, requireAdmi
     const ignoreNumbers = Array.isArray(cfgIn.ignoreNumbers)
       ? cfgIn.ignoreNumbers.map((s) => String(s || '').trim()).filter(Boolean).slice(0, 200)
       : [];
+    // Preservar los campos de OPERADOR (statusUrl/phoneNumber): el tenant edita
+    // instrucciones/ignorados/pausa, pero NO debe borrar la instancia asignada.
+    const existing = await prisma.integrationConfig.findUnique({
+      where: { restaurantId_type: { restaurantId, type: WA_ASSISTANT_TYPE } },
+    });
+    const prev = rawAssistantConfig(existing);
     const config = JSON.stringify({
       extraInstructions: String(cfgIn.extraInstructions || '').slice(0, 4000),
       ignoreNumbers,
       ignoreGroupName: String(cfgIn.ignoreGroupName || '').trim().slice(0, 120),
+      ...(prev.statusUrl ? { statusUrl: prev.statusUrl } : {}),
+      ...(prev.phoneNumber ? { phoneNumber: prev.phoneNumber } : {}),
     });
     const enabled = body.enabled !== false; // default true
 
@@ -225,7 +251,11 @@ router.get('/whatsapp-assistant/metrics', authenticate, requireTenantAccess, req
     catch (e) { console.error('bot metrics error:', e?.message || e); }
 
     let status = { reachable: false, ready: null, hasQr: null, qrUrl: null, url: null };
-    const statusUrl = process.env.WHATSAPP_BOT_STATUS_URL;
+    const row = await prisma.integrationConfig.findUnique({
+      where: { restaurantId_type: { restaurantId, type: WA_ASSISTANT_TYPE } },
+    });
+    status.provisioned = !!assistantStatusUrl(row);
+    const statusUrl = assistantStatusUrl(row);
     if (statusUrl) {
       status.url = statusUrl.replace(/\/+$/, '');
       try {
@@ -247,6 +277,41 @@ router.get('/whatsapp-assistant/metrics', authenticate, requireTenantAccess, req
   } catch (e) {
     console.error('whatsapp-assistant metrics error:', e?.message || e);
     res.status(500).json({ error: 'Error al obtener métricas del bot' });
+  }
+});
+
+// Provisión (OPERADOR / super-admin): vincula una instancia de bot (su health URL
+// de Railway) a un tenant. Fase SaaS: la instancia se crea a mano/por script y
+// aquí se asocia, para que el admin del tenant vea el estado/QR de SU bot. Preserva
+// la config editable del tenant (instrucciones/ignorados). Body: { restaurantId,
+// statusUrl, phoneNumber?, enabled? }.
+router.put('/whatsapp-assistant/provision', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    if (!restaurantId) return res.status(400).json({ error: 'restaurantId requerido' });
+    const statusUrl = String(req.body?.statusUrl || '').trim();
+    const phoneNumber = String(req.body?.phoneNumber || '').trim().slice(0, 25);
+    const existing = await prisma.integrationConfig.findUnique({
+      where: { restaurantId_type: { restaurantId, type: WA_ASSISTANT_TYPE } },
+    });
+    const prev = rawAssistantConfig(existing);
+    const config = JSON.stringify({
+      extraInstructions: typeof prev.extraInstructions === 'string' ? prev.extraInstructions : '',
+      ignoreNumbers: Array.isArray(prev.ignoreNumbers) ? prev.ignoreNumbers : [],
+      ignoreGroupName: typeof prev.ignoreGroupName === 'string' ? prev.ignoreGroupName : '',
+      ...(statusUrl ? { statusUrl } : (prev.statusUrl ? { statusUrl: prev.statusUrl } : {})),
+      ...(phoneNumber ? { phoneNumber } : (prev.phoneNumber ? { phoneNumber: prev.phoneNumber } : {})),
+    });
+    const enabled = req.body?.enabled !== false; // default true
+    await prisma.integrationConfig.upsert({
+      where: { restaurantId_type: { restaurantId, type: WA_ASSISTANT_TYPE } },
+      update: { config, enabled, lastSync: new Date() },
+      create: { restaurantId, type: WA_ASSISTANT_TYPE, enabled, mode: 'production', config, lastSync: new Date() },
+    });
+    res.json({ ok: true, message: 'Instancia de bot vinculada al tenant', restaurantId, statusUrl: statusUrl || prev.statusUrl || null });
+  } catch (e) {
+    console.error('whatsapp-assistant provision error:', e?.message || e);
+    res.status(500).json({ error: 'Error al vincular la instancia del bot' });
   }
 });
 

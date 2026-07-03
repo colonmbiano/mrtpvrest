@@ -51,11 +51,11 @@ type Tab = "asistente" | "reportes" | "contactos" | "campanas" | "juegos";
 
 // ── Bot asistente (Cajero Estrella) ──────────────────────────────────────────
 type AssistantConfig = { extraInstructions: string; ignoreNumbers: string[]; ignoreGroupName: string };
-type AssistantState = { configured: boolean; enabled: boolean; updatedAt: string | null; config: AssistantConfig };
+type AssistantState = { configured: boolean; enabled: boolean; provisioned: boolean; phoneNumber: string | null; updatedAt: string | null; config: AssistantConfig };
 type BotMetrics = {
   bot: { total: number; last24h: number; last7d: number; revenue: number; avgTicket: number; lastOrderAt: string | null };
 } | null;
-type BotStatus = { reachable: boolean; ready: boolean | null; hasQr: boolean | null; qrUrl: string | null; url: string | null; error?: string };
+type BotStatus = { reachable: boolean; ready: boolean | null; hasQr: boolean | null; qrUrl: string | null; url: string | null; provisioned?: boolean; error?: string };
 
 const money = (n: number) =>
   "$" + (Number(n) || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -152,6 +152,8 @@ function AssistantTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
   const [ignoreGroupName, setIgnoreGroupName] = useState("");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [configured, setConfigured] = useState(false);
+  const [provisioned, setProvisioned] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<BotMetrics>(null);
   const [status, setStatus] = useState<BotStatus | null>(null);
 
@@ -160,6 +162,8 @@ function AssistantTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
       const { data } = await api.get<AssistantState>("/api/admin/whatsapp-assistant");
       setEnabled(data.enabled);
       setConfigured(data.configured);
+      setProvisioned(!!data.provisioned);
+      setPhoneNumber(data.phoneNumber || null);
       setUpdatedAt(data.updatedAt);
       setInstructions(data.config?.extraInstructions || "");
       setIgnoreNumbersText((data.config?.ignoreNumbers || []).join("\n"));
@@ -186,6 +190,16 @@ function AssistantTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
       setLoading(false);
     })();
   }, [loadConfig, loadMetrics]);
+
+  // Mientras el bot está provisionado pero NO conectado (esperando escaneo de QR
+  // o reconectando), refrescar el estado cada 5 s para que la conexión se actualice
+  // sola en cuanto el dueño escanee el código.
+  const waitingConnection = !!status?.provisioned && status?.ready !== true;
+  useEffect(() => {
+    if (!waitingConnection) return;
+    const id = setInterval(() => { loadMetrics(); }, 5000);
+    return () => clearInterval(id);
+  }, [waitingConnection, loadMetrics]);
 
   const parseNumbers = (text: string): string[] => {
     const seen = new Set<string>();
@@ -271,6 +285,62 @@ function AssistantTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
           <Toggle checked={enabled} onChange={togglePause} label={enabled ? "Activo" : "En pausa"} />
         </div>
       </WtCard>
+
+      {/* Conexión de WhatsApp (onboarding self-service) */}
+      {!provisioned ? (
+        <WtCard className="p-5">
+          <SectionHead title="Conexión de WhatsApp" />
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl" style={{ background: "var(--surf-2)", color: "var(--tx-mut)" }}>
+              <QrCode size={20} />
+            </div>
+            <p className="text-sm text-tx-mut">
+              Tu asistente de WhatsApp aún no está activado. Escríbenos para conectarlo a tu
+              número y empezar a atender pedidos automáticamente por WhatsApp.
+            </p>
+          </div>
+        </WtCard>
+      ) : status?.ready === true ? (
+        <WtCard className="flex items-center gap-3 p-5">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl" style={{ background: "var(--ok-soft)", color: "var(--ok)" }}>
+            <CheckCircle2 size={20} />
+          </div>
+          <div>
+            <div className="font-syne text-sm font-bold text-tx">WhatsApp conectado</div>
+            <p className="mt-0.5 text-xs text-tx-mut">
+              Tu asistente está enlazado{phoneNumber ? ` al número ${phoneNumber}` : ""} y atendiendo mensajes.
+            </p>
+          </div>
+        </WtCard>
+      ) : (
+        <WtCard className="p-5">
+          <SectionHead title="Conecta tu WhatsApp" />
+          {status?.hasQr && status?.qrUrl ? (
+            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+              <div className="shrink-0 rounded-2xl bg-white p-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={status.qrUrl} alt="Código QR de WhatsApp" width={196} height={196} style={{ display: "block" }} />
+              </div>
+              <div className="text-sm text-tx-mut">
+                <p className="mb-2 font-bold text-tx">Escanéalo con el WhatsApp de tu negocio:</p>
+                <ol className="list-decimal space-y-1 pl-4">
+                  <li>Abre WhatsApp → <b>Dispositivos vinculados</b>.</li>
+                  <li>Toca <b>Vincular un dispositivo</b>.</li>
+                  <li>Escanea este código. La conexión se activa sola. 🔄</li>
+                </ol>
+                <a href={status.qrUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-primary">
+                  <QrCode size={13} /> ¿No ves el código? Ábrelo aquí
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-tx-mut">
+              <span className="h-4 w-4 animate-spin rounded-full border-t-2" style={{ borderColor: "var(--brand-primary)" }} />
+              {status?.reachable ? "Preparando la conexión… un momento." : "Contactando tu asistente… reintentando."}
+            </div>
+          )}
+        </WtCard>
+      )}
 
       {/* Métricas del bot */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
