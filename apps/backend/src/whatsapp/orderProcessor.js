@@ -74,6 +74,19 @@ async function postWithRetry(url, body, config = {}, retries = 0) {
   throw lastErr;
 }
 
+// Trae el detalle PÚBLICO de una orden (items con nombre/cantidad/precio +
+// subtotal + envío + total) para armar el ticket que se le manda al cliente.
+// Best-effort: si falla, el bot cae al resumen simple.
+async function fetchOrderDetail(orderId, port = 3001) {
+  try {
+    const r = await axios.get(`${apiBase(port)}/api/store/orders/${orderId}`, { timeout: 8000 });
+    return r.data;
+  } catch (err) {
+    console.error('[WhatsApp Bot] No se pudo traer el detalle de la orden:', err?.message || err);
+    return null;
+  }
+}
+
 async function getBotEmployeeId(restaurantId) {
   const cached = botEmployeeCache.get(restaurantId);
   if (cached) return cached;
@@ -215,6 +228,7 @@ async function addItemsToOrder(orderId, parsedJson, restaurantId, port = 3001) {
 module.exports = {
   createOrderFromGemini,
   addItemsToOrder,
+  fetchOrderDetail,
   normalizeBotItems,
   normalizePaymentMethod,
   normalizeCustomerPhone
