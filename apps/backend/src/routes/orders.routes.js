@@ -517,24 +517,29 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
           },
     });
 
-    // deliveryDriverId es un FK escalar sin relación Prisma, así que el nombre
-    // del repartidor se resuelve con una consulta batch y se adjunta como
-    // deliveryDriverName para que el TPV muestre "asignado a X". Los repartidores
-    // son Employee (no User): el TPV autentica como Employee, así que el id de
-    // deliveryDriverId apunta a la tabla Employee.
-    const driverIds = [...new Set(orders.map(o => o.deliveryDriverId).filter(Boolean))];
-    let driverMap = {};
-    if (driverIds.length) {
-      const drivers = await prisma.employee.findMany({
-        where: { id: { in: driverIds } },
+    // deliveryDriverId y createdById son FKs escalares a Employee sin relación
+    // Prisma (mismo patrón): el repartidor asignado y el empleado que TOMÓ el
+    // pedido. Resolvemos ambos nombres con UNA sola consulta batch y los
+    // adjuntamos como deliveryDriverName / createdByName para que el TPV muestre
+    // "asignado a X" y "tomado por Y". Los repartidores y cajeros/meseros son
+    // Employee (no User): el TPV autentica como Employee, así que ambos ids
+    // apuntan a la tabla Employee.
+    const employeeIds = [...new Set(
+      orders.flatMap(o => [o.deliveryDriverId, o.createdById]).filter(Boolean),
+    )];
+    let employeeMap = {};
+    if (employeeIds.length) {
+      const employees = await prisma.employee.findMany({
+        where: { id: { in: employeeIds } },
         select: { id: true, name: true },
       });
-      driverMap = Object.fromEntries(drivers.map(d => [d.id, d.name]));
+      employeeMap = Object.fromEntries(employees.map(e => [e.id, e.name]));
     }
 
     res.json(orders.map(o => ({
       ...o,
-      deliveryDriverName: o.deliveryDriverId ? (driverMap[o.deliveryDriverId] || null) : null,
+      deliveryDriverName: o.deliveryDriverId ? (employeeMap[o.deliveryDriverId] || null) : null,
+      createdByName: o.createdById ? (employeeMap[o.createdById] || null) : null,
     })));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

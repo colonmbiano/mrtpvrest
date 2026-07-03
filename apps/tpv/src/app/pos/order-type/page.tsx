@@ -320,6 +320,7 @@ export default function OrderTypePage() {
           status: o.status,
           createdAt: o.createdAt,
           driver: o.deliveryDriverName || null,
+          takenBy: o.createdByName || null,
           isWeb: ONLINE_SOURCES.has(String(o.source || "").toUpperCase()),
         };
       }),

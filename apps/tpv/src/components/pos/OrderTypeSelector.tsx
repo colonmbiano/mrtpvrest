@@ -26,6 +26,7 @@ import {
   ShoppingCart,
   SlidersHorizontal,
   Table2,
+  User,
   Users,
   Utensils,
   Wallet,
@@ -59,6 +60,9 @@ export interface OpenAccount {
   status: string;
   createdAt?: string;
   driver?: string | null;
+  /** Nombre del empleado (cajero/mesero) que tomó el pedido. Null en pedidos
+   *  ONLINE o previos a la atribución. */
+  takenBy?: string | null;
   /** Pedido originado en la tienda web / WhatsApp — se distingue en color. */
   isWeb?: boolean;
   /** Solo modo "Cobradas": método de pago crudo para el chip de la fila. */
@@ -800,6 +804,15 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                                   <span className="inline-flex items-center gap-1 truncate text-blue-300">
                                     <Bike size={11} className="shrink-0" />
                                     <span className="truncate">{acc.driver}</span>
+                                  </span>
+                                </>
+                              )}
+                              {acc.takenBy && (
+                                <>
+                                  <span className="text-white/20">·</span>
+                                  <span className="inline-flex items-center gap-1 truncate text-white/55">
+                                    <User size={11} className="shrink-0" />
+                                    <span className="truncate">{acc.takenBy}</span>
                                   </span>
                                 </>
                               )}
