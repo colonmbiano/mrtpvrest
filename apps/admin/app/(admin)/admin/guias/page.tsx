@@ -1,6 +1,6 @@
 "use client";
 import {
-  CheckCircle2, MessageCircle, UtensilsCrossed, Sparkles, ChevronRight,
+  CheckCircle2, MessageCircle, UtensilsCrossed, Sparkles, ChevronRight, Layers,
 } from "lucide-react";
 import {
   WtScreen, PageHeader, WtCard, SectionHead, IconBadge,
@@ -161,6 +161,26 @@ export default function GuiasUsoPage() {
             <h3 className="font-display text-lg font-extrabold text-tx-hi">Chatbot de WhatsApp</h3>
             <p className="mt-2 text-sm text-tx-mut" style={{ lineHeight: 1.6 }}>
               Activa tu asistente que toma pedidos solo: conexión, envío, pago en línea, juegos de premios y campañas.
+            </p>
+            <div className="mt-3 flex items-center gap-1 font-mono text-[10px] uppercase tracking-[.12em]" style={{ color: "#39c46e" }}>
+              Abrir guía <ChevronRight size={13} />
+            </div>
+          </WtCard>
+        </Link>
+
+        <Link href="/admin/guias/combos" className="block">
+          <WtCard className="h-full p-5 transition-transform active:scale-[.99]" style={{ borderColor: "rgba(57,196,110,0.4)" }}>
+            <div className="mb-3 flex items-center justify-between">
+              <span className="grid h-11 w-11 place-items-center rounded-[12px] text-white" style={{ background: GREEN_GRADIENT }}>
+                <Layers size={20} strokeWidth={1.9} />
+              </span>
+              <span className="rounded-full px-2.5 py-1 font-mono text-[9px] uppercase tracking-[.12em] text-white" style={{ background: "#1faa55" }}>
+                Nuevo
+              </span>
+            </div>
+            <h3 className="font-display text-lg font-extrabold text-tx-hi">Combos por estación</h3>
+            <p className="mt-2 text-sm text-tx-mut" style={{ lineHeight: 1.6 }}>
+              Arma combos configurables que se cobran como un solo producto pero mandan cada parte a su estación de cocina.
             </p>
             <div className="mt-3 flex items-center gap-1 font-mono text-[10px] uppercase tracking-[.12em]" style={{ color: "#39c46e" }}>
               Abrir guía <ChevronRight size={13} />
