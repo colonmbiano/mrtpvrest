@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useCart } from '../lib/cartStore';
 import { getApiUrl } from '../lib/config';
 import { computeDeliveryPreview, type DeliveryConfig } from '../lib/delivery';
+import { MapLocationPicker } from './MapLocationPicker';
 
 const API = getApiUrl();
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
@@ -399,10 +400,18 @@ export default function StoreCheckout({
                 <>
                   <textarea required placeholder="Dirección de entrega" className={`${field} h-20`} value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} />
                   {delivery?.mode === 'DISTANCE' && (
-                    <button type="button" onClick={useMyLocation} className="w-full p-4 rounded-2xl font-bold text-sm border-2"
-                      style={{ borderColor: coords ? '#10b981' : primary, color: coords ? '#10b981' : primary }}>
-                      {geoStatus === 'loading' ? 'Obteniendo ubicación…' : coords ? '✓ Ubicación detectada — toca para actualizar' : '📍 Usar mi ubicación para calcular el envío'}
-                    </button>
+                    <>
+                      <button type="button" onClick={useMyLocation} className="w-full p-4 rounded-2xl font-bold text-sm border-2"
+                        style={{ borderColor: coords ? '#10b981' : primary, color: coords ? '#10b981' : primary }}>
+                        {geoStatus === 'loading' ? 'Obteniendo ubicación…' : coords ? '✓ Ubicación marcada — ajústala en el mapa' : '📍 Usar mi ubicación para calcular el envío'}
+                      </button>
+                      <MapLocationPicker
+                        value={coords}
+                        onChange={setCoords}
+                        accent={primary}
+                        defaultCenter={delivery?.origin || undefined}
+                      />
+                    </>
                   )}
                   {geoStatus === 'error' && <p className="text-amber-600 text-xs font-bold">No pudimos obtener tu ubicación. Revisa los permisos.</p>}
                 </>

@@ -9,6 +9,7 @@ import StorefrontBrutalist from './themes/StorefrontBrutalist';
 import type { StoreProps } from './themes/types';
 
 import { computeDeliveryPreview } from '../../lib/delivery';
+import { MapLocationPicker } from '../../components/MapLocationPicker';
 
 const fmt = (n: number) => `$${n.toFixed(0)}`;
 const API = getApiUrl();
@@ -204,15 +205,23 @@ export default function StorefrontClient({
                 className="w-full p-4 bg-gray-100 rounded-2xl outline-none h-24"
                 value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} />
 
-              {/* Ubicación GPS para envío por distancia */}
+              {/* Ubicación por mapa para envío por distancia */}
               {delivery?.mode === 'DISTANCE' && (
-                <button type="button" onClick={useMyLocation}
-                  className="w-full p-4 rounded-2xl font-bold text-sm border-2 transition-all"
-                  style={{ borderColor: coords ? '#10b981' : primary, color: coords ? '#10b981' : primary }}>
-                  {geoStatus === 'loading' ? 'Obteniendo ubicación…'
-                    : coords ? '✓ Ubicación detectada — toca para actualizar'
-                    : '📍 Usar mi ubicación para calcular el envío'}
-                </button>
+                <>
+                  <button type="button" onClick={useMyLocation}
+                    className="w-full p-4 rounded-2xl font-bold text-sm border-2 transition-all"
+                    style={{ borderColor: coords ? '#10b981' : primary, color: coords ? '#10b981' : primary }}>
+                    {geoStatus === 'loading' ? 'Obteniendo ubicación…'
+                      : coords ? '✓ Ubicación marcada — ajústala en el mapa'
+                      : '📍 Usar mi ubicación para calcular el envío'}
+                  </button>
+                  <MapLocationPicker
+                    value={coords}
+                    onChange={setCoords}
+                    accent={primary}
+                    defaultCenter={delivery?.origin || undefined}
+                  />
+                </>
               )}
               {geoStatus === 'error' && (
                 <p className="text-amber-600 text-xs font-bold">No pudimos obtener tu ubicación. Revisa los permisos del navegador.</p>
