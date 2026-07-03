@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import {
   Users, Plus, Trash2, X, Send,
   Store, TrendingUp, Receipt, Wallet, Bike, Pencil, CheckCircle2, XCircle,
+  Bot, Sparkles, Power, Ban, QrCode, RefreshCw, Save, MessageSquare, Clock,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
@@ -46,7 +47,15 @@ type Report = {
   bySource: { source: string; revenue: number; orders: number }[];
 };
 
-type Tab = "reportes" | "contactos" | "campanas" | "juegos";
+type Tab = "asistente" | "reportes" | "contactos" | "campanas" | "juegos";
+
+// ── Bot asistente (Cajero Estrella) ──────────────────────────────────────────
+type AssistantConfig = { extraInstructions: string; ignoreNumbers: string[]; ignoreGroupName: string };
+type AssistantState = { configured: boolean; enabled: boolean; updatedAt: string | null; config: AssistantConfig };
+type BotMetrics = {
+  bot: { total: number; last24h: number; last7d: number; revenue: number; avgTicket: number; lastOrderAt: string | null };
+} | null;
+type BotStatus = { reachable: boolean; ready: boolean | null; hasQr: boolean | null; qrUrl: string | null; url: string | null; error?: string };
 
 const money = (n: number) =>
   "$" + (Number(n) || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -63,6 +72,7 @@ const emptyPrize = (): Prize => ({ label: "", type: "PERCENTAGE", value: 10, wei
 const emptyGame = (): Game => ({ id: "", name: "", enabled: true, trigger: "ON_COMMAND", maxPerContact: 1, prizes: [emptyPrize()] });
 
 const TAB_OPTIONS: { value: Tab; label: string }[] = [
+  { value: "asistente", label: "Asistente (IA)" },
   { value: "reportes", label: "Reportes" },
   { value: "contactos", label: "Clientes" },
   { value: "campanas", label: "Campañas" },
@@ -104,12 +114,13 @@ export default function WhatsappPage() {
       <PageHeader
         eyebrow="Canal WhatsApp"
         title="WhatsApp Bot"
-        subtitle="Clientes, campañas, juegos y reportes del canal WhatsApp"
+        subtitle="Asistente IA, clientes, campañas, juegos y reportes del canal WhatsApp"
       />
 
       {/* Tabs */}
-      <Segmented value={tab} onChange={setTab} options={TAB_OPTIONS} className="mb-5 md:max-w-md" />
+      <Segmented value={tab} onChange={setTab} options={TAB_OPTIONS} className="mb-5 md:max-w-2xl" />
 
+      {tab === "asistente" && <AssistantTab showToast={showToast} />}
       {tab === "reportes" && <ReportsTab showToast={showToast} />}
       {tab === "contactos" && <ContactsTab showToast={showToast} />}
       {tab === "campanas" && <CampaignsTab showToast={showToast} />}
@@ -124,6 +135,231 @@ function Spinner({ label }: { label: string }) {
     <div className="flex min-h-[30vh] flex-col items-center justify-center gap-4">
       <div className="h-10 w-10 animate-spin rounded-full border-t-2" style={{ borderColor: "var(--brand-primary)" }} />
       <p className="font-mono text-[10px] uppercase tracking-widest text-tx-dim">{label}</p>
+    </div>
+  );
+}
+
+// ── Tab: Asistente (IA) ───────────────────────────────────────────────────────
+// Controla el bot "Cajero Estrella" (worker whatsapp-web.js en Railway) desde
+// aquí, sin tocar env vars. Guarda en IntegrationConfig (type WHATSAPP_ASSISTANT)
+// vía /api/admin/whatsapp-assistant; el bot lee la MISMA BD y refresca en caliente.
+function AssistantTab({ showToast }: { showToast: (m: string, ok?: boolean) => void }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [enabled, setEnabled] = useState(true);
+  const [instructions, setInstructions] = useState("");
+  const [ignoreNumbersText, setIgnoreNumbersText] = useState("");
+  const [ignoreGroupName, setIgnoreGroupName] = useState("");
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [configured, setConfigured] = useState(false);
+  const [metrics, setMetrics] = useState<BotMetrics>(null);
+  const [status, setStatus] = useState<BotStatus | null>(null);
+
+  const loadConfig = useCallback(async () => {
+    try {
+      const { data } = await api.get<AssistantState>("/api/admin/whatsapp-assistant");
+      setEnabled(data.enabled);
+      setConfigured(data.configured);
+      setUpdatedAt(data.updatedAt);
+      setInstructions(data.config?.extraInstructions || "");
+      setIgnoreNumbersText((data.config?.ignoreNumbers || []).join("\n"));
+      setIgnoreGroupName(data.config?.ignoreGroupName || "");
+    } catch {
+      showToast("Error al cargar la configuración del bot", false);
+    }
+  }, [showToast]);
+
+  const loadMetrics = useCallback(async () => {
+    try {
+      const { data } = await api.get<{ metrics: BotMetrics; status: BotStatus }>("/api/admin/whatsapp-assistant/metrics");
+      setMetrics(data.metrics);
+      setStatus(data.status);
+    } catch {
+      /* métricas/estado son best-effort: no molestamos con toast */
+    }
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      await Promise.all([loadConfig(), loadMetrics()]);
+      setLoading(false);
+    })();
+  }, [loadConfig, loadMetrics]);
+
+  const parseNumbers = (text: string): string[] => {
+    const seen = new Set<string>();
+    return text
+      .split(/[\n,;]+/)
+      .map((s) => s.replace(/[^\d+]/g, "").trim())
+      .filter((s) => s.length >= 8)
+      .filter((s) => (seen.has(s) ? false : (seen.add(s), true)))
+      .slice(0, 200);
+  };
+
+  const save = async (nextEnabled?: boolean) => {
+    setSaving(true);
+    const en = nextEnabled ?? enabled;
+    try {
+      await api.put("/api/admin/whatsapp-assistant", {
+        enabled: en,
+        config: {
+          extraInstructions: instructions,
+          ignoreNumbers: parseNumbers(ignoreNumbersText),
+          ignoreGroupName: ignoreGroupName.trim(),
+        },
+      });
+      setConfigured(true);
+      setUpdatedAt(new Date().toISOString());
+      showToast("Configuración del bot guardada. Se aplica en ~1 min.");
+    } catch {
+      showToast("Error al guardar la configuración", false);
+      if (nextEnabled !== undefined) setEnabled(!en); // revertir el toggle
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const togglePause = (v: boolean) => {
+    setEnabled(v);
+    save(v);
+  };
+
+  if (loading) return <Spinner label="Cargando asistente..." />;
+
+  const b = metrics?.bot;
+  const online = status?.reachable && status?.ready === true;
+  const numbersCount = parseNumbers(ignoreNumbersText).length;
+
+  return (
+    <div className="space-y-5">
+      {/* Estado + interruptor global */}
+      <WtCard className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            className="grid h-11 w-11 place-items-center rounded-2xl"
+            style={{ background: enabled ? "var(--ok-soft)" : "var(--surf-2)", color: enabled ? "var(--ok)" : "var(--tx-mut)" }}
+          >
+            <Bot size={22} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-syne text-base font-bold text-tx">Cajero Estrella</span>
+              {status && (
+                <Pill tone={online ? "ok" : status.reachable ? "warn" : "neutral"} live={online}>
+                  {online ? "En línea" : status.reachable ? "Conectando…" : "Sin señal"}
+                </Pill>
+              )}
+            </div>
+            <p className="mt-0.5 text-xs text-tx-mut">
+              {enabled ? "El bot responde a los clientes por WhatsApp." : "El bot está en pausa: no responde a nadie."}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {status?.hasQr && status?.qrUrl && (
+            <a
+              href={status.qrUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold"
+              style={{ background: "var(--warn-soft)", color: "var(--warn)", border: "1px solid var(--warn)" }}
+            >
+              <QrCode size={14} /> Escanear QR
+            </a>
+          )}
+          <Toggle checked={enabled} onChange={togglePause} label={enabled ? "Activo" : "En pausa"} />
+        </div>
+      </WtCard>
+
+      {/* Métricas del bot */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+        <StatTile icon={MessageSquare} value={String(b?.total ?? 0)} label="Pedidos (total)" />
+        <StatTile icon={Clock} value={String(b?.last24h ?? 0)} label="Últimas 24h" />
+        <StatTile icon={TrendingUp} value={String(b?.last7d ?? 0)} label="Últimos 7 días" />
+        <StatTile icon={Wallet} value={money(b?.revenue ?? 0)} label="Ingresos" />
+        <StatTile icon={Receipt} value={money(b?.avgTicket ?? 0)} label="Ticket prom." />
+      </div>
+
+      {/* Instrucciones / personalidad */}
+      <WtCard className="space-y-3 p-5">
+        <SectionHead title="Instrucciones y tono" />
+        <p className="text-xs text-tx-mut">
+          Indicaciones extra que el bot suma a su comportamiento base: tono, promos a empujar, reglas de venta,
+          qué NO ofrecer, etc. Se aplican en caliente (~1 min) sin reiniciar el bot.
+        </p>
+        <div>
+          <Label>Instrucciones del asistente</Label>
+          <textarea
+            className={textareaCls}
+            style={fieldStyle}
+            rows={10}
+            maxLength={4000}
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            placeholder={"Ej: Sé cálido y breve. Ofrece siempre el Combo del día primero. Si preguntan por envío a zonas lejanas, pide confirmar dirección antes de cerrar…"}
+          />
+          <div className="mt-1 text-right font-mono text-[10px] text-tx-dim">{instructions.length}/4000</div>
+        </div>
+      </WtCard>
+
+      {/* Ignorados */}
+      <WtCard className="space-y-4 p-5">
+        <SectionHead title="A quién NO responde" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <Label>Números ignorados</Label>
+            <textarea
+              className={textareaCls}
+              style={fieldStyle}
+              rows={6}
+              value={ignoreNumbersText}
+              onChange={(e) => setIgnoreNumbersText(e.target.value)}
+              placeholder={"Uno por línea:\n5215512345678\n5215598765432"}
+            />
+            <div className="mt-1 flex items-center gap-1.5 font-mono text-[10px] text-tx-dim">
+              <Ban size={11} /> {numbersCount} número{numbersCount === 1 ? "" : "s"} · el bot los ignora (los atiendes tú)
+            </div>
+          </div>
+          <div>
+            <Label>Grupo ignorado (por nombre)</Label>
+            <input
+              className={inputCls}
+              style={fieldStyle}
+              value={ignoreGroupName}
+              onChange={(e) => setIgnoreGroupName(e.target.value)}
+              placeholder="Ej: Master Burguers works"
+            />
+            <p className="mt-1.5 text-xs text-tx-mut">
+              El bot carga los miembros de ese grupo de WhatsApp y no les responde. Agregar/quitar a alguien del grupo
+              lo activa/desactiva solo (se refresca cada 10 min).
+            </p>
+          </div>
+        </div>
+      </WtCard>
+
+      {/* Guardar */}
+      <div className="flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-tx-dim">
+          {configured ? (
+            <>
+              <Sparkles size={12} /> Última edición: {updatedAt ? new Date(updatedAt).toLocaleString("es-MX", { timeZone: "America/Mexico_City" }) : "—"}
+            </>
+          ) : (
+            <>
+              <Power size={12} /> Aún sin guardar — el bot opera con su config por defecto
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <PrimaryBtn ghost full={false} icon={RefreshCw} onClick={() => { loadConfig(); loadMetrics(); }}>
+            Recargar
+          </PrimaryBtn>
+          <PrimaryBtn full={false} icon={Save} onClick={() => save()} disabled={saving}>
+            {saving ? "Guardando…" : "Guardar cambios"}
+          </PrimaryBtn>
+        </div>
+      </div>
     </div>
   );
 }
