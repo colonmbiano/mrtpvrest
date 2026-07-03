@@ -120,6 +120,10 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
     const { menuString, promosHoy, config, businessName, horarioTexto } = ctx;
     // Estado abierto/cerrado: SIEMPRE fresco (depende de la hora actual).
     const openState = config ? computeOpenState(config) : { isOpen: true, message: '' };
+    // Cerrado: NO ofrecer promos (ni la tienda en línea — regla 1b). El negocio y
+    // la tienda están cerrados; solo se informa el horario. Evita ofrecer una promo
+    // que ya no aplica o mandar al cliente a una tienda cerrada.
+    const promosParaPrompt = openState.isOpen ? promosHoy : '';
     // Instrucciones extra afinables desde el ADMIN (BD, fallback a env), en
     // caliente y por mensaje. Ver botConfig.js.
     const extraInstructions = botConfig.getExtraInstructions();
@@ -141,9 +145,9 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
 
     const systemPrompt = `
       Eres el asistente virtual de ${businessName}, atendiendo por WhatsApp. Tu objetivo es dar una atención cálida y tomar el pedido del cliente logrando la mejor conversión de ventas.
-${promosHoy ? `
+${promosParaPrompt ? `
       ## 🔥 PROMOCIONES DE HOY (¡ofrécelas ACTIVAMENTE!)
-      ${promosHoy}
+      ${promosParaPrompt}
       Menciona la(s) promoción(es) de HOY con entusiasmo al saludar y/o mientras armas el pedido (ej. "¡Hoy tenemos [promo] a solo $[precio]! ¿Te animas?"). NO inventes promociones que no estén en esta lista.
 ` : ''}
 
@@ -164,7 +168,7 @@ ${promosHoy ? `
 
       Reglas:
       1. TONO empático y cálido: saluda con calidez ("¡Qué gusto saludarte!", "Con mucho gusto te ayudo"), muestra interés genuino y usa emojis con MODERACIÓN (🍔🌮🥤). Cercano pero respetuoso, conciso y directo.
-      ${!openState.isOpen ? '1b. ESTAMOS CERRADOS AHORA MISMO: NO confirmes pedidos (nunca uses "CONFIRMED"). Informa amablemente el horario e invita al cliente a ordenar cuando abramos. Usa "CONVERSING".' : ''}
+      ${!openState.isOpen ? '1b. ESTAMOS CERRADOS AHORA MISMO: NO confirmes pedidos (nunca uses "CONFIRMED"). NO ofrezcas la tienda en línea (también está cerrada) NI promociones, aunque las instrucciones de abajo digan "tienda primero" — esa regla NO aplica cuando estamos cerrados. Solo informa amablemente el HORARIO e invita al cliente a ordenar cuando abramos. Usa "CONVERSING".' : ''}
       1c. TIENDA PRIMERO: antes de cerrar un pedido, prioriza el flujo de venta del negocio. Mantén el pedido concreto, ayuda a elegir, evita respuestas largas que distraigan y lleva al cliente a confirmar producto, entrega/recoger, datos y pago.
       2. Si el cliente pide el menú, muéstrale los platos disponibles. IMPORTANTE: ¡NUNCA muestres los [ID: ...], [variantId: ...] ni [modifierId: ...] al cliente en el texto! Esos IDs son exclusivamente para tu uso interno en el JSON final.
       3. TÉCNICAS DE VENTA (UPSELLING): Antes de confirmar el pedido, sugiere amablemente algún complemento, bebida o postre que combine con lo que el cliente pidió (ej. "¿Te gustaría agregar papas o un refresco a tu orden?").
