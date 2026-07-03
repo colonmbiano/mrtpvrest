@@ -438,6 +438,15 @@ export interface TicketModifier {
   priceAdd?: number;
 }
 
+// Una parte de combo lista para rutear a su estación en la comanda de cocina.
+// Estructuralmente compatible con ComboPart de ticketStore (no se importa para
+// no acoplar el cliente de impresión al store).
+export interface ComboPart {
+  name: string;
+  quantity: number;
+  printerGroupIds: string[];
+}
+
 export interface TicketItem {
   name: string;
   quantity: number;
@@ -460,6 +469,16 @@ export interface TicketItem {
   // existe, default heredado de la categoría si no. El dispatcher usa
   // este array para enrutar la comanda a las impresoras correctas.
   printerGroupIds?: string[];
+  // Partes de un combo configurable, cada una con su propia estación. Si viene
+  // con ≥1 parte (todas con estación resuelta), printKitchenTickets EXPLOTA el
+  // combo: manda cada componente a su área (Freidora/Cocina/Barra) como línea
+  // propia en vez de una sola. Solo afecta la comanda de cocina; el recibo del
+  // cliente sigue con una sola línea y el precio del combo.
+  comboParts?: ComboPart[] | null;
+  // Nombre del combo al que pertenece una línea ya explotada. Se imprime como
+  // sub-línea SIEMPRE (sin gate de config) para que cocina sepa que es parte de
+  // un combo. Ej: "Alitas BBQ" con "(Combo: Combo Alitas)" debajo.
+  comboOf?: string | null;
 }
 
 /**
@@ -919,6 +938,13 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
       ? `${Number(item.weightKg).toFixed(3).replace(/\.?0+$/, "")} kg`
       : `${item.quantity}x`;
     s += `${qtyLabel} ${item.name}\n`;
+    // Etiqueta de combo en una línea ya explotada: SIEMPRE se imprime (sin gate)
+    // para que la estación sepa que ese componente pertenece a un combo.
+    if (item.comboOf && item.comboOf.trim()) {
+      s += itemSizeOff;
+      s += `  (Combo: ${item.comboOf.trim()})\n`;
+      s += itemSizeOn;
+    }
     // Desglose de combo/promo: sub-línea entre paréntesis bajo el nombre, para
     // que cocina sepa qué incluye sin depender de notas escritas a mano. Solo
     // se puebla para items promo (ver comboKitchenDetail), así que aquí no hay
@@ -1587,10 +1613,49 @@ export async function openCashDrawer(
  *
  * No lanza — la impresión no debe romper el flow del POS.
  */
+// Explota los combos configurables SOLO en la comanda de cocina: cada parte
+// (componente elegido) se vuelve su propia línea, ruteada a la estación de su
+// producto y etiquetada con el nombre del combo. Guarda de seguridad: solo se
+// explota si TODAS las partes tienen estación resuelta; si alguna no la tiene,
+// se deja el combo como una sola línea (comportamiento de hoy) para no perder
+// comida en cocina. El recibo del cliente no pasa por aquí.
+export function explodeCombosForKitchen(items: TicketItem[]): TicketItem[] {
+  const out: TicketItem[] = [];
+  for (const it of items) {
+    const parts = it.comboParts;
+    const explodable =
+      Array.isArray(parts) &&
+      parts.length > 0 &&
+      parts.every((p) => Array.isArray(p.printerGroupIds) && p.printerGroupIds.length > 0);
+    if (explodable && parts) {
+      for (const part of parts) {
+        out.push({
+          name: part.name,
+          quantity: (it.quantity || 1) * (part.quantity || 1),
+          price: 0,
+          printerGroupIds: part.printerGroupIds,
+          comboOf: it.name,
+          notes: it.notes ?? null,
+          seatNumber: it.seatNumber ?? null,
+          modifiers: null,
+        });
+      }
+    } else {
+      out.push(it);
+    }
+  }
+  return out;
+}
+
 export async function printKitchenTickets(
   printers: PrinterRecord[],
-  input: KitchenTicketInput
+  rawInput: KitchenTicketInput
 ): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
+  // Explota combos por estación antes de rutear (fallback si no hay partes).
+  const input: KitchenTicketInput = {
+    ...rawInput,
+    items: explodeCombosForKitchen(rawInput.items),
+  };
   const itemsWithGroups = input.items.filter(
     (it) => Array.isArray(it.printerGroupIds) && it.printerGroupIds.length > 0,
   );

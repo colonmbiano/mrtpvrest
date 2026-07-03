@@ -20,6 +20,7 @@ import {
   buildCustomerReceipt,
   buildKitchenTicket,
   comboKitchenDetail,
+  explodeCombosForKitchen,
   paymentLabel,
   withLabel,
   formatProductLine,
@@ -544,6 +545,95 @@ describe("printKitchenTickets", () => {
     expect(payloads.some((payload) => payload.includes("PLANCHA") && payload.includes("Hamburguesa"))).toBe(true);
     expect(payloads.some((payload) => payload.includes("FREIDORA") && payload.includes("Papas"))).toBe(true);
     expect(payloads.every((payload) => !(payload.includes("Hamburguesa") && payload.includes("Papas")))).toBe(true);
+  });
+});
+
+describe("explodeCombosForKitchen", () => {
+  it("explota un combo en una línea por estación, etiquetada con el combo", () => {
+    const out = explodeCombosForKitchen([
+      {
+        name: "Combo Alitas",
+        quantity: 1,
+        price: 199,
+        printerGroupIds: ["cocina"],
+        comboParts: [
+          { name: "Alitas BBQ", quantity: 1, printerGroupIds: ["freidora"] },
+          { name: "Papas Gajo", quantity: 1, printerGroupIds: ["cocina"] },
+          { name: "Coca 600ml", quantity: 1, printerGroupIds: ["barra"] },
+        ],
+      },
+    ]);
+    expect(out).toHaveLength(3);
+    expect(out.map((i) => i.name)).toEqual(["Alitas BBQ", "Papas Gajo", "Coca 600ml"]);
+    expect(out.map((i) => i.printerGroupIds)).toEqual([["freidora"], ["cocina"], ["barra"]]);
+    expect(out.every((i) => i.comboOf === "Combo Alitas")).toBe(true);
+  });
+
+  it("multiplica la cantidad del combo por la de cada parte", () => {
+    const out = explodeCombosForKitchen([
+      { name: "Combo x2", quantity: 2, price: 0, comboParts: [
+        { name: "Alitas", quantity: 1, printerGroupIds: ["freidora"] },
+      ] },
+    ]);
+    expect(out[0]?.quantity).toBe(2);
+  });
+
+  it("NO explota si alguna parte no tiene estación (fallback a una línea)", () => {
+    const out = explodeCombosForKitchen([
+      { name: "Combo", quantity: 1, price: 100, comboParts: [
+        { name: "Alitas", quantity: 1, printerGroupIds: ["freidora"] },
+        { name: "Refresco", quantity: 1, printerGroupIds: [] },
+      ] },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.name).toBe("Combo");
+  });
+
+  it("deja intactos los productos sin comboParts", () => {
+    const out = explodeCombosForKitchen([{ name: "Taco", quantity: 3, price: 35 }]);
+    expect(out).toEqual([{ name: "Taco", quantity: 3, price: 35 }]);
+  });
+
+  it("rutea cada componente de un combo a su estación en la comanda", async () => {
+    send.mockClear();
+    connect.mockClear();
+    const result = await printKitchenTickets(
+      [{
+        id: "printer-1",
+        name: "Cocina",
+        type: "KITCHEN",
+        ip: "192.168.1.50",
+        port: 9100,
+        connectionType: "NETWORK",
+        isActive: true,
+        printerGroupIds: ["cocina", "freidora"],
+        printerGroupRefs: [
+          { id: "cocina", name: "Cocina" },
+          { id: "freidora", name: "Freidora" },
+        ],
+      }],
+      {
+        orderNumber: "1003",
+        orderType: "TAKEOUT",
+        config: { separateByGroup: true },
+        items: [{
+          name: "Combo Alitas",
+          quantity: 1,
+          price: 199,
+          printerGroupIds: ["cocina"],
+          comboParts: [
+            { name: "Alitas BBQ", quantity: 1, printerGroupIds: ["freidora"] },
+            { name: "Papas Gajo", quantity: 1, printerGroupIds: ["cocina"] },
+          ],
+        }],
+      },
+    );
+    expect(result.ok).toBe(2);
+    const payloads = send.mock.calls.map(([arg]) => arg.data as string);
+    expect(payloads.some((p) => p.includes("FREIDORA") && p.includes("Alitas BBQ") && p.includes("Combo: Combo Alitas"))).toBe(true);
+    expect(payloads.some((p) => p.includes("COCINA") && p.includes("Papas Gajo"))).toBe(true);
+    // El combo padre NO se imprime como línea de producto ("1x Combo Alitas").
+    expect(payloads.every((p) => !/\dx Combo Alitas/.test(p))).toBe(true);
   });
 });
 

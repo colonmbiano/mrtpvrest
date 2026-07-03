@@ -209,7 +209,14 @@ router.get('/items', async (req, res) => {
           include: {
             options: {
               orderBy: { sortOrder: 'asc' },
-              include: { optionMenuItem: { select: { id: true, name: true, imageUrl: true } } },
+              // Trae la estación (printerGroups) de cada opción de combo: item-override
+              // o el default de su categoría. El TPV rutea cada componente del combo a
+              // su estación en la comanda (explosión por estación en printer-tcp).
+              include: { optionMenuItem: { select: {
+                id: true, name: true, imageUrl: true,
+                printerGroups: { include: { printerGroup: { select: { id: true, name: true } } } },
+                category: { select: { printerGroups: { include: { printerGroup: { select: { id: true, name: true } } } } } },
+              } } },
             },
           },
         },
@@ -246,7 +253,11 @@ router.get('/items/:id', async (req, res) => {
           include: {
             options: {
               orderBy: { sortOrder: 'asc' },
-              include: { optionMenuItem: { select: { id: true, name: true, imageUrl: true } } },
+              include: { optionMenuItem: { select: {
+                id: true, name: true, imageUrl: true,
+                printerGroups: { include: { printerGroup: { select: { id: true, name: true } } } },
+                category: { select: { printerGroups: { include: { printerGroup: { select: { id: true, name: true } } } } } },
+              } } },
             },
           },
         },

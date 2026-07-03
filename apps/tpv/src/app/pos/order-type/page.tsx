@@ -28,6 +28,7 @@ import {
   comboKitchenDetail,
   type TicketItem,
 } from "@/lib/printer-tcp";
+import { comboPartsFromOrderItem } from "@/lib/modifiers";
 import {
   readPaidTicketsCache,
   writePaidTicketsCache,
@@ -239,6 +240,7 @@ export default function OrderTypePage() {
         notes: it.notes || null,
         seatNumber: typeof it.seatNumber === "number" ? it.seatNumber : null,
         kitchenDetail: comboKitchenDetail(it.menuItem),
+        comboParts: comboPartsFromOrderItem(it),
         modifiers: (it.modifiers || []).map((m: any) => ({
           name: m.name || m.modifier?.name || "",
           priceAdd: Number(m.priceAdd ?? m.price ?? 0),

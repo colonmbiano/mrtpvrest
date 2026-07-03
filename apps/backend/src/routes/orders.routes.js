@@ -570,6 +570,44 @@ router.get('/table/:tableId/open', authenticate, requireTenantAccess, async (req
 });
 
 // ── GET /:id — Detalle completo (requiere auth + tenant scope) ───────────
+// Enriquece las comboSelections de un pedido con su printerGroupIds (estación).
+// ComboSelection.optionMenuItemId es ref blanda (sin relación Prisma), así que
+// se resuelve con un batch-query: optionMenuItemId → printerGroups (override del
+// item o default de su categoría). Muta las selecciones in-place. El TPV usa
+// esto para explotar el combo por estación al reimprimir/anular. No-op si el
+// pedido no tiene combos.
+async function attachComboStations(order) {
+  const items = order?.items || [];
+  const ids = [
+    ...new Set(
+      items
+        .flatMap((it) => (it.comboSelections || []).map((s) => s.optionMenuItemId))
+        .filter(Boolean),
+    ),
+  ];
+  if (ids.length === 0) return;
+  const menuItems = await prisma.menuItem.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      printerGroups: { select: { printerGroup: { select: { id: true } } } },
+      category: { select: { printerGroups: { select: { printerGroup: { select: { id: true } } } } } },
+    },
+  });
+  const pgById = new Map(
+    menuItems.map((mi) => {
+      const override = (mi.printerGroups || []).map((m) => m.printerGroup?.id).filter(Boolean);
+      const cat = (mi.category?.printerGroups || []).map((m) => m.printerGroup?.id).filter(Boolean);
+      return [mi.id, override.length ? override : cat];
+    }),
+  );
+  for (const it of items) {
+    for (const s of it.comboSelections || []) {
+      s.printerGroupIds = pgById.get(s.optionMenuItemId) || [];
+    }
+  }
+}
+
 router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
@@ -587,6 +625,11 @@ router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
         items: {
           include: {
             modifiers: true,
+            // Selecciones de combo (ref blanda, sin relación Prisma). Se
+            // enriquecen con printerGroupIds vía attachComboStations() abajo
+            // para que la comanda explote cada componente a su estación al
+            // reimprimir/anular.
+            comboSelections: true,
             // Se consume menuItem.name (fallback de display), isPromo +
             // description (desglose de cocina para combos/promos vía
             // comboKitchenDetail, ver kitchenShowItemDescription) y los
@@ -613,6 +656,9 @@ router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
       }
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+    // Resuelve la estación de cada componente de combo para reimpresión/anulación.
+    await attachComboStations(order);
 
     let driver = null;
     if (order.deliveryDriverId) {

@@ -50,13 +50,34 @@ export type MenuItemComplement = {
   sortOrder?: number;
 };
 
+// Referencia a un grupo de impresora (estación) tal como llega en el include
+// del backend: { printerGroup: { id, name } }.
+export type PrinterGroupRef = { printerGroup?: { id: string; name?: string } };
+
 export type ComboOption = {
   id: string;
   optionMenuItemId: string;
   priceDelta: number;
   isAvailable?: boolean;
   sortOrder?: number;
-  optionMenuItem?: { id: string; name: string };
+  // El producto real de la opción trae su estación (printerGroups override +
+  // category.printerGroups default) para rutear cada componente del combo a su
+  // área en la comanda. Ver comboPartsFromCartItem / explosión en printer-tcp.
+  optionMenuItem?: {
+    id: string;
+    name: string;
+    printerGroups?: PrinterGroupRef[];
+    category?: { printerGroups?: PrinterGroupRef[] };
+  };
+};
+
+// Una parte de combo lista para la comanda de cocina: qué producto, cuántos y a
+// qué estación(es) va. La produce comboPartsFromCartItem y la consume la
+// explosión por estación dentro de printKitchenTickets.
+export type ComboPart = {
+  name: string;
+  quantity: number;
+  printerGroupIds: string[];
 };
 
 export type ComboComponent = {
