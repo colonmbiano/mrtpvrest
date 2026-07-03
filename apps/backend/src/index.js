@@ -203,6 +203,7 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 app.use('/api/public', require('./routes/menu.routes'))
 app.use('/api/store',  require('./routes/store.routes'))
 app.use('/api/bot-alert', require('./routes/bot-alert.routes'))
+app.use('/api/bot-metrics', require('./routes/bot-metrics.routes'))
 app.use('/api/payments/terminal', require('./routes/terminal.routes'))
 app.use('/api/kiosk/webhook',     require('./routes/kiosk-webhook.routes'))
 // Chatbot de WhatsApp — webhook público multi-tenant (resuelve restaurante por
@@ -339,6 +340,9 @@ startUnverifiedPurgeJob()
 
 const { startRecurringPayablesJob } = require('./jobs/recurringPayables.job')
 startRecurringPayablesJob()
+
+const { startWhatsappBotReportJob } = require('./jobs/whatsappBotReport.job')
+startWhatsappBotReportJob()
 
 const PORT = process.env.PORT || 3001
 server.listen(PORT,'0.0.0.0', () => {
