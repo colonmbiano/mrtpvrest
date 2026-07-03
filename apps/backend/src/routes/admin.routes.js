@@ -315,6 +315,33 @@ router.put('/whatsapp-assistant/provision', authenticate, requireSuperAdmin, asy
   }
 });
 
+// Rotar/emitir el token API-only del bot de un tenant (Fase 2). Genera un token
+// nuevo `bt_<restaurantId>.<secret>`, guarda SOLO su hash en la config y lo
+// devuelve EN CLARO una sola vez (va al env WHATSAPP_BOT_TOKEN del bot). Rotar
+// invalida el token anterior al instante. Ver docs/whatsapp-bot-saas-plan.md §9.
+router.post('/whatsapp-assistant/rotate-token', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    if (!restaurantId) return res.status(400).json({ error: 'restaurantId requerido' });
+    const { generateBotToken } = require('../lib/bot-auth.middleware');
+    const { token, hash } = generateBotToken(restaurantId);
+    const existing = await prisma.integrationConfig.findUnique({
+      where: { restaurantId_type: { restaurantId, type: WA_ASSISTANT_TYPE } },
+    });
+    const prev = rawAssistantConfig(existing);
+    const config = JSON.stringify({ ...prev, botTokenHash: hash });
+    await prisma.integrationConfig.upsert({
+      where: { restaurantId_type: { restaurantId, type: WA_ASSISTANT_TYPE } },
+      update: { config, lastSync: new Date() },
+      create: { restaurantId, type: WA_ASSISTANT_TYPE, enabled: true, mode: 'production', config, lastSync: new Date() },
+    });
+    res.json({ ok: true, token, note: 'Guárdalo ahora: no se vuelve a mostrar. Ponlo como WHATSAPP_BOT_TOKEN en el bot.' });
+  } catch (e) {
+    console.error('whatsapp-assistant rotate-token error:', e?.message || e);
+    res.status(500).json({ error: 'Error al generar el token del bot' });
+  }
+});
+
 // ── BITÁCORA DE ACCESO ─────────────────────────────────────────────────
 // BUG-13 (QA): la pantalla /admin/seguridad consume GET /api/admin/access-log
 // para mostrar los últimos N eventos. Antes el endpoint no existía y devolvía
