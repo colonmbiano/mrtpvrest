@@ -29,6 +29,7 @@ export function SiteFooter() {
     <footer className="site-footer">
       <span>© 2026 MRTPVREST</span>
       <div>
+        <Link href="/casos/master-burguers">Caso real</Link>
         <Link href="/funciones">Funciones</Link>
         <Link href="/punto-de-venta">Giros</Link>
         <Link href="/moda">Tienda de ropa</Link>

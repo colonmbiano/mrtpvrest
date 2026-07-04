@@ -23,7 +23,7 @@ export const testimonials: Testimonial[] = [
     // permiso APROBADOS por el dueño del producto (jun-2026) — listo para prod.
     quote:
       'Llevábamos ventas y cortes a mano; ahora caja, cocina y reparto van en la misma pantalla y cerramos el día cuadrados.',
-    name: "Master Burger's",
+    name: "Master Burguer's",
     business: 'Hamburguesería',
     city: 'Estado de México',
     real: true,

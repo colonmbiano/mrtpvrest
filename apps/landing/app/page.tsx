@@ -58,11 +58,13 @@ const trust: { icon: IconName; label: string }[] = [
   { icon: 'shield', label: 'Sin contratos forzosos' },
 ]
 
+// Números REALES de producción (Master Burguer's, 30 días, corte 2026-07-03).
+// Detalle y fuente en /casos/master-burguers — mantener ambos en sincronía.
 const stats: { num: string; label: string }[] = [
+  { num: '+1,000', label: 'pedidos al mes procesa un solo restaurante con MRTPVREST' },
+  { num: '3', label: 'canales de venta en una caja: mostrador, WhatsApp y tienda en línea' },
   { num: '6', label: 'apps conectadas en un solo ecosistema' },
-  { num: '24/7', label: 'lectura de tu negocio en tiempo real' },
   { num: '14 días', label: 'gratis para probar, sin tarjeta' },
-  { num: 'LATAM', label: 'pensado para restaurantes reales' },
 ]
 
 const plans = [
@@ -96,6 +98,7 @@ const faqs = [
   ['¿Necesito saber de tecnología?', 'No. MRTPVREST está pensado para operar con pantallas táctiles, flujos claros y acompañamiento en español.'],
   ['¿En cuánto tiempo puedo estar vendiendo?', 'La primera operación puede quedar lista el mismo día si ya tienes menú, usuarios y conexión a internet.'],
   ['¿Qué pasa si ya tengo un POS?', 'Puedes migrar por etapas: empezar por reportes, cocina o TPV sin apagar tu operación actual de golpe.'],
+  ['¿Tengo que contratar todos los módulos desde el inicio?', 'No. Puedes empezar solo con el TPV para ordenar caja y ventas, y activar cocina (KDS), reparto propio, WhatsApp o tienda en línea cuando tu operación los pida. Todo se conecta a la misma caja.'],
   ['¿El precio es en dólares?', 'Los planes se muestran en USD con equivalentes aproximados en MXN para que puedas comparar rápido.'],
   ['¿Qué pasa cuando termina el trial?', 'Decides si sigues con un plan. No necesitas tarjeta para probar y no hay bloqueo de datos al evaluar.'],
 ] as const
@@ -312,6 +315,11 @@ export default function HomePage() {
                   <span className={styles.quoteMeta}>{featuredTestimonial.business} · {featuredTestimonial.city}</span>
                 </span>
               </figcaption>
+              {featuredTestimonial.real ? (
+                <Link className={styles.quoteLink} href="/casos/master-burguers">
+                  Lee el caso completo con números reales <Icon name="arrowRight" />
+                </Link>
+              ) : null}
             </figure>
           ) : null}
         </div>
@@ -324,7 +332,9 @@ export default function HomePage() {
             <span className={styles.kicker}>Precios</span>
             <h2 className={styles.sectionTitle}>Empieza sin tarjeta y escala cuando lo pidas</h2>
             <p className={styles.sectionLede}>
-              Todos los planes incluyen 14 días gratis y soporte en español durante el arranque.
+              Empieza solo con el TPV y activa módulos — cocina, reparto, WhatsApp, tienda en línea —
+              conforme tu operación los pida. Todos los planes incluyen 14 días gratis y soporte en
+              español durante el arranque.
             </p>
           </div>
           <div className={styles.plans}>
@@ -397,6 +407,7 @@ export default function HomePage() {
             </div>
             <div className={styles.footerCol}>
               <h4>Recursos</h4>
+              <Link href="/casos/master-burguers">Caso Master Burguer&apos;s</Link>
               <Link href="/funciones">Funciones</Link>
               <Link href="/punto-de-venta">Giros</Link>
               <Link href="/moda">Tienda de ropa</Link>
