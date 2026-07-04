@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { APKS, FUNCIONES } from '../lib/links'
+import { APKS, FUNCIONES, WHATSAPP_SALES_DEMO } from '../lib/links'
 import { siteUrl, registerUrl, loginUrl, contactEmail } from './_data/site'
 import { testimonials } from '../lib/testimonials'
 import styles from './page.module.css'
@@ -383,7 +383,7 @@ export default function HomePage() {
         </p>
         <div className={styles.finalCtas}>
           <a className={`${styles.btn} ${styles.btnPrimary}`} href={registerUrl}><Icon name="calendar" /> Solicitar demo</a>
-          <a className={`${styles.btn} ${styles.btnGhostDark}`} href={`mailto:${contactEmail}`}>Hablar con ventas</a>
+          <a className={`${styles.btn} ${styles.btnGhostDark}`} href={WHATSAPP_SALES_DEMO} target="_blank" rel="noopener">Hablar con ventas por WhatsApp</a>
         </div>
       </section>
 
