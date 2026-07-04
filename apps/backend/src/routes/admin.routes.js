@@ -217,11 +217,16 @@ router.put('/whatsapp-assistant', authenticate, requireTenantAccess, requireAdmi
     });
     const prev = rawAssistantConfig(existing);
     const config = JSON.stringify({
-      extraInstructions: String(cfgIn.extraInstructions || '').slice(0, 4000),
+      extraInstructions: String(cfgIn.extraInstructions || '').slice(0, 8000),
       ignoreNumbers,
       ignoreGroupName: String(cfgIn.ignoreGroupName || '').trim().slice(0, 120),
+      // Campos de OPERADOR/credencial que el tenant NO edita pero que debemos
+      // preservar: si no los re-inyectamos aquí, guardar instrucciones desde el
+      // panel los borra. botTokenHash es el que autentica al bot (modo API-only):
+      // perderlo tira el bot. statusUrl/phoneNumber son la instancia asignada.
       ...(prev.statusUrl ? { statusUrl: prev.statusUrl } : {}),
       ...(prev.phoneNumber ? { phoneNumber: prev.phoneNumber } : {}),
+      ...(prev.botTokenHash ? { botTokenHash: prev.botTokenHash } : {}),
     });
     const enabled = body.enabled !== false; // default true
 
