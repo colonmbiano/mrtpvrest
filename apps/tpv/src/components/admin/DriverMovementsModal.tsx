@@ -95,9 +95,10 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   // la caja — se registra como cuenta por pagar (deuda del restaurante).
   const [pendingDebt, setPendingDebt] = useState(false);
 
-  // Asignar fondo de cambio al repartidor (solo roles financieros). El origen
-  // decide si sale del cajón del local ("CAJA" → se refleja en el turno) o si es
-  // efectivo externo que el repartidor trae ("EXTERNO" → no toca la caja).
+  // Asignar fondo de cambio al repartidor (solo roles financieros). El fondo
+  // SIEMPRE suma al turno de caja (el repartidor lo devuelve al liquidar y el
+  // cierre lo espera); el origen ("CAJA"/"EXTERNO") es solo etiqueta de
+  // procedencia y no cambia el efecto en la caja.
   const [floatAmount, setFloatAmount] = useState("");
   const [floatDesc, setFloatDesc] = useState("");
   const [floatSource, setFloatSource] = useState<"CAJA" | "EXTERNO">("CAJA");
@@ -236,7 +237,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   }
 
   // Asigna fondo de cambio al repartidor (movimiento FLOAT). El backend valida
-  // rol admin; el origen ("CAJA"/"EXTERNO") decide si afecta el turno de caja.
+  // rol admin; el fondo siempre suma al turno de caja (el origen es etiqueta).
   async function handleAssignFloat(e: React.FormEvent) {
     e.preventDefault();
     if (!driver || !floatAmount || isNaN(Number(floatAmount)) || Number(floatAmount) <= 0) return;
@@ -485,7 +486,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                 <div className="grid grid-cols-2 gap-2">
                   {([
                     { value: "CAJA", label: "🏪 Desde caja", hint: "Sale del cajón del local" },
-                    { value: "EXTERNO", label: "💵 Desde fuera", hint: "No toca la caja" },
+                    { value: "EXTERNO", label: "💵 Desde fuera", hint: "Suma a la caja; se espera de vuelta al corte" },
                   ] as const).map((opt) => {
                     const active = floatSource === opt.value;
                     return (
