@@ -21,6 +21,16 @@ let latestQr = null;
 // 'lost' → sesión caída (antes de reiniciar).
 let sessionState = 'connecting';
 
+// Momento (ms) en que el bot quedó 'ready' por última vez. Lo usa el guard
+// ANTI-BLAST: al reconectar, whatsapp-web.js re-entrega por el evento 'message'
+// los mensajes que llegaron mientras estuvo offline (backlog); si los
+// contestamos, sale una RÁFAGA de respuestas a decenas de clientes de golpe →
+// envío no solicitado → riesgo REAL de baneo (incidentes 2026-07-03/04). Solo
+// atendemos mensajes cuyo timestamp sea posterior a este 'ready' (con gracia).
+let lastReadyAt = 0;
+// Gracia para no descartar un mensaje legítimo enviado justo antes de reconectar.
+const BACKLOG_GRACE_MS = 60 * 1000;
+
 // Alerta best-effort al dueño cuando el bot necesita atención (sesión perdida /
 // QR requerido). Se dispara a un webhook configurable WHATSAPP_BOT_ALERT_WEBHOOK
 // (Slack/Discord/Telegram/n8n). Throttled por tipo para no spamear con el QR que
@@ -401,6 +411,11 @@ function initWhatsApp(io) {
   whatsappClient.on('ready', async () => {
     latestQr = null;
     sessionState = 'ready';
+    // Marca de corte para el guard anti-blast: a partir de aquí solo se
+    // atienden mensajes con timestamp >= (lastReadyAt - gracia). Todo lo que
+    // whatsapp-web.js re-entregue del backlog (mensajes viejos que llegaron
+    // mientras estuvo offline) queda por debajo del corte y se ignora.
+    lastReadyAt = Date.now();
     console.log('[WhatsApp Bot] Cliente WhatsApp listo y conectado!');
     if (io) {
       io.emit('whatsapp:ready');
@@ -434,6 +449,18 @@ function initWhatsApp(io) {
     // mensajes. Aquí solo bloqueamos grupos/estados/difusiones/canales y
     // dejamos pasar cualquier chat individual (@c.us o @lid).
     if (!isCustomerChatId(chatKey)) return;
+
+    // GUARD ANTI-BLAST (crítico): al reconectar, whatsapp-web.js re-entrega por
+    // el evento 'message' los mensajes que llegaron mientras el bot estuvo
+    // offline (backlog). Si respondemos, sale una ráfaga a decenas de clientes
+    // de golpe → riesgo de baneo. Solo atendemos mensajes cuyo timestamp sea
+    // posterior a que el bot quedó 'ready' (con 60s de gracia). Los del backlog
+    // se ignoran en silencio (el humano los ve en el chat y los atiende).
+    const msgTsMs = Number(msg.timestamp) > 0 ? Number(msg.timestamp) * 1000 : Date.now();
+    if (lastReadyAt && msgTsMs < lastReadyAt - BACKLOG_GRACE_MS) {
+      console.log(`[WhatsApp Bot] Backlog ignorado (anti-blast) de ${msg.from}: ts=${new Date(msgTsMs).toISOString()} < ready=${new Date(lastReadyAt).toISOString()}.`);
+      return;
+    }
 
     // Interruptor global desde el admin: si el bot está en pausa (enabled=false
     // en IntegrationConfig), no responde a nadie hasta reactivarlo. Ver botConfig.js.
