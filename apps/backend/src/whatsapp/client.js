@@ -767,36 +767,17 @@ function initWhatsApp(io) {
 
   whatsappClient.on('message', (msg) => { handleIncomingMessage(msg); });
 
-  // Backfill de no-leídos al reconectar: whatsapp-web.js NO emite 'message' por
-  // el backlog anterior a que se registre el listener, así que los mensajes que
-  // entran durante un redeploy/restart se PERDERÍAN. Aquí, tras conectar, se
-  // procesan los chats individuales con no-leídos RECIENTES (< 30 min) por el
-  // mismo pipeline y se marcan como vistos. Esto elimina la pérdida de pedidos
-  // en cada deploy.
+  // Backfill DESACTIVADO (2026-07-03 — incidente de envío masivo). Antes, al
+  // reconectar, respondía a todos los chats con no-leídos recientes → disparaba
+  // una RÁFAGA de "bienvenidas" a ~20 contactos DE GOLPE en cada reconexión
+  // (con los múltiples restarts del día se repitió). Eso es envío no solicitado
+  // masivo → riesgo REAL de BANEO del número en WhatsApp. Se desactiva: al
+  // reconectar el bot NO auto-responde NADA del backlog; solo atiende mensajes
+  // NUEVOS por el evento 'message'. Los no-leídos quedan para que el humano los
+  // vea/atienda. NO reactivar sin dedupe robusto POR-MENSAJE en BD (el dedupe en
+  // memoria se pierde al reiniciar, y customerPhone suele venir null desde @lid).
   const backfillUnread = async () => {
-    try {
-      const chats = await whatsappClient.getChats();
-      const cutoffSec = Math.floor(Date.now() / 1000) - 30 * 60; // wwebjs: timestamp en segundos
-      let procesados = 0;
-      for (const chat of chats) {
-        if (chat.isGroup || (chat.unreadCount || 0) <= 0) continue;
-        let msgs = [];
-        try { msgs = await chat.fetchMessages({ limit: Math.min(chat.unreadCount, 10) }); } catch { continue; }
-        // Solo el mensaje MAS RECIENTE del cliente: reprocesar TODOS los no-leidos
-        // (p.ej. "menu, menu, menu") solo genera respuestas repetidas y ráfagas.
-        // El ultimo captura la intencion actual. fetchMessages: mas viejo → nuevo.
-        const relevantes = msgs.filter((m) => !m.fromMe && (m.timestamp || 0) >= cutoffSec);
-        const ultimo = relevantes[relevantes.length - 1];
-        if (ultimo) {
-          await handleIncomingMessage(ultimo);
-          procesados++;
-        }
-        try { await chat.sendSeen(); } catch {}
-      }
-      if (procesados > 0) console.log(`[WhatsApp Bot] Backfill: ${procesados} mensaje(s) no leído(s) atendido(s) tras reconectar.`);
-    } catch (e) {
-      console.error('[WhatsApp Bot] Error en backfill de no-leídos:', e?.message || e);
-    }
+    console.log('[WhatsApp Bot] Backfill de no-leídos DESACTIVADO (anti-blast): el backlog NO se auto-responde; solo se atienden mensajes nuevos.');
   };
 
   // Sesión perdida (WhatsApp desvinculó el dispositivo, o cerró el navegador):
