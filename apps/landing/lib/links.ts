@@ -1,9 +1,13 @@
 // lib/links.ts
 // Fuente única de verdad para enlaces de descarga, ventas y páginas de función.
 
-// WhatsApp de ventas. Reemplaza por el número real en formato wa.me (sin "+").
-// Mientras no haya número real, el fallback de DownloadButton usa el registro.
-export const WHATSAPP_SALES = 'https://wa.me/52XXXXXXXXXX'
+// WhatsApp de ventas (formato wa.me, sin "+").
+export const WHATSAPP_SALES = 'https://wa.me/5218148150200'
+
+// Enlace de ventas con mensaje prellenado para que el prospecto no llegue en frío.
+export const WHATSAPP_SALES_DEMO = `${WHATSAPP_SALES}?text=${encodeURIComponent(
+  'Hola, quiero una demo de MRTPVREST para mi restaurante.',
+)}`
 
 // APK servidos ESTÁTICAMENTE desde el sitio público (public/apks/...),
 // NO desde admin.mrtpvrest.com (el admin no sirve estos archivos a anónimos).

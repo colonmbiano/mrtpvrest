@@ -104,8 +104,8 @@ visita; si activos/trials < 30%, el problema es el onboarding, no las ventas.
 
 ## Pendientes técnicos que apoyan este playbook
 
-- `apps/landing/lib/links.ts` → `WHATSAPP_SALES` sigue siendo placeholder
-  (`52XXXXXXXXXX`); ponle el número real de ventas.
+- ~~`WHATSAPP_SALES` placeholder~~ → resuelto: número real cableado en
+  `apps/landing/lib/links.ts` y en el CTA "Hablar con ventas" del home.
 - Confirmar con Master Burguer's el OK para citar la cifra de ventas
   (+$340 mil/mes) que hoy aparece en el caso de estudio.
 - Cuando el bot por-tenant (Fase 2 del plan SaaS de WhatsApp) esté listo, la
