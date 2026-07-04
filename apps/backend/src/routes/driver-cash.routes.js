@@ -361,18 +361,18 @@ router.post('/:driverId/float', authenticate, requireTenantAccess, requireDriver
     if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 50000) {
       return res.status(400).json({ error: 'amount invalido' });
     }
-    // Origen del fondo:
-    //  - 'CAJA' (default): efectivo REAL del cajón del local. Se refleja como
-    //    ShiftCashIn en el turno abierto para que "sume al total de la caja":
-    //    el cierre lo espera de vuelta (como efectivo + el gasto cubierto con
-    //    él). Mismo criterio que el fondo para compras en POST /movements;
-    //    evita el sobrante fantasma.
-    //  - 'EXTERNO': efectivo que NO sale de la caja del local (el repartidor lo
-    //    trae de fuera). No toca el turno: solo se registra como FLOAT en su
-    //    caja para que cuadre su corte, sin inflar el total de la caja.
+    // El fondo SIEMPRE crea un ShiftCashIn en el turno abierto, sin importar el
+    // origen ('CAJA' o 'EXTERNO' — queda solo como etiqueta de procedencia).
+    // Razón: el repartidor responde por ese dinero al corte (lo devuelve junto
+    // con lo cobrado), y sus gastos SIEMPRE espejean a ShiftExpense (restan del
+    // esperado). Si el fondo no suma, el efectivo que el repartidor devuelve al
+    // liquidar entra al cajón sin que el cierre lo espere → SOBRANTE fantasma
+    // por el monto del fondo (caso real 2026-07-03: fondo de $400 de la cartera
+    // del dueño registrado como EXTERNO → sobrante de +$395.35 en el cierre).
+    // Mismo criterio que el fondo para compras en POST /movements.
     const fromShift = source !== 'EXTERNO';
     let openShift = null;
-    if (fromShift && driver.locationId) {
+    if (driver.locationId) {
       openShift = await prisma.cashShift.findFirst({
         where: { locationId: driver.locationId, isOpen: true },
         orderBy: { openedAt: 'desc' },

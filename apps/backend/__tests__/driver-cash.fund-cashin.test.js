@@ -129,4 +129,23 @@ describe('POST /:driverId/float — fondo de cambio', () => {
       data: { totalCashIn: { increment: 500 } },
     }));
   });
+
+  // CANDADO: el fondo EXTERNO (dinero de fuera, p.ej. la cartera del dueño)
+  // TAMBIÉN suma a la caja. El repartidor lo devuelve al liquidar, así que el
+  // cierre debe esperarlo; si no suma, ese efectivo entra al cajón sin estar
+  // en el esperado → sobrante fantasma (caso real 2026-07-03: fondo $400
+  // EXTERNO → sobrante +$395.35). El source queda solo como etiqueta.
+  test('FLOAT source EXTERNO también crea ShiftCashIn (suma a la caja)', async () => {
+    await request(makeApp())
+      .post('/api/driver-cash/d1/float')
+      .send({ amount: 400, description: 'Compras', source: 'EXTERNO' })
+      .expect(200);
+
+    expect(tx.shiftCashIn.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ shiftId: 'shift1', amount: 400, category: 'FONDO_REPARTIDOR' }),
+    }));
+    expect(tx.cashShift.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: { totalCashIn: { increment: 400 } },
+    }));
+  });
 });
