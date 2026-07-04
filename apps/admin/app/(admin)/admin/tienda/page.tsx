@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Store, Globe, Power, Clock, Phone, MessageCircle, MapPin, Palette,
   Truck, Star, Link2, Copy, Check, ExternalLink, Crosshair, AlertTriangle,
-  Flower2, Wallet, Trophy, Upload, ImagePlus, X, Mail,
+  Flower2, Wallet, Trophy, Upload, ImagePlus, X, Mail, Ticket,
 } from "lucide-react";
 import api from "@/lib/api";
 import { getStoreUrl } from "@/lib/config";
@@ -228,6 +228,152 @@ function RewardsManager() {
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return <div className="mb-1.5 font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">{children}</div>;
+}
+
+// ── Cupones de descuento (código) ───────────────────────────────────────────
+// CRUD contra /api/loyalty/coupons. El cliente escribe el código en el checkout
+// de la tienda online y obtiene el descuento. Es exclusivo de la tienda: el bot
+// de WhatsApp no canjea cupones, así que un cupón aquí empuja a pedir por la web.
+type Coupon = {
+  id: string;
+  code: string;
+  description: string;
+  discountType: "PERCENTAGE" | "FIXED";
+  discountValue: string | number;
+  minOrderAmount: string | number;
+  maxUses?: number | null;
+  usedCount: number;
+  expiresAt?: string | null;
+  isActive: boolean;
+};
+
+function CouponsManager() {
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  // Form de alta
+  const [code, setCode] = useState("");
+  const [discountType, setDiscountType] = useState<"PERCENTAGE" | "FIXED">("PERCENTAGE");
+  const [discountValue, setDiscountValue] = useState(10);
+  const [minOrderAmount, setMinOrderAmount] = useState(150);
+  const [maxUses, setMaxUses] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+
+  const load = () => {
+    api.get("/api/loyalty/coupons")
+      .then((r) => setCoupons(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setMsg("No se pudieron cargar los cupones"))
+      .finally(() => setLoaded(true));
+  };
+  useEffect(load, []);
+
+  const create = async () => {
+    setMsg("");
+    if (!code.trim()) { setMsg("Ponle un código al cupón"); return; }
+    setSaving(true);
+    try {
+      await api.post("/api/loyalty/coupons", {
+        code: code.trim(),
+        discountType,
+        discountValue,
+        minOrderAmount,
+        maxUses: maxUses.trim() === "" ? null : Number(maxUses),
+        expiresAt: expiresAt || null,
+      });
+      setCode(""); setMaxUses(""); setExpiresAt("");
+      load();
+    } catch (e: any) {
+      setMsg(e?.response?.data?.error || "No se pudo crear el cupón");
+    } finally { setSaving(false); }
+  };
+
+  const toggle = async (c: Coupon) => {
+    try {
+      await api.put(`/api/loyalty/coupons/${c.id}`, { isActive: !c.isActive });
+      load();
+    } catch (e: any) { setMsg(e?.response?.data?.error || "No se pudo actualizar"); }
+  };
+
+  const remove = async (c: Coupon) => {
+    if (!confirm(`¿Eliminar el cupón "${c.code}"?`)) return;
+    try { await api.delete(`/api/loyalty/coupons/${c.id}`); load(); }
+    catch (e: any) { setMsg(e?.response?.data?.error || "No se pudo eliminar"); }
+  };
+
+  const summarize = (c: Coupon) => {
+    const val = c.discountType === "PERCENTAGE" ? `${Number(c.discountValue)}%` : `$${Number(c.discountValue)}`;
+    const min = Number(c.minOrderAmount) > 0 ? ` · mín $${Number(c.minOrderAmount)}` : "";
+    const uses = c.maxUses ? ` · ${c.usedCount}/${c.maxUses} usos` : ` · ${c.usedCount} usos`;
+    const exp = c.expiresAt ? ` · vence ${new Date(c.expiresAt).toLocaleDateString()}` : "";
+    return `${val} de descuento${min}${uses}${exp}`;
+  };
+
+  return (
+    <div className="mt-2">
+      {loaded && coupons.length > 0 && (
+        <div className="mb-4 space-y-2">
+          {coupons.map((c) => (
+            <div key={c.id} className="flex items-center justify-between gap-3 rounded-xl px-4 py-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-tx-hi">
+                  <span className="font-mono">{c.code}</span>
+                  {!c.isActive && <span className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold text-tx-mut" style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>Pausado</span>}
+                </p>
+                <p className="truncate text-[12px] text-tx-mut">{summarize(c)}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button type="button" onClick={() => toggle(c)} className="rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-tx-mid" style={{ border: "1px solid var(--bd-1)" }}>
+                  {c.isActive ? "Pausar" : "Activar"}
+                </button>
+                <button type="button" onClick={() => remove(c)} className="rounded-lg p-1.5 text-tx-mut" title="Eliminar" style={{ border: "1px solid var(--bd-1)" }}>
+                  <X size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {loaded && coupons.length === 0 && (
+        <p className="mb-4 text-[12px] text-tx-mut">Sin cupones todavía. Crea uno exclusivo de la tienda (ej. <span className="font-mono">TIENDA10</span>) y anima a tus clientes a pedir por la web.</p>
+      )}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <FieldLabel>Código</FieldLabel>
+          <input type="text" value={code} placeholder="Ej. TIENDA10" onChange={(e) => setCode(e.target.value.toUpperCase())} className={INPUT_CLS} style={INPUT_STYLE} />
+        </div>
+        <div>
+          <FieldLabel>Tipo de descuento</FieldLabel>
+          <select value={discountType} onChange={(e) => setDiscountType(e.target.value as "PERCENTAGE" | "FIXED")} className={INPUT_CLS} style={INPUT_STYLE}>
+            <option value="PERCENTAGE">Porcentaje (%)</option>
+            <option value="FIXED">Monto fijo ($)</option>
+          </select>
+        </div>
+        <div>
+          <FieldLabel>{discountType === "PERCENTAGE" ? "Descuento (%)" : "Descuento ($)"}</FieldLabel>
+          <input type="number" min="1" step="any" value={discountValue} onChange={(e) => setDiscountValue(Math.max(1, Number(e.target.value) || 1))} className={INPUT_CLS} style={INPUT_STYLE} />
+        </div>
+        <div>
+          <FieldLabel>Compra mínima ($)</FieldLabel>
+          <input type="number" min="0" step="any" value={minOrderAmount} onChange={(e) => setMinOrderAmount(Math.max(0, Number(e.target.value) || 0))} className={INPUT_CLS} style={INPUT_STYLE} />
+        </div>
+        <div>
+          <FieldLabel>Usos máx. (vacío = ilimitado)</FieldLabel>
+          <input type="number" min="1" value={maxUses} placeholder="Ilimitado" onChange={(e) => setMaxUses(e.target.value)} className={INPUT_CLS} style={INPUT_STYLE} />
+        </div>
+        <div>
+          <FieldLabel>Vence (opcional)</FieldLabel>
+          <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className={INPUT_CLS} style={INPUT_STYLE} />
+        </div>
+      </div>
+      {msg && <p className="mt-2 text-[12px] font-bold text-amber-600">{msg}</p>}
+      <button type="button" onClick={create} disabled={saving} className="mt-3 rounded-xl px-4 py-2.5 text-[12px] font-extrabold text-white disabled:opacity-50" style={{ background: "var(--brand-primary)" }}>
+        {saving ? "Creando…" : "Agregar cupón"}
+      </button>
+    </div>
+  );
 }
 
 export default function TiendaConfigPage() {
@@ -839,6 +985,18 @@ export default function TiendaConfigPage() {
             </div>
           </div>
           <RewardsManager />
+        </WtCard>
+
+        {/* Cupones de descuento (exclusivos de la tienda online) */}
+        <WtCard className="p-5 md:p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Ticket size={16} className="shrink-0 text-tx-mid" />
+            <div className="min-w-0">
+              <p className="font-display text-base font-extrabold text-tx-hi">Cupones de descuento</p>
+              <p className="mt-0.5 text-[12px] text-tx-mut">Códigos que el cliente escribe al pagar en la tienda online</p>
+            </div>
+          </div>
+          <CouponsManager />
         </WtCard>
 
         <PrimaryBtn icon={Store} onClick={handleSave} disabled={saving}>
