@@ -9,7 +9,12 @@
 //  - INCOME category 'DELIVERY' (cobro de entrega) → NO crea ShiftCashIn: ya está
 //    contado vía totalCash de la venta; reflejarlo sería doble ingreso.
 //  - EXPENSE → ShiftExpense (comportamiento existente, intacto).
-//  - POST /float (fondo de cambio) → ShiftCashIn.
+//  - POST /float (fondo de cambio) → depende del ORIGEN (regla del dueño):
+//      · CAJA (default): el efectivo sale del cajón y regresa al corte del
+//        repartidor → neto cero; NO crea ShiftCashIn (sumarlo sin registrar la
+//        salida = faltante fantasma). Solo vive en la caja del repartidor.
+//      · EXTERNO: dinero que entra de fuera; el repartidor lo devuelve al
+//        liquidar → SÍ crea ShiftCashIn (sin él = sobrante fantasma).
 
 jest.mock('@mrtpvrest/database', () => {
   const tx = {
@@ -115,27 +120,37 @@ describe('POST /:driverId/movements — reflejo en la caja principal', () => {
   });
 });
 
-describe('POST /:driverId/float — fondo de cambio', () => {
-  test('FLOAT crea ShiftCashIn en el turno abierto', async () => {
+describe('POST /:driverId/float — fondo de cambio (efecto según origen)', () => {
+  // CANDADO: fondo DESDE CAJA (default) NO crea ShiftCashIn. El efectivo sale
+  // del cajón y regresa en el corte del repartidor → neto cero para el cierre;
+  // sumarlo sin registrar la salida inflaría el esperado (faltante fantasma).
+  test('FLOAT sin source (default CAJA) NO crea ShiftCashIn', async () => {
     await request(makeApp())
       .post('/api/driver-cash/d1/float')
       .send({ amount: 500, description: 'Cambio' })
       .expect(200);
 
-    expect(tx.shiftCashIn.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ shiftId: 'shift1', amount: 500, category: 'FONDO_REPARTIDOR' }),
-    }));
-    expect(tx.cashShift.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: { totalCashIn: { increment: 500 } },
-    }));
+    expect(tx.driverCashMovement.create).toHaveBeenCalled();
+    expect(tx.shiftCashIn.create).not.toHaveBeenCalled();
+    expect(tx.cashShift.update).not.toHaveBeenCalled();
+  });
+
+  test('FLOAT source CAJA NO crea ShiftCashIn', async () => {
+    await request(makeApp())
+      .post('/api/driver-cash/d1/float')
+      .send({ amount: 500, description: 'Cambio', source: 'CAJA' })
+      .expect(200);
+
+    expect(tx.shiftCashIn.create).not.toHaveBeenCalled();
+    expect(tx.cashShift.update).not.toHaveBeenCalled();
   });
 
   // CANDADO: el fondo EXTERNO (dinero de fuera, p.ej. la cartera del dueño)
-  // TAMBIÉN suma a la caja. El repartidor lo devuelve al liquidar, así que el
+  // SÍ suma a la caja. El repartidor lo devuelve al liquidar, así que el
   // cierre debe esperarlo; si no suma, ese efectivo entra al cajón sin estar
   // en el esperado → sobrante fantasma (caso real 2026-07-03: fondo $400
-  // EXTERNO → sobrante +$395.35). El source queda solo como etiqueta.
-  test('FLOAT source EXTERNO también crea ShiftCashIn (suma a la caja)', async () => {
+  // EXTERNO → sobrante +$395.35 en el cierre de esa noche).
+  test('FLOAT source EXTERNO crea ShiftCashIn (suma a la caja)', async () => {
     await request(makeApp())
       .post('/api/driver-cash/d1/float')
       .send({ amount: 400, description: 'Compras', source: 'EXTERNO' })

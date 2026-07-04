@@ -361,18 +361,24 @@ router.post('/:driverId/float', authenticate, requireTenantAccess, requireDriver
     if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 50000) {
       return res.status(400).json({ error: 'amount invalido' });
     }
-    // El fondo SIEMPRE crea un ShiftCashIn en el turno abierto, sin importar el
-    // origen ('CAJA' o 'EXTERNO' — queda solo como etiqueta de procedencia).
-    // Razón: el repartidor responde por ese dinero al corte (lo devuelve junto
-    // con lo cobrado), y sus gastos SIEMPRE espejean a ShiftExpense (restan del
-    // esperado). Si el fondo no suma, el efectivo que el repartidor devuelve al
-    // liquidar entra al cajón sin que el cierre lo espere → SOBRANTE fantasma
-    // por el monto del fondo (caso real 2026-07-03: fondo de $400 de la cartera
-    // del dueño registrado como EXTERNO → sobrante de +$395.35 en el cierre).
-    // Mismo criterio que el fondo para compras en POST /movements.
+    // Física del cajón según el ORIGEN del fondo (regla del dueño, 2026-07-04):
+    //
+    //  - 'CAJA' (default): el efectivo SALE físicamente del cajón y REGRESA en
+    //    el corte del repartidor → neto cero para el cierre. NO crea ShiftCashIn:
+    //    es un movimiento "simulado" que solo vive en la caja del repartidor
+    //    (su corte se lo cobra: balance = cobrado − gastos + fondo). Sumarlo al
+    //    turno sin registrar la salida inflaría el esperado → FALTANTE fantasma.
+    //    Los gastos pagados con ese fondo sí restan (ShiftExpense) y cuadran:
+    //    el repartidor devuelve fondo − gastos.
+    //
+    //  - 'EXTERNO': dinero que ENTRA de fuera (p.ej. la cartera del dueño). El
+    //    repartidor lo devuelve al liquidar, así que el cierre DEBE esperarlo →
+    //    SÍ crea ShiftCashIn. Sin él, ese efectivo entra al cajón sin estar en
+    //    el esperado → SOBRANTE fantasma (caso real 2026-07-03: fondo de $400
+    //    de la cartera del dueño → sobrante de +$395.35 en el cierre).
     const fromShift = source !== 'EXTERNO';
     let openShift = null;
-    if (driver.locationId) {
+    if (!fromShift && driver.locationId) {
       openShift = await prisma.cashShift.findFirst({
         where: { locationId: driver.locationId, isOpen: true },
         orderBy: { openedAt: 'desc' },
