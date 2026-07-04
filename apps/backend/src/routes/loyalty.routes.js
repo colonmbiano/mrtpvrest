@@ -123,16 +123,114 @@ router.delete('/rewards/:id', requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Error al eliminar recompensa' }) }
 })
 
+// ── Cupones de descuento (código) ───────────────────────────────────────────
+// CRUD scopeado por restaurante. El canje real vive en el checkout de la tienda
+// (store.routes.js POST /api/store/orders + /coupon/validate). `code` es UNIQUE
+// GLOBAL (no por tenant) → P2002 si choca con el de otro negocio. Normalización
+// server-side (nada de `data: req.body` directo → evita mass-assignment).
+const VALID_DISCOUNT_TYPES = ['PERCENTAGE', 'FIXED']
+
+function normalizeCouponBody(body, { partial = false } = {}) {
+  const out = {}
+  const has = (k) => body[k] !== undefined
+  if (has('code') || !partial) {
+    const code = String(body.code || '').trim().toUpperCase()
+    if (!code) return { error: 'Código requerido' }
+    if (!/^[A-Z0-9._-]{2,32}$/.test(code)) return { error: 'El código debe tener 2-32 caracteres (letras, números, . _ -)' }
+    out.code = code
+  }
+  if (has('description') || !partial) {
+    out.description = String(body.description || '').trim().slice(0, 160) || `Cupón ${out.code || ''}`.trim()
+  }
+  const dtRef = String(body.discountType || out.discountType || '').toUpperCase()
+  if (has('discountType') || !partial) {
+    if (!VALID_DISCOUNT_TYPES.includes(dtRef)) return { error: 'Tipo de descuento inválido (PERCENTAGE o FIXED)' }
+    out.discountType = dtRef
+  }
+  if (has('discountValue') || !partial) {
+    const dv = Number(body.discountValue)
+    if (!Number.isFinite(dv) || dv <= 0) return { error: 'El descuento debe ser mayor a 0' }
+    if (dtRef === 'PERCENTAGE' && dv > 100) return { error: 'El porcentaje no puede pasar de 100' }
+    out.discountValue = Math.round(dv * 100) / 100
+  }
+  if (has('minOrderAmount') || !partial) {
+    const mo = Number(body.minOrderAmount || 0)
+    if (!Number.isFinite(mo) || mo < 0) return { error: 'El mínimo no puede ser negativo' }
+    out.minOrderAmount = Math.round(mo * 100) / 100
+  }
+  if (has('maxUses') || !partial) {
+    if (body.maxUses === null || body.maxUses === '' || body.maxUses === undefined) {
+      out.maxUses = null
+    } else {
+      const mu = Math.floor(Number(body.maxUses))
+      if (!Number.isFinite(mu) || mu <= 0) return { error: 'Los usos deben ser un entero > 0 (o vacío = ilimitado)' }
+      out.maxUses = mu
+    }
+  }
+  if (has('expiresAt') || !partial) {
+    if (!body.expiresAt) {
+      out.expiresAt = null
+    } else {
+      const d = new Date(body.expiresAt)
+      if (isNaN(d.getTime())) return { error: 'Fecha de expiración inválida' }
+      out.expiresAt = d
+    }
+  }
+  if (partial && has('isActive')) out.isActive = Boolean(body.isActive)
+  return { data: out }
+}
+
+router.get('/coupons', requireAdmin, async (req, res) => {
+  try {
+    const coupons = await prisma.coupon.findMany({
+      where: { restaurantId: req.user.restaurantId },
+      orderBy: { createdAt: 'desc' },
+    })
+    res.json(coupons)
+  } catch (e) { res.status(500).json({ error: 'Error al obtener cupones' }) }
+})
+
 router.post('/coupons', requireAdmin, async (req, res) => {
   try {
-    const { code, description, discountType, discountValue, minOrderAmount, maxUses, expiresAt } = req.body
+    const norm = normalizeCouponBody(req.body || {})
+    if (norm.error) return res.status(400).json({ error: norm.error })
     const coupon = await prisma.coupon.create({
-      data: { code: code.toUpperCase(), description, discountType, discountValue: parseFloat(discountValue), minOrderAmount: parseFloat(minOrderAmount || 0), maxUses: maxUses || null, expiresAt: expiresAt ? new Date(expiresAt) : null },
+      data: { ...norm.data, restaurantId: req.user.restaurantId },
     })
     res.status(201).json(coupon)
   } catch (e) {
-    if (e.code === 'P2002') return res.status(409).json({ error: 'El codigo de cupon ya existe' })
-    res.status(500).json({ error: 'Error al crear cupon' })
+    if (e.code === 'P2002') return res.status(409).json({ error: 'Ese código de cupón ya existe' })
+    res.status(500).json({ error: 'Error al crear cupón' })
+  }
+})
+
+router.put('/coupons/:id', requireAdmin, async (req, res) => {
+  try {
+    const norm = normalizeCouponBody(req.body || {}, { partial: true })
+    if (norm.error) return res.status(400).json({ error: norm.error })
+    if (Object.keys(norm.data).length === 0) return res.status(400).json({ error: 'Nada que actualizar' })
+    const updated = await prisma.coupon.updateMany({
+      where: { id: req.params.id, restaurantId: req.user.restaurantId },
+      data: norm.data,
+    })
+    if (updated.count === 0) return res.status(404).json({ error: 'Cupón no encontrado' })
+    res.json(await prisma.coupon.findFirst({ where: { id: req.params.id, restaurantId: req.user.restaurantId } }))
+  } catch (e) {
+    if (e.code === 'P2002') return res.status(409).json({ error: 'Ese código de cupón ya existe' })
+    res.status(500).json({ error: 'Error al actualizar cupón' })
+  }
+})
+
+router.delete('/coupons/:id', requireAdmin, async (req, res) => {
+  try {
+    const deleted = await prisma.coupon.deleteMany({
+      where: { id: req.params.id, restaurantId: req.user.restaurantId },
+    })
+    if (deleted.count === 0) return res.status(404).json({ error: 'Cupón no encontrado' })
+    res.json({ ok: true })
+  } catch (e) {
+    if (e.code === 'P2003') return res.status(409).json({ error: 'Ese cupón ya se usó en pedidos; desactívalo en vez de borrarlo' })
+    res.status(500).json({ error: 'Error al eliminar cupón' })
   }
 })
 
