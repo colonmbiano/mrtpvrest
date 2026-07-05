@@ -79,6 +79,7 @@ interface WaiterOrderState {
   addItem: (item: Omit<LiteTicketItem, "lineId" | "total">) => void;
   incrementItem: (lineId: string) => void;
   decrementItem: (lineId: string) => void;
+  setItemNotes: (lineId: string, notes: string) => void;
   clearTicket: () => void;
 }
 
@@ -160,6 +161,16 @@ export const useWaiterOrderStore = create<WaiterOrderState>()(
                 : item,
             )
             .filter((item) => item.quantity > 0),
+          lastLocalChangeAt: touchLocalChange(),
+        })),
+      // Nota por línea (cocina): editable desde la comanda para CUALQUIER
+      // producto, incluidos los que se agregan directo sin configurador
+      // (sin variantes/modificadores) y que antes no tenían dónde anotarse.
+      setItemNotes: (lineId, notes) =>
+        set((state) => ({
+          ticketItems: state.ticketItems.map((item) =>
+            item.lineId === lineId ? { ...item, notes: notes.trim() } : item,
+          ),
           lastLocalChangeAt: touchLocalChange(),
         })),
       clearTicket: () =>

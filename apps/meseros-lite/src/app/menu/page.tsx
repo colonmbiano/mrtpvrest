@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronUp, Minus, Plus, RotateCw, Search, WifiOff, X } from "lucide-react";
+import { Check, ChevronUp, Minus, Plus, RotateCw, Search, StickyNote, WifiOff, X } from "lucide-react";
 import type { OrderStatus } from "@mrtpvrest/types";
 import api from "@/lib/api";
 import { apiOrQueue } from "@/lib/offline";
@@ -189,6 +189,9 @@ export default function MenuPage() {
   const [lastAddedName, setLastAddedName] = useState<string | null>(null);
   const [configProduct, setConfigProduct] = useState<MenuItem | null>(null);
   const [weightProduct, setWeightProduct] = useState<MenuItem | null>(null);
+  // Línea de la comanda a la que se le está editando la nota de cocina.
+  // Permite anotar productos que se agregan directo (sin configurador).
+  const [noteLineId, setNoteLineId] = useState<string | null>(null);
   // Panel de comanda inferior (portrait): colapsado muestra solo el resumen
   // para dar más espacio al grid; expandido muestra toda la comanda con +/-.
   const [ticketExpanded, setTicketExpanded] = useState(false);
@@ -203,6 +206,7 @@ export default function MenuPage() {
   const addItem = useWaiterOrderStore((state) => state.addItem);
   const incrementItem = useWaiterOrderStore((state) => state.incrementItem);
   const decrementItem = useWaiterOrderStore((state) => state.decrementItem);
+  const setItemNotes = useWaiterOrderStore((state) => state.setItemNotes);
   const clearTicket = useWaiterOrderStore((state) => state.clearTicket);
   const activeTableId = useWaiterOrderStore((state) => state.activeTableId);
   const activeTableName = useWaiterOrderStore((state) => state.activeTableName);
@@ -277,6 +281,9 @@ export default function MenuPage() {
 
   const total = ticketItems.reduce((sum, item) => sum + item.total, 0);
   const itemCount = ticketItems.reduce((sum, item) => sum + item.quantity, 0);
+  const noteLine = noteLineId
+    ? ticketItems.find((item) => item.lineId === noteLineId) ?? null
+    : null;
   const accumulatedItemCount = previousItemCount + itemCount;
   const accumulatedTotal = previousTotal + total;
 
@@ -771,6 +778,22 @@ export default function MenuPage() {
                       </button>
                     </div>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => setNoteLineId(item.lineId)}
+                    className="mt-2 flex min-h-[44px] w-full items-center gap-2 rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--surface-1)] px-3 text-left active:scale-95 transition-all duration-150"
+                    aria-label={`Nota para ${item.name}`}
+                  >
+                    <StickyNote size={18} className="shrink-0 text-[var(--brand)]" aria-hidden="true" />
+                    <span
+                      className={[
+                        "truncate text-sm font-bold",
+                        item.notes ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]",
+                      ].join(" ")}
+                    >
+                      {item.notes || "Agregar nota"}
+                    </span>
+                  </button>
                 </article>
               ))
             )}
@@ -854,11 +877,32 @@ export default function MenuPage() {
                         ? `${item.weightKg} kg × ${money(item.unitPrice)}/kg`
                         : `${item.quantity} x ${money(item.unitPrice)}${item.unit && item.unit !== "pz" ? `/${item.unit}` : ""}`}
                     </p>
+                    {item.notes && (
+                      <p className="truncate text-sm font-bold text-[var(--brand)]">{item.notes}</p>
+                    )}
                   </div>
                   {item.weightKg != null ? (
-                    <span className="text-base font-black text-[var(--brand)]">{money(item.total)}</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setNoteLineId(item.lineId)}
+                        className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--brand)] active:scale-95 transition-all duration-150"
+                        aria-label={`Nota para ${item.name}`}
+                      >
+                        <StickyNote size={20} />
+                      </button>
+                      <span className="text-base font-black text-[var(--brand)]">{money(item.total)}</span>
+                    </div>
                   ) : (
                     <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setNoteLineId(item.lineId)}
+                        className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--brand)] active:scale-95 transition-all duration-150"
+                        aria-label={`Nota para ${item.name}`}
+                      >
+                        <StickyNote size={20} />
+                      </button>
                       <button
                         type="button"
                         onClick={() => decrementItem(item.lineId)}
@@ -936,6 +980,18 @@ export default function MenuPage() {
           onConfirm={(kg) => {
             addWeightItem(weightProduct, kg);
             setWeightProduct(null);
+          }}
+        />
+      )}
+
+      {noteLine && (
+        <LiteNoteEntry
+          itemName={noteLine.name}
+          initialNotes={noteLine.notes || ""}
+          onClose={() => setNoteLineId(null)}
+          onConfirm={(notes) => {
+            setItemNotes(noteLine.lineId, notes);
+            setNoteLineId(null);
           }}
         />
       )}
@@ -1026,6 +1082,74 @@ function LiteWeightEntry({
             className="min-h-[56px] flex-1 rounded-xl bg-[var(--brand)] font-black text-[var(--brand-fg)] active:scale-95 transition-all disabled:opacity-40"
           >
             Agregar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Nota de cocina por línea de la comanda. Es la única forma de anotar
+// productos sin configurador (sin variantes/modificadores/complementos),
+// que se agregan directo con un toque; también permite corregir la nota
+// de líneas configuradas antes de enviar la ronda.
+function LiteNoteEntry({
+  itemName,
+  initialNotes,
+  onClose,
+  onConfirm,
+}: {
+  itemName: string;
+  initialNotes: string;
+  onClose: () => void;
+  onConfirm: (notes: string) => void;
+}) {
+  const [value, setValue] = useState(initialNotes);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-t-2xl border border-[var(--border)] bg-[var(--surface-2)] p-5 sm:rounded-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="text-xs font-black uppercase tracking-widest text-[var(--brand)]">Nota para cocina</p>
+        <p className="mb-4 truncate text-xl font-black text-[var(--text-primary)]">{itemName}</p>
+
+        <textarea
+          autoFocus
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          placeholder="Ej. sin cebolla, termino medio, salsa aparte..."
+          rows={3}
+          className="mb-4 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] p-4 text-lg font-bold text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--brand)]"
+        />
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-[56px] flex-1 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] font-black text-[var(--text-primary)] active:scale-95 transition-all"
+          >
+            Cancelar
+          </button>
+          {initialNotes && (
+            <button
+              type="button"
+              onClick={() => onConfirm("")}
+              className="min-h-[56px] flex-1 rounded-xl border border-[var(--danger)] bg-[var(--surface-1)] font-black text-[var(--danger)] active:scale-95 transition-all"
+            >
+              Quitar nota
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onConfirm(value)}
+            className="min-h-[56px] flex-1 rounded-xl bg-[var(--brand)] font-black text-[var(--brand-fg)] active:scale-95 transition-all"
+          >
+            Guardar
           </button>
         </div>
       </div>
