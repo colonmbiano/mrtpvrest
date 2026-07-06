@@ -1,13 +1,13 @@
 'use strict';
 
-// Dedupe anti doble-submit de POST /api/store/orders.
+// Gate de turno de caja de POST /api/store/orders (commit "no aceptar pedidos
+// de WhatsApp sin turno de caja abierto").
 //
-// Vector real: el bot de WhatsApp ("Cajero Estrella") crea la orden cuando
-// Gemini responde status=CONFIRMED; si el modelo REEMITE CONFIRMED en dos
-// mensajes seguidos, se dispararía POST /orders dos veces con el MISMO carrito.
-// El storefront tiene el mismo riesgo por doble-tap en "Confirmar pedido".
-// El endpoint debe devolver la orden existente (sin crear otra ni re-consumir
-// cupón/puntos) cuando dentro de la ventana llega una firma idéntica.
+// El bot de WhatsApp NO debe tomar pedidos si la sucursal no tiene un turno de
+// caja abierto: en el hueco entre "abre el negocio" (horario) y "el cajero abre
+// turno" se creaban pedidos huérfanos que ninguna caja cobra ni cierra. El gate
+// responde 409 NO_ACTIVE_SHIFT solo para source=WHATSAPP de clientes; la tienda
+// online (STORE) no se toca.
 
 jest.mock('@mrtpvrest/database', () => ({
   prisma: {
@@ -15,14 +15,13 @@ jest.mock('@mrtpvrest/database', () => ({
     location: { findUnique: jest.fn(), findFirst: jest.fn() },
     restaurantConfig: { findUnique: jest.fn() },
     menuItem: { findFirst: jest.fn() },
-    order: { findMany: jest.fn() },
+    order: { count: jest.fn(), findMany: jest.fn() },
     user: { findUnique: jest.fn() },
     cashShift: { findFirst: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
 
-// Servicios/deps pesadas fuera del camino que probamos.
 jest.mock('../src/lib/order-number', () => ({ nextOrderNumber: jest.fn() }));
 jest.mock('../src/services/loyalty.service', () => ({
   addLoyaltyPoints: jest.fn(), genLoyaltyQr: jest.fn(),
@@ -56,19 +55,10 @@ const BASE_PAYLOAD = {
   items: [{ menuItemId: 'm1', quantity: 2 }],
 };
 
-// Producto: hamburguesa a $70, sin variantes ni modificadores.
 const MENU_ITEM = {
   id: 'm1', name: 'Burger', price: 70, isPromo: false, promoPrice: null,
   restaurantId: 'r1', isAvailable: true, availableOnline: true,
   variants: [], modifierGroups: [], complements: [],
-};
-
-// Orden ya existente idéntica (2 × $70 = $140).
-const EXISTING = {
-  id: 'existing1', orderNumber: 1041, status: 'PENDING',
-  subtotal: 140, total: 140, discount: 0, pointsUsed: 0, tip: 0,
-  estimatedMinutes: 30,
-  items: [{ menuItemId: 'm1', quantity: 2, price: 70, modifiers: [] }],
 };
 
 function txMock(created) {
@@ -80,38 +70,40 @@ function txMock(created) {
   });
 }
 
-describe('POST /api/store/orders — dedupe anti doble-submit', () => {
+describe('POST /api/store/orders — gate de turno de caja (WhatsApp)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.restaurant.findUnique.mockResolvedValue({ id: 'r1', isActive: true });
     prisma.restaurantConfig.findUnique.mockResolvedValue(null); // salta cerrado/mínimo
     prisma.location.findFirst.mockResolvedValue({ id: 'loc1' }); // sucursal principal
     prisma.menuItem.findFirst.mockResolvedValue(MENU_ITEM);
-    // Turno de caja abierto: el payload es WHATSAPP y sin esto el gate de
-    // turno (409 NO_ACTIVE_SHIFT) responde antes de llegar al dedupe.
-    prisma.cashShift.findFirst.mockResolvedValue({ id: 'shift1' });
+    prisma.order.findMany.mockResolvedValue([]); // sin candidatos de dedupe
   });
 
-  it('firma idéntica dentro de la ventana → devuelve la orden existente sin crear otra', async () => {
-    prisma.order.findMany.mockResolvedValue([EXISTING]);
+  it('WhatsApp sin turno abierto → 409 NO_ACTIVE_SHIFT sin crear la orden', async () => {
+    prisma.cashShift.findFirst.mockResolvedValue(null);
 
     const res = await request(buildApp())
       .post('/api/store/orders')
       .set('x-restaurant-id', 'r1')
       .send(BASE_PAYLOAD);
 
-    expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ id: 'existing1', orderNumber: 1041, deduped: true });
-    expect(res.headers['x-dedup-replay']).toBe('true');
-    // Lo esencial: NO se abrió transacción → ni orden nueva ni consumo de cupón/puntos.
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('NO_ACTIVE_SHIFT');
+    expect(typeof res.body.error).toBe('string');
+    // El gate consulta el turno de LA sucursal resuelta, y no abre transacción.
+    expect(prisma.cashShift.findFirst).toHaveBeenCalledWith({
+      where: { locationId: 'loc1', isOpen: true },
+      select: { id: true },
+    });
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('sin candidatos recientes → crea la orden normalmente (una sola vez)', async () => {
-    prisma.order.findMany.mockResolvedValue([]);
-    nextOrderNumber.mockResolvedValue(1042);
+  it('WhatsApp con turno abierto → crea la orden normalmente', async () => {
+    prisma.cashShift.findFirst.mockResolvedValue({ id: 'shift1' });
+    nextOrderNumber.mockResolvedValue(1050);
     prisma.$transaction.mockImplementation(txMock({
-      id: 'new1', orderNumber: 1042, status: 'PENDING',
+      id: 'new1', orderNumber: 1050, status: 'PENDING',
       total: 140, discount: 0, pointsUsed: 0, tip: 0, estimatedMinutes: 30, items: [],
     }));
 
@@ -121,31 +113,27 @@ describe('POST /api/store/orders — dedupe anti doble-submit', () => {
       .send(BASE_PAYLOAD);
 
     expect(res.status).toBe(201);
-    expect(res.body.orderNumber).toBe(1042);
-    expect(res.body.deduped).toBeUndefined();
-    expect(res.headers['x-dedup-replay']).toBeUndefined();
+    expect(res.body.orderNumber).toBe(1050);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('mismo cliente pero items distintos → NO dedupea, crea orden nueva', async () => {
-    // Candidato reciente con OTRO subtotal/cantidad: la firma no casa.
-    prisma.order.findMany.mockResolvedValue([{
-      ...EXISTING, subtotal: 90,
-      items: [{ menuItemId: 'm1', quantity: 1, price: 90, modifiers: [] }],
-    }]);
-    nextOrderNumber.mockResolvedValue(1043);
+  it('tienda online (STORE) sin turno → NO se gatea, crea la orden', async () => {
+    prisma.cashShift.findFirst.mockResolvedValue(null);
+    nextOrderNumber.mockResolvedValue(1051);
     prisma.$transaction.mockImplementation(txMock({
-      id: 'new2', orderNumber: 1043, status: 'PENDING',
+      id: 'new2', orderNumber: 1051, status: 'PENDING',
       total: 140, discount: 0, pointsUsed: 0, tip: 0, estimatedMinutes: 30, items: [],
     }));
 
     const res = await request(buildApp())
       .post('/api/store/orders')
       .set('x-restaurant-id', 'r1')
-      .send(BASE_PAYLOAD);
+      .send({ ...BASE_PAYLOAD, source: 'STORE' });
 
     expect(res.status).toBe(201);
-    expect(res.body.orderNumber).toBe(1043);
+    expect(res.body.orderNumber).toBe(1051);
+    // El gate es exclusivo del canal WhatsApp: ni siquiera consulta turnos.
+    expect(prisma.cashShift.findFirst).not.toHaveBeenCalled();
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 });
