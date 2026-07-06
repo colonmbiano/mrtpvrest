@@ -36,6 +36,16 @@ function normalizeCustomerPhone(phone) {
   return /^\d{10,14}$/.test(digits) ? digits : null;
 }
 
+// Referencia estable y NO reversible del chat (sha1 truncado del id @lid/@c.us).
+// Es la parte "<ref>" del clientOrderId `wa:<ref>:<uuid>`: el backend la usa
+// para encontrar los pedidos recientes DEL MISMO CHAT (dedupe persistente y
+// GET /api/bot/chat-order).
+function chatRefFor(chatId) {
+  return chatId
+    ? crypto.createHash('sha1').update(String(chatId)).digest('hex').slice(0, 16)
+    : null;
+}
+
 // Empleado de servicio del bot, por restaurante. authenticate SIEMPRE resuelve
 // el actor contra la BD (User/Employee por id) — un JWT con id inventado
 // ('whatsapp-bot') da 401 "Sesión no válida". El fix honesto: un Employee REAL
@@ -142,9 +152,8 @@ async function createOrderFromGemini(restaurantId, parsedJson, port = 3001, chat
   // con carrito similar (ventana server-side que sobrevive restarts del bot —
   // la guarda en memoria de client.js solo cubre 45 min; el duplicado real
   // #1230/#1244 llegó a los 59. Ver dedupe en store.routes.js).
-  const clientOrderId = chatId
-    ? `wa:${crypto.createHash('sha1').update(String(chatId)).digest('hex').slice(0, 16)}:${crypto.randomUUID()}`
-    : undefined;
+  const chatRef = chatRefFor(chatId);
+  const clientOrderId = chatRef ? `wa:${chatRef}:${crypto.randomUUID()}` : undefined;
 
   try {
     // Sucursal principal: en API-only viene de /api/bot/context (sin BD); en
@@ -267,5 +276,6 @@ module.exports = {
   fetchOrderDetail,
   normalizeBotItems,
   normalizePaymentMethod,
-  normalizeCustomerPhone
+  normalizeCustomerPhone,
+  chatRefFor
 };

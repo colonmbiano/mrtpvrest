@@ -1,7 +1,7 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { processWhatsAppMessage } = require('./gemini');
-const { createOrderFromGemini } = require('./orderProcessor');
+const { createOrderFromGemini, chatRefFor } = require('./orderProcessor');
 const { isAudioMessage, transcribeWhatsAppAudio } = require('./audioTranscription');
 const { prisma } = require('@mrtpvrest/database');
 const botConfig = require('./botConfig');
@@ -65,6 +65,12 @@ const MAX_HISTORY_MESSAGES = 24;
 // Mapa para guardar órdenes recientes confirmadas por número. Permite añadir items.
 // Formato: { "5215551234567": { orderId: "abc", timestamp: 123456789 } }
 const recentOrders = new Map();
+// Throttle de la REHIDRATACIÓN desde BD (GET /api/bot/chat-order): cuando un
+// chat escribe y no hay entrada en recentOrders (restart del bot o ventana
+// vencida), se consulta el backend una vez y no de nuevo por 3 min — evita un
+// GET por CADA mensaje de chats sin pedido. Formato: { chatRef: ms }.
+const chatOrderLookups = new Map();
+const CHAT_ORDER_LOOKUP_TTL_MS = 3 * 60 * 1000;
 const recentOrderChats = new Map();
 const humanHandoffs = new Map();
 const botOutgoingIntents = new Map();
@@ -598,19 +604,62 @@ function initWhatsApp(io) {
       });
     }
 
-    // Orden reciente de este teléfono. DOS ventanas:
-    //  - activeOrderId (15 min): para ADD_TO_ORDER (agregar items al mismo ticket).
-    //  - recentConfirmedId (45 min): guarda ANTI-DUPLICADO. Es más larga porque el
-    //    comprobante de pago suele llegar bastante después de ordenar (el incidente
-    //    Gissel 2026-07-02 fueron 16 min → una ventana de 15 lo dejaba pasar).
+    // Orden reciente de este teléfono. DOS fuentes:
+    //  - Memoria local (recentOrders): la escribe el propio proceso al crear el
+    //    pedido. Ventanas: activeOrderId 15 min (ADD_TO_ORDER) y
+    //    recentConfirmedId 45 min (contexto para Gemini + acuse de comprobantes).
+    //  - REHIDRATACIÓN desde BD (API-only): si no hay entrada local (restart del
+    //    bot, o pasaron >45 min), se pregunta al backend por el último pedido del
+    //    chat (GET /api/bot/chat-order). El server dice además si el ticket sigue
+    //    vivo para AGREGAR (canAdd por status, no por reloj). Así "agrégame X"
+    //    funciona horas después y sobrevive reinicios.
     let activeOrderId = null;
     let recentConfirmedId = null;
-    const recentOrder = recentOrders.get(phone);
+    let recentOrder = recentOrders.get(phone);
     if (recentOrder) {
       const age = Date.now() - recentOrder.timestamp;
-      if (age < 15 * 60 * 1000) activeOrderId = recentOrder.orderId;
-      if (age < 45 * 60 * 1000) recentConfirmedId = recentOrder.orderId;
-      else recentOrders.delete(phone); // expiró del todo
+      // Local: 45 min (como siempre). Rehidratada: 120 min = la ventana del
+      // server (timestamp = createdAt del pedido); después se re-consulta la BD.
+      const maxAge = recentOrder.hydrated ? 120 * 60 * 1000 : 45 * 60 * 1000;
+      if (age >= maxAge) {
+        recentOrders.delete(phone);
+        recentOrder = null;
+      }
+    }
+    if (!recentOrder && botApi.useApi()) {
+      const ref = chatRefFor(chatKey);
+      const lastLookup = chatOrderLookups.get(ref) || 0;
+      if (ref && Date.now() - lastLookup >= CHAT_ORDER_LOOKUP_TTL_MS) {
+        chatOrderLookups.set(ref, Date.now());
+        if (chatOrderLookups.size > 2000) chatOrderLookups.clear(); // tope de memoria
+        try {
+          const remote = await botApi.getChatOrder(ref);
+          if (remote) {
+            recentOrder = {
+              orderId: remote.id,
+              orderNumber: remote.orderNumber,
+              total: remote.total ?? null,
+              summary: (remote.items || []).map((it) => `${it.quantity}x ${it.name}`).join(', '),
+              timestamp: new Date(remote.createdAt).getTime() || Date.now(),
+              hydrated: true,
+              canAddDb: remote.canAdd === true,
+            };
+            recentOrders.set(phone, recentOrder);
+            console.log(`[WhatsApp Bot] Pedido ${remote.orderNumber} rehidratado de BD para ${phone} (canAdd=${recentOrder.canAddDb}).`);
+          }
+        } catch (err) {
+          console.error('[WhatsApp Bot] No se pudo rehidratar el pedido del chat:', err?.response?.status || err?.message || err);
+        }
+      }
+    }
+    if (recentOrder) {
+      const age = Date.now() - recentOrder.timestamp;
+      // Entrada local: ADD solo en los primeros 15 min (no sabemos el status).
+      // Entrada rehidratada: manda el status real del server (canAddDb).
+      if (recentOrder.hydrated ? recentOrder.canAddDb : age < 15 * 60 * 1000) {
+        activeOrderId = recentOrder.orderId;
+      }
+      recentConfirmedId = recentOrder.orderId;
     }
 
     // Datos del pedido reciente para el prompt de Gemini: sin esto, cuando el
@@ -655,20 +704,16 @@ function initWhatsApp(io) {
     const status = geminiResponse.status;
     const items = Array.isArray(geminiResponse.items) ? geminiResponse.items : [];
 
-    if (status === 'CONFIRMED' && items.length > 0 && recentConfirmedId) {
-      // GUARDA ANTI-DUPLICADO: ya hay un pedido reciente (<45 min) para este
-      // teléfono y Gemini devolvió OTRO CONFIRMED. Es casi siempre un eco, no un
-      // pedido nuevo: p.ej. el cliente manda su COMPROBANTE DE PAGO y, como el bot
-      // no lee imágenes, Gemini re-resume el pedido desde el historial y lo
-      // re-confirma. Antes esto creaba una orden duplicada (incidente Gissel
-      // 2026-07-02: pedido ya en cocina + comprobante 16 min después → 2ª orden).
-      // NO crear otra; acusar recibo del pedido existente. Si de verdad quiere
-      // agregar algo, Gemini usa ADD_TO_ORDER (rama de abajo); un 2º pedido genuino
-      // en <45 min lo toma un humano (mejor eso que duplicar).
-      console.warn(`[WhatsApp Bot] CONFIRMED con pedido reciente ${recentConfirmedId} para ${phone}; se ignora para NO duplicar (posible comprobante/eco).`);
-      recentOrders.set(phone, { ...recentOrder, orderId: recentConfirmedId, timestamp: Date.now() });
-      await safeSend('¡Tu pedido ya está registrado y en preparación! 🙌 Si quieres agregar algo más, dime qué y lo sumo al mismo pedido. Si mandaste tu comprobante, ¡gracias! Enseguida validamos el pago.');
-    } else if (status === 'CONFIRMED' && items.length > 0) {
+    // NOTA: la vieja guarda LOCAL anti-duplicado (bloquear CONFIRMED si había
+    // recentConfirmedId) se quitó a propósito: bloqueaba en silencio también las
+    // CORRECCIONES (incidente #1230/#1244: el cliente reenvió el pedido con las
+    // papas gajo correctas y no había forma de enterarse). Ahora TODO CONFIRMED
+    // re-emitido viaja al backend, cuyo dedupe por chat (a) corta el duplicado,
+    // (b) detecta si el carrito CAMBIÓ y marca el ticket original con nota
+    // "⚠️ POSIBLE CORRECCIÓN" avisando a la caja, y (c) corre ANTES de los gates
+    // de tienda cerrada/turno, así el eco de un comprobante tardío recibe acuse
+    // aunque ya hayan cerrado.
+    if (status === 'CONFIRMED' && items.length > 0) {
       // CREAR LA ORDEN PRIMERO; confirmar SOLO si el TPV la registró. Antes se
       // enviaba "¡confirmado!" y DESPUÉS se creaba: si el POST fallaba, el
       // cliente esperaba un pedido que nunca existió. Además el folio y el total
@@ -679,19 +724,25 @@ function initWhatsApp(io) {
       // devuelve el existente con dedupReason=CHAT_WINDOW en vez de crear otro.
       const orderCreated = await createOrderFromGemini(restaurant.id, geminiResponse, process.env.PORT || 3001, chatKey);
       if (orderCreated && orderCreated.id && orderCreated.dedupReason === 'CHAT_WINDOW') {
-        // Red SERVER-SIDE anti-duplicado: complementa la guarda en memoria de
-        // arriba (45 min, se pierde al reiniciar — el duplicado #1230/#1244 del
-        // 2026-07-05 entró a los 59 min y costó $926 reembolsados). Acusamos el
-        // pedido existente y NO confirmamos uno "nuevo".
-        console.warn(`[WhatsApp Bot] Backend dedupeó CONFIRMED de ${phone} contra el pedido #${orderCreated.orderNumber} del mismo chat; no se duplica.`);
+        // Red SERVER-SIDE anti-duplicado (vive en BD: sobrevive restarts y
+        // ventanas largas — el duplicado #1230/#1244 del 2026-07-05 entró a los
+        // 59 min y costó $926 reembolsados). Acusamos el pedido existente y NO
+        // confirmamos uno "nuevo". Si el backend detectó CAMBIOS en el carrito
+        // (correctionFlagged), ya marcó el ticket y avisó a la caja: al cliente
+        // se le dice eso en vez del acuse genérico.
+        console.warn(`[WhatsApp Bot] Backend dedupeó CONFIRMED de ${phone} contra el pedido #${orderCreated.orderNumber} del mismo chat${orderCreated.correctionFlagged ? ' (posible corrección, caja avisada)' : ''}; no se duplica.`);
         recentOrders.set(phone, { orderId: orderCreated.id, orderNumber: orderCreated.orderNumber, total: orderCreated.total ?? null, summary: '', timestamp: Date.now() });
         rememberRecentOrderChat(chatKey, phone, orderCreated.id);
         history.push({
           role: 'model',
-          text: `El pedido ya estaba registrado antes: folio ${orderCreated.orderNumber}. NO se creó uno nuevo.`,
+          text: `El pedido ya estaba registrado antes: folio ${orderCreated.orderNumber}. NO se creó uno nuevo.${orderCreated.correctionFlagged ? ' Se avisó a la caja de un posible cambio.' : ''}`,
         });
         pruneHistory(history);
-        await safeSend(`¡Tu pedido *#${orderCreated.orderNumber}* ya está registrado y en preparación! 🙌 No creé uno nuevo para no duplicarlo. Si quieres AGREGAR algo dime qué y lo sumo; y si de verdad es OTRO pedido igual, un asesor te lo confirma en un momento.`);
+        if (orderCreated.correctionFlagged) {
+          await safeSend(`Ya tenía registrado tu pedido *#${orderCreated.orderNumber}* y noté cambios en lo que me enviaste 👀. Le avisé a la caja para que lo revise y ajuste — no creé un pedido duplicado. Si quieres AGREGAR algo más, dime qué y lo sumo.`);
+        } else {
+          await safeSend(`¡Tu pedido *#${orderCreated.orderNumber}* ya está registrado y en preparación! 🙌 No creé uno nuevo para no duplicarlo. Si quieres AGREGAR algo dime qué y lo sumo; y si de verdad es OTRO pedido igual, un asesor te lo confirma en un momento.`);
+        }
       } else if (orderCreated && orderCreated.id) {
         recentOrders.set(phone, { orderId: orderCreated.id, orderNumber: orderCreated.orderNumber, total: orderCreated.total ?? null, summary: '', timestamp: Date.now() });
         rememberRecentOrderChat(chatKey, phone, orderCreated.id);
@@ -757,6 +808,19 @@ function initWhatsApp(io) {
         // Gemini quiso agregar pero ya no hay orden activa (expiró / restart).
         await safeSend('No encuentro un pedido activo reciente para agregarle 🙏. ¿Te lo confirmo como un pedido nuevo?');
       } else {
+        // Si la orden vino REHIDRATADA de BD, su canAdd pudo quedar rancio (el
+        // ticket puede haber salido a reparto o cobrado desde la consulta).
+        // Re-validar contra el backend justo antes de agregar.
+        if (recentOrder?.hydrated && botApi.useApi()) {
+          let fresh = null;
+          try {
+            fresh = await botApi.getChatOrder(chatRefFor(chatKey));
+          } catch { /* si la validación falla, se intenta agregar igual: el backend valida */ }
+          if (fresh && (fresh.id !== activeOrderId || !fresh.canAdd)) {
+            await safeSend('Tu pedido anterior ya salió o ya está cobrado 🙏, así que no puedo agregarle nada. ¿Te lo confirmo como un pedido nuevo?');
+            return;
+          }
+        }
         const addResponse = await require('./orderProcessor').addItemsToOrder(activeOrderId, geminiResponse, restaurant.id, process.env.PORT || 3001);
         if (addResponse) {
           recentOrders.set(phone, { ...recentOrder, orderId: activeOrderId, timestamp: Date.now() });
