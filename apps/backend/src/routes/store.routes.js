@@ -120,6 +120,29 @@ setInterval(() => {
   }
 }, 15 * 60 * 1000).unref?.();
 
+// ── Freno de saturación ───────────────────────────────────────────────────
+// Con la cocina al tope, los canales remotos (tienda online y bot de WhatsApp)
+// dejan de aceptar pedidos nuevos para no prometer entregas imposibles. Se
+// cuentan los pedidos ABIERTOS del restaurante (cualquier canal: el TPV también
+// carga la cocina) creados en las últimas 2h. La ventana evita que pedidos
+// zombis (p. ej. CONFIRMED que nadie cerró) dejen el freno puesto para siempre.
+// El tope vive en RestaurantConfig.maxOpenOrders (null/0 = sin freno) y el
+// TPV/kiosko NUNCA se bloquean: el staff decide en persona si acepta más.
+const SATURATION_WINDOW_MS = 2 * 60 * 60 * 1000;
+const SATURATION_OPEN_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'PACKING'];
+const DEFAULT_SATURATED_MESSAGE =
+  '⚠️ Estamos recibiendo muchos pedidos y la cocina va al tope. Por favor inténtalo de nuevo en unos minutos 🙏';
+
+async function countOpenKitchenOrders(restaurantId) {
+  return prisma.order.count({
+    where: {
+      restaurantId,
+      status: { in: SATURATION_OPEN_STATUSES },
+      createdAt: { gte: new Date(Date.now() - SATURATION_WINDOW_MS) },
+    },
+  });
+}
+
 // ── Helper: resolver restaurante + sucursal desde query/headers ──────────────
 async function resolveStore(req, res) {
   const restaurantId   = req.headers['x-restaurant-id']   || req.query.restaurantId;
@@ -225,6 +248,16 @@ router.get('/info', async (req, res) => {
 
     // ¿Se puede pagar en línea (tarjeta) en esta tienda?
     onlinePayment: onlinePaymentEnabled,
+
+    // Freno de saturación: si está activo y la cocina va al tope, el
+    // storefront/bot pueden avisar ANTES del checkout (el POST /orders lo
+    // rechaza igual con 429 STORE_SATURATED, esto es solo cortesía de UX).
+    ...(config?.maxOpenOrders > 0
+      ? {
+          saturated: (await countOpenKitchenOrders(restaurant.id)) >= config.maxOpenOrders,
+          saturatedMessage: config.saturatedMessage?.trim() || DEFAULT_SATURATED_MESSAGE,
+        }
+      : { saturated: false }),
 
     // Reglas de pedido visibles para el cliente
     minOrderAmount:    config?.minOrderAmount ?? 0,
@@ -515,6 +548,21 @@ router.post('/orders', async (req, res) => {
         error: storeState.message || config.closedMessage || 'La tienda está cerrada en este momento.',
         code: 'STORE_CLOSED',
       });
+    }
+
+    // Freno de saturación: con la cocina al tope, dejamos de aceptar pedidos
+    // remotos (tienda online y bot de WhatsApp). El bot/storefront muestran el
+    // `error` de la respuesta tal cual al cliente. Staff y kiosko no aplican.
+    if (config.maxOpenOrders > 0) {
+      const openCount = await countOpenKitchenOrders(restaurant.id);
+      if (openCount >= config.maxOpenOrders) {
+        return res.status(429).json({
+          error: config.saturatedMessage?.trim() || DEFAULT_SATURATED_MESSAGE,
+          code: 'STORE_SATURATED',
+          openOrders: openCount,
+          limit: config.maxOpenOrders,
+        });
+      }
     }
   }
 

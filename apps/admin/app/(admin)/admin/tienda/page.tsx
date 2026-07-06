@@ -396,6 +396,11 @@ export default function TiendaConfigPage() {
     // Estado de la tienda
     isOpen: true,
     closedMessage: "",
+    // Freno de saturación: tope de pedidos abiertos en cocina a partir del
+    // cual la tienda online y el bot de WhatsApp rechazan pedidos nuevos.
+    // 0 = sin freno. El TPV nunca se bloquea.
+    maxOpenOrders: 0,
+    saturatedMessage: "",
     // Corte de caja: ¿los admins ven el efectivo esperado en corte ciego?
     adminCanViewExpectedCash: true,
     // Corte de caja por correo: enviar el resumen del corte al cerrar el turno.
@@ -490,6 +495,8 @@ export default function TiendaConfigPage() {
           ...d,
           freeDeliveryFrom: d.freeDeliveryFrom ?? 0,
           closedMessage: d.closedMessage ?? "",
+          maxOpenOrders: d.maxOpenOrders ?? 0,
+          saturatedMessage: d.saturatedMessage ?? "",
           deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : "FLAT",
           isOpen: d.isOpen ?? true,
           adminCanViewExpectedCash: d.adminCanViewExpectedCash ?? true,
@@ -611,6 +618,37 @@ export default function TiendaConfigPage() {
             <div className="mt-4">
               <FieldLabel>Mensaje al cliente (tienda cerrada)</FieldLabel>
               <input type="text" value={config.closedMessage} placeholder="Ej. Volvemos mañana a las 9:00 am" onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, closedMessage: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
+            </div>
+          )}
+        </WtCard>
+
+        {/* Freno de saturación — tope de pedidos remotos cuando la cocina va al tope */}
+        <WtCard className="p-5 md:p-6">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={16} className="shrink-0 text-tx-mid" />
+                <p className="font-display text-base font-extrabold text-tx-hi">Freno de saturación</p>
+              </div>
+              <p className="mt-1 text-[12px] text-tx-mut">
+                {config.maxOpenOrders > 0
+                  ? `Al llegar a ${config.maxOpenOrders} pedidos abiertos en cocina, la tienda online y el bot de WhatsApp dejan de aceptar pedidos. El TPV nunca se bloquea.`
+                  : "Apagado — la tienda online y el bot aceptan pedidos sin límite aunque la cocina vaya al tope."}
+              </p>
+            </div>
+            <Toggle checked={config.maxOpenOrders > 0} onChange={(v) => setConfig(p => ({ ...p, maxOpenOrders: v ? 25 : 0 }))} label="Freno de saturación" />
+          </div>
+          {config.maxOpenOrders > 0 && (
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <FieldLabel>Tope de pedidos abiertos</FieldLabel>
+                <input type="number" min="1" value={config.maxOpenOrders} onChange={(e) => { const v = Math.max(1, parseInt(e.target.value) || 1); setConfig(p => ({ ...p, maxOpenOrders: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
+                <p className="mt-1 text-[11px] text-tx-mut">Se cuentan los pedidos pendientes, confirmados y en preparación de las últimas 2 horas (de todos los canales).</p>
+              </div>
+              <div>
+                <FieldLabel>Mensaje al cliente (saturados)</FieldLabel>
+                <input type="text" value={config.saturatedMessage} placeholder="Ej. Cocina al tope 🔥 inténtalo en 30 min" onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, saturatedMessage: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
+              </div>
             </div>
           )}
         </WtCard>
