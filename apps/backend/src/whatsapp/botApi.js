@@ -60,4 +60,15 @@ async function addItems(orderId, items) {
   return r.data;
 }
 
-module.exports = { useApi, restaurantId, getContext, getConfig, whoami, getOrderDetail, addItems };
+// Último pedido del CHAT dentro de la ventana de dedupe (o null). `ref` = hash
+// del chat (chatRefFor). Trae `canAdd` server-side: el ticket sigue vivo en
+// cocina y sin cobrar → se le pueden AGREGAR items. Es la memoria persistente
+// del bot: sobrevive restarts, a diferencia del Map de 15 min de client.js.
+async function getChatOrder(ref) {
+  const r = await axios.get(`${apiBase()}/api/bot/chat-order`, {
+    params: { ref }, headers: authHeaders(), timeout: 8000,
+  });
+  return r.data?.order || null;
+}
+
+module.exports = { useApi, restaurantId, getContext, getConfig, whoami, getOrderDetail, addItems, getChatOrder };
