@@ -618,13 +618,74 @@ router.post('/orders', async (req, res) => {
       orderBy: { createdAt: 'desc' },
       take: 5,
     });
-    const dupChat = chatCandidates.find((cand) =>
-      cand.clientOrderId === botClientOrderId ||
-      orderItemSimilarity(Array.isArray(items) ? items : [], cand.items) >= minSimilarity
-    );
+    const newItems = Array.isArray(items) ? items : [];
+    let dupChat = null;
+    let dupSimilarity = 0;
+    for (const cand of chatCandidates) {
+      if (cand.clientOrderId === botClientOrderId) { dupChat = cand; dupSimilarity = 1; break; }
+      const sim = orderItemSimilarity(newItems, cand.items);
+      if (sim >= minSimilarity) { dupChat = cand; dupSimilarity = sim; break; }
+    }
     if (dupChat) {
+      // Carrito PARECIDO pero NO idéntico → probable CORRECCIÓN del cliente
+      // (caso real #1230/#1244: pidió "papas gajo con arrachera", el bot metió
+      // "Orden Arrachera 250gr" y al reenviar el pedido corregido se creaba un
+      // segundo ticket). Además de no duplicar: se marca el ticket original con
+      // nota ⚠️ y se avisa a la caja por socket para que un humano compare y
+      // ajuste. Best-effort: un fallo aquí nunca rompe la respuesta de dedupe.
+      let correctionFlagged = false;
+      if (dupSimilarity < 0.999 && dupChat.clientOrderId !== botClientOrderId) {
+        try {
+          const ids = [...new Set(newItems.map((it) => it?.menuItemId).filter(Boolean))];
+          const named = await prisma.menuItem.findMany({
+            where: { id: { in: ids }, restaurantId: restaurant.id },
+            select: { id: true, name: true },
+          });
+          const nameOf = new Map(named.map((m) => [m.id, m.name]));
+          const resumen = newItems
+            .filter((it) => it?.menuItemId)
+            .map((it) => `${Math.max(1, Number(it.quantity) || 1)}x ${nameOf.get(it.menuItemId) || it.menuItemId}`)
+            .join(', ');
+          const horaMx = new Intl.DateTimeFormat('es-MX', {
+            timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit',
+          }).format(new Date());
+          const nota = `⚠️ POSIBLE CORRECCIÓN (WhatsApp ${horaMx}): el cliente reenvió el pedido con cambios. Carrito reenviado: ${resumen}. Comparar con el ticket y ajustar.`;
+          const updated = await prisma.order.update({
+            where: { id: dupChat.id },
+            data: { notes: [dupChat.notes, nota].filter(Boolean).join('\n') },
+          });
+          correctionFlagged = true;
+          console.warn(`[store] Posible corrección vía WhatsApp sobre pedido ${dupChat.orderNumber} (similitud ${dupSimilarity.toFixed(2)}).`);
+          const io = req.app.get('io');
+          if (io) {
+            // Mismo evento que ya escucha el TPV para refrescar el ticket.
+            if (updated.locationId) {
+              io.to(`restaurant:${restaurant.id}:location:${updated.locationId}:admins`).emit('order:updated', updated);
+            } else {
+              io.to(`restaurant:${restaurant.id}`).emit('order:updated', updated);
+            }
+          }
+        } catch (flagErr) {
+          console.error('[store] No se pudo marcar la posible corrección:', flagErr?.message || flagErr);
+        }
+      }
       console.warn(`[store] Dedupe por chat WhatsApp: pedido ${dupChat.orderNumber} ya existe para ${chatPrefix} (no se crea otro).`);
-      return sendDedupReplay(res, dupChat, 'CHAT_WINDOW');
+      res.setHeader('X-Dedup-Replay', 'true');
+      return res.status(201).json({
+        id:          dupChat.id,
+        orderNumber: dupChat.orderNumber,
+        status:      dupChat.status,
+        total:       dupChat.total,
+        discount:    dupChat.discount,
+        pointsUsed:  dupChat.pointsUsed || 0,
+        pointsDiscount: 0,
+        tip:         dupChat.tip,
+        estimatedMinutes: dupChat.estimatedMinutes || 30,
+        couponWarnings: [],
+        deduped: true,
+        dedupReason: 'CHAT_WINDOW',
+        correctionFlagged,
+      });
     }
   }
 
