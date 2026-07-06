@@ -13,8 +13,8 @@ jest.mock('@mrtpvrest/database', () => ({
     restaurant: { findUnique: jest.fn() },
     location: { findUnique: jest.fn(), findFirst: jest.fn() },
     restaurantConfig: { findUnique: jest.fn() },
-    menuItem: { findFirst: jest.fn() },
-    order: { findMany: jest.fn(), findFirst: jest.fn() },
+    menuItem: { findFirst: jest.fn(), findMany: jest.fn() },
+    order: { findMany: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
     user: { findUnique: jest.fn() },
     cashShift: { findFirst: jest.fn() },
     $transaction: jest.fn(),
@@ -98,9 +98,12 @@ describe('POST /api/store/orders — dedupe por chat de WhatsApp (clientOrderId 
     prisma.cashShift.findFirst.mockResolvedValue({ id: 'shift1' });
   });
 
-  it('pedido reciente del mismo chat con carrito similar → devuelve el existente sin crear', async () => {
+  it('carrito IDÉNTICO re-emitido (eco/comprobante) → devuelve el existente en silencio', async () => {
     // 1ª findMany = candidatos por chat. No debe llegar al dedupe por firma.
-    prisma.order.findMany.mockResolvedValueOnce([CHAT_SIBLING]);
+    prisma.order.findMany.mockResolvedValueOnce([{
+      ...CHAT_SIBLING,
+      items: [{ menuItemId: 'm1', quantity: 2 }, { menuItemId: 'm2', quantity: 1 }],
+    }]);
 
     const res = await request(buildApp())
       .post('/api/store/orders')
@@ -110,14 +113,45 @@ describe('POST /api/store/orders — dedupe por chat de WhatsApp (clientOrderId 
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({
       id: 'prev1', orderNumber: 1230, deduped: true, dedupReason: 'CHAT_WINDOW',
+      correctionFlagged: false,
     });
     expect(res.headers['x-dedup-replay']).toBe('true');
     expect(prisma.$transaction).not.toHaveBeenCalled();
+    // Idéntico = eco, NO corrección: el ticket original no se toca.
+    expect(prisma.order.update).not.toHaveBeenCalled();
     // Responde en el gate por chat: ni siquiera corre el dedupe por firma.
     expect(prisma.order.findMany).toHaveBeenCalledTimes(1);
     const where = prisma.order.findMany.mock.calls[0][0].where;
     expect(where.clientOrderId).toEqual({ startsWith: `wa:${CHAT_HASH}:` });
     expect(where.status).toEqual({ not: 'CANCELLED' });
+  });
+
+  it('carrito PARECIDO pero cambiado → dedupea Y marca el ticket original como posible corrección', async () => {
+    // CHAT_SIBLING comparte 2 de 3 unidades con el payload (0.67 ≥ 0.6) pero
+    // difiere (m3 → m2): el caso Antonio Montes #1230/#1244.
+    prisma.order.findMany.mockResolvedValueOnce([CHAT_SIBLING]);
+    prisma.menuItem.findMany.mockResolvedValue([
+      { id: 'm1', name: 'Burger' }, { id: 'm2', name: 'Alitas' },
+    ]);
+    prisma.order.update.mockResolvedValue({ ...CHAT_SIBLING, locationId: 'loc1' });
+
+    const res = await request(buildApp())
+      .post('/api/store/orders')
+      .set('x-restaurant-id', 'r1')
+      .send(BASE_PAYLOAD);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      id: 'prev1', orderNumber: 1230, deduped: true, dedupReason: 'CHAT_WINDOW',
+      correctionFlagged: true,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    // El ticket original queda marcado con la nota y el carrito reenviado legible.
+    expect(prisma.order.update).toHaveBeenCalledTimes(1);
+    const upd = prisma.order.update.mock.calls[0][0];
+    expect(upd.where).toEqual({ id: 'prev1' });
+    expect(upd.data.notes).toContain('POSIBLE CORRECCIÓN');
+    expect(upd.data.notes).toContain('2x Burger, 1x Alitas');
   });
 
   it('mismo chat pero carrito claramente distinto → NO dedupea y persiste clientOrderId', async () => {

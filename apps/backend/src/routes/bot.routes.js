@@ -137,6 +137,44 @@ router.get('/orders/:id', async (req, res) => {
   }
 });
 
+// ── Último pedido del CHAT (memoria persistente del bot) ─────────────────────
+// `ref` = hash del chat (los 16 hex de sha1 que el bot usa en el clientOrderId
+// `wa:<ref>:<uuid>`). Devuelve el pedido MÁS RECIENTE de ese chat dentro de la
+// ventana de dedupe, con `canAdd` calculado server-side: solo se puede AGREGAR
+// a un ticket que sigue vivo en cocina (PENDING/CONFIRMED/PREPARING) y sin
+// cobrar. Sustituye la memoria de 15 min del bot como fuente para ADD_TO_ORDER:
+// esa memoria muere con cada restart y no sabe si el ticket ya salió a reparto.
+router.get('/chat-order', async (req, res) => {
+  try {
+    const ref = String(req.query.ref || '').toLowerCase();
+    if (!/^[a-f0-9]{8,40}$/.test(ref)) return res.status(400).json({ error: 'ref inválido' });
+    const windowMin = parseInt(process.env.WHATSAPP_CHAT_DEDUP_MINUTES, 10) || 120;
+    const order = await prisma.order.findFirst({
+      where: {
+        restaurantId: req.restaurantId,
+        source: 'WHATSAPP',
+        status: { not: 'CANCELLED' },
+        clientOrderId: { startsWith: `wa:${ref}:` },
+        createdAt: { gte: new Date(Date.now() - windowMin * 60_000) },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, orderNumber: true, status: true, paymentStatus: true,
+        total: true, createdAt: true,
+        items: { select: { name: true, quantity: true } },
+      },
+    });
+    res.set('Cache-Control', 'no-store');
+    if (!order) return res.json({ order: null });
+    const canAdd = ['PENDING', 'CONFIRMED', 'PREPARING'].includes(order.status)
+      && order.paymentStatus === 'PENDING';
+    res.json({ order: { ...order, canAdd } });
+  } catch (e) {
+    console.error('[bot] chat-order error:', e?.message || e);
+    res.status(500).json({ error: 'Error al buscar el pedido del chat' });
+  }
+});
+
 // Diagnóstico: confirma que el token es válido y a qué restaurante pertenece.
 router.get('/whoami', async (req, res) => {
   try {
