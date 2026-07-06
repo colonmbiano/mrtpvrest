@@ -16,6 +16,7 @@ jest.mock('@mrtpvrest/database', () => ({
     menuItem: { findFirst: jest.fn() },
     order: { count: jest.fn(), findMany: jest.fn() },
     user: { findUnique: jest.fn() },
+    cashShift: { findFirst: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
@@ -84,6 +85,9 @@ describe('POST /api/store/orders — freno de saturación', () => {
     prisma.location.findFirst.mockResolvedValue({ id: 'loc1' });
     prisma.menuItem.findFirst.mockResolvedValue(MENU_ITEM);
     prisma.order.findMany.mockResolvedValue([]); // sin candidatos de dedupe
+    // Turno de caja abierto: el payload es WHATSAPP y sin esto el gate de
+    // turno (409 NO_ACTIVE_SHIFT) responde antes de llegar al freno.
+    prisma.cashShift.findFirst.mockResolvedValue({ id: 'shift1' });
   });
 
   it('cocina al tope → 429 STORE_SATURATED sin crear la orden', async () => {
