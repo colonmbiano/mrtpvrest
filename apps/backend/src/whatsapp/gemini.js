@@ -33,6 +33,41 @@ const menuCache = new Map(); // restaurantId → { menuString, config, businessN
 /**
  * Handles the conversation with Gemini directly via Axios.
  */
+// ── AHORRO DE COSTO (A): pre-filtro de mensajes triviales ─────────────────────
+// Cada llamada a Gemini manda el menú completo + instrucciones (tokens caros).
+// Un saludo o un "gracias" NO necesita IA: se contesta con plantilla y se
+// AHORRA la llamada. Conservador a propósito: solo actúa cuando el mensaje ES
+// EXCLUSIVAMENTE un saludo o un agradecimiento; cualquier otra cosa (pedido,
+// pregunta, "ok"/"sí" que suelen ser respuestas) sigue yendo a Gemini con contexto.
+function normalizeForQuick(text) {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // fuera acentos
+    .replace(/[^\p{L}\s]/gu, ' ')                     // fuera emojis/signos/números
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+const QUICK_GREETING_RE = /^(hola|ola|holi|holaa+|hola buenas|buenas|buenas tardes|buenos dias|buenas noches|buen dia|buenos dias tenga|que tal|que onda|que hubo|hey|saludos)$/;
+const QUICK_THANKS_RE = /^(gracias|muchas gracias|mil gracias|grax|graxias|ok gracias|va gracias|gracias amigo|gracias crack|thank you|thanks|ty)$/;
+function tryQuickReply(text, ctx) {
+  const n = normalizeForQuick(text);
+  if (!n || n.length > 40) return null; // frases largas → probablemente no es trivial
+  if (QUICK_THANKS_RE.test(n)) return '¡A ti! 🙌 Aquí estoy para lo que necesites.';
+  // Saludo: solo si NO hay pedido activo (con pedido en curso, deja que Gemini
+  // maneje el contexto en vez de saludar como si empezara de cero).
+  if (QUICK_GREETING_RE.test(n) && !ctx.hasActiveOrder) {
+    if (ctx.isOpen) {
+      return `¡Hola! 😊 Bienvenido a ${ctx.businessName}.` +
+        (ctx.storeLink ? `\n\nVe el menú con fotos y pide en segundos aquí 👉 ${ctx.storeLink}` : '') +
+        `\n\n¿Qué se te antoja hoy? 🍔`;
+    }
+    return `¡Hola! 😊 Por ahora estamos cerrados${ctx.closedMessage ? ` (${ctx.closedMessage})` : ''}.` +
+      (ctx.horarioTexto ? ` Nuestro horario: ${ctx.horarioTexto}.` : '') +
+      ` ¡Con gusto te atiendo en cuanto abramos!`;
+  }
+  return null;
+}
+
 async function processWhatsAppMessage(phone, text, restaurantId, conversationHistory, activeOrderId = null, isInvalidPhone = false, customerProfile = {}, activeOrderInfo = null) {
   try {
     // Menú + contexto del negocio cacheados por restaurante (TTL 60s). Antes se
@@ -143,6 +178,27 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
     ].filter(Boolean).join('\n');
     const jsonCustomerPhone = remembered.phone || (isInvalidPhone ? 'NUMERO_DE_TELEFONO_DADO_POR_CLIENTE' : phone);
 
+    // AHORRO (A): si es un saludo/agradecimiento suelto, contesta con plantilla
+    // y NO llames a Gemini (evita mandar el menú completo por un "hola"/"gracias").
+    // storeLink: se saca del primer enlace de las instrucciones del negocio (así
+    // es el de la tienda del tenant, sin hardcodear).
+    const storeLink = (extraInstructions.match(/https?:\/\/\S+/) || [])[0] || '';
+    const quick = tryQuickReply(text, {
+      isOpen: openState.isOpen,
+      businessName,
+      storeLink,
+      horarioTexto,
+      closedMessage: openState.message || '',
+      hasActiveOrder: !!(activeOrderId || activeOrderInfo),
+    });
+    if (quick) {
+      console.log(`[Gemini] Quick-reply SIN IA (ahorro) para: "${String(text).slice(0, 40)}"`);
+      return { status: 'CONVERSING', replyMessage: quick };
+    }
+
+    // AHORRO (B): quita descripciones vacías "()" del menú (ruido de tokens).
+    const menuForPrompt = String(menuString).replace(/ \(\)/g, '');
+
     const systemPrompt = `
       Eres el asistente virtual de ${businessName}, atendiendo por WhatsApp. Tu objetivo es dar una atención cálida y tomar el pedido del cliente logrando la mejor conversión de ventas.
 ${promosParaPrompt ? `
@@ -239,11 +295,13 @@ ${promosParaPrompt ? `
       ${extraInstructions}
       ` : ''}
       Menú disponible hoy:
-      ${menuString}
+      ${menuForPrompt}
     `;
 
-    // Convert history to Gemini format
-    const contents = conversationHistory.map(msg => ({
+    // Convert history to Gemini format. AHORRO (B): solo los últimos 14 turnos
+    // (suficiente contexto para un pedido; evita mandar historiales largos que
+    // inflan los tokens de entrada en cada llamada).
+    const contents = conversationHistory.slice(-14).map(msg => ({
       role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.text }]
     }));
