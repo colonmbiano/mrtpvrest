@@ -615,6 +615,25 @@ router.post('/orders', async (req, res) => {
     if (primary) resolvedLocationId = primary.id;
   }
 
+  // REGLA: el bot de WhatsApp NO toma pedidos si no hay un TURNO DE CAJA abierto
+  // en la sucursal. Antes, en el hueco entre "abre el negocio" (horario) y "el
+  // cajero abre turno", el bot creaba pedidos huérfanos que ninguna caja cobra
+  // ni cierra. El TPV ya exige turno abierto (requireActiveShift); esto alinea el
+  // canal del bot. Scope: solo WHATSAPP (la tienda online/kiosko no se tocan) y
+  // clientes (staff exento). El bot muestra el `error` tal cual al cliente.
+  if (source === 'WHATSAPP' && !isStaff && resolvedLocationId) {
+    const openShift = await prisma.cashShift.findFirst({
+      where: { locationId: resolvedLocationId, isOpen: true },
+      select: { id: true },
+    });
+    if (!openShift) {
+      return res.status(409).json({
+        error: 'Todavía no abrimos la caja 🙏. En cuanto abramos tomo tu pedido enseguida, ¡gracias por tu paciencia!',
+        code: 'NO_ACTIVE_SHIFT',
+      });
+    }
+  }
+
   try {
     // Verificar y calcular items desde la BD (nunca confiar en precios del cliente)
     const itemsData = await Promise.all(
