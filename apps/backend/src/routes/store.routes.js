@@ -851,6 +851,58 @@ router.post('/orders', async (req, res) => {
       });
     }
 
+    // ── Detección de "pedido corregido" (solo WHATSAPP) ─────────────────────
+    // Caso real (Master Burguer's, 2026-07-05): el cliente pide por WhatsApp y
+    // una hora después manda el pedido "corregido" con otros platillos. Como el
+    // carrito es DISTINTO, el dedupe de arriba no lo atrapa y el bot crea una
+    // SEGUNDA orden; si nadie cancela la primera, ambas se entregan/cobran y la
+    // caja del repartidor queda descuadrada. Aquí NO bloqueamos ni cancelamos
+    // nada (decidir cuál pedido vale es del cajero): si el mismo cliente tiene
+    // una orden WHATSAPP AÚN ABIERTA y sin pagar creada en las últimas ~2h,
+    // marcamos la orden nueva con una nota visible (ticket + panel del TPV) y
+    // avisamos a la caja por socket. Identidad del cliente: por teléfono si
+    // ambas órdenes lo traen; si no (el bot no siempre setea customerPhone),
+    // por customerName normalizado (sin acentos/mayúsculas/espacios dobles).
+    const CORRECTION_WINDOW_MS = 2 * 60 * 60 * 1000;
+    // Estados en los que el pedido anterior sigue "vivo" en la operación.
+    // Incluye PACKING (vive entre READY y ON_THE_WAY en la máquina de estados).
+    const CORRECTION_OPEN_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING', 'ON_THE_WAY'];
+    const normalizeCustomer = (s) => String(s || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/\s+/g, ' ').trim();
+    let correctionSuspect = null;
+    if (source === 'WHATSAPP') {
+      const newPhone = customerPhone?.trim() || null;
+      const newName = normalizeCustomer(customerName);
+      const openCandidates = await prisma.order.findMany({
+        where: {
+          restaurantId: restaurant.id,
+          locationId: resolvedLocationId,
+          source: 'WHATSAPP',
+          status: { in: CORRECTION_OPEN_STATUSES },
+          paymentStatus: { not: 'PAID' },
+          createdAt: { gte: new Date(Date.now() - CORRECTION_WINDOW_MS) },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true, orderNumber: true, status: true, total: true,
+          customerName: true, customerPhone: true, createdAt: true,
+        },
+        take: 25,
+      });
+      correctionSuspect = openCandidates.find((cand) => {
+        const candPhone = cand.customerPhone?.trim() || null;
+        // Con teléfono en AMBAS órdenes, manda el teléfono (dos clientes
+        // distintos pueden llamarse igual). Si a cualquiera le falta, caemos
+        // al nombre normalizado.
+        if (newPhone && candPhone) return candPhone === newPhone;
+        return newName.length > 0 && normalizeCustomer(cand.customerName) === newName;
+      }) || null;
+    }
+    const correctionNote = correctionSuspect
+      ? `⚠️ POSIBLE CORRECCIÓN del pedido #${correctionSuspect.orderNumber} (mismo cliente, sigue abierto y sin pagar) — verificar si el pedido anterior se cancela. NO se canceló automáticamente.`
+      : null;
+
     // Envío: calculado en el backend (fuente de verdad). Para DELIVERY usa el
     // modo configurado (FLAT o DISTANCE) con las coordenadas del cliente.
     let deliveryFee = 0;
@@ -1068,9 +1120,13 @@ router.post('/orders', async (req, res) => {
           deliveryLat:     resolvedOrderType === 'DELIVERY' ? deliveryLat : null,
           deliveryLng:     resolvedOrderType === 'DELIVERY' ? deliveryLng : null,
           deliveryDistanceKm: resolvedOrderType === 'DELIVERY' ? deliveryDistanceKm : null,
-          notes:           deliveryFeePending
-            ? [notes?.trim(), '⚠️ ENVÍO POR ASIGNAR: el cliente no compartió ubicación GPS. Cotizar y cobrar el envío manualmente.'].filter(Boolean).join(' — ')
-            : (notes?.trim() || null),
+          notes:           [
+            notes?.trim(),
+            deliveryFeePending
+              ? '⚠️ ENVÍO POR ASIGNAR: el cliente no compartió ubicación GPS. Cotizar y cobrar el envío manualmente.'
+              : null,
+            correctionNote,
+          ].filter(Boolean).join(' — ') || null,
           userId:          loyaltyUserId,
           pointsUsed:      pointsUsed + (reward ? reward.pointsCost : 0),
           items: { create: finalItemsData },
@@ -1131,6 +1187,29 @@ router.post('/orders', async (req, res) => {
         // caja pierda el pedido (caso raro; no hay sucursal que "cruzar").
         io.to(`restaurant:${restaurant.id}`).emit('order:new', order);
       }
+
+      // Aviso de posible corrección: evento dedicado a la caja (misma sucursal,
+      // mismo room de admins que order:new) para que el cajero verifique si el
+      // pedido anterior del cliente se cancela. restaurantId/locationId salen de
+      // la BD (resolveStore / location principal), nunca del payload del cliente.
+      if (correctionSuspect) {
+        const correctionPayload = {
+          newOrderId:          order.id,
+          newOrderNumber:      order.orderNumber,
+          newTotal:            order.total,
+          previousOrderId:     correctionSuspect.id,
+          previousOrderNumber: correctionSuspect.orderNumber,
+          previousTotal:       correctionSuspect.total,
+          previousStatus:      correctionSuspect.status,
+          customerName:        order.customerName,
+          customerPhone:       order.customerPhone,
+        };
+        if (resolvedLocationId) {
+          io.to(`restaurant:${restaurant.id}:location:${resolvedLocationId}:admins`).emit('order:possible-correction', correctionPayload);
+        } else {
+          io.to(`restaurant:${restaurant.id}`).emit('order:possible-correction', correctionPayload);
+        }
+      }
     }
 
     // Registro por cliente (Customer) + recompensa por hitos de compra. GATEADO
@@ -1165,6 +1244,9 @@ router.post('/orders', async (req, res) => {
       estimatedMinutes: order.estimatedMinutes || 30,
       couponWarnings,
       reward: milestoneReward,
+      // Folio del pedido abierto del mismo cliente (si se detectó): el bot lo
+      // puede usar para avisarle al cliente que la caja verificará el cambio.
+      ...(correctionSuspect ? { possibleCorrectionOf: correctionSuspect.orderNumber } : {}),
     });
   } catch (e) {
     console.error('[store] POST /orders error:', e.message);

@@ -1,7 +1,8 @@
 /**
  * useNotifications.ts
  * Escucha eventos Socket.io del backend y genera notificaciones en tiempo real.
- * Eventos: order:new, new:order (kiosk), order:updated, order:payment:confirmed
+ * Eventos: order:new, new:order (kiosk), order:updated, order:payment:confirmed,
+ *          order:possible-correction (pedido WhatsApp que corrige otro abierto)
  */
 "use client";
 import { useEffect, useRef, useCallback } from "react";
@@ -33,12 +34,13 @@ const PAY_LABEL: Record<string, string> = {
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 export type NotifType =
-  | "order_new"        // Nuevo pedido online (tienda)
-  | "order_kiosk"      // Pedido de kiosko
-  | "order_ready"      // Orden lista en cocina
-  | "order_delivered"  // Entrega confirmada por repartidor
-  | "order_paid"       // Pago confirmado
-  | "order_updated";   // Cambio de estado genérico
+  | "order_new"         // Nuevo pedido online (tienda)
+  | "order_kiosk"       // Pedido de kiosko
+  | "order_ready"       // Orden lista en cocina
+  | "order_delivered"   // Entrega confirmada por repartidor
+  | "order_paid"        // Pago confirmado
+  | "order_updated"     // Cambio de estado genérico
+  | "order_correction"; // Posible corrección de un pedido WhatsApp abierto
 
 export interface Notification {
   id: string;
@@ -184,6 +186,28 @@ export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
     // otros estados no generan notificación (demasiado ruido)
   }, [addNotification]);
 
+  // Pedido WhatsApp que parece CORRECCIÓN de otro aún abierto del mismo
+  // cliente (backend: store.routes.js emite order:possible-correction). El
+  // cajero decide si cancela el anterior — aquí solo avisamos, fuerte.
+  const handlePossibleCorrection = useCallback((data: any) => {
+    const body = `El pedido #${data.newOrderNumber ?? "?"} de ${
+      data.customerName || "Cliente"
+    } parece corrección del #${data.previousOrderNumber ?? "?"} (sigue abierto, $${Number(
+      data.previousTotal ?? 0,
+    ).toFixed(2)}). Verificar si el anterior se cancela.`;
+
+    addNotification({
+      type: "order_correction",
+      title: "⚠️ Posible pedido corregido",
+      body,
+      orderNumber: data.newOrderNumber != null ? String(data.newOrderNumber) : undefined,
+      total: typeof data.newTotal === "number" ? data.newTotal : undefined,
+    });
+
+    // También a la bandeja nativa de Android: este aviso evita cobrar doble.
+    fireLocalNotification("⚠️ Posible pedido corregido", body);
+  }, [addNotification]);
+
   const handleOrderPaid = useCallback((data: any) => {
     const folio =
       data.orderNumber ||
@@ -259,24 +283,26 @@ export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
         }
       });
 
-      socket.on("order:new",               handleOrderNew);
-      socket.on("new:order",               handleOrderKiosk);
-      socket.on("order:updated",           handleOrderUpdated);
-      socket.on("order:paid",              handleOrderPaid);
-      socket.on("order:payment:confirmed", handleOrderPaid);
+      socket.on("order:new",                 handleOrderNew);
+      socket.on("new:order",                 handleOrderKiosk);
+      socket.on("order:updated",             handleOrderUpdated);
+      socket.on("order:paid",                handleOrderPaid);
+      socket.on("order:payment:confirmed",   handleOrderPaid);
+      socket.on("order:possible-correction", handlePossibleCorrection);
     })();
 
     return () => {
       cancelled = true;
       const socket = socketRef.current;
       if (!socket) return;
-      socket.off("order:new",               handleOrderNew);
-      socket.off("new:order",               handleOrderKiosk);
-      socket.off("order:updated",           handleOrderUpdated);
-      socket.off("order:paid",              handleOrderPaid);
-      socket.off("order:payment:confirmed", handleOrderPaid);
+      socket.off("order:new",                 handleOrderNew);
+      socket.off("new:order",                 handleOrderKiosk);
+      socket.off("order:updated",             handleOrderUpdated);
+      socket.off("order:paid",                handleOrderPaid);
+      socket.off("order:payment:confirmed",   handleOrderPaid);
+      socket.off("order:possible-correction", handlePossibleCorrection);
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [handleOrderNew, handleOrderKiosk, handleOrderUpdated, handleOrderPaid]);
+  }, [handleOrderNew, handleOrderKiosk, handleOrderUpdated, handleOrderPaid, handlePossibleCorrection]);
 }
