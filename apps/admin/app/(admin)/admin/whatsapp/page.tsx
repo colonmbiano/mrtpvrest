@@ -4,6 +4,7 @@ import {
   Users, Plus, Trash2, X, Send,
   Store, TrendingUp, Receipt, Wallet, Bike, Pencil, CheckCircle2, XCircle,
   Bot, Sparkles, Power, Ban, QrCode, RefreshCw, Save, MessageSquare, Clock,
+  AlertTriangle,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
@@ -156,6 +157,11 @@ function AssistantTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<BotMetrics>(null);
   const [status, setStatus] = useState<BotStatus | null>(null);
+  // Freno de saturación (vive en RestaurantConfig, compartido con /admin/tienda):
+  // tope de pedidos abiertos en cocina a partir del cual el bot y la tienda
+  // online rechazan pedidos. 0 = sin freno. El TPV nunca se bloquea.
+  const [maxOpenOrders, setMaxOpenOrders] = useState(0);
+  const [saturatedMessage, setSaturatedMessage] = useState("");
 
   const loadConfig = useCallback(async () => {
     try {
@@ -170,6 +176,13 @@ function AssistantTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
       setIgnoreGroupName(data.config?.ignoreGroupName || "");
     } catch {
       showToast("Error al cargar la configuración del bot", false);
+    }
+    try {
+      const { data } = await api.get("/api/admin/config");
+      setMaxOpenOrders(data?.maxOpenOrders ?? 0);
+      setSaturatedMessage(data?.saturatedMessage ?? "");
+    } catch {
+      /* el freno es opcional: sin config no bloqueamos la pantalla */
     }
   }, [showToast]);
 
@@ -223,6 +236,8 @@ function AssistantTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
           ignoreGroupName: ignoreGroupName.trim(),
         },
       });
+      // Freno de saturación → RestaurantConfig (el PUT solo toca los campos enviados).
+      await api.put("/api/admin/config", { maxOpenOrders, saturatedMessage });
       setConfigured(true);
       setUpdatedAt(new Date().toISOString());
       showToast("Configuración del bot guardada. Se aplica en ~1 min.");
@@ -350,6 +365,48 @@ function AssistantTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
         <StatTile icon={Wallet} value={money(b?.revenue ?? 0)} label="Ingresos" />
         <StatTile icon={Receipt} value={money(b?.avgTicket ?? 0)} label="Ticket prom." />
       </div>
+
+      {/* Freno de saturación — el bot deja de aceptar pedidos con la cocina al tope */}
+      <WtCard className="space-y-4 p-5">
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={16} className="shrink-0 text-tx-mid" />
+              <span className="font-syne text-sm font-bold text-tx">Freno de saturación</span>
+            </div>
+            <p className="mt-1 text-xs text-tx-mut">
+              {maxOpenOrders > 0
+                ? `Al llegar a ${maxOpenOrders} pedidos abiertos en cocina, el bot (y la tienda online) dejan de aceptar pedidos y le avisan al cliente. El TPV nunca se bloquea.`
+                : "Apagado — el bot acepta pedidos sin límite aunque la cocina vaya al tope."}
+            </p>
+          </div>
+          <Toggle checked={maxOpenOrders > 0} onChange={(v) => setMaxOpenOrders(v ? 25 : 0)} label="Freno de saturación" />
+        </div>
+        {maxOpenOrders > 0 && (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label>Tope de pedidos abiertos</Label>
+              <input
+                type="number" min={1} value={maxOpenOrders}
+                onChange={(e) => setMaxOpenOrders(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                className={inputCls} style={fieldStyle}
+              />
+              <p className="mt-1.5 text-xs text-tx-mut">
+                Cuenta los pedidos pendientes, confirmados y en preparación de las últimas 2 horas (todos los canales).
+              </p>
+            </div>
+            <div>
+              <Label>Mensaje al cliente (saturados)</Label>
+              <textarea
+                className={textareaCls} style={fieldStyle} rows={3} maxLength={300}
+                value={saturatedMessage}
+                onChange={(e) => setSaturatedMessage(e.target.value)}
+                placeholder="Ej: ⚠️ Cocina al tope 🔥 dame 30 min y vuelve a intentarlo 🙏"
+              />
+            </div>
+          </div>
+        )}
+      </WtCard>
 
       {/* Instrucciones / personalidad */}
       <WtCard className="space-y-3 p-5">
