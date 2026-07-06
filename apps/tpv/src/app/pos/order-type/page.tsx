@@ -559,6 +559,99 @@ export default function OrderTypePage() {
       )
     : false;
 
+  // Corregir el método de pago / reembolsar un ticket YA cobrado (pestaña
+  // "Cobradas"). Mismo gate que el backend (requirePermission('reopen_table')):
+  // roles privilegiados pasan sin permiso explícito, el resto necesita
+  // reopen_table. Espejo del cajón de tickets en /pos/menu.
+  const canCorrectPayment =
+    (currentEmployee?.role
+      ? ["ADMIN", "SUPER_ADMIN", "OWNER", "MANAGER"].includes(
+          currentEmployee.role,
+        )
+      : false) || !!currentEmployee?.permissions?.includes("reopen_table");
+
+  const handleCorrectPaymentMethod = useCallback(
+    async (o: { id: string }, method: string) => {
+      try {
+        const { data } = await api.put(
+          `/api/orders/${o.id}/correct-payment-method`,
+          { paymentMethod: method },
+        );
+        // Refleja el cambio en el cache local de cobrados (la fila y el chip de
+        // método se actualizan al instante; el picker excluye el nuevo método).
+        setPaidOrders((prev) => {
+          const next = prev.map((p) =>
+            p.id === o.id ? { ...p, paymentMethod: method } : p,
+          );
+          writePaidTicketsCache(next);
+          return next;
+        });
+        const label =
+          method === "CASH"
+            ? "Efectivo"
+            : method === "TRANSFER"
+              ? "Transferencia"
+              : method === "CARD"
+                ? "Tarjeta"
+                : method;
+        toast.success(`Método corregido a ${label}`);
+        if (data?.cashAdjusted === "locked") {
+          toast.warning(
+            "El corte del repartidor ya estaba cerrado; la caja no se ajustó automáticamente.",
+          );
+        }
+      } catch (err: any) {
+        toast.error(
+          err?.response?.data?.error || "No se pudo corregir el método de pago",
+        );
+        throw err;
+      }
+    },
+    [],
+  );
+
+  // Reembolsar un ticket YA cobrado (pestaña "Cobradas"), total o parcial, por
+  // un error de cobro. El backend valida el monto server-side y cuadra la caja
+  // (gasto REFUND en el turno / caja del repartidor).
+  const handleRefund = useCallback(
+    async (
+      o: { id: string; total?: number },
+      payload: { amount?: number; reason: string },
+    ) => {
+      try {
+        const { data } = await api.post(`/api/orders/${o.id}/refund`, {
+          amount: payload.amount,
+          reason: payload.reason,
+        });
+        const type = data?.refund?.type;
+        const amt = data?.refund?.amount;
+        const amtLabel = amt != null ? `: $${Number(amt).toFixed(2)}` : "";
+        // Reembolso TOTAL ⇒ ya no es una venta cobrada, sale de la lista.
+        // Parcial ⇒ se conserva (sigue cobrada por el saldo restante).
+        setPaidOrders((prev) => {
+          const next =
+            type === "FULL" ? prev.filter((p) => p.id !== o.id) : prev;
+          writePaidTicketsCache(next);
+          return next;
+        });
+        toast.success(
+          `Reembolso ${type === "PARTIAL" ? "parcial" : "total"} procesado${amtLabel}`,
+        );
+        if (data?.shiftAdjusted === "no_open_shift") {
+          toast.warning(
+            "No hay turno de caja abierto; el efectivo del reembolso no se descontó del corte automáticamente.",
+          );
+        }
+      } catch (err: any) {
+        toast.error(
+          err?.response?.data?.error || "No se pudo procesar el reembolso",
+        );
+        throw err;
+      }
+    },
+    [],
+  );
+
   // Detalle / cobro desde el cajón reusan el flujo de la lista (navegan al
   // catálogo). La reimpresión imprime directo (sin navegar ni reactivar).
   const handleDrawerShowDetail = (o: DrawerOrder) => {
@@ -861,6 +954,10 @@ export default function OrderTypePage() {
         mode={ordersMode}
         onModeChange={setOrdersMode}
         paidLoading={paidLoading}
+        canCorrectPaymentMethod={canCorrectPayment && ordersMode === "paid"}
+        onCorrectPaymentMethod={handleCorrectPaymentMethod}
+        canRefund={canCorrectPayment && ordersMode === "paid"}
+        onRefund={handleRefund}
         openAccounts={ordersMode === "paid" ? paidAccounts : openAccounts}
         onShiftClose={goShiftClose}
         onExpenses={goExpenses}
@@ -948,6 +1045,10 @@ export default function OrderTypePage() {
         onAssignDriver={handleAssignDriverToOrders}
         canSendToKitchen={ordersMode === "open"}
         onSendToKitchen={handleSendOrdersToKitchen}
+        canCorrectPaymentMethod={canCorrectPayment && ordersMode === "paid"}
+        onCorrectPaymentMethod={handleCorrectPaymentMethod}
+        canRefund={canCorrectPayment && ordersMode === "paid"}
+        onRefund={handleRefund}
       />
 
     </div>
