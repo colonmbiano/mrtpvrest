@@ -725,6 +725,11 @@ function initWhatsApp(io) {
           const vence = reward.expiresAt ? new Date(reward.expiresAt).toLocaleDateString('es-MX') : '';
           await safeSend(`🎉 ¡Y esta es tu compra #${reward.ordersCount} con nosotros! Te ganaste un cupón:\n🎟️ *${reward.couponCode}* — ${pct}% de descuento en tu próximo pedido${vence ? `\n📅 Vence el ${vence}` : ''}.\n¡Gracias por tu preferencia! 🙌`);
         }
+      } else if (orderCreated?.code === 'NO_ACTIVE_SHIFT') {
+        // La caja aún no está abierta: NO es un error técnico, es "todavía no
+        // abrimos". No confirmamos ni prometemos; invitamos a esperar la apertura.
+        console.warn(`[WhatsApp Bot] Pedido de ${phone} sin turno de caja abierto; no se crea (NO_ACTIVE_SHIFT).`);
+        await safeSend(orderCreated.message || '¡Ya casi! Todavía no abrimos la caja 🙏. En cuanto abramos tomo tu pedido enseguida.');
       } else {
         // Falla al registrar: NUNCA decir "confirmado". Dejar el hilo abierto.
         console.error(`[WhatsApp Bot] FALLO al crear orden CONFIRMED de ${phone}. items=${JSON.stringify(items)}`);

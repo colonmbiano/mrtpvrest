@@ -177,7 +177,12 @@ async function createOrderFromGemini(restaurantId, parsedJson, port = 3001) {
     return response.data;
 
   } catch (error) {
-    console.error('[WhatsApp Bot] Error creando la orden:', error?.response?.data || error.message);
+    const data = error?.response?.data;
+    console.error('[WhatsApp Bot] Error creando la orden:', data || error.message);
+    // Superficie del código de error para que client.js relate un mensaje
+    // específico (p.ej. NO_ACTIVE_SHIFT: la caja aún no está abierta) en vez del
+    // genérico "tuve un detalle". Sin código conocido → null (fallo genérico).
+    if (data?.code) return { failed: true, code: data.code, message: data.error };
     return null;
   }
 }
