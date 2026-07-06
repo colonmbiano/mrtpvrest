@@ -321,42 +321,86 @@ ${promosParaPrompt ? `
       },
     };
 
-    // Resiliencia: reintentos con backoff ante 429/503/500 y errores de red, con
-    // fallback a un modelo alterno, y timeout para no dejar al cliente colgado si
-    // Gemini no responde. La key va en header (x-goog-api-key), no en la URL, para
-    // no filtrarla en logs de error.
-    const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+    // ── PROVEEDOR DE IA: Groq (Llama) si hay GROQ_API_KEY; si no, Gemini ──────
+    // Groq (Llama) es mucho más barato/rápido que Gemini, y la plataforma ya lo
+    // usa para parsear pedidos (mismo modelo llama-3.3-70b-versatile). Se elige
+    // por presencia de GROQ_API_KEY → flip reversible por env, sin tocar código.
+    // Reintentos con backoff ante 429/503/500 y errores de red + modelo alterno.
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    let response = null;
     let lastErr = null;
-    outer:
-    for (const model of MODELS) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          response = await axios.post(url, body, {
-            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GOOGLE_AI_API_KEY },
-            timeout: 30000,
-          });
-          break outer;
-        } catch (err) {
-          lastErr = err;
-          const code = err?.response?.status;
-          const retriable = code === 429 || code === 503 || code === 500 || !err.response; // red/timeout sin response
-          console.warn(`[Gemini] ${model} intento ${attempt + 1} falló (${code || err.code || 'red'})${retriable ? ', reintentando…' : ', paso a fallback'}`);
-          if (!retriable) break; // no transitorio → probar el siguiente modelo
-          await sleep(1000 * Math.pow(2, attempt) + Math.floor(Math.random() * 300));
+    let replyText = null;
+
+    if (process.env.GROQ_API_KEY) {
+      // Formato OpenAI (chat completions). `response_format: json_object`
+      // garantiza JSON válido (el prompt ya pide JSON, requisito de Groq).
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...conversationHistory.slice(-14).map((m) => ({
+          role: m.role === 'user' ? 'user' : 'assistant',
+          content: m.text,
+        })),
+        { role: 'user', content: text },
+      ];
+      const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+      outerGroq:
+      for (const model of GROQ_MODELS) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const r = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+              model,
+              messages,
+              temperature: 0.2,
+              max_tokens: 1024,
+              response_format: { type: 'json_object' },
+            }, {
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+              timeout: 30000,
+            });
+            replyText = r.data?.choices?.[0]?.message?.content;
+            if (replyText) break outerGroq;
+          } catch (err) {
+            lastErr = err;
+            const code = err?.response?.status;
+            const retriable = code === 429 || code === 503 || code === 500 || !err.response;
+            console.warn(`[Groq] ${model} intento ${attempt + 1} falló (${code || err.code || 'red'})${retriable ? ', reintentando…' : ', paso a fallback'}`);
+            if (!retriable) break;
+            await sleep(1000 * Math.pow(2, attempt) + Math.floor(Math.random() * 300));
+          }
         }
       }
+      if (!replyText) throw lastErr || new Error('Groq sin respuesta');
+    } else {
+      // Gemini (fallback si no hay GROQ_API_KEY). Key en header, no en URL.
+      const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+      let response = null;
+      outerGemini:
+      for (const model of MODELS) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            response = await axios.post(url, body, {
+              headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GOOGLE_AI_API_KEY },
+              timeout: 30000,
+            });
+            break outerGemini;
+          } catch (err) {
+            lastErr = err;
+            const code = err?.response?.status;
+            const retriable = code === 429 || code === 503 || code === 500 || !err.response;
+            console.warn(`[Gemini] ${model} intento ${attempt + 1} falló (${code || err.code || 'red'})${retriable ? ', reintentando…' : ', paso a fallback'}`);
+            if (!retriable) break;
+            await sleep(1000 * Math.pow(2, attempt) + Math.floor(Math.random() * 300));
+          }
+        }
+      }
+      if (!response) throw lastErr || new Error('Gemini sin respuesta');
+      const cand = response.data?.candidates?.[0];
+      replyText = cand?.content?.parts?.[0]?.text;
     }
-    if (!response) throw lastErr || new Error('Gemini sin respuesta');
 
-    // Blindaje ante bloqueo por safety o respuesta sin texto (candidates vacío).
-    const cand = response.data?.candidates?.[0];
-    const replyText = cand?.content?.parts?.[0]?.text;
     if (!replyText) {
-      console.error('Gemini sin texto (posible safety block):', JSON.stringify(response.data?.promptFeedback || response.data || {}).slice(0, 500));
-      throw new Error('Gemini respuesta vacía');
+      console.error('LLM sin texto (respuesta vacía / bloqueo).');
+      throw new Error('LLM respuesta vacía');
     }
     let parsedReply;
     try {
