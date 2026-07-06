@@ -129,11 +129,22 @@ async function getBotEmployeeId(restaurantId) {
 /**
  * Recibe el JSON de Gemini y crea la orden en el TPV
  */
-async function createOrderFromGemini(restaurantId, parsedJson, port = 3001) {
+async function createOrderFromGemini(restaurantId, parsedJson, port = 3001, chatId = null) {
   const items = normalizeBotItems(parsedJson.items);
   if (parsedJson.status !== 'CONFIRMED' || items.length === 0) {
     return null;
   }
+
+  // Idempotencia + dedupe por chat EN BD: `wa:<sha1(chat)16>:<uuid>`. El uuid
+  // se genera UNA vez por confirmación (postWithRetry re-manda el MISMO body,
+  // así el @unique de clientOrderId corta replays exactos), y el hash del chat
+  // le permite al backend detectar un CONFIRMED re-emitido para el mismo chat
+  // con carrito similar (ventana server-side que sobrevive restarts del bot —
+  // la guarda en memoria de client.js solo cubre 45 min; el duplicado real
+  // #1230/#1244 llegó a los 59. Ver dedupe en store.routes.js).
+  const clientOrderId = chatId
+    ? `wa:${crypto.createHash('sha1').update(String(chatId)).digest('hex').slice(0, 16)}:${crypto.randomUUID()}`
+    : undefined;
 
   try {
     // Sucursal principal: en API-only viene de /api/bot/context (sin BD); en
@@ -162,6 +173,7 @@ async function createOrderFromGemini(restaurantId, parsedJson, port = 3001) {
       source: 'WHATSAPP',
       paymentMethod: normalizePaymentMethod(parsedJson.paymentMethod, orderType),
       notes: 'Pedido generado por asistente de IA de WhatsApp',
+      ...(clientOrderId ? { clientOrderId } : {}),
       items
     };
 
