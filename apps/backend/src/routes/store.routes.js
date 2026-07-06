@@ -474,6 +474,49 @@ router.get('/locations', async (req, res) => {
   }
 });
 
+// Similitud de carritos por multiconjunto de menuItemId (con cantidades):
+// unidades compartidas / unidades del carrito mayor. 1.0 = idénticos, 0 = nada
+// en común. La usa el dedupe por chat de WhatsApp: en el duplicado real
+// #1230/#1244 (2026-07-05) el segundo pedido repetía 7 de 9 unidades → 0.78.
+function orderItemSimilarity(newItems, existingItems) {
+  const tally = (list) => {
+    const m = new Map();
+    for (const it of list || []) {
+      if (!it?.menuItemId) continue;
+      m.set(it.menuItemId, (m.get(it.menuItemId) || 0) + Math.max(1, Number(it.quantity) || 1));
+    }
+    return m;
+  };
+  const a = tally(newItems);
+  const b = tally(existingItems);
+  let totalA = 0, totalB = 0, shared = 0;
+  for (const v of a.values()) totalA += v;
+  for (const v of b.values()) totalB += v;
+  for (const [id, qty] of a) shared += Math.min(qty, b.get(id) || 0);
+  const denom = Math.max(totalA, totalB);
+  return denom > 0 ? shared / denom : 0;
+}
+
+// Respuesta de replay para un pedido que YA existe (mismo shape que el 201 de
+// creación, para que el bot/storefront lo traten como éxito sin crear nada).
+function sendDedupReplay(res, order, dedupReason) {
+  res.setHeader('X-Dedup-Replay', 'true');
+  return res.status(201).json({
+    id:          order.id,
+    orderNumber: order.orderNumber,
+    status:      order.status,
+    total:       order.total,
+    discount:    order.discount,
+    pointsUsed:  order.pointsUsed || 0,
+    pointsDiscount: 0,
+    tip:         order.tip,
+    estimatedMinutes: order.estimatedMinutes || 30,
+    couponWarnings: [],
+    deduped: true,
+    dedupReason,
+  });
+}
+
 // ── POST /api/store/orders ───────────────────────────────────────────────────
 router.post('/orders', async (req, res) => {
   const store = await resolveStore(req, res);
@@ -537,6 +580,53 @@ router.post('/orders', async (req, res) => {
   const tableNumber = resolvedOrderType === 'DINE_IN' && rawTableNumber
     ? (Math.max(1, Math.min(999, parseInt(rawTableNumber) || 0)) || null)
     : null;
+
+  // ── Dedupe PERSISTENTE por chat de WhatsApp ────────────────────────────────
+  // El bot manda clientOrderId con forma `wa:<hash16-del-chat>:<uuid>`: el hash
+  // identifica el CHAT (sha1 del id @lid/@c.us, no reversible) y el uuid hace
+  // único cada intento. Dos usos:
+  //  1. El prefijo `wa:<hash>:` permite buscar en BD los pedidos RECIENTES del
+  //     mismo chat: si Gemini re-emite CONFIRMED con un carrito muy parecido
+  //     (comprobante de pago tardío, eco del historial) devolvemos el pedido
+  //     existente en vez de crear otro. La guarda en memoria del bot solo cubre
+  //     45 min y muere con cada restart; el duplicado real #1230/#1244
+  //     (2026-07-05, $926 reembolsados) llegó a los 59 min. Esta red vive en BD.
+  //  2. El @unique de clientOrderId corta replays EXACTOS (reintentos del bot)
+  //     a nivel BD aunque expire la ventana (ver catch P2002 abajo).
+  // Corre ANTES de los gates de tienda cerrada/saturación/turno: si el pedido
+  // YA existe, la respuesta correcta es acusarlo, no un error. Solo aplica a
+  // source=WHATSAPP con el formato exacto: storefront/kiosko no mandan
+  // clientOrderId y un valor con otra forma se ignora (no se persiste).
+  const botClientOrderId = (source === 'WHATSAPP'
+    && typeof req.body.clientOrderId === 'string'
+    && /^wa:[a-f0-9]{8,40}:[A-Za-z0-9-]{6,40}$/.test(req.body.clientOrderId))
+    ? req.body.clientOrderId : null;
+  if (botClientOrderId) {
+    const chatPrefix = botClientOrderId.slice(0, botClientOrderId.lastIndexOf(':') + 1);
+    const windowMin = parseInt(process.env.WHATSAPP_CHAT_DEDUP_MINUTES, 10) || 120;
+    const minSimilarity = Number(process.env.WHATSAPP_CHAT_DEDUP_SIMILARITY) || 0.6;
+    const chatCandidates = await prisma.order.findMany({
+      where: {
+        restaurantId: restaurant.id,
+        source: 'WHATSAPP',
+        // Un pedido CANCELADO no bloquea re-ordenar lo mismo.
+        status: { not: 'CANCELLED' },
+        clientOrderId: { startsWith: chatPrefix },
+        createdAt: { gte: new Date(Date.now() - windowMin * 60_000) },
+      },
+      include: { items: { select: { menuItemId: true, quantity: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+    const dupChat = chatCandidates.find((cand) =>
+      cand.clientOrderId === botClientOrderId ||
+      orderItemSimilarity(Array.isArray(items) ? items : [], cand.items) >= minSimilarity
+    );
+    if (dupChat) {
+      console.warn(`[store] Dedupe por chat WhatsApp: pedido ${dupChat.orderNumber} ya existe para ${chatPrefix} (no se crea otro).`);
+      return sendDedupReplay(res, dupChat, 'CHAT_WINDOW');
+    }
+  }
 
   // Tienda cerrada: bloquear pedidos online (kioskos operan presencialmente y
   // no dependen de este flag). Considera override manual Y horario automático.
@@ -1049,6 +1139,9 @@ router.post('/orders', async (req, res) => {
           restaurantId:    restaurant.id,
           locationId:      resolvedLocationId,
           orderNumber,
+          // Llave de idempotencia/chat del bot de WhatsApp (ver dedupe arriba).
+          // undefined para storefront/kiosko: el campo queda null como siempre.
+          clientOrderId:   botClientOrderId || undefined,
           status:          'PENDING',
           orderType:       resolvedOrderType,
           tableNumber,
@@ -1167,6 +1260,17 @@ router.post('/orders', async (req, res) => {
       reward: milestoneReward,
     });
   } catch (e) {
+    // Replay exacto que se CRUZÓ en carrera con su primer intento (timeout del
+    // bot + reintento mientras la primera transacción seguía en vuelo): ambos
+    // pasan el dedupe de arriba, pero el @unique de clientOrderId corta al
+    // segundo en BD (P2002). Respondemos la orden que sí quedó creada.
+    if (e?.code === 'P2002' && botClientOrderId
+        && String(e?.meta?.target || '').includes('clientOrderId')) {
+      const existing = await prisma.order.findFirst({
+        where: { restaurantId: restaurant.id, clientOrderId: botClientOrderId },
+      }).catch(() => null);
+      if (existing) return sendDedupReplay(res, existing, 'CHAT_WINDOW');
+    }
     console.error('[store] POST /orders error:', e.message);
     res.status(400).json({ error: e.message || 'Error al crear el pedido.' });
   }
