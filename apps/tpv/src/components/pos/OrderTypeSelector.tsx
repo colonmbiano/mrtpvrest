@@ -5,11 +5,13 @@ import {
   Armchair,
   ArrowLeftRight,
   ArrowRight,
+  Banknote,
   Bell,
   Bike,
   CheckCircle2,
   Circle,
   Coins,
+  CreditCard,
   Globe,
   Merge,
   LayoutGrid,
@@ -26,12 +28,14 @@ import {
   ShoppingCart,
   SlidersHorizontal,
   Table2,
+  Undo2,
   User,
   Users,
   Utensils,
   Wallet,
   Zap,
 } from "lucide-react";
+import { hapticMedium } from "@/lib/haptics";
 import type { OrderType } from "@/components/tpv/TicketPanel";
 import { ORDER_TYPE_ACTION, ORDER_TYPE_BADGE, ORDER_TYPE_SHORT } from "@/lib/orderTypes";
 import UserBadge from "@/components/UserBadge";
@@ -79,6 +83,19 @@ const PAY_METHOD_LABEL: Record<string, string> = {
 };
 const payMethodLabel = (m?: string | null): string =>
   m ? PAY_METHOD_LABEL[m] || m : "Pagado";
+
+// Métodos a los que se puede corregir un cobro desde la pestaña "Cobradas".
+// Coincide con CORRECTABLE_PAYMENT_METHODS del backend (sin OTHER en la UI) y
+// con el selector equivalente del cajón de tickets (OrdersDrawer).
+const CORRECTION_METHODS: {
+  key: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+}[] = [
+  { key: "CASH", label: "Efectivo", icon: Banknote },
+  { key: "TRANSFER", label: "Transfer.", icon: ArrowLeftRight },
+  { key: "CARD", label: "Tarjeta", icon: CreditCard },
+];
 
 // Color "web" de la app (índigo), reutilizado del badge de pedidos web.
 const WEB_ACCENT = "#5e6ad2";
@@ -143,6 +160,22 @@ interface OrderTypeSelectorProps {
   onReprintPaid?: (id: string) => void;
   /** Spinner en la lista mientras se cargan los cobrados y no hay cache. */
   paidLoading?: boolean;
+  /** Solo pestaña "Cobradas": habilita corregir el método de pago de un ticket
+   *  ya cobrado (efectivo ↔ transferencia ↔ tarjeta). Mismo gate que el cajón
+   *  de tickets: permiso reopen_table / rol privilegiado. */
+  canCorrectPaymentMethod?: boolean;
+  /** Aplica el nuevo método al ticket cobrado. El caller llama al backend
+   *  (PUT /orders/:id/correct-payment-method) y refresca el cache de cobrados. */
+  onCorrectPaymentMethod?: (account: OpenAccount, method: string) => Promise<void>;
+  /** Solo pestaña "Cobradas": habilita REEMBOLSAR un ticket ya cobrado (total
+   *  o parcial). Mismo permiso que corregir el método. */
+  canRefund?: boolean;
+  /** Procesa el reembolso. El caller llama al backend (POST /orders/:id/refund)
+   *  con el monto (opcional = total) y el motivo, y refresca los cobrados. */
+  onRefund?: (
+    account: OpenAccount,
+    payload: { amount?: number; reason: string },
+  ) => Promise<void>;
   /** Cuentas en curso (mesa, llevar, domicilio) — o cobradas en modo "paid". */
   openAccounts?: OpenAccount[];
   /**
@@ -278,6 +311,10 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onModeChange,
   onReprintPaid,
   paidLoading = false,
+  canCorrectPaymentMethod = false,
+  onCorrectPaymentMethod,
+  canRefund = false,
+  onRefund,
   openAccounts = [],
   allowedTypes,
 }) => {
@@ -295,6 +332,17 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   const [isMerging, setIsMerging] = useState(false);
   const [showDriverPicker, setShowDriverPicker] = useState(false);
   const [assigningDriverId, setAssigningDriverId] = useState<string | null>(null);
+
+  // Pestaña "Cobradas": id del ticket cuyo selector de corrección de método
+  // está abierto, y el id que está guardando contra el backend (spinner).
+  const [correctingId, setCorrectingId] = useState<string | null>(null);
+  const [correctingSaveId, setCorrectingSaveId] = useState<string | null>(null);
+  // Pestaña "Cobradas": id del ticket con el panel de reembolso abierto, el
+  // monto y el motivo capturados, y el id que procesa contra el backend.
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [refundAmount, setRefundAmount] = useState<string>("");
+  const [refundReason, setRefundReason] = useState<string>("");
+  const [refundSaveId, setRefundSaveId] = useState<string | null>(null);
 
   const canSelect = !paidMode && (canMerge || Boolean(onAssignDriver));
 
@@ -841,15 +889,205 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                         Imprimir / Cobrar ("Cobrar" se oculta con hideMoney). En
                         modo selección se ocultan (la fila es un toggle). */}
                     {!selectMode && (paidMode ? (
-                      <div className="flex items-stretch gap-2">
-                        <button
-                          type="button"
-                          aria-label={`Reimprimir recibo de ${title}`}
-                          onClick={() => onReprintPaid?.(acc.id)}
-                          className="flex-1 h-10 rounded-xl bg-[#88D66C]/12 border border-[#88D66C]/30 text-[#88D66C] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
-                        >
-                          <Receipt size={15} strokeWidth={2.5} /> Reimprimir recibo
-                        </button>
+                      <div className="flex w-full flex-col gap-2">
+                        <div className="flex items-stretch gap-2">
+                          <button
+                            type="button"
+                            aria-label={`Reimprimir recibo de ${title}`}
+                            onClick={() => onReprintPaid?.(acc.id)}
+                            className="flex-1 h-10 rounded-xl bg-[#88D66C]/12 border border-[#88D66C]/30 text-[#88D66C] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                          >
+                            <Receipt size={15} strokeWidth={2.5} /> Reimprimir
+                          </button>
+                          {canCorrectPaymentMethod && onCorrectPaymentMethod && (
+                            <button
+                              type="button"
+                              aria-label={`Corregir método de pago de ${title}`}
+                              onClick={() => {
+                                hapticMedium();
+                                setRefundingId(null);
+                                setCorrectingId((cur) =>
+                                  cur === acc.id ? null : acc.id,
+                                );
+                              }}
+                              className={`flex-1 h-10 rounded-xl border text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95 ${
+                                correctingId === acc.id
+                                  ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)]"
+                                  : "bg-white/5 border-white/10 text-white/75"
+                              }`}
+                            >
+                              <Wallet size={15} strokeWidth={2.5} /> Corregir cobro
+                            </button>
+                          )}
+                          {canRefund && onRefund && (
+                            <button
+                              type="button"
+                              aria-label={`Reembolsar ticket de ${title}`}
+                              onClick={() => {
+                                hapticMedium();
+                                setCorrectingId(null);
+                                setRefundingId((cur) => {
+                                  if (cur === acc.id) return null;
+                                  // Al abrir: prefijar el monto con el total.
+                                  setRefundAmount(String(acc.total ?? ""));
+                                  setRefundReason("");
+                                  return acc.id;
+                                });
+                              }}
+                              className={`flex-1 h-10 rounded-xl border text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95 ${
+                                refundingId === acc.id
+                                  ? "bg-red-500 border-red-500 text-white"
+                                  : "bg-red-500/10 border-red-500/30 text-red-300"
+                              }`}
+                            >
+                              <Undo2 size={15} strokeWidth={2.5} /> Reembolsar
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Panel inline de reembolso (monto total/parcial + motivo). */}
+                        {canRefund && onRefund && refundingId === acc.id && (
+                          <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-2.5 flex flex-col gap-2">
+                            <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-red-300/80 px-0.5">
+                              Reembolsar · ${Number(acc.total ?? 0).toFixed(2)}
+                            </p>
+                            <div className="flex items-stretch gap-2">
+                              <div className="flex-1">
+                                <label className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/40 px-0.5">
+                                  Monto
+                                </label>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min={0}
+                                  step="0.01"
+                                  value={refundAmount}
+                                  onChange={(e) => setRefundAmount(e.target.value)}
+                                  className="w-full h-10 rounded-xl bg-black/30 border border-white/10 px-2 text-white text-sm font-mono focus:outline-none focus:border-red-400/60"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setRefundAmount(String(acc.total ?? ""))}
+                                className="self-end h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-white/70 text-[10px] font-semibold uppercase tracking-[0.1em] active:scale-95 transition-transform"
+                              >
+                                Total
+                              </button>
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/40 px-0.5">
+                                Motivo
+                              </label>
+                              <input
+                                type="text"
+                                value={refundReason}
+                                placeholder="p. ej. cobré de más"
+                                maxLength={500}
+                                onChange={(e) => setRefundReason(e.target.value)}
+                                className="w-full h-10 rounded-xl bg-black/30 border border-white/10 px-2 text-white text-sm focus:outline-none focus:border-red-400/60"
+                              />
+                            </div>
+                            <div className="flex items-stretch gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setRefundingId(null)}
+                                className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 text-white/70 text-[11px] font-semibold uppercase tracking-[0.1em] active:scale-95 transition-transform"
+                              >
+                                Cancelar
+                              </button>
+                              {(() => {
+                                const amt = Number(refundAmount);
+                                const reasonOk = refundReason.trim().length > 0;
+                                const amountOk =
+                                  Number.isFinite(amt) &&
+                                  amt > 0 &&
+                                  amt <= Number(acc.total ?? 0) + 0.005;
+                                const busy = refundSaveId === acc.id;
+                                return (
+                                  <button
+                                    type="button"
+                                    disabled={busy || !reasonOk || !amountOk}
+                                    onClick={async () => {
+                                      hapticMedium();
+                                      setRefundSaveId(acc.id);
+                                      try {
+                                        // Sin monto explícito o igual al total ⇒
+                                        // el backend reembolsa el saldo restante.
+                                        const isFull =
+                                          Math.abs(amt - Number(acc.total ?? 0)) < 0.005;
+                                        await onRefund(acc, {
+                                          amount: isFull ? undefined : amt,
+                                          reason: refundReason.trim(),
+                                        });
+                                        setRefundingId(null);
+                                      } catch {
+                                        // El caller muestra el error (toast).
+                                      } finally {
+                                        setRefundSaveId(null);
+                                      }
+                                    }}
+                                    className="flex-[1.4] h-10 rounded-xl bg-red-500 border border-red-500 text-white text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40"
+                                  >
+                                    {busy ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <Undo2 size={14} strokeWidth={2.5} />
+                                    )}
+                                    Reembolsar
+                                  </button>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Selector inline del nuevo método (excluye el actual). */}
+                        {canCorrectPaymentMethod &&
+                          onCorrectPaymentMethod &&
+                          correctingId === acc.id && (
+                            <div className="rounded-xl border border-white/10 bg-white/5 p-2">
+                              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-white/40 mb-1.5 px-0.5">
+                                Cambiar método a…
+                              </p>
+                              <div className="flex items-stretch gap-2">
+                                {CORRECTION_METHODS.filter(
+                                  (m) =>
+                                    m.key !==
+                                    (acc.paymentMethod || "").toUpperCase(),
+                                ).map((m) => {
+                                  const Icon = m.icon;
+                                  const busy = correctingSaveId === acc.id;
+                                  return (
+                                    <button
+                                      key={m.key}
+                                      type="button"
+                                      disabled={busy}
+                                      onClick={async () => {
+                                        hapticMedium();
+                                        setCorrectingSaveId(acc.id);
+                                        try {
+                                          await onCorrectPaymentMethod(acc, m.key);
+                                          setCorrectingId(null);
+                                        } catch {
+                                          // El caller muestra el error (toast).
+                                        } finally {
+                                          setCorrectingSaveId(null);
+                                        }
+                                      }}
+                                      className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 text-white text-[11px] font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-40"
+                                    >
+                                      {busy ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                      ) : (
+                                        <Icon size={14} strokeWidth={2.5} />
+                                      )}
+                                      {m.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                       </div>
                     ) : (
                       <div className="flex items-stretch gap-2">
