@@ -636,6 +636,22 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           printedWebOrders.current.delete(id);
           return;
         }
+        // IMPRIME-UNA-VEZ (server-side): si hay varias tablets con la caja
+        // abierta, solo la primera que reclama imprime; las demás reciben
+        // claimed:false y se saltan. Fail-open: si el reclamo falla por red,
+        // imprime igual (mejor un posible doble que una comanda perdida).
+        let mayPrint = true;
+        try {
+          const claim = await api.post(`/api/orders/${id}/claim-kitchen-print`);
+          mayPrint = claim?.data?.claimed !== false;
+        } catch {
+          mayPrint = true;
+        }
+        if (!mayPrint) {
+          const folioOtra = full.orderNumber ? `#${full.orderNumber}` : "";
+          toast.info(`Pedido web ${folioOtra} lo imprime otra caja`);
+          return; // otra pantalla se encarga; el id queda marcado, no se reintenta aquí
+        }
         const res = await printKitchenTickets(printers, {
           orderNumber: full.orderNumber || String(full.id).slice(-6).toUpperCase(),
           orderType: full.orderType || null,
