@@ -1323,6 +1323,15 @@ model RestaurantConfig {
   isOpen            Boolean @default(true)
   closedMessage     String?
 
+  // FRENO DE SATURACIÓN · tope de pedidos en cocina para canales remotos.
+  // Si maxOpenOrders > 0 y los pedidos abiertos del restaurante (PENDING/
+  // CONFIRMED/PREPARING creados en las últimas 2h, de cualquier canal)
+  // alcanzan el tope, la tienda online y el bot de WhatsApp rechazan pedidos
+  // nuevos con 429 STORE_SATURATED. El TPV y el kiosko nunca se bloquean.
+  // null/0 → sin freno. saturatedMessage = texto que ve el cliente (opcional).
+  maxOpenOrders    Int?
+  saturatedMessage String?
+
   // ─── HORARIO DE ATENCIÓN ───────────────────────────────────────────────
   // scheduleEnabled: si true, la apertura se calcula con el reloj local
   // (timezone) contra businessHours. isOpen sigue siendo el override "forzar
