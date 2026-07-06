@@ -674,8 +674,25 @@ function initWhatsApp(io) {
       // cliente esperaba un pedido que nunca existió. Además el folio y el total
       // se arman en CÓDIGO desde la respuesta del server (nunca lo que alucine
       // Gemini) — cumple "totales siempre server-side".
-      const orderCreated = await createOrderFromGemini(restaurant.id, geminiResponse, process.env.PORT || 3001);
-      if (orderCreated && orderCreated.id) {
+      // chatKey viaja al backend como llave de dedupe persistente (hasheada):
+      // si este CONFIRMED duplica un pedido reciente del MISMO chat, el server
+      // devuelve el existente con dedupReason=CHAT_WINDOW en vez de crear otro.
+      const orderCreated = await createOrderFromGemini(restaurant.id, geminiResponse, process.env.PORT || 3001, chatKey);
+      if (orderCreated && orderCreated.id && orderCreated.dedupReason === 'CHAT_WINDOW') {
+        // Red SERVER-SIDE anti-duplicado: complementa la guarda en memoria de
+        // arriba (45 min, se pierde al reiniciar — el duplicado #1230/#1244 del
+        // 2026-07-05 entró a los 59 min y costó $926 reembolsados). Acusamos el
+        // pedido existente y NO confirmamos uno "nuevo".
+        console.warn(`[WhatsApp Bot] Backend dedupeó CONFIRMED de ${phone} contra el pedido #${orderCreated.orderNumber} del mismo chat; no se duplica.`);
+        recentOrders.set(phone, { orderId: orderCreated.id, orderNumber: orderCreated.orderNumber, total: orderCreated.total ?? null, summary: '', timestamp: Date.now() });
+        rememberRecentOrderChat(chatKey, phone, orderCreated.id);
+        history.push({
+          role: 'model',
+          text: `El pedido ya estaba registrado antes: folio ${orderCreated.orderNumber}. NO se creó uno nuevo.`,
+        });
+        pruneHistory(history);
+        await safeSend(`¡Tu pedido *#${orderCreated.orderNumber}* ya está registrado y en preparación! 🙌 No creé uno nuevo para no duplicarlo. Si quieres AGREGAR algo dime qué y lo sumo; y si de verdad es OTRO pedido igual, un asesor te lo confirma en un momento.`);
+      } else if (orderCreated && orderCreated.id) {
         recentOrders.set(phone, { orderId: orderCreated.id, orderNumber: orderCreated.orderNumber, total: orderCreated.total ?? null, summary: '', timestamp: Date.now() });
         rememberRecentOrderChat(chatKey, phone, orderCreated.id);
         updateCustomerProfile(phone, {
