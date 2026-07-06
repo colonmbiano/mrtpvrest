@@ -402,6 +402,7 @@ const { requireModule, MODULES } = require('../lib/modules');
 const { computeBulkPromoDiscount, loadActiveBulkPromos } = require('../lib/bulk-promo');
 const { nextOrderNumber } = require('../lib/order-number');
 const { releaseTableAfterPayment } = require('../services/table-lifecycle.service');
+const { claimKitchenPrint } = require('../lib/print-claim');
 const audit = require('../lib/audit-logger');
 const {
   createOrderSchema,
@@ -2924,6 +2925,31 @@ router.post('/:id/messages', authenticate, requireTenantAccess, validateBody(mes
     });
     res.json(msg);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Reclamo "imprime-una-vez" de la comanda de cocina de un pedido web. Lo llama
+// el TPV ANTES de auto-imprimir: solo la primera tablet que reclama imprime; las
+// demás reciben { claimed: false } y NO imprimen (evita comandas duplicadas
+// cuando hay varias pantallas de caja abiertas). El cliente es fail-open: si
+// esta llamada falla por red, imprime igual (mejor un posible doble que una
+// comanda perdida). Sin rol específico: cualquier sesión válida del tenant puede
+// coordinar la impresión; el pedido se valida que pertenezca al restaurante.
+router.post('/:id/claim-kitchen-print', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, restaurantId },
+      select: { id: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const claimed = await claimKitchenPrint(`${restaurantId}:${order.id}`);
+    res.json({ claimed });
+  } catch (e) {
+    console.error('claim-kitchen-print error:', e?.message || e);
+    // Fail-open: ante error, deja imprimir (no perder la comanda por este guard).
+    res.json({ claimed: true });
+  }
 });
 
 module.exports = router;
