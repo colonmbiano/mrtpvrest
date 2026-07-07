@@ -1365,6 +1365,13 @@ export interface ShiftCloseCashInLine {
   category?: string | null;
 }
 
+export interface ShiftCloseTransferLine {
+  orderNumber?: string | number | null;
+  customerName?: string | null;
+  amount: number;
+  paidAt?: string | null; // ISO
+}
+
 export interface ShiftCloseTicketInput {
   shiftId?: string | null;
   businessName?: string | null;
@@ -1385,6 +1392,8 @@ export interface ShiftCloseTicketInput {
   expectedCash?: number | null;  // esperado; null/undefined → se calcula
   expenses?: ShiftCloseExpenseLine[];
   cashIns?: ShiftCloseCashInLine[];
+  /** Transferencias del turno, una por una, para cotejarlas contra el banco. */
+  transfers?: ShiftCloseTransferLine[];
   notes?: string | null;
   blindClose?: boolean;
   /** Imprime el arqueo (esperado + desfase) aunque sea ciego. Se activa tras
@@ -1519,6 +1528,35 @@ export function buildShiftCloseTicket(input: ShiftCloseTicketInput): string {
   // Notas
   if (input.notes && input.notes.trim()) {
     d += sep + boldOn + "NOTAS\n" + boldOff + input.notes.trim() + "\n";
+  }
+
+  // Transferencias del turno, al final: folio + hora + monto, una por línea,
+  // para cotejarlas una por una contra los movimientos de la app del banco.
+  const transfers = input.transfers ?? [];
+  if (transfers.length > 0) {
+    const fmtTime = (iso?: string | null): string => {
+      if (!iso) return "";
+      const dt = new Date(iso);
+      if (Number.isNaN(dt.getTime())) return "";
+      return dt.toLocaleTimeString("es-MX", {
+        timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit",
+      });
+    };
+    d += sep + boldOn + "TRANSFERENCIAS\n" + boldOff;
+    let sumTransfers = 0;
+    for (const t of transfers) {
+      const amount = Number(t.amount) || 0;
+      sumTransfers += amount;
+      const folio = t.orderNumber != null && String(t.orderNumber).trim() !== ""
+        ? "#" + String(t.orderNumber)
+        : "Pedido";
+      const time = fmtTime(t.paidAt);
+      const money = fmtMoney(amount);
+      const left = ("- " + folio + (time ? " " + time : ""))
+        .slice(0, Math.max(1, lw - money.length - 1));
+      d += row(left, money, lw);
+    }
+    d += boldOn + row("TOTAL TRANSFER:", fmtMoney(sumTransfers), lw) + boldOff;
   }
 
   d += (heavy ? CMD.DBLSTRIKE_OFF : "");

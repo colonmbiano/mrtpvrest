@@ -31,6 +31,15 @@ interface ShiftCashIn {
   createdAt: string;
 }
 
+// Detalle de una transferencia del turno (respuesta del cierre). Se imprime
+// al final del ticket de corte para cotejarla contra la app del banco.
+interface ShiftTransferOrder {
+  orderNumber?: string | number | null;
+  customerName?: string | null;
+  amount: number;
+  paidAt?: string | null;
+}
+
 interface Shift {
   id: string;
   openedAt: string;
@@ -55,6 +64,8 @@ interface Shift {
   notes?: string | null;
   expenses?: ShiftExpense[];
   cashIns?: ShiftCashIn[];
+  // Transferencias del turno (solo llega en la respuesta del cierre).
+  transferOrders?: ShiftTransferOrder[];
   // Cuántos meseros/staff quedaron cerrados (clock-out) junto con la caja.
   staffClockedOut?: number;
   // Cuántos repartidores recibieron su corte automático al cerrar la caja.
@@ -140,6 +151,12 @@ export default function CierreTurno() {
     })),
     cashIns: (s.cashIns ?? []).map((c) => ({
       description: c.description, amount: Number(c.amount || 0), category: c.category,
+    })),
+    transfers: (s.transferOrders ?? []).map((t) => ({
+      orderNumber: t.orderNumber ?? null,
+      customerName: t.customerName ?? null,
+      amount: Number(t.amount || 0),
+      paidAt: t.paidAt ?? null,
     })),
     notes: s.notes ?? null,
     blindClose: s.blindClose,
