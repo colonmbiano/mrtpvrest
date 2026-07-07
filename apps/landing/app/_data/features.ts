@@ -18,7 +18,7 @@ export const features: Feature[] = [
     nav: 'Punto de venta (TPV)',
     metaTitle: 'Punto de Venta para Restaurantes (TPV) | MRTPVREST',
     metaDescription:
-      'Software de punto de venta para restaurantes: cobra, gestiona mesas, divide cuentas y cierra caja desde una tablet. Prueba 14 días gratis, sin tarjeta.',
+      'Software de punto de venta para restaurantes: cobra, gestiona mesas, divide cuentas y cierra caja desde una tablet. Prueba 6 meses gratis, sin tarjeta.',
     eyebrow: 'TPV · Punto de venta',
     h1: 'El punto de venta para restaurantes que cobra a la velocidad de tu servicio',
     intro:

@@ -62,11 +62,11 @@ export default async function VerticalPage({ params }: { params: Promise<{ giro:
             <h1>{vertical.h1}</h1>
             <p>{vertical.intro}</p>
             <div className="hero-actions">
-              <a className="btn btn-primary" href={registerUrl}>Probar 14 días gratis</a>
+              <a className="btn btn-primary" href={registerUrl}>Probar 6 meses gratis</a>
               <Link className="btn btn-soft" href="/punto-de-venta">Ver otros giros</Link>
             </div>
             <div className="trust-row" aria-label="Beneficios de confianza">
-              <span>14 días gratis</span>
+              <span>6 meses gratis</span>
               <span>Sin tarjeta</span>
               <span>Soporte en español</span>
             </div>

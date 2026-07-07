@@ -46,7 +46,7 @@ export default function ModaVerticalsHubPage() {
               cuadra tu caja, en Windows, Android o web.
             </p>
             <div className="hero-actions">
-              <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+              <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
               <Link className="btn btn-soft" href="/moda">Ver MODA+</Link>
             </div>
           </div>
@@ -67,9 +67,9 @@ export default function ModaVerticalsHubPage() {
         <section className="final-cta">
           <span className="section-kicker">MODA+</span>
           <h2>¿No ves tu giro? También funciona para ti</h2>
-          <p>Si vendes ropa o calzado por talla y color, MODA+ se adapta. Pruébalo 15 días gratis y sin tarjeta.</p>
+          <p>Si vendes ropa o calzado por talla y color, MODA+ se adapta. Pruébalo 6 meses gratis y sin tarjeta.</p>
           <div className="hero-actions">
-            <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+            <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
             <Link className="btn btn-line" href="/moda/comparativa/sicar">Ver comparativas</Link>
           </div>
         </section>

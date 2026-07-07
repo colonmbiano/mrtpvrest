@@ -197,9 +197,9 @@ export default function ModaInventoryGuidePage() {
         <section className="final-cta">
           <span className="section-kicker">MODA+</span>
           <h2>Controla tu inventario desde el primer día</h2>
-          <p>Carga tus productos por talla y color, imprime etiquetas y deja que la caja descuente el stock por ti. 15 días gratis, sin tarjeta.</p>
+          <p>Carga tus productos por talla y color, imprime etiquetas y deja que la caja descuente el stock por ti. 6 meses gratis, sin tarjeta.</p>
           <div className="hero-actions">
-            <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+            <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
             <Link className="btn btn-line" href="/moda">Ver MODA+</Link>
           </div>
         </section>

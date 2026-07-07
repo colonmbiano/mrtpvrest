@@ -37,7 +37,7 @@ export default function VerticalsHubPage() {
               mariscos por kilo. MRTPVREST se adapta a la forma de operar de tu restaurante.
             </p>
             <div className="hero-actions">
-              <a className="btn btn-primary" href={registerUrl}>Probar 14 días gratis</a>
+              <a className="btn btn-primary" href={registerUrl}>Probar 6 meses gratis</a>
               <Link className="btn btn-soft" href="/funciones">Ver funciones</Link>
             </div>
           </div>
@@ -60,7 +60,7 @@ export default function VerticalsHubPage() {
         <section className="final-cta">
           <span className="section-kicker">MRTPVREST</span>
           <h2>¿No ves tu giro? También funciona para ti</h2>
-          <p>MRTPVREST se adapta a cualquier restaurante. Pruébalo 14 días gratis y configúralo a tu operación.</p>
+          <p>MRTPVREST se adapta a cualquier restaurante. Pruébalo 6 meses gratis y configúralo a tu operación.</p>
           <div className="hero-actions">
             <a className="btn btn-primary" href={registerUrl}>Registrar mi restaurante</a>
             <Link className="btn btn-line" href="/comparativa/parrot">Ver comparativas</Link>

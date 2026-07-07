@@ -18,7 +18,7 @@ export const verticals: Vertical[] = [
     nav: 'Taquería',
     metaTitle: 'Punto de Venta para Taquería | MRTPVREST',
     metaDescription:
-      'Punto de venta para taquería: cobra tacos por pieza, salsas y extras como modificadores, maneja delivery y cierra caja al turno. Prueba 14 días gratis.',
+      'Punto de venta para taquería: cobra tacos por pieza, salsas y extras como modificadores, maneja delivery y cierra caja al turno. Prueba 6 meses gratis.',
     eyebrow: 'Giro · Taquería',
     h1: 'El punto de venta para taquería que aguanta la hora pico',
     intro:
@@ -45,7 +45,7 @@ export const verticals: Vertical[] = [
     nav: 'Pizzería',
     metaTitle: 'Punto de Venta para Pizzería | MRTPVREST',
     metaDescription:
-      'Punto de venta para pizzería: tamaños y mitades, ingredientes extra, control de horno por KDS y delivery propio sin comisión. Prueba 14 días gratis.',
+      'Punto de venta para pizzería: tamaños y mitades, ingredientes extra, control de horno por KDS y delivery propio sin comisión. Prueba 6 meses gratis.',
     eyebrow: 'Giro · Pizzería',
     h1: 'Punto de venta para pizzería: tamaños, mitades y delivery sin comisión',
     intro:
@@ -72,7 +72,7 @@ export const verticals: Vertical[] = [
     nav: 'Cafetería',
     metaTitle: 'Punto de Venta para Cafetería | MRTPVREST',
     metaDescription:
-      'Punto de venta para cafetería: cobro rápido en mostrador, modificadores de leche y tamaño, puntos de cliente y pedidos QR. Prueba 14 días gratis.',
+      'Punto de venta para cafetería: cobro rápido en mostrador, modificadores de leche y tamaño, puntos de cliente y pedidos QR. Prueba 6 meses gratis.',
     eyebrow: 'Giro · Cafetería',
     h1: 'Punto de venta para cafetería: mostrador rápido y clientes que vuelven',
     intro:
@@ -99,7 +99,7 @@ export const verticals: Vertical[] = [
     nav: 'Bar y cantina',
     metaTitle: 'Punto de Venta para Bar y Cantina | MRTPVREST',
     metaDescription:
-      'Punto de venta para bar: cuentas abiertas largas, rondas, cuentas divididas, propinas y control de inventario de barra. Prueba 14 días gratis.',
+      'Punto de venta para bar: cuentas abiertas largas, rondas, cuentas divididas, propinas y control de inventario de barra. Prueba 6 meses gratis.',
     eyebrow: 'Giro · Bar y cantina',
     h1: 'Punto de venta para bar: cuentas abiertas, rondas y propinas bajo control',
     intro:
@@ -126,7 +126,7 @@ export const verticals: Vertical[] = [
     nav: 'Comida rápida',
     metaTitle: 'Punto de Venta para Comida Rápida y Fast Food | MRTPVREST',
     metaDescription:
-      'Punto de venta para comida rápida: combos, cobro veloz, kiosko de autoservicio y KDS de cocina para mover más pedidos en hora pico. Prueba 14 días gratis.',
+      'Punto de venta para comida rápida: combos, cobro veloz, kiosko de autoservicio y KDS de cocina para mover más pedidos en hora pico. Prueba 6 meses gratis.',
     eyebrow: 'Giro · Comida rápida',
     h1: 'Punto de venta para comida rápida: velocidad en cada pedido',
     intro:

@@ -64,14 +64,14 @@ const stats: { num: string; label: string }[] = [
   { num: '+1,000', label: 'pedidos al mes procesa un solo restaurante con MRTPVREST' },
   { num: '3', label: 'canales de venta en una caja: mostrador, WhatsApp y tienda en línea' },
   { num: '6', label: 'apps conectadas en un solo ecosistema' },
-  { num: '14 días', label: 'gratis para probar, sin tarjeta' },
+  { num: '6 meses', label: 'gratis para probar, sin tarjeta' },
 ]
 
 const plans = [
   {
     name: 'Básico',
     price: '$29',
-    local: '~$580 MXN / mes',
+    local: '6 meses gratis · luego ~$580 MXN / mes',
     text: 'Para locales que quieren ordenar caja, ventas y reportes.',
     features: ['1 sucursal', 'TPV + Admin', 'Reportes esenciales', 'Soporte por correo'],
     featured: false,
@@ -79,7 +79,7 @@ const plans = [
   {
     name: 'Pro',
     price: '$59',
-    local: '~$1,180 MXN / mes',
+    local: '6 meses gratis · luego ~$1,180 MXN / mes',
     text: 'Para restaurantes con cocina, roles y operación diaria activa.',
     features: ['Apps conectadas', 'KDS + Delivery', 'Roles y permisos', 'Onboarding asistido'],
     featured: true,
@@ -87,7 +87,7 @@ const plans = [
   {
     name: 'Unlimited',
     price: '$99',
-    local: '~$1,980 MXN / mes',
+    local: '6 meses gratis · luego ~$1,980 MXN / mes',
     text: 'Para grupos con múltiples pantallas, equipos y sucursales.',
     features: ['Sucursales ilimitadas', 'Automatizaciones', 'Soporte prioritario', 'Integraciones avanzadas'],
     featured: false,
@@ -330,10 +330,10 @@ export default function HomePage() {
         <div className={styles.pricingInner}>
           <div className={styles.sectionHead}>
             <span className={styles.kicker}>Precios</span>
-            <h2 className={styles.sectionTitle}>Empieza sin tarjeta y escala cuando lo pidas</h2>
+            <h2 className={styles.sectionTitle}>Gratis 6 meses por lanzamiento, sin tarjeta</h2>
             <p className={styles.sectionLede}>
               Empieza solo con el TPV y activa módulos — cocina, reparto, WhatsApp, tienda en línea —
-              conforme tu operación los pida. Todos los planes incluyen 14 días gratis y soporte en
+              conforme tu operación los pida. Todos los planes incluyen 6 meses gratis y soporte en
               español durante el arranque.
             </p>
           </div>

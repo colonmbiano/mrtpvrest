@@ -61,7 +61,7 @@ export default function ModaGuidesHubPage() {
               etiquetar con código de barras: contenido práctico para vender más ordenado.
             </p>
             <div className="hero-actions">
-              <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+              <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
               <Link className="btn btn-soft" href="/moda">Ver MODA+</Link>
             </div>
           </div>
@@ -82,9 +82,9 @@ export default function ModaGuidesHubPage() {
         <section className="final-cta">
           <span className="section-kicker">MODA+</span>
           <h2>Pon en práctica lo que lees</h2>
-          <p>Crea tu cuenta, carga tus productos por talla y color y vende desde el primer día. 15 días gratis, sin tarjeta.</p>
+          <p>Crea tu cuenta, carga tus productos por talla y color y vende desde el primer día. 6 meses gratis, sin tarjeta.</p>
           <div className="hero-actions">
-            <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+            <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
             <Link className="btn btn-line" href="/moda/giros">Ver giros</Link>
           </div>
         </section>

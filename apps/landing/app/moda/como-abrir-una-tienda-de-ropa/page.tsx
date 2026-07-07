@@ -152,7 +152,7 @@ export default function ModaOpenStoreGuidePage() {
               <li>Cuadre la caja por turno (esperado vs. contado).</li>
               <li>Funcione en el equipo que tienes y sin depender del internet.</li>
             </ul>
-            <p>MODA+ cubre justo eso, y puedes probarlo 15 días sin tarjeta antes de comprometerte.</p>
+            <p>MODA+ cubre justo eso, y puedes probarlo 6 meses sin tarjeta antes de comprometerte.</p>
           </section>
 
           <section>
@@ -205,9 +205,9 @@ export default function ModaOpenStoreGuidePage() {
         <section className="final-cta">
           <span className="section-kicker">MODA+</span>
           <h2>Arranca tu tienda con el control desde el día uno</h2>
-          <p>Carga tus productos por talla y color, imprime etiquetas y cuadra tu caja con MODA+. 15 días gratis, sin tarjeta.</p>
+          <p>Carga tus productos por talla y color, imprime etiquetas y cuadra tu caja con MODA+. 6 meses gratis, sin tarjeta.</p>
           <div className="hero-actions">
-            <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+            <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
             <Link className="btn btn-line" href="/moda/guias">Ver más guías</Link>
           </div>
         </section>

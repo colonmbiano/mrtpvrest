@@ -16,7 +16,7 @@ export type Comparison = {
 const sharedReasons = [
   { title: 'Ecosistema conectado', text: 'TPV, KDS de cocina, delivery, kiosko, app de cliente y administración comparten la misma operación en tiempo real, no módulos sueltos.' },
   { title: 'Pensado para LATAM', text: 'Interfaz cálida en español, flujos para piso y cocina, y soporte en español durante el arranque.' },
-  { title: 'Precio público y transparente', text: 'Planes visibles desde el sitio, con 14 días gratis y sin tarjeta para evaluar antes de decidir.' },
+  { title: 'Precio público y transparente', text: 'Planes visibles desde el sitio, con 6 meses gratis y sin tarjeta para evaluar antes de decidir.' },
   { title: 'Delivery propio con caja conciliada', text: 'Reparto propio con app de repartidor y corte de caja del repartidor ligado a sus pedidos.' },
 ]
 
@@ -33,7 +33,7 @@ export const comparisons: Comparison[] = [
     competitor: 'Parrot Software',
     metaTitle: 'Alternativa a Parrot Software para Restaurantes | MRTPVREST',
     metaDescription:
-      '¿Buscas una alternativa a Parrot Software? Compara MRTPVREST: punto de venta, KDS, delivery, kiosko y administración conectados. Prueba 14 días gratis.',
+      '¿Buscas una alternativa a Parrot Software? Compara MRTPVREST: punto de venta, KDS, delivery, kiosko y administración conectados. Prueba 6 meses gratis.',
     eyebrow: 'Comparativa · Alternativa',
     h1: 'MRTPVREST como alternativa a Parrot Software',
     intro:
@@ -45,7 +45,7 @@ export const comparisons: Comparison[] = [
     reasons: sharedReasons,
     criteria: sharedCriteria,
     faqs: [
-      ['¿MRTPVREST es una alternativa a Parrot Software?', 'Sí. MRTPVREST es un punto de venta para restaurantes con TPV, KDS, delivery, kiosko, app de cliente y administración conectados; puedes probarlo 14 días gratis y sin tarjeta para compararlo con tu opción actual.'],
+      ['¿MRTPVREST es una alternativa a Parrot Software?', 'Sí. MRTPVREST es un punto de venta para restaurantes con TPV, KDS, delivery, kiosko, app de cliente y administración conectados; puedes probarlo 6 meses gratis y sin tarjeta para compararlo con tu opción actual.'],
       ['¿Puedo migrar por etapas?', 'Sí. Puedes empezar por reportes, cocina o TPV sin apagar de golpe tu operación actual.'],
     ],
   },
@@ -67,7 +67,7 @@ export const comparisons: Comparison[] = [
     criteria: sharedCriteria,
     faqs: [
       ['¿MRTPVREST funciona en la nube?', 'Sí, la administración y los reportes viven en la nube y las apps operativas sincronizan en tiempo real; la impresión de tickets es local por red.'],
-      ['¿Qué incluye la prueba gratis?', 'Puedes evaluar la plataforma 14 días sin tarjeta y sin bloqueo de datos durante la prueba.'],
+      ['¿Qué incluye la prueba gratis?', 'Puedes evaluar la plataforma 6 meses sin tarjeta y sin bloqueo de datos durante la prueba.'],
     ],
   },
   {
@@ -75,7 +75,7 @@ export const comparisons: Comparison[] = [
     competitor: 'Loyverse',
     metaTitle: 'Alternativa a Loyverse para Restaurantes | MRTPVREST',
     metaDescription:
-      '¿Loyverse se te queda corto para tu restaurante? MRTPVREST suma KDS, delivery, kiosko y operación de restaurante en tiempo real. Prueba 14 días gratis.',
+      '¿Loyverse se te queda corto para tu restaurante? MRTPVREST suma KDS, delivery, kiosko y operación de restaurante en tiempo real. Prueba 6 meses gratis.',
     eyebrow: 'Comparativa · Alternativa',
     h1: 'MRTPVREST como alternativa a Loyverse',
     intro:
@@ -88,7 +88,7 @@ export const comparisons: Comparison[] = [
     criteria: sharedCriteria,
     faqs: [
       ['¿En qué se diferencia de un POS general?', 'MRTPVREST está hecho para restaurantes: conecta cocina (KDS), delivery, kiosko, pedidos QR y administración en una sola operación, no solo el cobro.'],
-      ['¿Tiene plan para empezar?', 'Sí, hay planes públicos desde un tier básico y una prueba de 14 días sin tarjeta.'],
+      ['¿Tiene plan para empezar?', 'Sí, hay planes públicos desde un tier básico y una prueba de 6 meses sin tarjeta.'],
     ],
   },
 ]

@@ -6,7 +6,7 @@ import { SiteNav, SiteFooter } from '../_components/SiteChrome'
 
 const metaTitle = 'Punto de Venta para Tienda de Ropa | MODA+'
 const metaDescription =
-  'Punto de venta para tienda de ropa y boutique: inventario por talla y color, etiquetas de código de barras y corte de caja. 15 días gratis, sin tarjeta.'
+  'Punto de venta para tienda de ropa y boutique: inventario por talla y color, etiquetas de código de barras y corte de caja. 6 meses gratis, sin tarjeta.'
 
 export const metadata: Metadata = {
   title: metaTitle,
@@ -81,7 +81,7 @@ const faqs: [string, string][] = [
   ],
   [
     '¿Cuánto cuesta? ¿Necesito tarjeta?',
-    'Puedes probarlo 15 días gratis, sin tarjeta. Creas tu tienda desde la app en minutos.',
+    'Puedes probarlo 6 meses gratis, sin tarjeta. Creas tu tienda desde la app en minutos.',
   ],
 ]
 
@@ -117,7 +117,7 @@ export default function ModaLandingPage() {
         applicationCategory: 'BusinessApplication',
         operatingSystem: 'Windows, Android, Web',
         description: metaDescription,
-        offers: { '@type': 'Offer', price: '0', priceCurrency: 'MXN', description: '15 días de prueba gratis, sin tarjeta' },
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'MXN', description: '6 meses de prueba gratis, sin tarjeta' },
       },
       {
         '@type': 'FAQPage',
@@ -145,11 +145,11 @@ export default function ModaLandingPage() {
               tiendas de moda en México.
             </p>
             <div className="hero-actions">
-              <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+              <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
               <Link className="btn btn-soft" href="#funciona">Ver cómo funciona</Link>
             </div>
             <div className="trust-row" aria-label="Beneficios de confianza">
-              <span>15 días gratis</span>
+              <span>6 meses gratis</span>
               <span>Sin tarjeta</span>
               <span>Windows, Android y web</span>
             </div>
@@ -267,7 +267,7 @@ export default function ModaLandingPage() {
           <h2>Empieza hoy con tu tienda de ropa</h2>
           <p>Crea tu cuenta en minutos, carga tus productos por talla y color y vende desde el primer día.</p>
           <div className="hero-actions">
-            <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+            <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
             <Link className="btn btn-line" href="#faq">Ver preguntas frecuentes</Link>
           </div>
         </section>

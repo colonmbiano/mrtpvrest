@@ -201,9 +201,9 @@ export default function ModaCashCloseGuidePage() {
         <section className="final-cta">
           <span className="section-kicker">MODA+</span>
           <h2>Que tu caja cuadre sola</h2>
-          <p>MODA+ calcula el efectivo esperado por turno y te muestra la diferencia al cerrar. 15 días gratis, sin tarjeta.</p>
+          <p>MODA+ calcula el efectivo esperado por turno y te muestra la diferencia al cerrar. 6 meses gratis, sin tarjeta.</p>
           <div className="hero-actions">
-            <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+            <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
             <Link className="btn btn-line" href="/moda/guias">Ver más guías</Link>
           </div>
         </section>

@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   ...buildMetadata({
     title: 'Software de Punto de Venta para Restaurantes | MRTPVREST',
     description:
-      'Punto de venta para restaurantes que conecta caja, cocina (KDS), delivery, kiosko y administración en tiempo real. Prueba 14 días gratis, sin tarjeta.',
+      'Punto de venta para restaurantes que conecta caja, cocina (KDS), delivery, kiosko y administración en tiempo real. Prueba 6 meses gratis, sin tarjeta.',
     path: '/',
   }),
   keywords: [

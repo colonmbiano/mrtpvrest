@@ -285,7 +285,7 @@ export default function LoginPage() {
               </div>
 
               <Link href="/register" className="flex min-h-12 items-center justify-center rounded-xl border border-bd-2 px-4 text-sm font-bold text-primary transition hover:border-[var(--brand-primary)] hover:bg-iris-soft">
-                Crear cuenta gratis · 15 días sin tarjeta
+                Crear cuenta gratis · 6 meses sin tarjeta
               </Link>
             </div>
 

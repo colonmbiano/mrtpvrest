@@ -65,11 +65,11 @@ export default async function ModaVerticalPage({ params }: { params: Promise<{ g
             <h1>{vertical.h1}</h1>
             <p>{vertical.intro}</p>
             <div className="hero-actions">
-              <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+              <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
               <Link className="btn btn-soft" href="/moda">Ver MODA+</Link>
             </div>
             <div className="trust-row" aria-label="Beneficios de confianza">
-              <span>15 días gratis</span>
+              <span>6 meses gratis</span>
               <span>Sin tarjeta</span>
               <span>Windows, Android y web</span>
             </div>
@@ -127,7 +127,7 @@ export default async function ModaVerticalPage({ params }: { params: Promise<{ g
           <h2>El punto de venta para tu {vertical.nav.toLowerCase()}</h2>
           <p>Crea tu cuenta en minutos, carga tus productos por talla y color y vende desde el primer día.</p>
           <div className="hero-actions">
-            <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+            <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
             <Link className="btn btn-line" href="/moda#faq">Ver preguntas frecuentes</Link>
           </div>
         </section>

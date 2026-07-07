@@ -139,7 +139,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           <h2>El punto de venta para tu restaurante</h2>
           <p>Registra tu negocio, conecta caja y cocina y opera con datos desde el primer turno.</p>
           <div className="hero-actions">
-            <a className="btn btn-primary" href={registerUrl}>Probar 14 días gratis</a>
+            <a className="btn btn-primary" href={registerUrl}>Probar 6 meses gratis</a>
             <Link className="btn btn-line" href="/blog">Ver más guías</Link>
           </div>
         </section>

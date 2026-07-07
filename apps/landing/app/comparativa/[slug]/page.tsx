@@ -60,11 +60,11 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
             <h1>{comparison.h1}</h1>
             <p>{comparison.intro}</p>
             <div className="hero-actions">
-              <a className="btn btn-primary" href={registerUrl}>Probar 14 días gratis</a>
+              <a className="btn btn-primary" href={registerUrl}>Probar 6 meses gratis</a>
               <Link className="btn btn-soft" href="/funciones">Ver funciones</Link>
             </div>
             <div className="trust-row" aria-label="Beneficios de confianza">
-              <span>14 días gratis</span>
+              <span>6 meses gratis</span>
               <span>Sin tarjeta</span>
               <span>Soporte en español</span>
             </div>
@@ -133,7 +133,7 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
         <section className="final-cta">
           <span className="section-kicker">MRTPVREST</span>
           <h2>Compáralo con tu operación real</h2>
-          <p>Registra tu restaurante, prueba 14 días sin tarjeta y decide con datos, no con folletos.</p>
+          <p>Registra tu restaurante, prueba 6 meses sin tarjeta y decide con datos, no con folletos.</p>
           <div className="hero-actions">
             <a className="btn btn-primary" href={registerUrl}>Registrar mi restaurante</a>
             <Link className="btn btn-line" href="/#precios">Ver precios</Link>

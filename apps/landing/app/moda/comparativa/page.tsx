@@ -45,7 +45,7 @@ export default function ModaComparisonsHubPage() {
               MODA+ frente a otras opciones, y qué criterios neutrales revisar para elegir bien.
             </p>
             <div className="hero-actions">
-              <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+              <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
               <Link className="btn btn-soft" href="/moda">Ver MODA+</Link>
             </div>
           </div>
@@ -66,9 +66,9 @@ export default function ModaComparisonsHubPage() {
         <section className="final-cta">
           <span className="section-kicker">MODA+</span>
           <h2>Compáralo con tu tienda real</h2>
-          <p>La mejor forma de comparar es probar. Crea tu cuenta y carga tus productos por talla y color. 15 días gratis, sin tarjeta.</p>
+          <p>La mejor forma de comparar es probar. Crea tu cuenta y carga tus productos por talla y color. 6 meses gratis, sin tarjeta.</p>
           <div className="hero-actions">
-            <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+            <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
             <Link className="btn btn-line" href="/moda/guias">Ver guías</Link>
           </div>
         </section>

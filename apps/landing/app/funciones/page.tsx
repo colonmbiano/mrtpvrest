@@ -37,7 +37,7 @@ export default function FuncionesPage() {
               administración— y todas comparten la misma verdad del restaurante en tiempo real.
             </p>
             <div className="hero-actions">
-              <a className="btn btn-primary" href={registerUrl}>Probar 14 días gratis</a>
+              <a className="btn btn-primary" href={registerUrl}>Probar 6 meses gratis</a>
               <Link className="btn btn-soft" href="/#precios">Ver precios</Link>
             </div>
           </div>

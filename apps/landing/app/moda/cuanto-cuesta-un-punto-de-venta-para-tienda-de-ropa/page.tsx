@@ -15,7 +15,7 @@ const url = `${siteUrl}/moda/${slug}`
 const faqs: [string, string][] = [
   [
     '¿Cuánto cuesta al mes un punto de venta para ropa?',
-    'Depende del modelo: hay opciones gratuitas básicas y planes en la nube que suelen ir de unos cientos de pesos al mes según las funciones. MODA+ ofrece 15 días gratis sin tarjeta para que evalúes antes de pagar.',
+    'Depende del modelo: hay opciones gratuitas básicas y planes en la nube que suelen ir de unos cientos de pesos al mes según las funciones. MODA+ ofrece 6 meses gratis sin tarjeta para que evalúes antes de pagar.',
   ],
   [
     '¿Necesito comprar una computadora especial?',
@@ -133,7 +133,7 @@ export default function ModaCostGuidePage() {
               <li><strong>Licencia de pago único</strong>: pagas una vez por instalar el sistema en una computadora. Cuesta más al inicio, pero no hay mensualidad; revisa si las actualizaciones y el soporte se cobran aparte.</li>
             </ul>
             <p>
-              Antes de pagar, aprovecha las pruebas gratis. MODA+, por ejemplo, te deja probarlo 15 días sin tarjeta para
+              Antes de pagar, aprovecha las pruebas gratis. MODA+, por ejemplo, te deja probarlo 6 meses sin tarjeta para
               que cargues tus productos por talla y color y veas si te acomoda antes de decidir.
             </p>
           </section>
@@ -206,9 +206,9 @@ export default function ModaCostGuidePage() {
         <section className="final-cta">
           <span className="section-kicker">MODA+</span>
           <h2>Pruébalo antes de pagar</h2>
-          <p>Crea tu cuenta en minutos, carga tus productos por talla y color y vende desde el primer día. 15 días gratis, sin tarjeta.</p>
+          <p>Crea tu cuenta en minutos, carga tus productos por talla y color y vende desde el primer día. 6 meses gratis, sin tarjeta.</p>
           <div className="hero-actions">
-            <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+            <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
             <Link className="btn btn-line" href="/moda">Ver MODA+</Link>
           </div>
         </section>
