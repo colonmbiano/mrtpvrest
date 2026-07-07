@@ -6,6 +6,7 @@ import {
   X, Check, ListChecks, Bike, Utensils, ShoppingBag,
   Trophy, RefreshCcw, LogOut, Radio, Trash2,
   Clock3, UserRound, Settings2, PlugZap, Router,
+  Moon, Sun, Zap, BarChart3, Sigma,
 } from "lucide-react";
 import { io, type Socket } from "socket.io-client";
 import api, { getApiUrl } from "@/lib/api";
@@ -17,7 +18,7 @@ import { parseEscPosTickets, type ParsedTicketItem } from "@/lib/escpos-parser";
 // ── Tipos ─────────────────────────────────────────────────────────────────
 
 type StationCode = "KITCHEN" | "BAR" | "GRILL" | "FRYER";
-type TabKey = "orders" | "tasks" | "tcp";
+type TabKey = "orders" | "tasks" | "tcp" | "bump" | "totals" | "metrics";
 type TicketSize = "compact" | "normal" | "large";
 type ReceiveMode = "socket" | "tcp" | "both";
 
@@ -193,6 +194,7 @@ function writeKdsDisplayConfig(config: KdsDisplayConfig): void {
 
 export default function KdsScreen() {
   const [tab, setTab]               = useState<TabKey>("orders");
+  const [dark, setDark]             = useState<boolean>(false);
   // Estaciones que esta pantalla vigila (config del LoginScreen).
   // visibleStations es el subset de STATIONS que coincide con kdsStations.
   const [allowedStations] = useState<StationCode[]>(() => readKdsStations());
@@ -227,6 +229,22 @@ export default function KdsScreen() {
   const [tcpListening, setTcpListening] = useState<boolean>(false);
   const tcpEnabled = displayConfig.receiveMode === "tcp" || displayConfig.receiveMode === "both";
   const serverEnabled = displayConfig.receiveMode === "socket" || displayConfig.receiveMode === "both";
+
+  useEffect(() => {
+    const stored = localStorage.getItem("kdsTheme");
+    const nextDark = stored ? stored === "dark" : false;
+    setDark(nextDark);
+    document.documentElement.dataset.theme = nextDark ? "dark" : "light";
+  }, []);
+
+  const toggleTheme = () => {
+    setDark((current) => {
+      const next = !current;
+      document.documentElement.dataset.theme = next ? "dark" : "light";
+      localStorage.setItem("kdsTheme", next ? "dark" : "light");
+      return next;
+    });
+  };
 
   const updateDisplayConfig = useCallback((patch: Partial<KdsDisplayConfig>) => {
     setDisplayConfig((current) => {
@@ -524,25 +542,41 @@ export default function KdsScreen() {
   }
 
   const locationName = typeof window !== "undefined" ? localStorage.getItem("locationName") || "" : "";
+  const activeOrders = orders.filter((o) => !o.allDone);
+  const totalActiveItems = activeOrders.reduce(
+    (sum, order) => sum + order.items.reduce((inner, item) => inner + item.quantity, 0),
+    0,
+  );
+
+  useEffect(() => {
+    if (tab !== "bump") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (!/^[1-9]$/.test(event.key)) return;
+      const order = activeOrders[Number(event.key) - 1];
+      if (order) finalizeOrder(order.id);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeOrders, tab]);
 
   return (
-    <div className="relative min-h-screen w-full bg-[#0c0c0e] text-white overflow-hidden">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-60 -right-40 w-[700px] h-[700px] rounded-full blur-[120px] opacity-40"
-        style={{ background: "radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)" }}
-      />
-
+    <div className="min-h-screen w-full overflow-hidden bg-[var(--paper)] text-[var(--ink)]">
       {/* HEADER */}
-      <header className="relative z-10 flex items-center justify-between gap-4 px-5 py-4 bg-white/5 backdrop-blur-md border-b border-white/10 flex-wrap">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[10px] font-black tracking-[0.25em] text-white/40">KDS</span>
-          <span className="text-base font-black text-white tracking-tight truncate">
+      <header className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--card)] px-4 py-[11px] shadow-[0_5px_14px_var(--shadow)]">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[12px] bg-[var(--brand)] text-lg font-extrabold text-white">
+            M
+          </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-[18px] font-bold leading-tight text-[var(--ink)]">KDS - COCINA</h1>
+            <p className="truncate text-[11px] font-semibold text-[var(--muted)]">
             {locationName || "Estación de cocina"}
-          </span>
+            </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        </div>
+
+        <nav className="flex flex-1 items-center justify-center gap-1 overflow-x-auto px-1">
           <TabPill active={tab === "orders"} onClick={() => setTab("orders")}>
             <Utensils size={14} /> Pedidos
             {orders.length > 0 && <Counter value={orders.length} />}
@@ -555,7 +589,18 @@ export default function KdsScreen() {
             <Radio size={14} /> TCP
             {tcpTickets.length > 0 && <Counter value={tcpTickets.length} />}
           </TabPill>
-        </div>
+          <TabPill active={tab === "bump"} onClick={() => setTab("bump")}>
+            <Zap size={14} /> Bump
+            {activeOrders.length > 0 && <Counter value={Math.min(activeOrders.length, 9)} />}
+          </TabPill>
+          <TabPill active={tab === "totals"} onClick={() => setTab("totals")}>
+            <Sigma size={14} /> Totales
+            {totalActiveItems > 0 && <Counter value={totalActiveItems} />}
+          </TabPill>
+          <TabPill active={tab === "metrics"} onClick={() => setTab("metrics")}>
+            <BarChart3 size={14} /> Metricas
+          </TabPill>
+        </nav>
 
         <div className="flex items-center gap-2">
           <SourceIndicator
@@ -566,9 +611,17 @@ export default function KdsScreen() {
           <NetIndicator online={online} serverOk={serverOk} />
           <button
             type="button"
+            onClick={toggleTheme}
+            aria-label="Cambiar tema"
+            className="flex h-11 min-h-[44px] w-11 items-center justify-center rounded-[13px] border border-[var(--line)] bg-[var(--card)] text-[var(--muted)] shadow-[0_5px_14px_var(--shadow)] transition-transform active:scale-95"
+          >
+            {dark ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+          <button
+            type="button"
             onClick={() => setShowConfig(true)}
             aria-label="Configuracion KDS"
-            className="w-11 h-11 min-h-[44px] rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 transition-transform"
+            className="flex h-11 min-h-[44px] w-11 items-center justify-center rounded-[13px] border border-[var(--line)] bg-[var(--card)] text-[var(--muted)] shadow-[0_5px_14px_var(--shadow)] transition-transform active:scale-95"
           >
             <Settings2 size={18} />
           </button>
@@ -576,7 +629,7 @@ export default function KdsScreen() {
             type="button"
             onClick={() => setShowInfo(true)}
             aria-label="Info"
-            className="w-11 h-11 min-h-[44px] rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 transition-transform"
+            className="flex h-11 min-h-[44px] w-11 items-center justify-center rounded-[13px] border border-[var(--line)] bg-[var(--card)] text-[var(--muted)] shadow-[0_5px_14px_var(--shadow)] transition-transform active:scale-95"
           >
             <Info size={18} />
           </button>
@@ -584,7 +637,7 @@ export default function KdsScreen() {
             type="button"
             onClick={() => setShowLogout(true)}
             aria-label="Cerrar sesión"
-            className="w-11 h-11 min-h-[44px] rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 transition-transform text-red-400"
+            className="flex h-11 min-h-[44px] w-11 items-center justify-center rounded-[13px] border border-[var(--line)] bg-[var(--red-soft)] text-[var(--solid-red)] shadow-[0_5px_14px_var(--shadow)] transition-transform active:scale-95"
           >
             <LogOut size={18} />
           </button>
@@ -596,7 +649,7 @@ export default function KdsScreen() {
           (config del LoginScreen) ocultamos los tabs y mostramos el
           rótulo fijo. */}
       {tab === "orders" && visibleStations.length > 1 && (
-        <div className="relative z-10 flex items-center gap-2 px-5 py-3 border-b border-white/5 overflow-x-auto">
+        <div className="relative z-10 flex items-center gap-2 overflow-x-auto border-b border-[var(--line)] bg-[var(--paper)] px-5 py-3">
           {visibleStations.map((s) => {
             const active = s.value === station;
             return (
@@ -604,11 +657,11 @@ export default function KdsScreen() {
                 key={s.value}
                 type="button"
                 onClick={() => setStation(s.value)}
-                className="px-4 py-2 min-h-[44px] rounded-2xl text-xs font-black tracking-wider uppercase whitespace-nowrap active:scale-95 transition-transform"
+                className="min-h-[40px] whitespace-nowrap rounded-[13px] px-4 py-2 text-xs font-extrabold uppercase tracking-[0.12em] transition-transform active:scale-95"
                 style={{
-                  background: active ? s.color : "rgba(255,255,255,0.05)",
-                  color:      active ? "#0a0a0c" : "rgba(255,255,255,0.55)",
-                  border:     active ? `1px solid ${s.color}` : "1px solid rgba(255,255,255,0.08)",
+                  background: active ? s.color : "var(--card)",
+                  color:      active ? "#ffffff" : "var(--muted)",
+                  border:     active ? `1px solid ${s.color}` : "1px solid var(--line)",
                 }}
               >
                 {s.label}
@@ -618,22 +671,22 @@ export default function KdsScreen() {
         </div>
       )}
       {tab === "orders" && visibleStations.length === 1 && (
-        <div className="relative z-10 flex items-center gap-3 px-5 py-3 border-b border-white/5">
+        <div className="relative z-10 flex items-center gap-3 border-b border-[var(--line)] bg-[var(--paper)] px-5 py-3">
           <span
             className="inline-block w-3 h-3 rounded-full"
             style={{ background: visibleStations[0]!.color }}
           />
-          <span className="text-xs font-black uppercase tracking-[0.2em] text-white/85">
+          <span className="font-mono text-xs font-bold uppercase tracking-[0.16em] text-[var(--ink)]">
             {visibleStations[0]!.label}
           </span>
-          <span className="text-[10px] font-bold text-white/40">
+          <span className="text-[11px] font-semibold text-[var(--muted)]">
             · estación dedicada
           </span>
         </div>
       )}
 
-      <main className="relative z-10 p-5">
-        {tab === "orders" ? (
+      <main className="relative z-10 p-4 sm:p-5">
+        {tab === "orders" && (
           <OrdersGrid
             loading={loadingOrders}
             orders={orders}
@@ -645,7 +698,8 @@ export default function KdsScreen() {
             onToggleItem={toggleItem}
             onFinalize={finalizeOrder}
           />
-        ) : tab === "tasks" ? (
+        )}
+        {tab === "tasks" && (
           <TasksList
             loading={loadingTasks}
             tasks={tasks}
@@ -654,13 +708,37 @@ export default function KdsScreen() {
             onPick={(t) => { setTaskPinError(""); setTaskPinFor(t); }}
             onSync={() => flushPendingLogs()}
           />
-        ) : (
+        )}
+        {tab === "tcp" && (
           <TcpTicketsView
             tickets={tcpTickets}
             listening={tcpListening}
             enabled={tcpEnabled}
             onDismiss={(id) => setTcpTickets((curr) => curr.filter((t) => t.id !== id))}
             onClear={() => setTcpTickets([])}
+          />
+        )}
+        {tab === "bump" && (
+          <BumpView
+            orders={activeOrders}
+            now={now}
+            delayedMinutes={displayConfig.delayedMinutes}
+            urgentMinutes={displayConfig.urgentMinutes}
+            onFinalize={finalizeOrder}
+          />
+        )}
+        {tab === "totals" && <TotalsView orders={activeOrders} />}
+        {tab === "metrics" && (
+          <MetricsView
+            orders={orders}
+            tasks={tasks}
+            tcpTickets={tcpTickets}
+            online={online}
+            serverOk={serverOk}
+            socketConnected={socketConnected}
+            tcpListening={tcpListening}
+            pendingCount={pendingCount}
+            now={now}
           />
         )}
       </main>
@@ -703,11 +781,11 @@ function TabPill({ active, onClick, children }: { active: boolean; onClick: () =
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] rounded-2xl text-xs font-black tracking-wider active:scale-95 transition-transform"
+      className="inline-flex min-h-[40px] items-center gap-2 rounded-[13px] px-3 py-2 text-[11px] font-extrabold uppercase tracking-[0.08em] transition active:scale-95"
       style={{
-        background: active ? "#ffb84d" : "rgba(255,255,255,0.05)",
-        color:      active ? "#0a0a0c" : "rgba(255,255,255,0.85)",
-        border:     active ? "1px solid #ffb84d" : "1px solid rgba(255,255,255,0.08)",
+        background: active ? "var(--brand)" : "transparent",
+        color:      active ? "#ffffff" : "var(--muted)",
+        border:     active ? "1px solid var(--brand)" : "1px solid transparent",
       }}
     >
       {children}
@@ -720,8 +798,8 @@ function Counter({ value, tone = "default" }: { value: number; tone?: "default" 
     <span
       className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[10px] font-black"
       style={{
-        background: tone === "warn" ? "rgba(255,92,51,0.25)" : "rgba(0,0,0,0.20)",
-        color:      tone === "warn" ? "#FF8B6E" : "inherit",
+        background: tone === "warn" ? "var(--red-soft)" : "rgba(0,0,0,0.18)",
+        color:      tone === "warn" ? "var(--solid-red)" : "inherit",
       }}
     >
       {value}
@@ -744,9 +822,9 @@ function SourceIndicator({
     <div
       className="hidden md:inline-flex items-center gap-2 px-3 py-2 rounded-full text-[10px] font-black tracking-widest uppercase"
       style={{
-        background: ok ? "rgba(255,184,77,0.12)" : "rgba(255,255,255,0.06)",
-        border: ok ? "1px solid rgba(255,184,77,0.30)" : "1px solid rgba(255,255,255,0.10)",
-        color: ok ? "#ffb84d" : "rgba(255,255,255,0.50)",
+        background: ok ? "var(--brand-soft)" : "var(--row)",
+        border: "1px solid var(--line)",
+        color: ok ? "var(--brand)" : "var(--muted)",
       }}
       title={`Recepcion: ${label}`}
     >
@@ -762,9 +840,9 @@ function NetIndicator({ online, serverOk }: { online: boolean; serverOk: boolean
     <div
       className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-[10px] font-black tracking-widest uppercase"
       style={{
-        background: ok ? "rgba(136,214,108,0.12)" : "rgba(255,92,51,0.12)",
-        border:     ok ? "1px solid rgba(136,214,108,0.35)" : "1px solid rgba(255,92,51,0.35)",
-        color:      ok ? "#88D66C" : "#FF8B6E",
+        background: ok ? "var(--green-soft)" : "var(--red-soft)",
+        border:     "1px solid var(--line)",
+        color:      ok ? "var(--solid-green)" : "var(--solid-red)",
       }}
     >
       {online ? <Wifi size={12} /> : <WifiOff size={12} />}
@@ -775,9 +853,9 @@ function NetIndicator({ online, serverOk }: { online: boolean; serverOk: boolean
 }
 
 function ticketGridMin(size: TicketSize): number {
-  if (size === "compact") return 210;
+  if (size === "compact") return 280;
   if (size === "large") return 400;
-  return 280;
+  return 320;
 }
 
 function ticketSizeStyles(size: TicketSize): {
@@ -818,13 +896,13 @@ function ticketSizeStyles(size: TicketSize): {
     };
   }
   return {
-    card: "p-4 gap-3",
+    card: "p-4 gap-3.5",
     item: "p-2.5 min-h-[64px] gap-2.5",
     qty: "w-12 text-xl",
     check: "w-8 h-8 rounded-lg",
     icon: "w-10 h-10 rounded-xl",
     meta: "text-[11px] px-2 py-1",
-    action: "min-h-[52px] py-3 text-xs rounded-xl",
+    action: "min-h-[56px] py-3 text-xs rounded-[10px]",
     orderNumber: "text-xl",
     itemName: "text-[17px]",
   };
@@ -845,24 +923,24 @@ function OrdersGrid({
 }) {
   if (receiveMode === "tcp") {
     return (
-      <div className="max-w-xl mx-auto rounded-3xl bg-white/5 border border-white/10 p-8 text-center">
-        <Router size={28} className="mx-auto text-[#ffb84d] mb-3" />
-        <p className="text-lg font-black text-white mb-1">Modo TCP local activo</p>
-        <p className="text-sm font-medium text-white/45">
+      <div className="mx-auto max-w-xl rounded-[18px] border border-[var(--line)] bg-[var(--card)] p-8 text-center shadow-[0_12px_32px_var(--shadow)]">
+        <Router size={28} className="mx-auto mb-3 text-[var(--brand)]" />
+        <p className="mb-1 text-lg font-extrabold text-[var(--ink)]">Modo TCP local activo</p>
+        <p className="text-sm font-medium text-[var(--muted)]">
           Las comandas entran por la IP local de esta tablet. Revisalas en la pestana TCP.
         </p>
       </div>
     );
   }
   if (loading) {
-    return <p className="text-white/40 text-center py-12 text-sm font-bold">Cargando pedidos…</p>;
+    return <p className="py-12 text-center text-sm font-bold text-[var(--muted)]">Cargando pedidos...</p>;
   }
   if (orders.length === 0) {
-    return <p className="text-white/40 text-center py-16 text-sm font-bold">🎉 Sin pedidos pendientes en esta estación</p>;
+    return <p className="py-16 text-center text-sm font-bold text-[var(--muted)]">Sin pedidos pendientes en esta estacion</p>;
   }
   return (
     <div
-      className="grid gap-3 items-start"
+      className="grid items-start gap-3.5"
       style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${ticketGridMin(ticketSize)}px, 1fr))` }}
     >
       {orders.map((order) => (
@@ -905,44 +983,50 @@ function OrderCard({
 
   return (
     <article
-      className={`rounded-3xl flex flex-col bg-[#16171a] border ${size.card}`}
+      className={`overflow-hidden rounded-[18px] flex flex-col bg-[var(--card)] border ${size.card}`}
       style={{
-        borderColor: allDone ? "rgba(136,214,108,0.4)" : `${u.color}80`,
+        borderColor: allDone ? "rgba(47,174,107,.42)" : "var(--line)",
         boxShadow: allDone
-          ? "0 0 30px rgba(136,214,108,0.15)"
-          : `0 12px 30px rgba(0,0,0,0.35), 0 0 24px ${u.bg}`,
+          ? "0 12px 32px rgba(47,174,107,.42)"
+          : "0 12px 32px var(--shadow)",
       }}
     >
-      <header className="flex items-start justify-between gap-3">
+      <header
+        className="-m-4 mb-0 flex items-start justify-between gap-3 rounded-t-[18px] p-4"
+        style={{
+          background: allDone ? "var(--brand)" : mins >= urgentMinutes ? "var(--red-soft)" : mins >= delayedMinutes ? "var(--amber-soft)" : "var(--brand)",
+          color: allDone || mins < delayedMinutes ? "#ffffff" : "var(--ink)",
+        }}
+      >
         <div className="flex items-start gap-3 min-w-0">
           <span className={`inline-flex items-center justify-center flex-shrink-0 ${size.icon}`}
                 style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.85)" }}>
             {ORDER_TYPE_ICONS[order.orderType]}
           </span>
           <div className="min-w-0">
-            <span className="block text-[11px] font-black uppercase tracking-[0.24em] text-white/35">Pedido</span>
-            <span className={`block font-black tracking-tight text-white truncate ${size.orderNumber}`}>
+            <span className="block font-mono text-[10px] font-bold uppercase tracking-[0.16em] opacity-75">Pedido</span>
+            <span className={`block font-bold truncate ${size.orderNumber}`}>
               {order.orderNumber || order.id.slice(-6)}
             </span>
           </div>
         </div>
         <div className="flex flex-col items-end gap-2 flex-shrink-0">
-          <span className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-black tracking-widest"
+          <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/20 px-3 font-mono text-[11px] font-bold tracking-widest"
                 style={{ background: u.bg, color: u.color }}>
             <Clock3 size={13} /> {u.label} · {mins}m
           </span>
-          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] opacity-75">
             {totalItems} pieza{totalItems === 1 ? "" : "s"}
           </span>
         </div>
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.07] border border-white/10 text-[12px] font-black text-white/80">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--row)] px-3 py-1.5 text-[12px] font-bold text-[var(--ink)]">
           <UserRound size={13} /> {orderLabel}
         </span>
         {order.notes && (
-          <span className="px-3 py-1.5 rounded-full bg-amber-400/12 border border-amber-400/20 text-[11px] font-bold text-amber-200">
+          <span className="rounded-full border border-[var(--line)] bg-[var(--amber-soft)] px-3 py-1.5 text-[11px] font-bold text-[var(--ink)]">
             {order.notes}
           </span>
         )}
@@ -956,27 +1040,27 @@ function OrderCard({
               onClick={() => onToggleItem(order.id, item.id, item.done)}
               className={`w-full flex items-stretch rounded-xl text-left active:scale-[0.99] transition-transform ${size.item}`}
               style={{
-                background: item.done ? "rgba(136,214,108,0.11)" : "rgba(255,255,255,0.065)",
-                border:     item.done ? "1px solid rgba(136,214,108,0.34)" : "1px solid rgba(255,255,255,0.10)",
+                background: item.done ? "var(--green-soft)" : "var(--green-soft)",
+                border:     "1px solid var(--line)",
               }}
             >
               <span
                 className={`${size.check} flex items-center justify-center flex-shrink-0 self-center`}
                 style={{
-                  background: item.done ? "#88D66C" : "transparent",
-                  border:     item.done ? "none" : "2px solid rgba(255,255,255,0.36)",
+                  background: item.done ? "var(--solid-green)" : "var(--card)",
+                  border:     item.done ? "none" : "2px solid var(--line)",
                 }}
               >
-                {item.done && <Check size={20} className="text-[#0c0c0e]" strokeWidth={3} />}
+                {item.done && <Check size={20} className="text-white" strokeWidth={3} />}
               </span>
-              <span className={`rounded-xl flex items-center justify-center bg-black/25 border border-white/10 font-black text-[#ffb84d] flex-shrink-0 ${size.qty}`}>
+              <span className={`rounded-[10px] flex items-center justify-center bg-[var(--brand)] border border-[var(--line)] font-mono font-bold text-white flex-shrink-0 ${size.qty}`}>
                 {item.quantity}x
               </span>
               <span className="flex-1 min-w-0 py-0.5">
                 <span
                   className={`block leading-tight font-black tracking-tight break-words ${size.itemName}`}
                   style={{
-                    color: item.done ? "rgba(255,255,255,0.48)" : "white",
+                    color: item.done ? "var(--muted)" : "var(--ink)",
                     textDecoration: item.done ? "line-through" : "none",
                   }}
                 >
@@ -990,7 +1074,7 @@ function OrderCard({
                   ))}
                 </span>
                 {item.notes && (
-                  <span className="block mt-2 text-[12px] leading-snug font-bold text-amber-200">
+                  <span className="mt-2 block text-[12px] font-bold leading-snug text-[var(--honey)]">
                     {item.notes}
                   </span>
                 )}
@@ -1005,10 +1089,10 @@ function OrderCard({
         onClick={() => onFinalize(order.id)}
         className={`mt-auto w-full font-black tracking-wider uppercase active:scale-95 transition-transform ${size.action}`}
         style={{
-          background: allDone ? "#88D66C" : "rgba(255,255,255,0.05)",
-          color:      allDone ? "#0a0a0c" : "rgba(255,255,255,0.55)",
-          border:     allDone ? "none" : "1px dashed rgba(255,255,255,0.15)",
-          boxShadow:  allDone ? "0 12px 30px rgba(136,214,108,0.30)" : "none",
+          background: allDone ? "var(--brand)" : "var(--row)",
+          color:      allDone ? "#ffffff" : "var(--muted)",
+          border:     allDone ? "1px solid var(--brand)" : "1px dashed var(--line)",
+          boxShadow:  allDone ? "0 12px 30px rgba(47,174,107,0.30)" : "none",
         }}
       >
         {allDone ? "Finalizar pedido" : "Marca productos para finalizar"}
@@ -1024,7 +1108,7 @@ function displayItemName(item: KdsOrderItem): string {
 
 function ItemMeta({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <span className={`inline-flex items-center rounded-lg bg-white/[0.07] border border-white/10 font-black uppercase tracking-[0.12em] text-white/[0.58] ${className}`}>
+    <span className={`inline-flex items-center rounded-lg border border-[var(--line)] bg-[var(--row)] font-mono font-bold uppercase tracking-[0.12em] text-[var(--muted)] ${className}`}>
       {children}
     </span>
   );
@@ -1094,6 +1178,154 @@ function TasksList({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function BumpView({
+  orders, now, delayedMinutes, urgentMinutes, onFinalize,
+}: {
+  orders: KdsOrder[];
+  now: number;
+  delayedMinutes: number;
+  urgentMinutes: number;
+  onFinalize: (orderId: string) => void;
+}) {
+  return (
+    <section className="mx-auto flex max-w-5xl flex-col gap-3">
+      <div className="rounded-[18px] bg-[var(--brand)] px-5 py-4 text-white shadow-[0_8px_22px_var(--shadow)]">
+        <h2 className="text-[21px] font-bold">Despacho rapido</h2>
+        <p className="font-mono text-[11px] font-bold uppercase tracking-[0.12em] opacity-85">
+          Toca BUMP o usa teclas 1-9 - mas antiguo primero
+        </p>
+      </div>
+      {orders.length === 0 ? (
+        <p className="rounded-[18px] border border-[var(--line)] bg-[var(--card)] p-10 text-center text-sm font-bold text-[var(--muted)] shadow-[0_8px_22px_var(--shadow)]">
+          No hay comandas en cola.
+        </p>
+      ) : (
+        <div className="grid gap-3">
+          {orders.slice(0, 9).map((order, index) => {
+            const mins = minutesElapsed(order.createdAt, now);
+            const u = urgencyOf(mins, delayedMinutes, urgentMinutes);
+            return (
+              <article key={order.id} className="overflow-hidden rounded-[18px] border border-[var(--line)] bg-[var(--card)] shadow-[0_8px_22px_var(--shadow)]">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[var(--row)] font-mono text-sm font-bold text-[var(--muted)]">
+                      {index + 1}
+                    </span>
+                    <div>
+                      <p className="text-lg font-bold text-[var(--ink)]">#{order.orderNumber || order.id.slice(-6)}</p>
+                      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--muted)]">
+                        {order.tableNumber ? `Mesa ${order.tableNumber}` : order.customerName || "Cliente"} - {u.label} {mins}m
+                      </p>
+                    </div>
+                  </div>
+                  <span className="rounded-full px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.12em]" style={{ background: u.bg, color: u.color }}>
+                    {order.items.reduce((sum, item) => sum + item.quantity, 0)} piezas
+                  </span>
+                </div>
+                <div className="grid gap-2 px-4 pb-4 sm:grid-cols-2">
+                  {order.items.map((item) => (
+                    <div key={item.id} className="flex min-h-[52px] items-center gap-3 rounded-[10px] border border-[var(--line)] bg-[var(--green-soft)] px-3">
+                      <span className="font-mono text-base font-bold text-[var(--brand)]">{item.quantity}x</span>
+                      <span className="text-[15px] font-bold text-[var(--ink)]">{displayItemName(item)}</span>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onFinalize(order.id)}
+                  className="flex h-14 w-full items-center justify-center gap-2 border-t border-[var(--line)] bg-[var(--brand)] text-base font-bold uppercase tracking-[0.08em] text-white active:scale-[0.99]"
+                >
+                  <Check size={18} strokeWidth={2.8} /> Bump
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TotalsView({ orders }: { orders: KdsOrder[] }) {
+  const totals = new Map<string, number>();
+  for (const order of orders) {
+    for (const item of order.items) {
+      totals.set(displayItemName(item), (totals.get(displayItemName(item)) || 0) + item.quantity);
+    }
+  }
+  const rows = Array.from(totals.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+
+  return (
+    <section className="mx-auto max-w-3xl overflow-hidden rounded-[18px] border border-[var(--line)] bg-[var(--card)] shadow-[0_12px_32px_var(--shadow)]">
+      <div className="bg-[var(--brand)] px-5 py-4 text-white">
+        <h2 className="text-[21px] font-bold">LINEA DE COCINA</h2>
+        <p className="font-mono text-[11px] font-bold uppercase tracking-[0.12em] opacity-85">Suma de todos los pedidos activos</p>
+      </div>
+      {rows.length === 0 ? (
+        <p className="p-10 text-center text-sm font-bold text-[var(--muted)]">Sin productos activos.</p>
+      ) : (
+        <ul className="divide-y divide-[var(--line)]">
+          {rows.map(([name, quantity]) => (
+            <li key={name} className="flex min-h-[58px] items-center justify-between gap-4 px-5 py-3">
+              <span className="text-[16px] font-bold text-[var(--ink)]">{name}</span>
+              <span className="font-mono text-2xl font-bold text-[var(--brand)]">{quantity}x</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function MetricsView({
+  orders, tasks, tcpTickets, online, serverOk, socketConnected, tcpListening, pendingCount, now,
+}: {
+  orders: KdsOrder[];
+  tasks: KdsTask[];
+  tcpTickets: TcpTicket[];
+  online: boolean;
+  serverOk: boolean;
+  socketConnected: boolean;
+  tcpListening: boolean;
+  pendingCount: number;
+  now: number;
+}) {
+  const ready = orders.filter((order) => order.items.length > 0 && order.items.every((item) => item.done)).length;
+  const oldest = orders.reduce((max, order) => Math.max(max, minutesElapsed(order.createdAt, now)), 0);
+  const totalItems = orders.reduce((sum, order) => sum + order.items.reduce((inner, item) => inner + item.quantity, 0), 0);
+
+  return (
+    <section className="mx-auto max-w-5xl overflow-hidden rounded-[18px] border border-[var(--line)] bg-[var(--card)] shadow-[0_12px_32px_var(--shadow)]">
+      <div className="bg-[var(--brand)] px-5 py-4 text-white">
+        <h2 className="text-[21px] font-bold">METRICAS DE DESPACHO</h2>
+        <p className="font-mono text-[11px] font-bold uppercase tracking-[0.12em] opacity-85">Estado operativo de esta pantalla</p>
+      </div>
+      <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+        <MetricRow label="Comandas activas" value={orders.length} />
+        <MetricRow label="Productos activos" value={totalItems} />
+        <MetricRow label="Listas para bump" value={ready} />
+        <MetricRow label="Mas antigua" value={`${oldest}m`} />
+        <MetricRow label="Tickets TCP" value={tcpTickets.length} />
+        <MetricRow label="Tareas" value={tasks.length} />
+        <MetricRow label="Offline queue" value={pendingCount} />
+        <MetricRow label="Internet" value={online ? "on" : "off"} />
+        <MetricRow label="Servidor" value={serverOk ? "on" : "off"} />
+        <MetricRow label="Socket" value={socketConnected ? "on" : "off"} />
+        <MetricRow label="TCP" value={tcpListening ? "on" : "off"} />
+      </div>
+    </section>
+  );
+}
+
+function MetricRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-[13px] border border-[var(--line)] bg-[var(--row)] px-4 py-3">
+      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--muted)]">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-[var(--ink)]">{value}</p>
     </div>
   );
 }

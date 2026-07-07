@@ -66,10 +66,10 @@ const config: Config = {
         pill: "999px",
       },
       fontFamily: {
-        sans:    ["var(--font-dm-sans)", "DM Sans", "system-ui", "sans-serif"],
-        display: ["var(--font-syne)",    "Syne",   "sans-serif"],
-        syne:    ["var(--font-syne)",    "Syne",   "sans-serif"],
-        mono:    ["var(--font-dm-mono)", "DM Mono", "ui-monospace", "monospace"],
+        sans:    ["Outfit", "system-ui", "sans-serif"],
+        display: ["Outfit", "system-ui", "sans-serif"],
+        syne:    ["Outfit", "system-ui", "sans-serif"],
+        mono:    ["Space Mono", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       boxShadow: {
         sm: "var(--shadow-sm)",
