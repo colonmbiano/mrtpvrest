@@ -215,17 +215,49 @@ export default function DeliveryApp() {
     } catch {}
   }, []);
 
+  // Pedido del bot sin GPS: nace con envío $0 y la marca "ENVÍO POR ASIGNAR".
+  // El backend NO lo deja salir a reparto hasta capturar el costo de envío.
+  const shippingPending = (order: any) =>
+    order?.orderType === 'DELIVERY' &&
+    !(Number(order?.deliveryFee) > 0) &&
+    /ENV[IÍ]O POR ASIGNAR/i.test(order?.notes || '');
+
+  const promptShippingFee = (order: any): number | null => {
+    const raw = window.prompt(
+      `El pedido #${order.orderNumber} tiene el ENVÍO POR ASIGNAR.\n¿Cuánto se cobra de envío? ($)`,
+      ''
+    );
+    if (raw == null) return null; // canceló
+    const fee = Math.round(Number(String(raw).replace(',', '.')) * 100) / 100;
+    if (!Number.isFinite(fee) || fee <= 0 || fee > 1000) {
+      alert('Monto de envío inválido.');
+      return null;
+    }
+    return fee;
+  };
+
   // Tomar un pedido del pool. El backend es atómico: si otro repartidor ganó,
-  // responde 409 ALREADY_CLAIMED y solo refrescamos la lista.
+  // responde 409 ALREADY_CLAIMED y solo refrescamos la lista. Si el pedido
+  // trae "ENVÍO POR ASIGNAR", se captura el costo ANTES de tomarlo (viaja en
+  // el mismo claim, así el pedido nunca sale con envío $0).
   const claimOrder = useCallback(async (order: any) => {
     if (!driver || claimingId) return;
+    let deliveryFee: number | undefined;
+    if (shippingPending(order)) {
+      const fee = promptShippingFee(order);
+      if (fee == null) return;
+      deliveryFee = fee;
+    }
     setClaimingId(order.id);
     try {
-      await api.post(`/api/delivery/${driver.id}/claim/${order.id}`);
+      await api.post(`/api/delivery/${driver.id}/claim/${order.id}`, deliveryFee ? { deliveryFee } : {});
       setAvailableOrders(prev => prev.filter(o => o.id !== order.id));
       await fetchOrders();
     } catch (err: any) {
-      if (err?.response?.status === 409) {
+      const code = err?.response?.data?.code;
+      if (code === 'SHIPPING_FEE_PENDING') {
+        alert('Este pedido necesita costo de envío. Tócalo de nuevo y captúralo.');
+      } else if (err?.response?.status === 409) {
         alert('Otro repartidor ya tomó ese pedido 🏃');
       } else {
         alert(err?.response?.data?.error || 'No se pudo tomar el pedido');
@@ -414,7 +446,24 @@ export default function DeliveryApp() {
       await api.put(`/api/delivery/${driver.id}/orders/${order.id}/status`, data);
       fetchOrders();
       if (status === 'DELIVERED') setScreen('home');
-    } catch (err: any) { alert(err.response?.data?.error || 'Error'); }
+    } catch (err: any) {
+      // Pedido asignado a mano que sigue con "ENVÍO POR ASIGNAR": capturar el
+      // costo aquí mismo y reintentar — sin envío el backend no deja cerrar.
+      if (err?.response?.data?.code === 'SHIPPING_FEE_PENDING') {
+        const fee = promptShippingFee(order);
+        if (fee == null) return;
+        try {
+          await api.put(`/api/delivery/orders/${order.id}/delivery-fee`, { amount: fee });
+          await api.put(`/api/delivery/${driver.id}/orders/${order.id}/status`, data);
+          fetchOrders();
+          if (status === 'DELIVERED') setScreen('home');
+        } catch (retryErr: any) {
+          alert(retryErr?.response?.data?.error || 'No se pudo asignar el envío');
+        }
+        return;
+      }
+      alert(err.response?.data?.error || 'Error');
+    }
   }
 
   async function saveExpense(cat: string, amount: string, desc: string, pending = false) {

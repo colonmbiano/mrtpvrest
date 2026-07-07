@@ -60,6 +60,40 @@ async function findDriverOrder(req, orderId, driverId) {
   });
 }
 
+// ── Envío pendiente de cotizar ───────────────────────────────────────────────
+// Los pedidos del bot de WhatsApp SIN ubicación GPS se crean con envío $0 y la
+// marca "⚠️ ENVÍO POR ASIGNAR" en notes (store.routes). En la auditoría del
+// 2026-07-05 salieron 8 entregas así SIN que nadie cobrara el envío. Regla:
+// un pedido marcado NO puede salir a reparto (claim/assign/ON_THE_WAY) ni
+// cerrarse (DELIVERED) hasta que alguien capture el costo. OJO: envío $0 SIN
+// la marca es legítimo (freeDeliveryFrom / radio gratis) y no se bloquea.
+const SHIPPING_PENDING_RE = /ENV[IÍ]O POR ASIGNAR/i;
+
+function shippingFeePending(order) {
+  return order?.orderType === 'DELIVERY'
+    && !(Number(order.deliveryFee) > 0)
+    && SHIPPING_PENDING_RE.test(order.notes || '');
+}
+
+// Monto capturado a mano: acotado a un rango sano (evita typos tipo $2500).
+function parseFeeInput(value) {
+  const fee = Math.round(Number(value) * 100) / 100;
+  return Number.isFinite(fee) && fee > 0 && fee <= 1000 ? fee : null;
+}
+
+// Reemplaza la marca de pendiente por el registro de quién asignó cuánto.
+function resolveShippingNote(notes, fee, byName) {
+  return String(notes || '').replace(
+    /⚠️ ENV[IÍ]O POR ASIGNAR:[^\n]*/i,
+    `✅ Envío asignado: $${fee} (${byName || 'repartidor'})`
+  );
+}
+
+const SHIPPING_FEE_PENDING_ERROR = {
+  error: 'Este pedido tiene el ENVÍO POR ASIGNAR. Captura el costo de envío para poder moverlo (el repartidor lo captura al tomarlo en su app).',
+  code: 'SHIPPING_FEE_PENDING',
+};
+
 async function ensureCashOnDeliveryMovement(order) {
   if (!order || !order.deliveryDriverId) return null;
   if (order.paymentMethod !== 'CASH') return null;
@@ -172,6 +206,23 @@ router.post('/:driverId/claim/:orderId', authenticate, requireTenantAccess, asyn
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
     const restaurantId = req.restaurantId || req.user?.restaurantId;
+
+    // Envío por asignar: el claim DEBE traer el costo de envío capturado
+    // (la app se lo pide al repartidor antes de tomar). Sin eso, 409.
+    const preview = await prisma.order.findFirst({
+      where: { id: req.params.orderId, restaurantId },
+      select: { orderType: true, deliveryFee: true, notes: true },
+    });
+    if (!preview) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const pendingFee = shippingFeePending(preview);
+    const feeInput = parseFeeInput(req.body?.deliveryFee);
+    if (pendingFee && !feeInput) {
+      return res.status(409).json({
+        error: 'Este pedido no tiene envío asignado. Captura el costo de envío para tomarlo.',
+        code: 'SHIPPING_FEE_PENDING',
+      });
+    }
+
     const claimed = await prisma.order.updateMany({
       where: {
         id: req.params.orderId,
@@ -180,13 +231,26 @@ router.post('/:driverId/claim/:orderId', authenticate, requireTenantAccess, asyn
         deliveryDriverId: null,
         status: { notIn: ['DELIVERED', 'CANCELLED'] },
       },
-      data: { deliveryDriverId: driver.id, status: 'ON_THE_WAY' },
+      data: {
+        deliveryDriverId: driver.id,
+        status: 'ON_THE_WAY',
+        // El envío capturado entra en el MISMO update atómico del claim: solo
+        // el ganador lo aplica, y el total se ajusta server-side (fee era $0).
+        ...(pendingFee && feeInput ? { deliveryFee: feeInput, total: { increment: feeInput } } : {}),
+      },
     });
     if (claimed.count === 0) {
       return res.status(409).json({
         error: 'Otro repartidor ya tomó este pedido (o ya no está disponible).',
         code: 'ALREADY_CLAIMED',
       });
+    }
+    if (pendingFee && feeInput) {
+      // Cambiar la marca de notes por el registro de quién capturó el envío.
+      await prisma.order.update({
+        where: { id: req.params.orderId },
+        data: { notes: resolveShippingNote(preview.notes, feeInput, driver.name) },
+      }).catch(() => {});
     }
     const order = await prisma.order.findFirst({
       where: { id: req.params.orderId, restaurantId },
@@ -202,6 +266,48 @@ router.post('/:driverId/claim/:orderId', authenticate, requireTenantAccess, asyn
 
     res.json(order);
   } catch (e) { console.error('POST /delivery/claim:', e); res.status(500).json({ error: 'Error interno' }); }
+});
+
+// ── Capturar el costo de envío de un pedido "ENVÍO POR ASIGNAR" ─────────────
+// Para pedidos que YA tienen repartidor (asignados a mano) pero siguen con la
+// marca: la app captura el monto y reintenta la acción bloqueada. Permitido
+// para staff y para el repartidor ASIGNADO al pedido. El total se ajusta
+// server-side (el fee marcado siempre nace en $0). Pedidos PAGADOS no se
+// tocan por aquí (eso es una corrección de cobro, otro flujo).
+router.put('/orders/:orderId/delivery-fee', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const fee = parseFeeInput(req.body?.amount);
+    if (!fee) return res.status(400).json({ error: 'Monto de envío inválido (1 a 1000).' });
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.orderId, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
+      select: { id: true, orderType: true, status: true, paymentStatus: true, deliveryFee: true, notes: true, deliveryDriverId: true, locationId: true, restaurantId: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (!shippingFeePending(order)) {
+      return res.status(409).json({ error: 'Este pedido no tiene envío pendiente de asignar.' });
+    }
+    if (order.paymentStatus === 'PAID' || ['DELIVERED', 'CANCELLED'].includes(order.status)) {
+      return res.status(409).json({ error: 'El pedido ya está cerrado o cobrado; corrige el cobro desde el TPV.' });
+    }
+    const allowed = isStaff(req.user) || (req.user?.role === 'DELIVERY' && req.user?.id === order.deliveryDriverId);
+    if (!allowed) return res.status(403).json({ error: 'Solo el repartidor asignado o el staff pueden capturar el envío.' });
+
+    const updated = await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        deliveryFee: fee,
+        total: { increment: fee },
+        notes: resolveShippingNote(order.notes, fee, req.user?.name || 'repartidor'),
+      },
+    });
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
+      io.to(`restaurant:${order.restaurantId}:drivers`).emit('availableOrdersChanged', { orderId: order.id });
+    }
+    res.json({ id: updated.id, deliveryFee: updated.deliveryFee, total: updated.total });
+  } catch (e) { console.error('PUT /delivery/orders/:id/delivery-fee:', e); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, res) => {
@@ -260,9 +366,32 @@ router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_RO
       where: { id: driverId, role: 'DELIVERY', isActive: true, ...(restaurantId ? { location: { restaurantId } } : {}) },
     });
     if (!driver) return res.status(404).json({ error: 'Repartidor no encontrado' });
+
+    // Envío por asignar: tampoco el staff puede mandarlo a reparto sin costo
+    // de envío. Acepta body.deliveryFee para capturarlo aquí mismo; si no
+    // viene, 409 con instrucción (el TPV/admin muestran el error tal cual).
+    const preview = await prisma.order.findFirst({
+      where: { id: orderId, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
+      select: { orderType: true, deliveryFee: true, notes: true },
+    });
+    if (!preview) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const pendingFee = shippingFeePending(preview);
+    const feeInput = parseFeeInput(req.body?.deliveryFee);
+    if (pendingFee && !feeInput) {
+      return res.status(409).json(SHIPPING_FEE_PENDING_ERROR);
+    }
+
     const order = await prisma.order.update({
       where: { id: orderId, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
-      data: { deliveryDriverId: driverId, status: 'ON_THE_WAY' },
+      data: {
+        deliveryDriverId: driverId,
+        status: 'ON_THE_WAY',
+        ...(pendingFee && feeInput ? {
+          deliveryFee: feeInput,
+          total: { increment: feeInput },
+          notes: resolveShippingNote(preview.notes, feeInput, req.user?.name || 'caja'),
+        } : {}),
+      },
       include: { items: { include: { menuItem: true } }, user: true },
     });
 
@@ -318,6 +447,15 @@ router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAcces
     const ALLOWED_DRIVER_STATUSES = ['ON_THE_WAY', 'DELIVERED'];
     if (!ALLOWED_DRIVER_STATUSES.includes(status)) {
       return res.status(400).json({ error: 'Estado no permitido' });
+    }
+    // Sin envío asignado no sale NI se cierra: al cerrar en DELIVERED con
+    // efectivo se genera el INCOME del corte con order.total — si el envío
+    // sigue en $0, el corte queda corto. La app captura el fee y reintenta.
+    if (shippingFeePending(existing)) {
+      return res.status(409).json({
+        error: 'Este pedido no tiene envío asignado. Captura el costo de envío antes de continuar.',
+        code: 'SHIPPING_FEE_PENDING',
+      });
     }
     const data = { status };
     if (paymentMethod) data.paymentMethod = paymentMethod;

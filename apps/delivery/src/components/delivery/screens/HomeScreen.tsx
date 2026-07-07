@@ -39,6 +39,10 @@ function AvailableOrderCard({ order, claiming, onClaim }: {
   claiming: boolean;
   onClaim: () => void;
 }) {
+  // Pedido del bot sin GPS: hay que capturar el envío al tomarlo (la app lo
+  // pide con un prompt; el backend no lo deja salir sin eso).
+  const feePending = !(Number((order as any).deliveryFee) > 0)
+    && /ENV[IÍ]O POR ASIGNAR/i.test((order as any).notes || '');
   return (
     <div style={{
       background: C.surf1, borderRadius: 20, border: '1px solid rgba(136,214,108,0.25)',
@@ -47,8 +51,17 @@ function AvailableOrderCard({ order, claiming, onClaim }: {
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: C.green }} />
       <div style={{ padding: '14px 14px 14px 18px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <div style={{ fontSize: 10.5, fontWeight: 700, color: C.green, letterSpacing: '0.06em', fontFamily: C.fontBody }}>
-            #{order.orderNumber}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.green, letterSpacing: '0.06em', fontFamily: C.fontBody }}>
+              #{order.orderNumber}
+            </div>
+            {feePending && (
+              <span style={{
+                fontSize: 8, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase',
+                padding: '3px 8px', borderRadius: 12, background: 'rgba(255,184,77,0.14)',
+                color: C.amber, border: '1px solid rgba(255,184,77,0.3)', whiteSpace: 'nowrap',
+              }}>Envío por asignar</span>
+            )}
           </div>
           <div style={{ fontFamily: C.fontDisplay, fontSize: 18, fontWeight: 700, color: C.green, lineHeight: 1 }}>
             ${(order.total || 0).toFixed(2)}
