@@ -1,7 +1,7 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { processWhatsAppMessage } = require('./gemini');
-const { createOrderFromGemini, chatRefFor } = require('./orderProcessor');
+const { createOrderFromGemini, chatRefFor, normalizeCustomerPhone } = require('./orderProcessor');
 const { isAudioMessage, transcribeWhatsAppAudio } = require('./audioTranscription');
 const { prisma } = require('@mrtpvrest/database');
 const botConfig = require('./botConfig');
@@ -722,6 +722,14 @@ function initWhatsApp(io) {
       // chatKey viaja al backend como llave de dedupe persistente (hasheada):
       // si este CONFIRMED duplica un pedido reciente del MISMO chat, el server
       // devuelve el existente con dedupReason=CHAT_WINDOW en vez de crear otro.
+      // Teléfono del cliente: Gemini solo lo pone si el cliente lo dictó (en
+      // chats @lid suele viajar el placeholder → null y el pedido queda SIN
+      // cliente en el CRM). Fallback duro en código: chat normal (@c.us) → el
+      // número del chat ES el teléfono; @lid → lo que el cliente haya escrito.
+      if (!normalizeCustomerPhone(geminiResponse.customerPhone)) {
+        geminiResponse.customerPhone = (hasReliableChatPhone ? phone : null)
+          || profile.customerPhone || detectedPhone || null;
+      }
       const orderCreated = await createOrderFromGemini(restaurant.id, geminiResponse, process.env.PORT || 3001, chatKey);
       if (orderCreated && orderCreated.id && orderCreated.dedupReason === 'CHAT_WINDOW') {
         // Red SERVER-SIDE anti-duplicado (vive en BD: sobrevive restarts y
