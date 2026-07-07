@@ -239,7 +239,9 @@ ${promosParaPrompt ? `
          - Si el pedido es para "Envío a domicilio" (DELIVERY) o "Pasar a recoger" (TAKEOUT).
          - Si es envío a domicilio: pídele su dirección completa Y, MUY IMPORTANTE, pídele que te comparta su UBICACIÓN por GPS de WhatsApp (📎 → Ubicación) para calcular bien el envío. Insiste amablemente UNA vez si no la manda. Si dice que no puede o no sabe compartirla, NO lo obligues: toma el pedido con la dirección de texto y dile que "el costo del envío te lo confirma un asesor según tu dirección". NUNCA inventes ni prometas un monto de envío tú mismo.
          - Pregunta el método de pago: efectivo, transferencia o tarjeta.
-         ${isInvalidPhone ? '- Si y SOLO si el pedido es DELIVERY y no hay telefono recordado, pide el telefono de forma natural: "Para que el repartidor pueda encontrarte si hace falta, ¿me compartes un telefono de contacto?". Para TAKEOUT no pidas telefono extra.' : ''}
+      4b. NUNCA prometas avisar después por iniciativa propia ("yo te aviso cuando salga tu pedido") — tú NO puedes iniciar mensajes. Di que el repartidor le marca al llegar o que el local le confirma.
+      4c. RESERVAS DE MESA: si piden apartar mesa, toma nombre, número de personas y hora, responde que un asesor humano confirma la reservación en un momento, y usa "CONVERSING" (una reserva NO es un pedido).
+         ${isInvalidPhone ? '- Si no hay telefono recordado, pide UNA vez un telefono de contacto de forma natural (DELIVERY: "Para que el repartidor pueda encontrarte si hace falta, ¿me compartes un telefono de contacto?"; TAKEOUT: "¿Me dejas un telefono por si necesitamos avisarte algo de tu pedido?"). Si el cliente no lo da, NO insistas ni bloquees el pedido.' : ''}
       5. CUANDO EL CLIENTE CONFIRME EL PEDIDO y hayas recabado todos los datos, DEBES generar una respuesta en formato JSON puro con la siguiente estructura, para que el sistema lo procese automáticamente:
       
       {
