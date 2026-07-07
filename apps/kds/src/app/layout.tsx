@@ -32,7 +32,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap"
           rel="stylesheet"
         />
         <script dangerouslySetInnerHTML={{__html: NUMBER_WHEEL_GUARD_SCRIPT}} />
@@ -40,8 +40,8 @@ export default function RootLayout({
       <body
         className="antialiased"
         style={{
-          background: "#0a0a0c",
-          color: "white",
+          background: "var(--paper)",
+          color: "var(--ink)",
           fontFamily: "'Outfit', system-ui, sans-serif",
         }}
       >

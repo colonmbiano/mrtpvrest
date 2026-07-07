@@ -2,11 +2,59 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --paper: #eef1ec;
+  --card: #ffffff;
+  --ink: #17201b;
+  --muted: #6c766f;
+  --ink-sub: #aeb6ad;
+  --line: #e3e8e1;
+  --row: #f1f4f0;
+  --field: #eef1ec;
+  --bar: #e6ebe5;
+  --shadow: rgba(22, 32, 26, .10);
+  --brand: #1f9d57;
+  --brand-soft: #e3f3e9;
+  --green-soft: #e3f3e9;
+  --green-soft2: #d6eede;
+  --amber-soft: #fbeed2;
+  --red-soft: #fbe3e1;
+  --violet-soft: #ece5fb;
+  --solid-red: #e23b35;
+  --solid-green: #2fae6b;
+  --honey: #e8a531;
+  --honey-soft: #fbeed2;
+}
+
+[data-theme="dark"] {
+  --paper: #0e120f;
+  --card: #181c18;
+  --ink: #e9efe9;
+  --muted: #8b948c;
+  --ink-sub: #5a635c;
+  --line: #2a312b;
+  --row: #1f241f;
+  --field: #1f241f;
+  --bar: #13170f;
+  --shadow: rgba(0, 0, 0, .5);
+  --brand: #27b362;
+  --brand-soft: rgba(39, 179, 98, .16);
+  --green-soft: rgba(47, 174, 107, .16);
+  --green-soft2: rgba(47, 174, 107, .20);
+  --amber-soft: rgba(232, 165, 49, .16);
+  --red-soft: rgba(226, 59, 53, .22);
+  --violet-soft: rgba(124, 85, 216, .24);
+  --solid-red: #f15a54;
+  --solid-green: #37c778;
+  --honey: #e8a531;
+  --honey-soft: rgba(232, 165, 49, .16);
+}
+
 html, body {
   margin: 0;
   padding: 0;
-  background: #0a0a0c;
-  color: white;
+  background: var(--paper);
+  color: var(--ink);
   font-family: 'Outfit', system-ui, sans-serif;
 }
 
