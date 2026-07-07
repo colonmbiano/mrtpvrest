@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const { localDayRange } = require('../utils/dayRange');
+const { sendPushToDriver, notifyDriversNewDeliveryOrder } = require('../services/notifications.service');
 const router = express.Router();
 
 const STAFF_ROLES = ['CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'];
@@ -130,6 +131,79 @@ router.post('/login', async (req, res) => {
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
+// ── Pool de pedidos DISPONIBLES (auto-asignación del repartidor) ─────────────
+// Pedidos DELIVERY de HOY sin repartidor asignado. Cualquier empleado
+// autenticado del restaurante los ve; el repartidor los toma con /claim.
+// OJO: definido ANTES de las rutas /:driverId/* para que "available-orders"
+// no se trague como un driverId.
+router.get('/available-orders', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { from, to } = localDayRange();
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        orderType: 'DELIVERY',
+        deliveryDriverId: null,
+        status: { notIn: ['DELIVERED', 'CANCELLED'] },
+        createdAt: { gte: from, lte: to },
+      },
+      include: {
+        items: { include: { menuItem: true, modifiers: true } },
+        restaurant: { select: { config: { select: { countryCode: true } } } },
+      },
+      orderBy: { createdAt: 'asc' }, // el más viejo primero: es el más urgente
+    });
+    res.json(orders.map(o => ({
+      ...o,
+      countryCode: o.restaurant?.config?.countryCode || 'MX',
+    })));
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+});
+
+// ── Auto-asignación: el repartidor TOMA un pedido del pool ───────────────────
+// Atómico vía updateMany condicional (deliveryDriverId: null en el WHERE):
+// si dos repartidores tocan "Tomar" a la vez, solo el primero gana; el otro
+// recibe 409 ALREADY_CLAIMED. Mismo efecto que el /assign manual del staff
+// (driver + ON_THE_WAY) pero iniciado por el propio repartidor.
+router.post('/:driverId/claim/:orderId', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const claimed = await prisma.order.updateMany({
+      where: {
+        id: req.params.orderId,
+        restaurantId,
+        orderType: 'DELIVERY',
+        deliveryDriverId: null,
+        status: { notIn: ['DELIVERED', 'CANCELLED'] },
+      },
+      data: { deliveryDriverId: driver.id, status: 'ON_THE_WAY' },
+    });
+    if (claimed.count === 0) {
+      return res.status(409).json({
+        error: 'Otro repartidor ya tomó este pedido (o ya no está disponible).',
+        code: 'ALREADY_CLAIMED',
+      });
+    }
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.orderId, restaurantId },
+      include: { items: { include: { menuItem: true, modifiers: true } }, user: true },
+    });
+
+    const io = req.app.get('io');
+    if (io && order) {
+      // Los demás repartidores sacan el pedido de su pool; la caja ve la asignación.
+      io.to(`restaurant:${order.restaurantId}:drivers`).emit('availableOrdersChanged', { orderId: order.id, claimedBy: driver.name });
+      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
+    }
+
+    res.json(order);
+  } catch (e) { console.error('POST /delivery/claim:', e); res.status(500).json({ error: 'Error interno' }); }
+});
+
 router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, res) => {
   try {
     const driver = await assertDriverAccess(req, res);
@@ -196,8 +270,17 @@ router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_RO
     const io = req.app.get('io');
     if (io) {
       io.to(`driver:${driverId}`).emit('orderAssigned', { order });
+      // El pedido salió del pool: los demás repartidores lo dejan de ver.
+      io.to(`restaurant:${order.restaurantId}:drivers`).emit('availableOrdersChanged', { orderId: order.id });
       io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
     }
+    // Push al celular del repartidor asignado (funciona con la app cerrada).
+    sendPushToDriver(driverId, {
+      title: `📦 Se te asignó el pedido #${order.orderNumber}`,
+      body: `${order.customerName || 'Cliente'} · $${Number(order.total || 0).toFixed(2)}\n${order.deliveryAddress || ''}`.trim(),
+      tag: `assigned-${order.id}`,
+      url: '/',
+    }).catch(() => {});
 
     res.json(order);
   } catch (e) { console.error('PUT /delivery/assign:', e); res.status(500).json({ error: 'Error interno' }); }
@@ -215,7 +298,10 @@ router.put('/unassign', authenticate, requireTenantAccess, requireRole(...STAFF_
     const io = req.app.get('io');
     if (io) {
       io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
+      // Vuelve al pool: avisar a los repartidores (socket + push).
+      io.to(`restaurant:${order.restaurantId}:drivers`).emit('newAvailableOrder', { order });
     }
+    notifyDriversNewDeliveryOrder(order).catch(() => {});
     res.json(order);
   } catch (e) { console.error('PUT /delivery/unassign:', e); res.status(500).json({ error: 'Error interno' }); }
 });

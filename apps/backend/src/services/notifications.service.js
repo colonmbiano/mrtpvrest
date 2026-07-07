@@ -44,6 +44,61 @@ async function sendPushToOrder(orderId, payload) {
   } catch (e) { console.error('Push error:', e.message); return 0; }
 }
 
+// ── Push a un REPARTIDOR (Employee, no User) ───────────────────────────────
+// Los repartidores no tienen fila en users: su suscripción se guarda en
+// PushSubscription.userId con el prefijo `driver:<employeeId>` (la columna es
+// String sin FK, así que no choca con ids de User). La registra la app de
+// reparto tras el login (POST /api/notifications/subscribe).
+async function sendPushToDriver(driverId, payload) {
+  if (!PUSH_ENABLED || !driverId) return 0;
+  try {
+    const subs = await prisma.pushSubscription.findMany({ where: { userId: `driver:${driverId}` } });
+    await Promise.allSettled(subs.map(sub =>
+      webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        JSON.stringify(payload)
+      ).catch(async e => {
+        // 410 Gone = suscripción muerta (app desinstalada / permiso revocado).
+        if (e.statusCode === 410 || e.statusCode === 404) {
+          await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
+        }
+      })
+    ));
+    return subs.length;
+  } catch (e) { console.error('Push driver error:', e.message); return 0; }
+}
+
+// ── Aviso a TODOS los repartidores: nuevo pedido DELIVERY disponible ───────
+// Se dispara al crear un pedido a domicilio SIN repartidor asignado (TPV,
+// tienda online, bot de WhatsApp) y al desasignar uno. Push a cada repartidor
+// activo del restaurante para que abran la app y lo tomen del pool
+// (el socket 'newAvailableOrder' cubre a los que ya la tienen abierta).
+// Best-effort: nunca afecta la creación del pedido.
+async function notifyDriversNewDeliveryOrder(order) {
+  if (!PUSH_ENABLED || !order?.restaurantId) return 0;
+  try {
+    const drivers = await prisma.employee.findMany({
+      where: {
+        role: 'DELIVERY',
+        isActive: true,
+        location: { restaurantId: order.restaurantId },
+        ...(order.locationId ? { locationId: order.locationId } : {}),
+      },
+      select: { id: true },
+    });
+    if (!drivers.length) return 0;
+    const totalTxt = order.total != null ? ` · $${Number(order.total).toFixed(2)}` : '';
+    const payload = {
+      title: `🛵 Pedido disponible #${order.orderNumber || ''}`,
+      body: `${order.customerName || 'Cliente'}${totalTxt}\n${order.deliveryAddress || ''}`.trim(),
+      tag: `available-${order.id}`, // reemplaza la notificación si se re-emite
+      url: '/',
+    };
+    await Promise.allSettled(drivers.map(d => sendPushToDriver(d.id, payload)));
+    return drivers.length;
+  } catch (e) { console.error('Push drivers error:', e.message); return 0; }
+}
+
 async function sendPushToUser(userId, payload) {
   if (!PUSH_ENABLED) return;
   try {
@@ -254,4 +309,4 @@ async function notifyLowStock(ingredient, locationId) {
   } catch (e) { console.error('notifyLowStock:', e.message); }
 }
 
-module.exports = { notifyOrderStatus, notifyIngredientShortage, notifyNewOrder, notifyLowStock, sendWhatsApp, sendOrderWhatsApp, sendPushToOrder };
+module.exports = { notifyOrderStatus, notifyIngredientShortage, notifyNewOrder, notifyLowStock, sendWhatsApp, sendOrderWhatsApp, sendPushToOrder, sendPushToDriver, notifyDriversNewDeliveryOrder };
