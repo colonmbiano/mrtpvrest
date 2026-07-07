@@ -88,7 +88,7 @@ export const comparisons: Comparison[] = [
     criteria: sharedCriteria,
     faqs: [
       ['¿En qué se diferencia de un POS general?', 'MRTPVREST está hecho para restaurantes: conecta cocina (KDS), delivery, kiosko, pedidos QR y administración en una sola operación, no solo el cobro.'],
-      ['¿Tiene plan para empezar?', 'Sí, hay planes públicos desde un tier básico y una prueba de 6 meses sin tarjeta.'],
+      ['¿Tiene plan para empezar?', 'Sí, hay un plan único con acceso total a todos los módulos y hasta 6 meses gratis por lanzamiento, sin tarjeta.'],
     ],
   },
 ]
