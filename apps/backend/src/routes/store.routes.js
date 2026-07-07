@@ -1285,6 +1285,16 @@ router.post('/orders', async (req, res) => {
         // caja pierda el pedido (caso raro; no hay sucursal que "cruzar").
         io.to(`restaurant:${restaurant.id}`).emit('order:new', order);
       }
+
+      // Pedido a DOMICILIO (tienda online / bot de WhatsApp / kiosko) sin
+      // repartidor: anunciarlo al pool de repartidores en vivo.
+      if (order.orderType === 'DELIVERY') {
+        io.to(`restaurant:${restaurant.id}:drivers`).emit('newAvailableOrder', { order });
+      }
+    }
+    if (order.orderType === 'DELIVERY') {
+      // Push best-effort a los celulares de los repartidores (app cerrada incluida).
+      require('../services/notifications.service').notifyDriversNewDeliveryOrder(order).catch(() => {});
     }
 
     // Registro por cliente (Customer) + recompensa por hitos de compra. GATEADO

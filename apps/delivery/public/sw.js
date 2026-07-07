@@ -3,8 +3,42 @@
 // REGLA DE ORO: nunca cachear las llamadas a la API ni el tracking GPS;
 // esas siempre van a la red para no servir datos de pedidos/ubicación stale.
 
-const CACHE = "mb-delivery-v2";
+const CACHE = "mb-delivery-v3";
 const APP_SHELL = ["/", "/manifest.webmanifest"];
+
+// ── Web Push: notificación de pedidos al celular del repartidor ────────────
+// El backend (web-push/VAPID) manda un JSON { title, body, tag, url }. Esto
+// funciona con la app CERRADA: el sistema despierta al SW y muestra la
+// notificación nativa (Android Chrome/PWA; iOS 16.4+ con la PWA instalada).
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data && event.data.text() }; }
+  const title = data.title || "MB Delivery";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || "",
+      tag: data.tag || undefined, // mismo tag = reemplaza (no acumula) la notificación
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      vibrate: [180, 80, 180],
+      data: { url: data.url || "/" },
+    })
+  );
+});
+
+// Tocar la notificación abre (o enfoca) la app del repartidor.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) { client.navigate(url).catch(() => {}); return client.focus(); }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

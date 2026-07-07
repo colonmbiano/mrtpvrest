@@ -20,6 +20,10 @@ interface Driver {
 interface HomeScreenProps {
   driver: Driver | null;
   orders: Order[];
+  // Pool: pedidos DELIVERY sin repartidor que cualquiera puede tomar.
+  availableOrders?: Order[];
+  claimingId?: string | null;
+  onClaimOrder?: (order: Order) => void;
   isOnline: boolean;
   pendingSync?: number;
   unreadNotices?: number;
@@ -27,6 +31,49 @@ interface HomeScreenProps {
   onChat: (order: Order) => void;
   onDeliverOrder: (order: Order) => void;
   onNavigate: (screen: string) => void;
+}
+
+// Tarjeta compacta del pool de disponibles: la acción única es TOMAR el pedido.
+function AvailableOrderCard({ order, claiming, onClaim }: {
+  order: Order;
+  claiming: boolean;
+  onClaim: () => void;
+}) {
+  return (
+    <div style={{
+      background: C.surf1, borderRadius: 20, border: '1px solid rgba(136,214,108,0.25)',
+      overflow: 'hidden', position: 'relative',
+    }}>
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: C.green }} />
+      <div style={{ padding: '14px 14px 14px 18px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: C.green, letterSpacing: '0.06em', fontFamily: C.fontBody }}>
+            #{order.orderNumber}
+          </div>
+          <div style={{ fontFamily: C.fontDisplay, fontSize: 18, fontWeight: 700, color: C.green, lineHeight: 1 }}>
+            ${(order.total || 0).toFixed(2)}
+          </div>
+        </div>
+        <div style={{
+          fontFamily: C.fontDisplay, fontSize: 17, fontWeight: 700, color: C.text,
+          marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {order.customerName}
+        </div>
+        <div style={{ fontSize: 11, color: C.textDim, lineHeight: 1.5, marginBottom: 12 }}>
+          {order.deliveryAddress}
+        </div>
+        <button onClick={onClaim} disabled={claiming} style={{
+          width: '100%', height: 44, borderRadius: 12, cursor: claiming ? 'wait' : 'pointer',
+          border: 'none', background: claiming ? 'rgba(136,214,108,0.35)' : C.green,
+          fontSize: 11, fontWeight: 800, color: '#0B0B0D',
+          letterSpacing: '0.14em', textTransform: 'uppercase', fontFamily: C.fontBody,
+        }}>
+          {claiming ? 'Tomando…' : 'Tomar pedido'}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function OrderCard({ order, onDetail, onChat, onDeliver, onNavigate }: {
@@ -153,7 +200,8 @@ function OrderCard({ order, onDetail, onChat, onDeliver, onNavigate }: {
 }
 
 export function HomeScreen({
-  driver, orders, isOnline, pendingSync = 0, unreadNotices = 0,
+  driver, orders, availableOrders = [], claimingId = null, onClaimOrder,
+  isOnline, pendingSync = 0, unreadNotices = 0,
   onSelectOrder, onChat, onDeliverOrder, onNavigate,
 }: HomeScreenProps) {
 
@@ -305,6 +353,33 @@ export function HomeScreen({
           ))}
         </div>
       </div>
+
+      {/* ── Pedidos DISPONIBLES (pool para auto-asignarse) ── */}
+      {availableOrders.length > 0 && onClaimOrder && (
+        <div style={{ padding: '20px 16px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div>
+              <div style={{ ...S.sectionLabel, color: C.green }}>Disponibles</div>
+              <div style={{ fontFamily: C.fontDisplay, fontSize: 26, fontWeight: 700, color: C.text, lineHeight: 1 }}>
+                {availableOrders.length}{' '}
+                <span style={{ fontSize: 13, color: C.textDim, fontFamily: C.fontBody, fontWeight: 400 }}>
+                  {availableOrders.length === 1 ? 'pedido sin repartidor' : 'pedidos sin repartidor'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {availableOrders.map(order => (
+              <AvailableOrderCard
+                key={order.id}
+                order={order}
+                claiming={claimingId === order.id}
+                onClaim={() => onClaimOrder(order)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Orders ── */}
       <div style={{ padding: '20px 16px 32px' }}>

@@ -1176,6 +1176,15 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     const io = req.app.get('io');
     if (io) {
       io.to(`restaurant:${restaurantId}:location:${req.locationId}:admins`).emit('order:new', order);
+      // Pedido a DOMICILIO sin repartidor: anunciarlo al pool de repartidores
+      // (socket para apps abiertas). El push a celulares va abajo, fuera del if.
+      if (order.orderType === 'DELIVERY' && !order.deliveryDriverId) {
+        io.to(`restaurant:${restaurantId}:drivers`).emit('newAvailableOrder', { order });
+      }
+    }
+    if (order.orderType === 'DELIVERY' && !order.deliveryDriverId) {
+      // Push best-effort a los celulares de los repartidores (app cerrada incluida).
+      require('../services/notifications.service').notifyDriversNewDeliveryOrder(order).catch(() => {});
     }
 
     res.json(order);

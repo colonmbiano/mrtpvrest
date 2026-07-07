@@ -10,6 +10,7 @@ import { getApiUrl } from '@/lib/config';
 import GPSTracker from '@/components/delivery/GPSTracker';
 import { useOfflineStore } from '@/store/useOfflineStore';
 import { initBackgroundSync } from '@/lib/offline';
+import { ensureDriverPushSubscription } from '@/lib/push';
 import { LoginScreen }     from '@/components/delivery/screens/LoginScreen';
 import { HomeScreen }      from '@/components/delivery/screens/HomeScreen';
 import { DetailScreen }    from '@/components/delivery/screens/DetailScreen';
@@ -147,6 +148,9 @@ export default function DeliveryApp() {
   const [orderDetail, setOrderDetail]   = useState<any>(null);
   const [prevOrderCount, setPrevOrderCount] = useState(0);
   const [incomingOrder, setIncomingOrder]   = useState<any>(null);
+  // Pool de pedidos DELIVERY sin repartidor: cualquier repartidor puede tomarlos.
+  const [availableOrders, setAvailableOrders] = useState<any[]>([]);
+  const [claimingId, setClaimingId]           = useState<string | null>(null);
   const [avisos, setAvisos]                 = useState<any[]>([]);
   const [unreadNotices, setUnreadNotices]   = useState(0);
 
@@ -204,6 +208,33 @@ export default function DeliveryApp() {
     } catch {}
   }, [driver, prevOrderCount]);
 
+  const fetchAvailable = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/delivery/available-orders');
+      setAvailableOrders(Array.isArray(data) ? data : []);
+    } catch {}
+  }, []);
+
+  // Tomar un pedido del pool. El backend es atómico: si otro repartidor ganó,
+  // responde 409 ALREADY_CLAIMED y solo refrescamos la lista.
+  const claimOrder = useCallback(async (order: any) => {
+    if (!driver || claimingId) return;
+    setClaimingId(order.id);
+    try {
+      await api.post(`/api/delivery/${driver.id}/claim/${order.id}`);
+      setAvailableOrders(prev => prev.filter(o => o.id !== order.id));
+      await fetchOrders();
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        alert('Otro repartidor ya tomó ese pedido 🏃');
+      } else {
+        alert(err?.response?.data?.error || 'No se pudo tomar el pedido');
+      }
+      fetchAvailable();
+    } finally { setClaimingId(null); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driver, claimingId]);
+
   const fetchHistory = useCallback(async () => {
     if (!driver) return;
     try {
@@ -256,6 +287,10 @@ export default function DeliveryApp() {
     fetchOrders();
     fetchHistory();
     fetchAvisos();
+    fetchAvailable();
+    // Notificaciones push al celular (PWA): registrar/actualizar la suscripción
+    // de ESTE repartidor. Best-effort; si niega el permiso, la app sigue igual.
+    ensureDriverPushSubscription(driver.id).catch(() => {});
 
     const socket = io(getApiUrl(), {
       // El token identifica al repartidor en el server (socket.data.user) y lo
@@ -268,6 +303,13 @@ export default function DeliveryApp() {
     });
     socket.on('newOrder',     () => fetchOrders());
     socket.on('orderUpdated', () => fetchOrders());
+    // Nuevo pedido DELIVERY sin asignar → entra al pool de "Disponibles".
+    socket.on('newAvailableOrder', () => {
+      audioRef.current?.play().catch(() => {});
+      fetchAvailable();
+    });
+    // Alguien tomó (o el staff asignó) un pedido del pool → refrescar ambos.
+    socket.on('availableOrdersChanged', () => { fetchAvailable(); fetchOrders(); });
     // Nueva orden asignada específicamente a este repartidor.
     // Backend debe emitir 'orderAssigned' solo al socket del driver: socket.to(driverSocketId).emit('orderAssigned', { order })
     socket.on('orderAssigned', (data: any) => {
@@ -483,6 +525,9 @@ export default function DeliveryApp() {
         <HomeScreen
           driver={driver}
           orders={orders}
+          availableOrders={availableOrders}
+          claimingId={claimingId}
+          onClaimOrder={claimOrder}
           isOnline={isOnline}
           unreadNotices={unreadNotices}
           pendingSync={useOfflineStore.getState().queue.length}
