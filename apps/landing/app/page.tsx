@@ -67,30 +67,22 @@ const stats: { num: string; label: string }[] = [
   { num: '6 meses', label: 'gratis con acceso total para los primeros 100 negocios' },
 ]
 
+// Promo de lanzamiento: un solo plan con acceso total. Los primeros 100
+// negocios entran 6 meses gratis; después, 3 meses gratis para todo nuevo.
 const plans = [
   {
-    name: 'Básico',
-    price: '$29',
-    local: 'Hasta 6 meses gratis · luego ~$580 MXN / mes',
-    text: 'Para locales que quieren ordenar caja, ventas y reportes.',
-    features: ['1 sucursal', 'TPV + Admin', 'Reportes esenciales', 'Soporte por correo'],
-    featured: false,
-  },
-  {
-    name: 'Pro',
-    price: '$59',
-    local: 'Hasta 6 meses gratis · luego ~$1,180 MXN / mes',
-    text: 'Para restaurantes con cocina, roles y operación diaria activa.',
-    features: ['Apps conectadas', 'KDS + Delivery', 'Roles y permisos', 'Onboarding asistido'],
+    name: 'Acceso Total',
+    price: '$699',
+    local: 'MXN / mes · hasta 6 meses gratis por lanzamiento',
+    text: 'Todos los módulos y las 6 apps conectados desde el día uno. Un solo precio cuando termina tu periodo gratis, sin niveles ni sorpresas.',
+    features: [
+      'Sucursales y empleados ilimitados',
+      'TPV + KDS + Delivery + Kiosko',
+      'Tienda en línea y app de cliente',
+      'Reportes IA, inventario, finanzas y nómina',
+      'Soporte en español',
+    ],
     featured: true,
-  },
-  {
-    name: 'Unlimited',
-    price: '$99',
-    local: 'Hasta 6 meses gratis · luego ~$1,980 MXN / mes',
-    text: 'Para grupos con múltiples pantallas, equipos y sucursales.',
-    features: ['Sucursales ilimitadas', 'Automatizaciones', 'Soporte prioritario', 'Integraciones avanzadas'],
-    featured: false,
   },
 ] as const
 
@@ -99,7 +91,7 @@ const faqs = [
   ['¿En cuánto tiempo puedo estar vendiendo?', 'La primera operación puede quedar lista el mismo día si ya tienes menú, usuarios y conexión a internet.'],
   ['¿Qué pasa si ya tengo un POS?', 'Puedes migrar por etapas: empezar por reportes, cocina o TPV sin apagar tu operación actual de golpe.'],
   ['¿Tengo que contratar todos los módulos desde el inicio?', 'No. Puedes empezar solo con el TPV para ordenar caja y ventas, y activar cocina (KDS), reparto propio, WhatsApp o tienda en línea cuando tu operación los pida. Todo se conecta a la misma caja.'],
-  ['¿El precio es en dólares?', 'Los planes se muestran en USD con equivalentes aproximados en MXN para que puedas comparar rápido.'],
+  ['¿Cuánto cuesta después del periodo gratis?', 'El plan Acceso Total cuesta $699 MXN al mes e incluye todos los módulos. Durante el lanzamiento los primeros 100 negocios entran 6 meses gratis y, a partir de ahí, todo negocio nuevo entra 3 meses gratis.'],
   ['¿Qué pasa cuando termina el trial?', 'Decides si sigues con un plan. No necesitas tarjeta para probar y no hay bloqueo de datos al evaluar.'],
 ] as const
 
@@ -142,7 +134,7 @@ const structuredData = {
         '@type': 'Offer',
         name: plan.name,
         price: plan.price.replace('$', ''),
-        priceCurrency: 'USD',
+        priceCurrency: 'MXN',
         url: `${siteUrl}/#precios`,
       })),
       ...(realTestimonials.length > 0
@@ -337,7 +329,7 @@ export default function HomePage() {
               negocio nuevo entra con 3 meses gratis. Sin tarjeta y con soporte en español durante el arranque.
             </p>
           </div>
-          <div className={styles.plans}>
+          <div className={`${styles.plans} ${plans.length === 1 ? styles.plansOne : ''}`}>
             {plans.map((plan) => (
               <article className={`${styles.plan} ${plan.featured ? styles.planFeatured : ''}`} key={plan.name}>
                 {plan.featured ? <span className={styles.planTag}>Más elegido</span> : null}

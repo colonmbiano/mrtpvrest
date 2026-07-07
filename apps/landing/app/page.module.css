@@ -765,6 +765,12 @@
   align-items: start;
 }
 
+/* Promo de lanzamiento: un solo plan — tarjeta centrada en vez de grid de 3. */
+.plansOne {
+  grid-template-columns: minmax(0, 480px);
+  justify-content: center;
+}
+
 .plan {
   position: relative;
   display: flex;
