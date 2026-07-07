@@ -30,6 +30,12 @@ function formatBusinessHours(businessHoursJson) {
 // mensaje (depende de la hora), no se cachea.
 const menuCache = new Map(); // restaurantId → { menuString, config, businessName, horarioTexto, ts }
 
+// Fallback Groq→Gemini: se loguea UNA vez por incidente, no por mensaje
+// (con Groq caído entran decenas de mensajes por minuto y esto inundaría los
+// logs). true mientras Groq esté fallando y se responda con Gemini; se
+// resetea (y se loguea la recuperación) cuando Groq vuelve a contestar.
+let groqFallbackActive = false;
+
 /**
  * Handles the conversation with Gemini directly via Axios.
  */
@@ -326,6 +332,9 @@ ${promosParaPrompt ? `
     // usa para parsear pedidos (mismo modelo llama-3.3-70b-versatile). Se elige
     // por presencia de GROQ_API_KEY → flip reversible por env, sin tocar código.
     // Reintentos con backoff ante 429/503/500 y errores de red + modelo alterno.
+    // Si TODOS los modelos de Groq fallan (413/429/5xx/red), se cae a Gemini en
+    // vez de lanzar: el tier gratis de Groq (6,000 TPM) rechaza con 413 prompts
+    // grandes y eso dejó al bot contestando "problema técnico" (2026-07-06).
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let lastErr = null;
     let replyText = null;
@@ -368,9 +377,25 @@ ${promosParaPrompt ? `
           }
         }
       }
-      if (!replyText) throw lastErr || new Error('Groq sin respuesta');
-    } else {
-      // Gemini (fallback si no hay GROQ_API_KEY). Key en header, no en URL.
+      if (replyText) {
+        if (groqFallbackActive) {
+          groqFallbackActive = false;
+          console.warn('[Groq] recuperado: Groq vuelve a ser el proveedor principal.');
+        }
+      } else if (process.env.GOOGLE_AI_API_KEY) {
+        if (!groqFallbackActive) {
+          groqFallbackActive = true;
+          const detalle = lastErr?.response?.status || lastErr?.code || lastErr?.message || 'sin detalle';
+          console.error(`[Groq] todos los modelos fallaron (${detalle}); fallback a Gemini hasta que Groq se recupere.`);
+        }
+      } else {
+        throw lastErr || new Error('Groq sin respuesta');
+      }
+    }
+
+    if (!replyText) {
+      // Gemini: proveedor por defecto sin GROQ_API_KEY, y fallback si Groq cae.
+      // Key en header, no en URL.
       const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
       let response = null;
       outerGemini:
