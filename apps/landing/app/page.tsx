@@ -64,14 +64,14 @@ const stats: { num: string; label: string }[] = [
   { num: '+1,000', label: 'pedidos al mes procesa un solo restaurante con MRTPVREST' },
   { num: '3', label: 'canales de venta en una caja: mostrador, WhatsApp y tienda en línea' },
   { num: '6', label: 'apps conectadas en un solo ecosistema' },
-  { num: '6 meses', label: 'gratis para probar, sin tarjeta' },
+  { num: '6 meses', label: 'gratis con acceso total para los primeros 100 negocios' },
 ]
 
 const plans = [
   {
     name: 'Básico',
     price: '$29',
-    local: '6 meses gratis · luego ~$580 MXN / mes',
+    local: 'Hasta 6 meses gratis · luego ~$580 MXN / mes',
     text: 'Para locales que quieren ordenar caja, ventas y reportes.',
     features: ['1 sucursal', 'TPV + Admin', 'Reportes esenciales', 'Soporte por correo'],
     featured: false,
@@ -79,7 +79,7 @@ const plans = [
   {
     name: 'Pro',
     price: '$59',
-    local: '6 meses gratis · luego ~$1,180 MXN / mes',
+    local: 'Hasta 6 meses gratis · luego ~$1,180 MXN / mes',
     text: 'Para restaurantes con cocina, roles y operación diaria activa.',
     features: ['Apps conectadas', 'KDS + Delivery', 'Roles y permisos', 'Onboarding asistido'],
     featured: true,
@@ -87,7 +87,7 @@ const plans = [
   {
     name: 'Unlimited',
     price: '$99',
-    local: '6 meses gratis · luego ~$1,980 MXN / mes',
+    local: 'Hasta 6 meses gratis · luego ~$1,980 MXN / mes',
     text: 'Para grupos con múltiples pantallas, equipos y sucursales.',
     features: ['Sucursales ilimitadas', 'Automatizaciones', 'Soporte prioritario', 'Integraciones avanzadas'],
     featured: false,
@@ -330,11 +330,11 @@ export default function HomePage() {
         <div className={styles.pricingInner}>
           <div className={styles.sectionHead}>
             <span className={styles.kicker}>Precios</span>
-            <h2 className={styles.sectionTitle}>Gratis 6 meses por lanzamiento, sin tarjeta</h2>
+            <h2 className={styles.sectionTitle}>Acceso total gratis: 6 meses para los primeros 100</h2>
             <p className={styles.sectionLede}>
-              Empieza solo con el TPV y activa módulos — cocina, reparto, WhatsApp, tienda en línea —
-              conforme tu operación los pida. Todos los planes incluyen 6 meses gratis y soporte en
-              español durante el arranque.
+              Por lanzamiento, entras con acceso total — TPV, cocina, reparto, tienda en línea y todos
+              los módulos. Los primeros 100 negocios lo usan 6 meses gratis; a partir de ahí, todo
+              negocio nuevo entra con 3 meses gratis. Sin tarjeta y con soporte en español durante el arranque.
             </p>
           </div>
           <div className={styles.plans}>

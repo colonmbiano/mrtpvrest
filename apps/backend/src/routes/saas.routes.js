@@ -2,6 +2,7 @@ const router  = require('express').Router();
 const prisma   = require('@mrtpvrest/database').prisma;
 const { authenticate, requireSuperAdmin } = require('../middleware/auth.middleware');
 const { deriveActiveKeys, syncTenantModuleRows, VALID_MODULE_KEYS } = require('../lib/tenantModules');
+const { resolveTrialDays, decoratePublicPlans } = require('../lib/promo');
 
 // Tenant de sistema — contenedor del SUPER_ADMIN de plataforma. Se excluye
 // de toda lista / métrica visible a clientes o super-admins del SaaS.
@@ -44,7 +45,8 @@ router.get('/plans', async (req, res) => {
       where:   { isActive: true },
       orderBy: { price: 'asc' }
     });
-    res.json(plans);
+    // Promo de lanzamiento: trialDays efectivo + lugares de fundador restantes.
+    res.json(await decoratePublicPlans(prisma, plans));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -214,7 +216,7 @@ router.post('/tenants', async (req, res) => {
 
     const now         = new Date();
     const trialEndsAt = new Date(now);
-    trialEndsAt.setDate(trialEndsAt.getDate() + plan.trialDays);
+    trialEndsAt.setDate(trialEndsAt.getDate() + await resolveTrialDays(prisma, plan));
     const cleanSlug = slug.toLowerCase();
 
     const tenant = await prisma.tenant.create({

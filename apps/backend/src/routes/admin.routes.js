@@ -1,6 +1,7 @@
 const express = require('express')
 const prisma  = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
+const { resolveTrialDays } = require('../lib/promo')
 const router  = express.Router()
 
 // Tenant de sistema — se excluye del listado visible de marcas.
@@ -547,7 +548,7 @@ router.post('/tenants', authenticate, requireSuperAdmin, async (req, res) => {
 
     const now      = new Date();
     const endsAt   = subscriptionEndsAt ? new Date(subscriptionEndsAt)
-      : isTrial    ? new Date(now.getTime() + planRecord.trialDays * 86400000)
+      : isTrial    ? new Date(now.getTime() + (await resolveTrialDays(prisma, planRecord)) * 86400000)
       : null;
     const status   = isTrial ? 'TRIAL' : 'ACTIVE';
 

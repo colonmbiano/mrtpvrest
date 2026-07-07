@@ -1339,7 +1339,7 @@ function SetupScreen({ onLinked, onDemo }){
         </>)}
         {step==="register" && (<>
           <div className="text-[15px] font-semibold text-ink-900 text-center">Crear tu tienda</div>
-          <div className="text-[12px] text-ink-400 text-center mt-1 mb-5">6 meses de prueba · sin tarjeta</div>
+          <div className="text-[12px] text-ink-400 text-center mt-1 mb-5">Hasta 6 meses gratis · sin tarjeta</div>
           {err && <div className="text-[12px] text-red-500 text-center mb-3">{err}</div>}
           <div className="space-y-3">
             {fld("Nombre de la tienda",<input value={rName} onChange={e=>setRName(e.target.value)} placeholder="Boutique Aurora" className={inputCls}/>)}
