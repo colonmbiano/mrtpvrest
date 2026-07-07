@@ -24,6 +24,15 @@ interface Plan {
   hasAPIAccess: boolean;
 }
 
+// 180 días se lee mejor como "6 meses"; solo formatea, el valor real viene del plan en BD.
+function trialLabel(days: number): string {
+  if (days >= 30 && days % 30 === 0) {
+    const months = days / 30;
+    return months === 1 ? "1 mes" : `${months} meses`;
+  }
+  return `${days} días`;
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const [step, setStep]                       = useState(1);
@@ -165,7 +174,7 @@ export default function RegisterPage() {
         </div>
         <p style={{ fontFamily: "var(--f-m)", fontSize: 10, fontWeight: 700, color: "var(--tx-mut)", textTransform: "uppercase", letterSpacing: "0.8px" }}>
           {selectedPlan && selectedPlan.trialDays > 0
-            ? `EMPIEZA TU PRUEBA DE ${selectedPlan.trialDays} DÍAS`
+            ? `EMPIEZA GRATIS · ${trialLabel(selectedPlan.trialDays).toUpperCase()} DE PRUEBA`
             : "EMPIEZA A VENDER HOY"}
         </p>
       </div>
@@ -256,7 +265,7 @@ export default function RegisterPage() {
                           </span>
                         </div>
                         <div style={{ fontSize: 11, color: "var(--tx-mut)", marginBottom: 6 }}>
-                          {p.trialDays > 0 ? `${p.trialDays} días gratis` : "Sin trial"} · sin tarjeta
+                          {p.trialDays > 0 ? `${trialLabel(p.trialDays)} gratis` : "Sin trial"} · sin tarjeta
                         </div>
                         {perks.length > 0 && (
                           <div style={{ fontSize: 11, color: "var(--tx-mut)", fontFamily: "var(--f-m)" }}>

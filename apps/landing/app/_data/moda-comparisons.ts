@@ -47,7 +47,7 @@ export const modaComparisons: ModaComparison[] = [
     reasons: sharedReasons,
     criteria: sharedCriteria,
     faqs: [
-      ['¿MODA+ es una alternativa a SICAR?', 'Sí. MODA+ es un punto de venta hecho para tiendas de ropa con matriz de talla y color, etiquetas con código de barras y corte de caja; puedes probarlo 15 días gratis y sin tarjeta para compararlo con tu opción actual.'],
+      ['¿MODA+ es una alternativa a SICAR?', 'Sí. MODA+ es un punto de venta hecho para tiendas de ropa con matriz de talla y color, etiquetas con código de barras y corte de caja; puedes probarlo 6 meses gratis y sin tarjeta para compararlo con tu opción actual.'],
       ['¿Necesito instalar algo para probarlo?', 'No. Puedes empezar en la web en minutos y, si quieres, instalar la app en Windows o Android después; la misma cuenta funciona en todos los equipos.'],
     ],
   },
@@ -89,7 +89,7 @@ export const modaComparisons: ModaComparison[] = [
     reasons: sharedReasons,
     criteria: sharedCriteria,
     faqs: [
-      ['¿MODA+ es una alternativa a INTAC?', 'Sí. MODA+ es un punto de venta hecho para tiendas de ropa con matriz de talla y color, etiquetas con código de barras y corte de caja; puedes probarlo 15 días gratis y sin tarjeta para compararlo con tu opción actual.'],
+      ['¿MODA+ es una alternativa a INTAC?', 'Sí. MODA+ es un punto de venta hecho para tiendas de ropa con matriz de talla y color, etiquetas con código de barras y corte de caja; puedes probarlo 6 meses gratis y sin tarjeta para compararlo con tu opción actual.'],
       ['¿Puedo usarlo en celular además de la PC?', 'Sí. MODA+ corre en PC con Windows, en Android y en la web, con la misma cuenta en todos los equipos.'],
     ],
   },
@@ -110,7 +110,7 @@ export const modaComparisons: ModaComparison[] = [
     reasons: sharedReasons,
     criteria: sharedCriteria,
     faqs: [
-      ['¿MODA+ es una alternativa a Kyte?', 'Sí. MODA+ es un punto de venta hecho para tiendas de ropa con matriz de talla y color, etiquetas con código de barras y corte de caja; puedes probarlo 15 días gratis y sin tarjeta para compararlo.'],
+      ['¿MODA+ es una alternativa a Kyte?', 'Sí. MODA+ es un punto de venta hecho para tiendas de ropa con matriz de talla y color, etiquetas con código de barras y corte de caja; puedes probarlo 6 meses gratis y sin tarjeta para compararlo.'],
       ['¿Funciona en PC además de celular?', 'Sí. MODA+ corre en PC con Windows, en Android y en la web, con la misma cuenta en todos los equipos.'],
     ],
   },
@@ -131,7 +131,7 @@ export const modaComparisons: ModaComparison[] = [
     reasons: sharedReasons,
     criteria: sharedCriteria,
     faqs: [
-      ['¿MODA+ es una alternativa a Vendty?', 'Sí. MODA+ es un punto de venta para tiendas de ropa con matriz de talla y color, etiquetas con código de barras y corte de caja; puedes probarlo 15 días gratis y sin tarjeta.'],
+      ['¿MODA+ es una alternativa a Vendty?', 'Sí. MODA+ es un punto de venta para tiendas de ropa con matriz de talla y color, etiquetas con código de barras y corte de caja; puedes probarlo 6 meses gratis y sin tarjeta.'],
       ['¿Sigue vendiendo sin internet?', 'Sí. Instálalo en Windows o Android y sigue cobrando aunque se caiga la conexión; sincroniza cuando vuelve.'],
     ],
   },

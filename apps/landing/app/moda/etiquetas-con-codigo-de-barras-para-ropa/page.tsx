@@ -185,9 +185,9 @@ export default function ModaBarcodeLabelsGuidePage() {
         <section className="final-cta">
           <span className="section-kicker">MODA+</span>
           <h2>Etiqueta y cobra escaneando</h2>
-          <p>MODA+ genera tus etiquetas con código de barras por variante y descuenta el stock al cobrar. 15 días gratis, sin tarjeta.</p>
+          <p>MODA+ genera tus etiquetas con código de barras por variante y descuenta el stock al cobrar. 6 meses gratis, sin tarjeta.</p>
           <div className="hero-actions">
-            <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+            <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
             <Link className="btn btn-line" href="/moda/guias">Ver más guías</Link>
           </div>
         </section>

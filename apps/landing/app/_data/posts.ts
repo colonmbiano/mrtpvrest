@@ -149,7 +149,7 @@ export const posts: Post[] = [
     ],
     faqs: [
       ['¿Cuánto cuesta al mes un punto de venta para restaurante?', 'Varía según el modelo y lo que incluya el plan. Lo importante es comparar el costo total —mensualidad, hardware, comisiones y permanencia— y no solo el precio de etiqueta.'],
-      ['¿Hay puntos de venta para restaurante con prueba gratis?', 'Sí. MRTPVREST, por ejemplo, ofrece 14 días gratis sin tarjeta para evaluar la plataforma con tu menú antes de decidir.'],
+      ['¿Hay puntos de venta para restaurante con prueba gratis?', 'Sí. MRTPVREST, por ejemplo, ofrece 6 meses gratis sin tarjeta para evaluar la plataforma con tu menú antes de decidir.'],
     ],
     related: [
       { href: '/#precios', label: 'Ver precios de MRTPVREST' },

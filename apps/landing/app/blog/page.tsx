@@ -59,7 +59,7 @@ export default function BlogIndexPage() {
         <section className="final-cta">
           <span className="section-kicker">MRTPVREST</span>
           <h2>Pon en práctica lo que lees</h2>
-          <p>Prueba el punto de venta para restaurantes MRTPVREST 14 días gratis y sin tarjeta.</p>
+          <p>Prueba el punto de venta para restaurantes MRTPVREST 6 meses gratis y sin tarjeta.</p>
           <div className="hero-actions">
             <Link className="btn btn-primary" href="/funciones">Ver funciones</Link>
             <Link className="btn btn-line" href="/#precios">Ver precios</Link>

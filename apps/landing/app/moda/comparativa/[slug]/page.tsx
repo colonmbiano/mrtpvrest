@@ -65,11 +65,11 @@ export default async function ModaComparisonPage({ params }: { params: Promise<{
             <h1>{comparison.h1}</h1>
             <p>{comparison.intro}</p>
             <div className="hero-actions">
-              <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+              <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
               <Link className="btn btn-soft" href="/moda">Ver MODA+</Link>
             </div>
             <div className="trust-row" aria-label="Beneficios de confianza">
-              <span>15 días gratis</span>
+              <span>6 meses gratis</span>
               <span>Sin tarjeta</span>
               <span>Windows, Android y web</span>
             </div>
@@ -140,7 +140,7 @@ export default async function ModaComparisonPage({ params }: { params: Promise<{
           <h2>Compáralo con tu tienda real</h2>
           <p>Crea tu cuenta en minutos, carga tus productos por talla y color y decide con datos, no con folletos.</p>
           <div className="hero-actions">
-            <a className="btn btn-primary" href={modaUrl}>Probar 15 días gratis</a>
+            <a className="btn btn-primary" href={modaUrl}>Probar 6 meses gratis</a>
             <Link className="btn btn-line" href="/moda">Ver MODA+</Link>
           </div>
         </section>
