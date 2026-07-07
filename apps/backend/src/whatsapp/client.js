@@ -121,7 +121,12 @@ function isValidPhoneNumber(phone) {
 }
 
 function extractPhoneFromText(text) {
-  const match = String(text || '').match(/(?:\+?\d[\d\s().-]{8,}\d)/);
+  // Coordenadas GPS NO son teléfonos: del mensaje sintético "[...latitud
+  // 19.1772226, longitud -100.2112801]" el run "100.2112801" daba 10 dígitos
+  // y acababa como customerPhone del pedido (y del CRM) — auditoría 2026-07-05:
+  // 3 contactos con lat/lng como teléfono. Se quitan los decimales ANTES.
+  const clean = String(text || '').replace(/-?\d{1,3}\.\d{4,}/g, ' ');
+  const match = clean.match(/(?:\+?\d[\d\s().-]{8,}\d)/);
   if (!match) return null;
   const digits = match[0].replace(/\D/g, '');
   return isValidPhoneNumber(digits) ? digits : null;
