@@ -697,4 +697,37 @@ describe("buildShiftCloseTicket", () => {
     const t = buildShiftCloseTicket({ ...base, closingFloat: 16000 });
     expect(t).toContain("SOBRANTE");
   });
+
+  it("imprime las TRANSFERENCIAS al final, con folio, monto y total", () => {
+    const t = buildShiftCloseTicket({
+      ...base,
+      transfers: [
+        { orderNumber: 101, amount: 1500, paidAt: "2026-06-13T01:10:00.000Z" },
+        { orderNumber: "108", amount: 748.9, paidAt: "2026-06-13T05:42:00.000Z" },
+      ],
+    });
+    expect(t).toContain("TRANSFERENCIAS");
+    expect(t).toContain("#101");
+    expect(t).toContain("#108");
+    expect(t).toContain("TOTAL TRANSFER:");
+    expect(t).toContain("$2,248.90"); // suma de las líneas
+    // Al FINAL: después del arqueo, no dentro de las ventas por método.
+    expect(t.indexOf("TRANSFERENCIAS")).toBeGreaterThan(t.indexOf("ARQUEO DE EFECTIVO"));
+  });
+
+  it("sin transferencias NO imprime la sección de detalle", () => {
+    const t = buildShiftCloseTicket({ ...base, transfers: [] });
+    expect(t).not.toContain("TOTAL TRANSFER:");
+    // El renglón de ventas por método sigue saliendo.
+    expect(t).toContain("Transferencia:");
+  });
+
+  it("una transferencia sin folio sale como 'Pedido' (no '#null')", () => {
+    const t = buildShiftCloseTicket({
+      ...base,
+      transfers: [{ orderNumber: null, amount: 300, paidAt: null }],
+    });
+    expect(t).toContain("Pedido");
+    expect(t).not.toContain("#null");
+  });
 });

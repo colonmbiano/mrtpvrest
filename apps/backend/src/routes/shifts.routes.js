@@ -6,7 +6,7 @@ const { authenticate, requireAdmin, requireTenantAccess } = require('../middlewa
 const { requireModule, MODULES } = require('../lib/modules');
 const { validateBody } = require('../lib/validate');
 const { openShiftSchema, closeShiftSchema } = require('../schemas/shifts.schema');
-const { summarizePayments, cashCutSummary, round2 } = require('../lib/money');
+const { summarizePayments, cashCutSummary, round2, PAYMENT_METHOD_MAP } = require('../lib/money');
 const { sendCashCutEmail } = require('../lib/cash-cut-mailer');
 const audit = require('../lib/audit-logger');
 const router = express.Router();
@@ -254,6 +254,39 @@ function shiftOrdersWhere(shift) {
   };
 }
 
+// Detalle de las transferencias del turno (folio + monto + hora de cobro).
+// Va al final del ticket de corte para que el dueño coteje cada transferencia
+// contra los movimientos de la app del banco. Misma regla de tenders que
+// summarizePayments: en cobro MIXTO solo cuenta el renglón por transferencia;
+// sin renglones, el total completo si el método único mapea a totalTransfer.
+function transferOrdersDetail(orders) {
+  const isTransfer = (m) => PAYMENT_METHOD_MAP[m] === 'totalTransfer';
+  const detail = [];
+  for (const o of orders || []) {
+    const tenders = Array.isArray(o.payments)
+      ? o.payments.filter((p) => p && p.status !== 'FAILED' && p.status !== 'REFUNDED')
+      : [];
+    let amount = 0;
+    if (tenders.length > 0) {
+      amount = tenders
+        .filter((p) => isTransfer(p.method))
+        .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    } else if (isTransfer(o.paymentMethod)) {
+      amount = Number(o.total) || 0;
+    }
+    if (amount > 0) {
+      detail.push({
+        orderNumber: o.orderNumber ?? null,
+        customerName: o.customerName || null,
+        amount: round2(amount),
+        paidAt: o.paidAt || o.createdAt || null,
+      });
+    }
+  }
+  detail.sort((a, b) => new Date(a.paidAt || 0) - new Date(b.paidAt || 0));
+  return detail;
+}
+
 // Helper compartido: ejecuta el cierre de un turno YA cargado (con
 // include {expenses, cashIns}). Lo usan POST /:id/close (turno por id) y
 // POST /current/close (turno abierto resuelto por sucursal, para la cola
@@ -292,6 +325,8 @@ async function performShiftClose(req, res, shift) {
     });
 
     const totals = summarizePayments(orders);
+    // Detalle de transferencias para el ticket de corte (cotejo contra banco).
+    const transferOrders = transferOrdersDetail(orders);
 
     const totalExpenses = shift.expenses.reduce((s, e) => s + e.amount, 0);
     const totalCashIn = shift.cashIns.reduce((s, c) => s + c.amount, 0);
@@ -430,10 +465,12 @@ async function performShiftClose(req, res, shift) {
     // Persistimos expectedCash en la BD (para admin/historial y para el
     // endpoint /reveal con PIN), pero lo ocultamos en la respuesta al cajero.
     // El ticket de cierre que imprime el TPV refleja esto: sin arqueo si es ciego.
+    // transferOrders NO es sensible al corte ciego (igual que totalTransfer,
+    // que siempre se muestra): solo se ocultan efectivo esperado y desfase.
     if (closed.blindClose) {
-      res.json({ ...closed, expectedCash: null, staffClockedOut, driversCut });
+      res.json({ ...closed, expectedCash: null, transferOrders, staffClockedOut, driversCut });
     } else {
-      res.json({ ...closed, staffClockedOut, driversCut });
+      res.json({ ...closed, transferOrders, staffClockedOut, driversCut });
     }
 }
 
@@ -874,3 +911,4 @@ module.exports = router;
 // Exportado para pruebas unitarias de la regla de atribución del efectivo.
 module.exports.shiftOrdersWhere = shiftOrdersWhere;
 module.exports.shiftDriverLiquidation = shiftDriverLiquidation;
+module.exports.transferOrdersDetail = transferOrdersDetail;
