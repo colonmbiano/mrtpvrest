@@ -10,6 +10,7 @@ const { refreshLimiter, resendVerifyLimiter } = require('../lib/rate-limiters')
 const { sendEmail, verificationEmailHtml } = require('../utils/mailer')
 const { verifyTurnstile } = require('../lib/turnstile')
 const { isDisposableEmail } = require('../lib/email-domains')
+const { resolveTrialDays } = require('../lib/promo')
 const log = require('../lib/logger')('auth')
 
 const router = express.Router()
@@ -205,8 +206,9 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
     if (!plan) return res.status(500).json({ error: 'No hay planes activos configurados' })
 
     const now         = new Date()
+    const trialDays   = await resolveTrialDays(prisma, plan)
     const trialEndsAt = new Date(now)
-    trialEndsAt.setDate(trialEndsAt.getDate() + plan.trialDays)
+    trialEndsAt.setDate(trialEndsAt.getDate() + trialDays)
     const passwordHash = await bcrypt.hash(password, 12)
 
     const { tenant, restaurant, user, location } = await prisma.$transaction(async (tx) => {
@@ -380,7 +382,7 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
         status:     'TRIAL',
         trialEndsAt,
         plan:       plan.displayName,
-        trialDays:  plan.trialDays,
+        trialDays,
       },
       accessToken,
       refreshToken,

@@ -22,6 +22,9 @@ interface Plan {
   hasInventory: boolean;
   hasReports: boolean;
   hasAPIAccess: boolean;
+  // Promo de lanzamiento: lugares de fundador (6 meses gratis) restantes.
+  // Solo viene en el plan promo; null/undefined en el resto.
+  foundersLeft?: number | null;
 }
 
 // 180 días se lee mejor como "6 meses"; solo formatea, el valor real viene del plan en BD.
@@ -60,9 +63,9 @@ export default function RegisterPage() {
       .then(r => {
         const list = r.data || [];
         setPlans(list);
-        // Pre-selecciona BASIC si existe, si no el más barato
-        const basic = list.find(p => p.name === "BASIC");
-        setSelectedPlanId((basic || list[0])?.id || "");
+        // Pre-selecciona el plan promo si existe, luego BASIC, luego el más barato
+        const preferred = list.find(p => p.name === "FULL_ACCESS") || list.find(p => p.name === "BASIC");
+        setSelectedPlanId((preferred || list[0])?.id || "");
       })
       .catch(() => setPlans([]))
       .finally(() => setPlansLoading(false));
@@ -267,6 +270,11 @@ export default function RegisterPage() {
                         <div style={{ fontSize: 11, color: "var(--tx-mut)", marginBottom: 6 }}>
                           {p.trialDays > 0 ? `${trialLabel(p.trialDays)} gratis` : "Sin trial"} · sin tarjeta
                         </div>
+                        {typeof p.foundersLeft === "number" && p.foundersLeft > 0 && (
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--brand-primary)", marginBottom: 6 }}>
+                            🔥 Quedan {p.foundersLeft} lugares con 6 meses gratis
+                          </div>
+                        )}
                         {perks.length > 0 && (
                           <div style={{ fontSize: 11, color: "var(--tx-mut)", fontFamily: "var(--f-m)" }}>
                             {perks.join(" · ")}
