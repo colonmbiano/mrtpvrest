@@ -597,6 +597,12 @@ export interface ReceiptInput {
   showWifi?: boolean | null;
   wifiSsid?: string | null;
   wifiPassword?: string | null;
+  // Datos para pagar por TRANSFERENCIA (banco/titular/CLABE). Solo se imprimen
+  // en la cuenta PENDIENTE de pago (paid=false) — el recibo pagado los omite.
+  showTransferData?: boolean | null;
+  transferBank?: string | null;
+  transferAccountName?: string | null;
+  transferAccountNumber?: string | null;
   // ── Identidad de negocio extendida (encabezado fiscal) ──────────────────
   // Si el tenant aún no define estos campos, el builder los omite (no imprime
   // líneas vacías). Ver reporte "campos del tenant a agregar".
@@ -1334,6 +1340,25 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
     d += boldOn + "WiFi" + "\n" + boldOff;
     d += "Red: " + input.wifiSsid + "\n";
     if (input.wifiPassword) d += "Clave: " + input.wifiPassword + "\n";
+    d += CMD.ALIGN_LEFT;
+  }
+
+  // ── 6d. DATOS PARA TRANSFERENCIA (solo cuenta PENDIENTE de pago) ─────────
+  // La cuenta sin pagar imprime banco/titular/CLABE al final para que el
+  // cliente pueda transferir desde su app. El recibo ya pagado no los imprime.
+  const hasTransferData = !!(
+    input.transferBank || input.transferAccountName || input.transferAccountNumber
+  );
+  if (isPending && input.showTransferData && hasTransferData) {
+    d += sep + CMD.ALIGN_CENTER;
+    d += boldOn + "PAGA POR TRANSFERENCIA\n" + boldOff;
+    if (input.transferBank) d += "Banco: " + input.transferBank + "\n";
+    if (input.transferAccountName) d += "Titular: " + input.transferAccountName + "\n";
+    if (input.transferAccountNumber) {
+      // La CLABE/cuenta va sola y en negrita: es el dato que el cliente copia.
+      d += "CLABE / Cuenta:\n";
+      d += boldOn + input.transferAccountNumber + "\n" + boldOff;
+    }
     d += CMD.ALIGN_LEFT;
   }
 

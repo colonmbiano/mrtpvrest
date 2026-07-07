@@ -1470,6 +1470,14 @@ model TicketConfig {
   wifiSsid     String?
   wifiPassword String?
 
+  // Datos para pagar por TRANSFERENCIA, impresos SOLO en la cuenta PENDIENTE
+  // de pago (paid=false): banco, titular y CLABE/cuenta para que el cliente
+  // pueda transferir. El recibo ya pagado no los imprime.
+  showTransferData      Boolean @default(false)
+  transferBank          String  @default("")
+  transferAccountName   String  @default("")
+  transferAccountNumber String  @default("")
+
   showPoints          Boolean @default(true)
   showTip             Boolean @default(true)
   tipSuggestions      String  @default("[10,15,20]")

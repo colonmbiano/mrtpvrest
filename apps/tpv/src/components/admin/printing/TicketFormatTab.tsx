@@ -31,6 +31,11 @@ interface TicketConfig {
   showWifi: boolean;
   wifiSsid: string;
   wifiPassword: string;
+  // Datos para transferencia (solo se imprimen en cuentas pendientes de pago).
+  showTransferData: boolean;
+  transferBank: string;
+  transferAccountName: string;
+  transferAccountNumber: string;
   // Datos fiscales del emisor (encabezado del recibo).
   businessType: string;
   rfc: string;
@@ -86,6 +91,7 @@ const EMPTY: TicketConfig = {
   showLogo: true, logoUrl: null, showAddress: true, address: "", phone: "",
   showPhone: true, showOrderNumber: true, compactMode: false,
   showCustomerData: true, showWifi: false, wifiSsid: "", wifiPassword: "",
+  showTransferData: false, transferBank: "", transferAccountName: "", transferAccountNumber: "",
   businessType: "", rfc: "", showInvoiceQr: false, invoiceUrl: "", invoiceFolioPrefix: "",
   deliveryFeeTaxed: true,
   showLoyaltyQr: false, loyaltyUrl: "",
@@ -255,6 +261,21 @@ export default function TicketFormatTab() {
                 <Field label="Contraseña"><input value={cfg.wifiPassword ?? ""} onChange={(e) => setCfg({ ...cfg, wifiPassword: e.target.value })} className={inputCls} placeholder="••••••••" /></Field>
               </div>
             )}
+
+            <SectionLabel>Datos para transferencia (cuenta pendiente de pago)</SectionLabel>
+            <Toggle label="Imprimir datos para transferir" checked={cfg.showTransferData} onChange={(v) => setCfg({ ...cfg, showTransferData: v })} />
+            {cfg.showTransferData && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Banco"><input value={cfg.transferBank ?? ""} onChange={(e) => setCfg({ ...cfg, transferBank: e.target.value })} className={inputCls} placeholder="BBVA" /></Field>
+                  <Field label="Titular"><input value={cfg.transferAccountName ?? ""} onChange={(e) => setCfg({ ...cfg, transferAccountName: e.target.value })} className={inputCls} placeholder="Nombre del titular" /></Field>
+                </div>
+                <Field label="CLABE / No. de cuenta / tarjeta">
+                  <input value={cfg.transferAccountNumber ?? ""} onChange={(e) => setCfg({ ...cfg, transferAccountNumber: e.target.value })} className={inputCls} placeholder="012 345 678 901 234 567" />
+                </Field>
+              </>
+            )}
+            <p className="text-[10px] text-zinc-500 -mt-2 ml-1">Se imprimen al final del ticket SOLO cuando la cuenta está pendiente de pago, para que el cliente pueda transferir.</p>
 
             <SectionLabel>Tipografía del recibo</SectionLabel>
             <Field label="Ancho de papel">
