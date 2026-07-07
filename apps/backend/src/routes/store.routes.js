@@ -1297,6 +1297,19 @@ router.post('/orders', async (req, res) => {
       require('../services/notifications.service').notifyDriversNewDeliveryOrder(order).catch(() => {});
     }
 
+    // CRM de WhatsApp: registrar/actualizar el contacto (pestaña Clientes del
+    // panel + remarketing). Solo pedidos del bot y solo si trae teléfono real
+    // (los chats @lid no siempre lo revelan). Best-effort: la orden ya existe.
+    if (source === 'WHATSAPP') {
+      require('../services/whatsapp-bot/contacts')
+        .upsertContact(prisma, restaurant.id, {
+          phone: customerPhone,
+          name: customerName?.trim() || null,
+          orderTotal: Number(order.total) || 0,
+        })
+        .catch(() => {});
+    }
+
     // Registro por cliente (Customer) + recompensa por hitos de compra. GATEADO
     // por env (LOYALTY_MILESTONE_RESTAURANT_IDS), APAGADO por defecto → cero
     // impacto en otros tenants. Best-effort: la orden ya está creada, esto nunca
