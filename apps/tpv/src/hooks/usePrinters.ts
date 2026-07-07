@@ -158,6 +158,11 @@ type TicketConfigDTO = {
   showWifi?: boolean;          // imprimir WiFi al pie del recibo
   wifiSsid?: string;
   wifiPassword?: string;
+  // Datos para transferencia (solo en la cuenta pendiente de pago).
+  showTransferData?: boolean;
+  transferBank?: string;
+  transferAccountName?: string;
+  transferAccountNumber?: string;
   kitchenHeader?: string;
   kitchenFooter?: string;
   kitchenShowOrderNumber?: boolean;
@@ -233,6 +238,10 @@ export function buildReceiptIdentityFields(
     showWifi: dto?.showWifi,
     wifiSsid: dto?.wifiSsid || null,
     wifiPassword: dto?.wifiPassword || null,
+    showTransferData: dto?.showTransferData,
+    transferBank: dto?.transferBank || null,
+    transferAccountName: dto?.transferAccountName || null,
+    transferAccountNumber: dto?.transferAccountNumber || null,
     showInvoiceQr: dto?.showInvoiceQr,
     invoiceUrl: dto?.invoiceUrl || null,
     invoiceFolio,

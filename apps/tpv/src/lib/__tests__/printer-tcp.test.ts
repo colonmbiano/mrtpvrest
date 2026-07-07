@@ -470,6 +470,44 @@ describe("recibo :: estilo Loyverse (cantidad aparte, CUENTA/RECIBO)", () => {
     expect(buildCustomerReceipt(baseReceipt)).toContain("TOTAL:");
   });
 
+  it("cuenta pendiente imprime los datos para transferencia al final", () => {
+    const cuenta = buildCustomerReceipt({
+      ...baseReceipt,
+      paid: false,
+      showTransferData: true,
+      transferBank: "BBVA",
+      transferAccountName: "Eduardo Colon",
+      transferAccountNumber: "012345678901234567",
+    });
+    expect(cuenta).toContain("PAGA POR TRANSFERENCIA");
+    expect(cuenta).toContain("Banco: BBVA");
+    expect(cuenta).toContain("Titular: Eduardo Colon");
+    expect(cuenta).toContain("012345678901234567");
+    // Al final: después del total pendiente.
+    expect(cuenta.indexOf("PAGA POR TRANSFERENCIA")).toBeGreaterThan(cuenta.indexOf("Pendiente de cobro"));
+  });
+
+  it("recibo PAGADO no imprime los datos de transferencia aunque estén configurados", () => {
+    const recibo = buildCustomerReceipt({
+      ...baseReceipt,
+      paid: true,
+      showTransferData: true,
+      transferBank: "BBVA",
+      transferAccountNumber: "012345678901234567",
+    });
+    expect(recibo).not.toContain("PAGA POR TRANSFERENCIA");
+    expect(recibo).not.toContain("012345678901234567");
+  });
+
+  it("sin el toggle (o sin datos) la cuenta pendiente no imprime la sección", () => {
+    const sinToggle = buildCustomerReceipt({
+      ...baseReceipt, paid: false, transferBank: "BBVA", transferAccountNumber: "0123",
+    });
+    expect(sinToggle).not.toContain("PAGA POR TRANSFERENCIA");
+    const sinDatos = buildCustomerReceipt({ ...baseReceipt, paid: false, showTransferData: true });
+    expect(sinDatos).not.toContain("PAGA POR TRANSFERENCIA");
+  });
+
   it("usa labels Empleado/TPV (no Cajero/Terminal)", () => {
     const out = buildCustomerReceipt({ ...baseReceipt, cashierName: "Ana", terminalName: "Caja 1" });
     expect(out).toContain("Empleado:");
