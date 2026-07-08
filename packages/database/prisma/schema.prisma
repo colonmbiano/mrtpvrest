@@ -319,6 +319,7 @@ model Restaurant {
   suppliers        Supplier[]
   whatsappSessions WhatsappSession[]
   whatsappContacts WhatsappContact[]
+  whatsappConversations WhatsappConversation[]
   promoGames       PromoGame[]
   bulkPromos       BulkPromo[]
 
@@ -2376,6 +2377,69 @@ model WhatsappContact {
   @@unique([restaurantId, phone])
   @@index([restaurantId])
   @@map("whatsapp_contacts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BANDEJA DE ENTRADA DE WHATSAPP — conversaciones y mensajes persistidos.
+//
+// A diferencia de WhatsappSession (estado efímero de la máquina de estados,
+// TTL 6h), aquí se guarda el HISTORIAL: cada mensaje entrante del cliente y
+// cada respuesta del bot o del dueño. Es lo que alimenta la bandeja de entrada
+// del panel admin. `lastInboundAt` ancla la ventana de 24h de Meta (fuera de
+// ella solo se puede contestar con plantilla aprobada, que aún no manejamos:
+// el panel bloquea la respuesta libre). `status` gobierna el handoff humano:
+// mientras esté en NEEDS_HUMAN el bot guarda los mensajes pero NO contesta —
+// el dueño responde desde el panel y al marcar RESOLVED el bot retoma.
+// ─────────────────────────────────────────────────────────────────────────────
+model WhatsappConversation {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  // Número del cliente, normalizado a solo dígitos (mismo formato que WhatsappSession).
+  phone String
+  // Último nombre de perfil conocido (viene del webhook del proveedor).
+  name  String?
+
+  status String @default("OPEN") // OPEN | NEEDS_HUMAN | RESOLVED
+
+  lastMessageAt    DateTime  @default(now())
+  lastInboundAt    DateTime? // ancla de la ventana de 24h
+  lastOutboundAt   DateTime?
+  unreadCount      Int       @default(0) // entrantes no vistos en el panel
+  needsHumanReason String? // por qué se escaló (comando del cliente, error del bot)
+  escalatedAt      DateTime?
+
+  messages WhatsappMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, phone])
+  @@index([restaurantId, status, lastMessageAt])
+  @@map("whatsapp_conversations")
+}
+
+model WhatsappMessage {
+  id             String               @id @default(cuid())
+  conversationId String
+  conversation   WhatsappConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  // Scope de tenant (columna plana, sin relación inversa para no inflar Restaurant).
+  restaurantId String
+
+  direction String @default("IN") // IN (cliente) | OUT (bot/dueño)
+  type      String @default("text") // text | location | other
+  body      String @default("")
+  // Id del mensaje en el proveedor (solo entrantes) — dedupe de reintentos de webhook.
+  waMessageId String?
+  sentBy      String @default("BOT") // BOT | HUMAN (respuesta desde el panel)
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([restaurantId, createdAt])
+  @@map("whatsapp_messages")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
