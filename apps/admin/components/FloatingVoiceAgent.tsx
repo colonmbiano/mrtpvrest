@@ -121,14 +121,14 @@ export default function FloatingVoiceAgent() {
 
   const bg =
     status === "listening"
-      ? "#ef4444"
+      ? "var(--err)"
       : status === "processing"
-      ? "#6366f1"
+      ? "var(--info)"
       : status === "success"
-      ? "#10b981"
+      ? "var(--ok)"
       : status === "error"
-      ? "#f59e0b"
-      : "#111827";
+      ? "var(--warn)"
+      : "var(--sb-bg)";
 
   return (
     <>
@@ -146,7 +146,7 @@ export default function FloatingVoiceAgent() {
           background: bg,
           boxShadow:
             status === "listening"
-              ? "0 0 0 8px rgba(239, 68, 68, 0.25), 0 10px 30px rgba(0,0,0,0.25)"
+              ? "0 0 0 8px var(--err-soft), 0 10px 30px rgba(0,0,0,0.25)"
               : "0 10px 30px rgba(0,0,0,0.25)",
         }}
       >
@@ -201,10 +201,10 @@ export default function FloatingVoiceAgent() {
             style={{
               background:
                 toast.kind === "success"
-                  ? "#10b981"
+                  ? "var(--ok)"
                   : toast.kind === "error"
-                  ? "#ef4444"
-                  : "#3b82f6",
+                  ? "var(--err)"
+                  : "var(--info)",
             }}
           >
             {toast.text}
@@ -215,7 +215,7 @@ export default function FloatingVoiceAgent() {
       {transcript && status === "processing" && (
         <div
           className="fixed z-40 left-1/2 -translate-x-1/2 bottom-44 md:bottom-48 max-w-md w-[90%] px-4 py-2 rounded-full text-xs text-white/90"
-          style={{ background: "rgba(17, 24, 39, 0.85)" }}
+          style={{ background: "color-mix(in srgb, var(--sb-bg) 85%, transparent)" }}
         >
           “{transcript}”
         </div>

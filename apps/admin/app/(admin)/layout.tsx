@@ -44,9 +44,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <AdminTopbar />
         </div>
         <div className="hidden md:block"><TrialBanner /></div>
-        <main className="flex-1 pb-24 md:p-8 md:pb-8">
+        <main className="mx-auto w-full max-w-[1440px] flex-1 pb-24 md:p-8 md:pb-8">
           <div className="hidden md:block"><OnboardingChecklist /></div>
-          {/* Cada pantalla controla su propio padding vía <WtScreen> (WarmTech). */}
+          {/* Cada pantalla controla su propio padding vía <PageShell> (ds). */}
           {children}
         </main>
       </div>
