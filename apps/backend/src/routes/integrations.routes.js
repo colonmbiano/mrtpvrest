@@ -9,7 +9,7 @@ const router = express.Router();
 const INTEGRATION_TYPES = {
   MERCADOPAGO: { label: 'Pago digital', fields: ['accessToken', 'publicKey', 'webhookSecret'], icon: '💳' },
   STRIPE:      { label: 'Tarjeta bancaria',      fields: ['secretKey', 'publicKey', 'webhookSecret'], icon: '🌍' },
-  WHATSAPP:    { label: 'Mensajería (Chatbot)', fields: ['provider', 'token', 'phoneNumberId', 'verifyToken', 'wabaId'], icon: '💬' },
+  WHATSAPP:    { label: 'Mensajería (Chatbot)', fields: ['provider', 'token', 'phoneNumberId', 'verifyToken', 'wabaId', 'ownerPhone'], icon: '💬' },
   CLOUDINARY:  { label: 'Fotos', fields: ['cloudName', 'apiKey', 'apiSecret'], icon: '☁️' },
   RAPPI:       { label: 'Delivery webhook', fields: ['apiKey', 'storeId'], icon: '🛵' },
 };

@@ -169,6 +169,22 @@ module.exports = {
   genericError:
     '⚠️ Ocurrió un problema procesando tu mensaje. Escribe *menú* para reintentar o *cancelar* para empezar de nuevo.',
 
+  // ── Handoff a humano ──────────────────────────────────────────────────────
+  humanHandoff:
+    '🙋 ¡Claro! Ya avisé al equipo para que una persona te atienda por aquí en un momento. Gracias por tu paciencia 🙏.',
+
+  ownerEscalation: ({ restaurantName, phone, reason }) =>
+    [
+      `🚨 *${restaurantName}* — un cliente necesita atención humana.`,
+      '',
+      `📱 Cliente: +${phone}`,
+      reason ? `💬 Motivo: ${reason}` : null,
+      '',
+      'Respóndele desde tu panel: *Admin → Bandeja de entrada*. El asistente pausó sus respuestas en esa conversación hasta que la marques como resuelta.',
+    ]
+      .filter((line) => line !== null)
+      .join('\n'),
+
   // ── Juegos promocionales ──────────────────────────────────────────────────
   prizeWon: (label, code, expiresAt) => {
     const vence = expiresAt

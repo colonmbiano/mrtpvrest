@@ -10,6 +10,7 @@ const catalog = require('./catalog');
 const engine = require('./engine');
 const orderSvc = require('./order');
 const nlu = require('./nlu');
+const inbox = require('./inbox');
 const promoGames = require('../promo-games.service');
 const { computeOpenState } = require('../../utils/storeHours');
 const m = require('./messages');
@@ -47,12 +48,57 @@ function verifyMetaChallenge(query, integration) {
   return null;
 }
 
+// Envía la respuesta al cliente y la deja registrada en la bandeja de entrada.
+// El registro es best-effort y solo ocurre si el envío tuvo éxito.
+async function sendAndRecord(cfg, restaurantId, phone, body, sentBy = 'BOT') {
+  const ok = await provider.sendText(cfg, phone, body);
+  if (ok) {
+    try {
+      await inbox.recordOutbound(prisma, restaurantId, phone, body, { sentBy });
+    } catch (err) {
+      console.error('[wa-bot] inbox outbound:', err.message);
+    }
+  }
+  return ok;
+}
+
 /**
  * Procesa un único mensaje entrante normalizado.
  */
 async function processMessage({ restaurant, integration, message, io }) {
   const cfg = provider.resolveConfig(integration);
   const phone = message.from;
+
+  // Registrar el entrante en la bandeja (best-effort) y conocer el estado del hilo.
+  let conversation = null;
+  try {
+    conversation = await inbox.recordInbound(prisma, restaurant.id, message);
+  } catch (err) {
+    console.error('[wa-bot] inbox inbound:', err.message);
+  }
+
+  // Handoff humano activo: el mensaje ya quedó guardado para el panel, pero el
+  // bot NO contesta — el dueño está atendiendo y sus respuestas no deben
+  // mezclarse con las del bot. Al marcar la conversación como resuelta en el
+  // panel, el bot retoma.
+  if (conversation && conversation.status === inbox.STATUS.NEEDS_HUMAN) return;
+
+  // El cliente pide hablar con una persona → escalar, avisar al dueño y pausar el bot.
+  if (message.type === 'text' && inbox.wantsHuman(engine.norm(message.text))) {
+    try {
+      await inbox.escalate({
+        prisma,
+        cfg,
+        restaurant,
+        phone,
+        reason: `El cliente escribió: "${String(message.text).slice(0, 120)}"`,
+      });
+    } catch (err) {
+      console.error('[wa-bot] escalate:', err.message);
+    }
+    await sendAndRecord(cfg, restaurant.id, phone, m.humanHandoff);
+    return;
+  }
 
   // Config, sucursales y disponibilidad de pago en línea (scope por restaurantId).
   const [config, locations, onlinePayment] = await Promise.all([
@@ -70,7 +116,7 @@ async function processMessage({ restaurant, integration, message, io }) {
   if (config) {
     const storeState = computeOpenState(config);
     if (!storeState.isOpen) {
-      await provider.sendText(cfg, phone, m.storeClosed(storeState.message || config.closedMessage));
+      await sendAndRecord(cfg, restaurant.id, phone, m.storeClosed(storeState.message || config.closedMessage));
       return;
     }
   }
@@ -108,7 +154,7 @@ async function processMessage({ restaurant, integration, message, io }) {
     outcome = await engine.handleInbound({ restaurant, config, locations, session, message, deps, onlinePayment });
   } catch (err) {
     console.error('[wa-bot] engine error:', err);
-    await provider.sendText(cfg, phone, m.genericError);
+    await sendAndRecord(cfg, restaurant.id, phone, m.genericError);
     return;
   }
 
@@ -139,7 +185,7 @@ async function processMessage({ restaurant, integration, message, io }) {
 
   // Enviar respuestas en orden.
   for (const reply of outcome.replies) {
-    if (reply) await provider.sendText(cfg, phone, reply);
+    if (reply) await sendAndRecord(cfg, restaurant.id, phone, reply);
   }
 }
 

@@ -10,7 +10,7 @@
 //   - META  (WhatsApp Cloud API, graph.facebook.com)
 //
 // La config por restaurante vive en IntegrationConfig (type='WHATSAPP') como
-// JSON: { provider?, token, phoneNumberId?, apiUrl?, verifyToken? }.
+// JSON: { provider?, token, phoneNumberId?, apiUrl?, verifyToken?, ownerPhone? }.
 
 const axios = require('axios');
 const { decryptSecret } = require('../../lib/secret-crypto');
@@ -39,7 +39,7 @@ function toDigits(raw) {
 
 /**
  * Lee y descifra la configuración de WhatsApp de un restaurante.
- * @returns {{ provider:string, token:string|null, phoneNumberId:string|null, apiUrl:string, verifyToken:string|null }}
+ * @returns {{ provider:string, token:string|null, phoneNumberId:string|null, apiUrl:string, verifyToken:string|null, ownerPhone:string|null }}
  */
 function resolveConfig(integration) {
   let parsed = {};
@@ -53,10 +53,13 @@ function resolveConfig(integration) {
   const token = readSecret(parsed.token) || process.env.WHATSAPP_TOKEN || null;
   const verifyToken = parsed.verifyToken || process.env.WHATSAPP_VERIFY_TOKEN || null;
   const phoneNumberId = parsed.phoneNumberId || null;
+  // WhatsApp personal del dueño: recibe el aviso cuando una conversación se
+  // escala a atención humana. Opcional.
+  const ownerPhone = toDigits(parsed.ownerPhone) || null;
   const apiUrl = parsed.apiUrl
     || (provider === 'META' ? META_GRAPH_URL : process.env.WHATSAPP_API_URL || WHAPI_DEFAULT_URL);
 
-  return { provider, token, phoneNumberId, apiUrl, verifyToken };
+  return { provider, token, phoneNumberId, apiUrl, verifyToken, ownerPhone };
 }
 
 /**
