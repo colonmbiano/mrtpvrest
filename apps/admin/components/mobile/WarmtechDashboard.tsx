@@ -12,6 +12,7 @@ import {
   PackagePlus, ReceiptText, Sparkles, TrendingUp, UsersRound,
 } from "lucide-react";
 import api from "@/lib/api";
+import { AgentHealthCard, LiveDeliveryMap, PeakHoursHeatmap } from "@/components/dashboard/widgets";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip);
 
@@ -178,6 +179,15 @@ export default function WarmtechDashboard() {
         </div>
         <Link href="/admin/reportes/ia" className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-xl bg-white px-4 text-xs font-extrabold" style={{ color: "var(--brand-secondary)" }}>Ver plan del día <ArrowRight size={15} /></Link>
       </section>
+
+      {/* Operación en vivo: cerebro del agente IA + mapa de entregas + horas pico */}
+      <div className="mt-3 grid gap-3 md:mt-5 md:grid-cols-2 md:gap-4">
+        <AgentHealthCard />
+        <LiveDeliveryMap />
+      </div>
+      <div className="mt-3 md:mt-4">
+        <PeakHoursHeatmap />
+      </div>
 
       <div className="md:grid md:grid-cols-[minmax(0,1.45fr)_minmax(300px,.55fr)] md:gap-5">
         <div>
