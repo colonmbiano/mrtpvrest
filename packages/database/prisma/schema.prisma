@@ -1347,6 +1347,15 @@ model RestaurantConfig {
   // [{ "day":1, "enabled":true, "open":"09:00", "close":"22:00" }, ...]
   businessHours   String  @default("[]")
 
+  // ─── VENTANA HORARIA DE PROMOCIONES ────────────────────────────────────
+  // Horario diario ("HH:mm", hora local según `timezone`) en el que aplican
+  // los precios promocionales de platillos (isPromo/promoPrice). Fuera de la
+  // ventana los platillos promo se OCULTAN del catálogo (TPV/tienda/bot) y,
+  // como respaldo, se cobran a precio normal. null = sin límite por ese lado.
+  // promoEndTime "21:00" = las promos terminan a las 9 pm.
+  promoStartTime String?
+  promoEndTime   String?
+
   // ─── ENVÍO POR DISTANCIA ───────────────────────────────────────────────
   // deliveryMode controla cómo se calcula el costo de envío:
   //   FLAT     → tarifa fija = deliveryFee (comportamiento histórico).

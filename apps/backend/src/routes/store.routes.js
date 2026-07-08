@@ -24,6 +24,7 @@ const {
 } = require('../lib/payment-providers');
 // Cálculo de envío: fuente única compartida con el chatbot de WhatsApp.
 const { resolveComboSelection } = require('../lib/money');
+const { isPromoWindowOpen } = require('../lib/promo-window');
 const { computeDeliveryFee } = require('../lib/delivery-fee');
 const { filterLiveBanners } = require('../lib/banner-schedule');
 const { nextOrderNumber } = require('../lib/order-number');
@@ -294,7 +295,7 @@ router.get('/menu', async (req, res) => {
   const { restaurant } = store;
 
   try {
-    const [categories, items] = await Promise.all([
+    const [categories, rawItems, promoOpen] = await Promise.all([
       prisma.category.findMany({
         where: { restaurantId: restaurant.id, isActive: true },
         orderBy: { sortOrder: 'asc' },
@@ -344,7 +345,12 @@ router.get('/menu', async (req, res) => {
           },
         },
       }),
+      isPromoWindowOpen(prisma, restaurant.id),
     ]);
+
+    // Ventana horaria de promos: fuera del horario, los platillos promo se
+    // ocultan de la tienda/kiosko (mismo criterio que el catálogo del TPV).
+    const items = promoOpen ? rawItems : rawItems.filter(i => !i.isPromo);
 
     // Agrupar items por categoría
     const categoriesWithItems = categories.map(cat => ({
@@ -786,6 +792,9 @@ router.post('/orders', async (req, res) => {
   }
 
   try {
+    // Ventana horaria de promos: fuera de ella los precios promocionales no
+    // aplican (el catálogo ya los oculta; esto es el respaldo en el cobro).
+    const promoWindowIsOpen = await isPromoWindowOpen(prisma, restaurant.id);
     // Verificar y calcular items desde la BD (nunca confiar en precios del cliente)
     const itemsData = await Promise.all(
       items.map(async ({ menuItemId, variantId, quantity = 1, notes: itemNotes, modifierIds, comboSelections }) => {
@@ -809,7 +818,7 @@ router.post('/orders', async (req, res) => {
         });
         if (!menuItem) throw new Error(`Producto ${menuItemId} no disponible.`);
 
-        let basePrice = menuItem.isPromo && menuItem.promoPrice ? menuItem.promoPrice : menuItem.price;
+        let basePrice = promoWindowIsOpen && menuItem.isPromo && menuItem.promoPrice ? menuItem.promoPrice : menuItem.price;
         let variantName = null;
 
         if (variantId) {

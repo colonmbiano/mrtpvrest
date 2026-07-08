@@ -105,6 +105,8 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       'cashCutEmailEnabled','cashCutEmails',
       // Horario de atención (businessHours llega como JSON serializado)
       'scheduleEnabled','timezone','businessHours',
+      // Ventana horaria de promociones (precios promo de platillos)
+      'promoStartTime','promoEndTime',
       // Envío por distancia
       'deliveryMode','originLat','originLng','deliveryBaseFee','deliveryPerKm',
       'deliveryFreeRadiusKm','deliveryMaxKm',
@@ -135,6 +137,14 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       } else if (k === 'cashCutEmails' || k === 'saturatedMessage') {
         // String opcional: un vacío se guarda como null (cae al default).
         data[k] = (typeof v === 'string' && v.trim()) ? v.trim() : null;
+      } else if (k === 'promoStartTime' || k === 'promoEndTime') {
+        // Ventana horaria de promos: "HH:mm" válido o null (sin límite).
+        const s = typeof v === 'string' ? v.trim() : '';
+        if (!s) { data[k] = null; continue; }
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(s)) {
+          return res.status(400).json({ error: 'Horario de promos inválido: usa formato HH:mm (ej. 21:00)' });
+        }
+        data[k] = s;
       } else {
         data[k] = v;
       }

@@ -400,6 +400,7 @@ const { canTransition } = require('../lib/order-status');
 const { parseVariantsFromItem } = require('../lib/parse-variant');
 const { requireModule, MODULES } = require('../lib/modules');
 const { computeBulkPromoDiscount, loadActiveBulkPromos } = require('../lib/bulk-promo');
+const { isPromoWindowOpen } = require('../lib/promo-window');
 const { nextOrderNumber } = require('../lib/order-number');
 const { releaseTableAfterPayment } = require('../services/table-lifecycle.service');
 const { claimKitchenPrint } = require('../lib/print-claim');
@@ -783,6 +784,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     // Resolver cada item con su menuItem y modificadores (validados contra DB).
     // El precio del item siempre se re-lee del servidor, igual que los priceAdd
     // de los modificadores: el cliente no puede manipular precios.
+    // Ventana horaria de promos: fuera de ella, promoPrice se ignora (respaldo
+    // por si el TPV manda un platillo promo desde un menú cacheado).
+    const promoWindowIsOpen = await isPromoWindowOpen(prisma, restaurantId);
     const resolvedItems = await Promise.all(items.map(async (item) => {
       const menuItem = await prisma.menuItem.findUnique({
         where: { id: item.menuItemId, restaurantId },
@@ -796,6 +800,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           },
         },
       });
+      if (menuItem && !promoWindowIsOpen) menuItem.promoPrice = null;
 
       const variantSelection = resolveVariantSelection(menuItem, item);
       // Combo configurable: resuelve la selección (re-lee priceDelta de DB, valida
@@ -1224,6 +1229,8 @@ async function addRoundHandler(req, res) {
     }
 
     // Re-leer precios desde DB (misma lógica de defensa que POST /tpv).
+    // Ventana horaria de promos: fuera de ella, promoPrice se ignora.
+    const promoWindowIsOpen = await isPromoWindowOpen(prisma, restaurantId);
     const newItemsData = await Promise.all(items.map(async (item) => {
       const menuItem = await prisma.menuItem.findUnique({
         where: { id: item.menuItemId, restaurantId },
@@ -1237,6 +1244,7 @@ async function addRoundHandler(req, res) {
           },
         },
       });
+      if (menuItem && !promoWindowIsOpen) menuItem.promoPrice = null;
       const variantSelection = resolveVariantSelection(menuItem, item);
       const combo = resolveComboSelection(menuItem, item);
       const modifierIds = extractIds(item.modifiers, 'modifierId');
