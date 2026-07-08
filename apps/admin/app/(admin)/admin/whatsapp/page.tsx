@@ -48,7 +48,7 @@ type Report = {
   bySource: { source: string; revenue: number; orders: number }[];
 };
 
-type Tab = "asistente" | "reportes" | "contactos" | "campanas" | "juegos";
+type Tab = "asistente" | "reportes" | "contactos" | "campanas" | "juegos" | "sugerencias";
 
 // ── Bot asistente (Cajero Estrella) ──────────────────────────────────────────
 type AssistantConfig = { extraInstructions: string; ignoreNumbers: string[]; ignoreGroupName: string };
@@ -78,6 +78,7 @@ const TAB_OPTIONS: { value: Tab; label: string }[] = [
   { value: "contactos", label: "Clientes" },
   { value: "campanas", label: "Campañas" },
   { value: "juegos", label: "Juegos" },
+  { value: "sugerencias", label: "Sugerencias" },
 ];
 
 // ── estilos compartidos para inputs/selects nativos ──────────────────────────
@@ -126,6 +127,7 @@ export default function WhatsappPage() {
       {tab === "contactos" && <ContactsTab showToast={showToast} />}
       {tab === "campanas" && <CampaignsTab showToast={showToast} />}
       {tab === "juegos" && <GamesTab showToast={showToast} />}
+      {tab === "sugerencias" && <UpsellTab showToast={showToast} />}
     </WtScreen>
   );
 }
@@ -937,6 +939,417 @@ function GameEditor({
           {saving ? "Guardando..." : "Guardar juego"}
         </PrimaryBtn>
       </div>
+    </div>
+  );
+}
+
+// ── Tab: Sugerencias de venta (upsell) ────────────────────────────────────────
+// Reglas de "¿le agregas X?" que el bot ofrece antes del checkout, con métricas
+// de cuántas veces se ofreció, cuántas se aceptaron y cuánto dinero generó cada
+// una. El producto y el precio siempre salen del menú vivo (el bot no inventa).
+type UpsellRule = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  menuItemId: string;
+  variantId: string | null;
+  productName: string;
+  productMissing: boolean;
+  triggerType: "ALWAYS" | "CATEGORY" | "ITEM";
+  triggerId: string | null;
+  triggerName: string | null;
+  minSubtotal: number;
+  offerText: string | null;
+  offerCount: number;
+  acceptCount: number;
+  conversion: number;
+  revenue: number;
+};
+
+type MenuPickerItem = { id: string; name: string; variants: { id: string; name: string }[] };
+type MenuPickerCategory = { id: string; name: string };
+
+type UpsellForm = {
+  id: string | null;
+  name: string;
+  productKey: string; // "menuItemId::variantId" ("" en variantId si no hay)
+  triggerType: "ALWAYS" | "CATEGORY" | "ITEM";
+  triggerId: string;
+  minSubtotal: number;
+  offerText: string;
+  enabled: boolean;
+};
+
+const emptyUpsellForm = (): UpsellForm => ({
+  id: null,
+  name: "",
+  productKey: "",
+  triggerType: "ALWAYS",
+  triggerId: "",
+  minSubtotal: 0,
+  offerText: "",
+  enabled: true,
+});
+
+const TRIGGER_LABELS: Record<UpsellRule["triggerType"], string> = {
+  ALWAYS: "Siempre",
+  CATEGORY: "Si el carrito trae la categoría",
+  ITEM: "Si el carrito trae el producto",
+};
+
+function UpsellTab({ showToast }: { showToast: (m: string, ok?: boolean) => void }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [rules, setRules] = useState<UpsellRule[]>([]);
+  const [totals, setTotals] = useState({ offers: 0, accepts: 0, revenue: 0 });
+  const [items, setItems] = useState<MenuPickerItem[]>([]);
+  const [categories, setCategories] = useState<MenuPickerCategory[]>([]);
+  const [form, setForm] = useState<UpsellForm | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [rulesRes, itemsRes, catsRes] = await Promise.all([
+        api.get("/api/whatsapp/upsell"),
+        api.get("/api/menu/items?admin=true"),
+        api.get("/api/menu/categories"),
+      ]);
+      setRules(rulesRes.data.rules || []);
+      setTotals(rulesRes.data.totals || { offers: 0, accepts: 0, revenue: 0 });
+      const rawItems = Array.isArray(itemsRes.data) ? itemsRes.data : itemsRes.data?.items || [];
+      setItems(
+        rawItems.map((i: { id: string; name: string; variants?: { id: string; name: string }[] }) => ({
+          id: i.id,
+          name: i.name,
+          variants: (i.variants || []).map((v) => ({ id: v.id, name: v.name })),
+        }))
+      );
+      const rawCats = Array.isArray(catsRes.data) ? catsRes.data : catsRes.data?.categories || [];
+      setCategories(rawCats.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+    } catch {
+      showToast("No se pudieron cargar las sugerencias", false);
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Opciones del selector de producto: una línea por variante (o el producto solo).
+  const productOptions = items.flatMap((item) =>
+    item.variants.length > 0
+      ? item.variants.map((v) => ({ key: `${item.id}::${v.id}`, label: `${item.name} (${v.name})` }))
+      : [{ key: `${item.id}::`, label: item.name }]
+  );
+
+  async function save() {
+    if (!form || saving) return;
+    const [menuItemId, variantId] = form.productKey.split("::");
+    if (!form.name.trim()) return showToast("Ponle un nombre a la sugerencia", false);
+    if (!menuItemId) return showToast("Elige el producto a sugerir", false);
+    if (form.triggerType !== "ALWAYS" && !form.triggerId) {
+      return showToast("Elige qué dispara la sugerencia", false);
+    }
+    setSaving(true);
+    try {
+      await api.post("/api/whatsapp/upsell", {
+        id: form.id || undefined,
+        name: form.name,
+        enabled: form.enabled,
+        menuItemId,
+        variantId: variantId || null,
+        triggerType: form.triggerType,
+        triggerId: form.triggerType === "ALWAYS" ? null : form.triggerId,
+        minSubtotal: form.minSubtotal,
+        offerText: form.offerText.trim() || null,
+      });
+      showToast("Sugerencia guardada");
+      setForm(null);
+      await load();
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      showToast(err.response?.data?.error || "No se pudo guardar", false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleRule(rule: UpsellRule) {
+    try {
+      await api.post("/api/whatsapp/upsell", {
+        id: rule.id,
+        name: rule.name,
+        enabled: !rule.enabled,
+        menuItemId: rule.menuItemId,
+        variantId: rule.variantId,
+        triggerType: rule.triggerType,
+        triggerId: rule.triggerId,
+        minSubtotal: rule.minSubtotal,
+        offerText: rule.offerText,
+      });
+      await load();
+    } catch {
+      showToast("No se pudo actualizar", false);
+    }
+  }
+
+  async function removeRule(rule: UpsellRule) {
+    if (!window.confirm(`¿Eliminar la sugerencia "${rule.name}"? Sus métricas se pierden.`)) return;
+    try {
+      await api.delete(`/api/whatsapp/upsell/${rule.id}`);
+      showToast("Sugerencia eliminada");
+      await load();
+    } catch {
+      showToast("No se pudo eliminar", false);
+    }
+  }
+
+  function editRule(rule: UpsellRule) {
+    setForm({
+      id: rule.id,
+      name: rule.name,
+      productKey: `${rule.menuItemId}::${rule.variantId || ""}`,
+      triggerType: rule.triggerType,
+      triggerId: rule.triggerId || "",
+      minSubtotal: rule.minSubtotal,
+      offerText: rule.offerText || "",
+      enabled: rule.enabled,
+    });
+  }
+
+  if (loading) return <Spinner label="Cargando sugerencias" />;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Métricas globales del upsell */}
+      <div className="grid grid-cols-3 gap-2 md:max-w-xl">
+        <WtCard className="px-3 py-2.5">
+          <div className="font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Ofrecidas</div>
+          <div className="mt-0.5 font-display text-xl font-extrabold text-tx-hi">{totals.offers}</div>
+        </WtCard>
+        <WtCard className="px-3 py-2.5">
+          <div className="font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Aceptadas</div>
+          <div className="mt-0.5 font-display text-xl font-extrabold" style={{ color: "var(--ok)" }}>
+            {totals.accepts}
+            {totals.offers > 0 && (
+              <span className="ml-1 text-xs font-bold text-tx-mut">({Math.round((totals.accepts / totals.offers) * 100)}%)</span>
+            )}
+          </div>
+        </WtCard>
+        <WtCard className="px-3 py-2.5">
+          <div className="font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Generado</div>
+          <div className="mt-0.5 font-display text-xl font-extrabold" style={{ color: "var(--brand-primary)" }}>{money(totals.revenue)}</div>
+        </WtCard>
+      </div>
+
+      {!form && (
+        <PrimaryBtn onClick={() => setForm(emptyUpsellForm())} icon={Plus} full={false}>
+          Nueva sugerencia
+        </PrimaryBtn>
+      )}
+
+      {/* Formulario crear/editar */}
+      {form && (
+        <WtCard className="flex flex-col gap-4 p-4">
+          <div className="font-display text-base font-extrabold text-tx-hi">
+            {form.id ? "Editar sugerencia" : "Nueva sugerencia"}
+          </div>
+
+          <div>
+            <Label>Nombre interno</Label>
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Ej. Papas con hamburguesa"
+              className={inputCls}
+              style={fieldStyle}
+            />
+          </div>
+
+          <div>
+            <Label>Producto a sugerir</Label>
+            <select
+              value={form.productKey}
+              onChange={(e) => setForm({ ...form, productKey: e.target.value })}
+              className={inputCls}
+              style={fieldStyle}
+            >
+              <option value="">— Elige un producto —</option>
+              {productOptions.map((option) => (
+                <option key={option.key} value={option.key}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <Label>Cuándo ofrecerla</Label>
+            <select
+              value={form.triggerType}
+              onChange={(e) => setForm({ ...form, triggerType: e.target.value as UpsellForm["triggerType"], triggerId: "" })}
+              className={inputCls}
+              style={fieldStyle}
+            >
+              <option value="ALWAYS">Siempre (cualquier pedido)</option>
+              <option value="CATEGORY">Si el carrito trae una categoría</option>
+              <option value="ITEM">Si el carrito trae un producto</option>
+            </select>
+          </div>
+
+          {form.triggerType === "CATEGORY" && (
+            <div>
+              <Label>Categoría disparadora</Label>
+              <select
+                value={form.triggerId}
+                onChange={(e) => setForm({ ...form, triggerId: e.target.value })}
+                className={inputCls}
+                style={fieldStyle}
+              >
+                <option value="">— Elige una categoría —</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {form.triggerType === "ITEM" && (
+            <div>
+              <Label>Producto disparador</Label>
+              <select
+                value={form.triggerId}
+                onChange={(e) => setForm({ ...form, triggerId: e.target.value })}
+                className={inputCls}
+                style={fieldStyle}
+              >
+                <option value="">— Elige un producto —</option>
+                {items.map((i) => (
+                  <option key={i.id} value={i.id}>{i.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <Label>Pedido mínimo (opcional, $)</Label>
+            <input
+              type="number"
+              min={0}
+              value={form.minSubtotal || ""}
+              onChange={(e) => setForm({ ...form, minSubtotal: Math.max(0, Number(e.target.value) || 0) })}
+              placeholder="0 = sin mínimo"
+              className={inputCls}
+              style={fieldStyle}
+            />
+          </div>
+
+          <div>
+            <Label>Gancho del mensaje (opcional)</Label>
+            <textarea
+              value={form.offerText}
+              onChange={(e) => setForm({ ...form, offerText: e.target.value })}
+              rows={2}
+              maxLength={300}
+              placeholder="Ej. 🍟 ¿Unas papas para acompañar tu hamburguesa?"
+              className={textareaCls}
+              style={fieldStyle}
+            />
+            <p className="ml-1 mt-1 text-[10px] leading-snug text-tx-dim">
+              El bot lo muestra seguido del producto y su precio real del menú. Si lo dejas vacío usa el texto estándar.
+            </p>
+          </div>
+
+          <Toggle checked={form.enabled} onChange={(next) => setForm({ ...form, enabled: next })} label="Sugerencia activa" />
+
+          <div className="flex gap-3">
+            <PrimaryBtn ghost onClick={() => setForm(null)}>Cancelar</PrimaryBtn>
+            <PrimaryBtn onClick={save} disabled={saving} icon={Save}>
+              {saving ? "Guardando…" : "Guardar sugerencia"}
+            </PrimaryBtn>
+          </div>
+        </WtCard>
+      )}
+
+      {/* Lista de reglas con métricas */}
+      {rules.length === 0 && !form ? (
+        <WtCard className="flex flex-col items-center px-6 py-10 text-center">
+          <span className="mb-3 grid h-12 w-12 place-items-center rounded-2xl text-tx-mut" style={{ background: "var(--surf-2)" }}>
+            <Sparkles size={24} strokeWidth={1.8} />
+          </span>
+          <div className="font-display text-base font-extrabold text-tx-hi">Sin sugerencias todavía</div>
+          <p className="mx-auto mt-1.5 max-w-xs text-sm text-tx-mut">
+            Crea tu primera sugerencia de venta: el asistente la ofrecerá justo antes de cerrar el pedido y aquí verás cuánto genera.
+          </p>
+        </WtCard>
+      ) : (
+        rules.map((rule) => (
+          <WtCard key={rule.id} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-display text-[14px] font-extrabold text-tx-hi">{rule.name}</span>
+                  {rule.enabled ? <Pill tone="ok">Activa</Pill> : <Pill tone="neutral">Pausada</Pill>}
+                  {rule.productMissing && <Pill tone="err">Producto eliminado</Pill>}
+                </div>
+                <div className="mt-1 text-xs text-tx-mut">
+                  Sugiere <span className="font-bold text-tx">{rule.productName}</span> · {TRIGGER_LABELS[rule.triggerType]}
+                  {rule.triggerName ? ` "${rule.triggerName}"` : ""}
+                  {rule.minSubtotal > 0 ? ` · mínimo ${money(rule.minSubtotal)}` : ""}
+                </div>
+              </div>
+              <div className="flex shrink-0 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => editRule(rule)}
+                  aria-label="Editar"
+                  className="grid h-9 w-9 place-items-center rounded-xl text-tx-mid"
+                  style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeRule(rule)}
+                  aria-label="Eliminar"
+                  className="grid h-9 w-9 place-items-center rounded-xl"
+                  style={{ background: "var(--err-soft)", color: "var(--err)" }}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-4 gap-2">
+              <div className="rounded-xl px-2.5 py-2" style={{ background: "var(--surf-2)" }}>
+                <div className="font-mono text-[9px] uppercase tracking-[.1em] text-tx-dim">Ofrecidas</div>
+                <div className="font-display text-sm font-extrabold text-tx-hi">{rule.offerCount}</div>
+              </div>
+              <div className="rounded-xl px-2.5 py-2" style={{ background: "var(--surf-2)" }}>
+                <div className="font-mono text-[9px] uppercase tracking-[.1em] text-tx-dim">Aceptadas</div>
+                <div className="font-display text-sm font-extrabold text-tx-hi">{rule.acceptCount}</div>
+              </div>
+              <div className="rounded-xl px-2.5 py-2" style={{ background: "var(--surf-2)" }}>
+                <div className="font-mono text-[9px] uppercase tracking-[.1em] text-tx-dim">Conversión</div>
+                <div className="font-display text-sm font-extrabold" style={{ color: "var(--ok)" }}>{rule.conversion}%</div>
+              </div>
+              <div className="rounded-xl px-2.5 py-2" style={{ background: "var(--surf-2)" }}>
+                <div className="font-mono text-[9px] uppercase tracking-[.1em] text-tx-dim">Generado</div>
+                <div className="font-display text-sm font-extrabold" style={{ color: "var(--brand-primary)" }}>{money(rule.revenue)}</div>
+              </div>
+            </div>
+
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => toggleRule(rule)}
+                className="text-xs font-bold text-primary"
+              >
+                {rule.enabled ? "Pausar sugerencia" : "Reactivar sugerencia"}
+              </button>
+            </div>
+          </WtCard>
+        ))
+      )}
     </div>
   );
 }

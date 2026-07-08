@@ -11,6 +11,7 @@ const engine = require('./engine');
 const orderSvc = require('./order');
 const nlu = require('./nlu');
 const inbox = require('./inbox');
+const upsell = require('./upsell');
 const promoGames = require('../promo-games.service');
 const { computeOpenState } = require('../../utils/storeHours');
 const m = require('./messages');
@@ -144,6 +145,10 @@ async function processMessage({ restaurant, integration, message, io }) {
     createOrder: (data) => orderSvc.createBotOrder({ prisma, io, restaurant, config, data }),
     createCheckout: (order) => orderSvc.createCheckoutLink({ prisma, restaurant, order }),
     playGame: (trigger) => promoGames.playGame({ restaurantId: restaurant.id, phone, trigger }),
+    loadUpsellOffer: (cart) =>
+      upsell.pickOffer({ prisma, restaurantId: restaurant.id, cart, loadMenu: deps.loadMenu }),
+    recordUpsellAccept: (ruleId, amount) =>
+      upsell.recordAccept({ prisma, restaurantId: restaurant.id, ruleId, amount }),
     ...(NLU_ENABLED && {
       parseOrderText: (text, menu) => nlu.parseOrderText({ restaurantId: restaurant.id, text, menu }),
     }),
