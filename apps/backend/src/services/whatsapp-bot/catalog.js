@@ -5,6 +5,8 @@
 // con variantes se "aplana": cada variante es una línea seleccionable propia
 // (ej. "Pizza (Chica)", "Pizza (Grande)") con su precio efectivo.
 
+const { isPromoWindowOpen } = require('../../lib/promo-window');
+
 // Precio efectivo de un producto sin variante (respeta promociones).
 function effectivePrice(item) {
   return item.isPromo && item.promoPrice ? item.promoPrice : item.price;
@@ -16,7 +18,7 @@ function effectivePrice(item) {
  * @returns {Promise<Array<{ id, name, lines: Array<{ menuItemId, variantId, name, unitPrice }> }>>}
  */
 async function loadMenu(prisma, restaurantId) {
-  const [categories, items] = await Promise.all([
+  const [categories, rawItems, promoOpen] = await Promise.all([
     prisma.category.findMany({
       where: { restaurantId, isActive: true },
       orderBy: { sortOrder: 'asc' },
@@ -39,7 +41,12 @@ async function loadMenu(prisma, restaurantId) {
         },
       },
     }),
+    isPromoWindowOpen(prisma, restaurantId),
   ]);
+
+  // Ventana horaria de promos: fuera del horario, los platillos promo se
+  // ocultan del menú del bot (mismo criterio que TPV y tienda).
+  const items = promoOpen ? rawItems : rawItems.filter((i) => !i.isPromo);
 
   // Convierte un producto en sus líneas seleccionables (1 por variante, o 1
   // sola si no tiene variantes).

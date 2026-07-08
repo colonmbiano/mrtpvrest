@@ -3,6 +3,7 @@ const prisma   = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const { pick } = require('../lib/validate')
 const { PromoPriceValidationError, resolvePromoPricing } = require('../lib/promo-price')
+const { isPromoWindowOpen } = require('../lib/promo-window')
 const router   = express.Router()
 
 // ── Helper: resuelve restaurantId del request o devuelve 400 explícito ─────
@@ -228,7 +229,13 @@ router.get('/items', async (req, res) => {
     // los platillos regulares quedan siempre visibles; las promos sin día
     // configurado siguen ocultas como antes.
     const todayDay = getTodayDay()
-    const filtered = adminMode ? items : items.filter(item => isMenuItemActiveToday(item, todayDay))
+    let filtered = adminMode ? items : items.filter(item => isMenuItemActiveToday(item, todayDay))
+
+    // Ventana horaria de promos (config del restaurante): fuera del horario,
+    // los platillos promo se ocultan del catálogo (igual que activeDays).
+    if (!adminMode && !(await isPromoWindowOpen(prisma, restaurantId))) {
+      filtered = filtered.filter(item => !item.isPromo)
+    }
 
     res.json(filtered)
   } catch (e) { res.status(500).json({ error: 'Error al obtener menu' }) }
@@ -1026,11 +1033,13 @@ router.get('/public/:slug/menu', async (req, res) => {
       }
     })
 
-    // Filtrar promos inactivas hoy de cada categoría
+    // Filtrar promos inactivas hoy de cada categoría. La ventana horaria de
+    // promos también aplica: fuera de ella los platillos promo se ocultan.
+    const promoOpen = await isPromoWindowOpen(prisma, restaurant.id)
     const filtered = categories
       .map(cat => ({
         ...cat,
-        items: cat.items.filter(item => isMenuItemActiveToday(item, todayDay))
+        items: cat.items.filter(item => isMenuItemActiveToday(item, todayDay) && (promoOpen || !item.isPromo))
       }))
       .filter(cat => cat.items.length > 0)
 

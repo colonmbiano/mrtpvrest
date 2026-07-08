@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Sparkles, Bot, Trash2, Settings2, Zap, Store, Tag,
-  TrendingUp, Percent, Target, X, Lightbulb, Utensils,
+  TrendingUp, Percent, Target, X, Lightbulb, Utensils, Clock,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
@@ -50,6 +50,10 @@ export default function PromocionesPage() {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [configLoc, setConfigLoc] = useState<Location | null>(null);
   const [clearing, setClearing] = useState(false);
+  // Ventana horaria de promos (RestaurantConfig): fuera de este horario los
+  // platillos promo se ocultan del TPV/tienda/bot y se cobran a precio normal.
+  const [promoWindow, setPromoWindow] = useState<{ startTime: string; endTime: string }>({ startTime: "", endTime: "" });
+  const [savingWindow, setSavingWindow] = useState(false);
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -69,12 +73,35 @@ export default function PromocionesPage() {
       }])));
       setPromoItems(data.promoItems || []);
       setMenuItems(data.menuItems || data.promoItems || []);
+      try {
+        const { data: cfg } = await api.get("/api/admin/config");
+        setPromoWindow({
+          startTime: cfg?.promoStartTime || "",
+          endTime: cfg?.promoEndTime || "",
+        });
+      } catch { /* config opcional: sin ventana configurada */ }
     } catch {
       showToast("Error al cargar promociones", false);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const handleSaveWindow = async () => {
+    setSavingWindow(true);
+    try {
+      await api.put("/api/admin/config", {
+        promoStartTime: promoWindow.startTime || null,
+        promoEndTime: promoWindow.endTime || null,
+      });
+      showToast("Horario de promociones guardado");
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      showToast(err?.response?.data?.error || "Error al guardar horario", false);
+    } finally {
+      setSavingWindow(false);
+    }
+  };
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -222,6 +249,53 @@ export default function PromocionesPage() {
               disabled={triggering === "all" || enabledLocations.length === 0}
             >
               {triggering === "all" ? "Analizando…" : "Analizar todas"}
+            </PrimaryBtn>
+          </div>
+        </div>
+      </WtCard>
+
+      {/* Horario de promociones */}
+      <WtCard className="mb-4 p-4 md:p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="flex items-start gap-3">
+            <IconBadge icon={Clock} tone="ac" size={38} />
+            <div className="min-w-0">
+              <h3 className="font-display text-sm font-extrabold text-tx-hi md:text-base">
+                Horario de promociones
+              </h3>
+              <p className="mt-0.5 max-w-lg text-[12px] leading-relaxed text-tx-mid">
+                Fuera de este horario, los platillos en promo se ocultan del TPV, la
+                tienda y el bot, y se cobran a precio normal. Vacío = todo el día.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-end gap-2">
+            <div>
+              <label className="mb-1 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
+                Desde
+              </label>
+              <input
+                type="time"
+                value={promoWindow.startTime}
+                onChange={(e) => setPromoWindow((w) => ({ ...w, startTime: e.target.value }))}
+                className="min-h-11 rounded-xl px-3 font-display text-sm font-bold text-tx outline-none"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
+                Hasta
+              </label>
+              <input
+                type="time"
+                value={promoWindow.endTime}
+                onChange={(e) => setPromoWindow((w) => ({ ...w, endTime: e.target.value }))}
+                className="min-h-11 rounded-xl px-3 font-display text-sm font-bold text-tx outline-none"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+              />
+            </div>
+            <PrimaryBtn full={false} onClick={handleSaveWindow} disabled={savingWindow}>
+              {savingWindow ? "Guardando…" : "Guardar"}
             </PrimaryBtn>
           </div>
         </div>
