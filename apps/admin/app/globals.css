@@ -3,219 +3,143 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────
-   DESIGN SYSTEM · MRTPVREST (canonical tokens)
+   DESIGN SYSTEM v2 · MRTPVREST admin (light-first)
    Fuentes: Syne (display) · DM Sans (body) · DM Mono (mono)
+   Tema claro premium retail (Shopify/Stripe/Linear) por defecto,
+   sidebar oscuro siempre (tokens --sb-*), acento dinámico por
+   tenant vía AccentInjector (--brand-primary + familia --accent-*).
    ───────────────────────────────────────────────────────────── */
 :root,
-[data-theme="dark"] {
-  /* Iris (brand) */
-  --iris-200:#dcd0ff; --iris-300:#b89eff; --iris-400:#9472ff; --iris-500:#7c3aed;
-  --iris-600:#6428d0; --iris-soft:rgba(124,58,237,.14); --iris-glow:rgba(124,58,237,.35);
-
-  /* Status */
-  --ok:#10b981;   --ok-soft:rgba(16,185,129,.14);
-  --warn:#f59e0b; --warn-soft:rgba(245,158,11,.14);
-  --err:#ef4444;  --err-soft:rgba(239,68,68,.14);
-  --info:#3b82f6; --info-soft:rgba(59,130,246,.14);
-
-  /* Superficies dark (OLED) */
-  --bg:     #08080f;
-  --surf-1: #0f0f1c;
-  --surf-2: #15152a;
-  --surf-3: #1c1c38;
-
-  /* Borders */
-  --bd-1: rgba(255,255,255,.08);
-  --bd-2: rgba(255,255,255,.14);
-
-  /* Texto (AAA contra --bg) */
-  --tx:     #f4f4fb;
-  --tx-hi:  #ffffff;
-  --tx-mid: #c4c4de;
-  --tx-mut: #9494b8;
-  --tx-dim: #6e6e92;
-
-  /* Tipografía */
-  --f-d: var(--font-syne, 'Syne'), sans-serif;
-  --f-b: var(--font-dm-sans, 'DM Sans'), sans-serif;
-  --f-m: var(--font-dm-mono, 'DM Mono'), monospace;
-
-  /* Alias legacy (compat con UI previa del admin) */
-  --surf:          var(--surf-1);
-  --surf2:         var(--surf-2);
-  --surf3:         var(--surf-3);
-  --border:        var(--bd-1);
-  --border2:       var(--bd-2);
-  --text:          var(--tx);
-  --muted:         var(--tx-mut);
-  --muted2:        var(--tx-dim);
-
-  /* Brand accent — overwritten by AccentInjector with logo color */
-  --brand-primary:   var(--iris-500);
-  --brand-secondary: var(--iris-400);
-
-  /* Semantic colors (legacy aliases) */
-  --green:  var(--ok);
-  --amber:  var(--warn);
-  --red:    var(--err);
-  --blue:   var(--info);
-
-  /* Accent aliases used across the admin UI */
-  --gold:   #f5a623;
-  --orange: #f59e0b;
-  --yellow: #facc15;
-  --accent: var(--brand-primary);
-
-  /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.35);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.45);
-}
-
-/* ── LIGHT THEME · Retail premium (Shopify/Stripe/Linear-style) ──
-   Fondo claro, tarjetas blancas, sombras suaves, verde como acento.
-   Es el tema por defecto del admin (ver app/layout.tsx). */
 [data-theme="light"] {
-  /* Acento verde retail (default; AccentInjector lo sobreescribe por tenant) */
-  --iris-400:#34d399; --iris-500:#22c55e; --iris-600:#16a34a;
-  --iris-soft: rgba(34,197,94,.10);
-  --iris-glow: rgba(34,197,94,.22);
+  /* Acento (AccentInjector sobreescribe toda la familia por tenant) */
+  --brand-primary:   #22c55e;
+  --brand-secondary: #16a34a;
+  --accent-soft:     rgba(34,197,94,.10);
+  --accent-glow:     rgba(34,197,94,.22);
+  --accent-contrast: #ffffff;
 
+  /* Superficies */
   --bg:     #f6f8fa;
   --surf-1: #ffffff;
   --surf-2: #f1f5f9;
   --surf-3: #e8edf3;
   --bd-1:   #e2e8f0;
   --bd-2:   #cbd5e1;
-  --tx:     #0f172a;
+
+  /* Texto */
   --tx-hi:  #0b1220;
+  --tx:     #0f172a;
   --tx-mid: #334155;
   --tx-mut: #64748b;
   --tx-dim: #94a3b8;
 
-  --surf:          var(--surf-1);
-  --surf2:         var(--surf-2);
-  --surf3:         var(--surf-3);
-  --border:        var(--bd-1);
-  --border2:       var(--bd-2);
-  --text:          var(--tx);
-  --muted:         var(--tx-mut);
-  --muted2:        var(--tx-dim);
-
-  --brand-primary:   #22c55e;
-  --brand-secondary: #16a34a;
-
-  /* Status (tonos sólidos para fondo claro) */
+  /* Estado */
   --ok:#16a34a;   --ok-soft:rgba(34,197,94,.12);
   --warn:#d97706; --warn-soft:rgba(245,158,11,.14);
   --err:#dc2626;  --err-soft:rgba(239,68,68,.10);
   --info:#2563eb; --info-soft:rgba(59,130,246,.10);
 
-  --green:  #16a34a;
-  --amber:  #d97706;
-  --red:    #dc2626;
-  --blue:   #2563eb;
+  /* Tipografía */
+  --f-d: var(--font-syne, 'Syne'), sans-serif;
+  --f-b: var(--font-dm-sans, 'DM Sans'), sans-serif;
+  --f-m: var(--font-dm-mono, 'DM Mono'), monospace;
 
-  --gold:   #d97706;
-  --orange: #d97706;
-  --yellow: #ca8a04;
-  --accent: var(--brand-primary);
+  /* Elevación + radios */
+  --shadow-sm: 0 1px 2px rgba(15,23,42,.05);
+  --shadow-md: 0 8px 24px rgba(15,23,42,.06);
+  --shadow-lg: 0 16px 48px rgba(15,23,42,.10);
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 20px;
 
-  --shadow-sm: 0 1px 2px rgba(15,23,42,0.05);
-  --shadow-md: 0 12px 36px rgba(15,23,42,0.06);
+  /* Sidebar oscuro (independiente del tema de la página) */
+  --sb-bg:   #0f172a;
+  --sb-surf: #1e293b;
+  --sb-bd:   rgba(255,255,255,.08);
+  --sb-tx:   #f1f5f9;
+  --sb-mut:  #94a3b8;
+  --sb-dim:  #64748b;
 }
 
-/* ── SIDEBAR oscuro elegante (independiente del tema de la página) ──
-   El spec pide fondo claro general + sidebar oscuro tipo Linear/Vercel.
-   Redefinimos los tokens SOLO dentro del aside para que herede dark. */
-.admin-sidebar {
-  --surf:   #0f172a;
-  --surf-1: #0f172a;
-  --surf2:  #111827;
-  --surf-2: #111827;
-  --surf3:  #1e293b;
-  --surf-3: #1e293b;
-  --border: rgba(255,255,255,.08);
-  --bd-1:   rgba(255,255,255,.08);
-  --border2:rgba(255,255,255,.14);
-  --bd-2:   rgba(255,255,255,.14);
-  --text:   #f1f5f9;
-  --tx:     #f1f5f9;
-  --tx-hi:  #ffffff;
+/* ── DARK v2 · slate coherente derivado del claro ── */
+[data-theme="dark"] {
+  --accent-soft: rgba(34,197,94,.16);
+  --accent-glow: rgba(34,197,94,.34);
+
+  --bg:     #0b1220;
+  --surf-1: #111a2c;
+  --surf-2: #18233a;
+  --surf-3: #1f2c47;
+  --bd-1:   rgba(148,163,184,.14);
+  --bd-2:   rgba(148,163,184,.24);
+
+  --tx-hi:  #f8fafc;
+  --tx:     #e2e8f0;
   --tx-mid: #cbd5e1;
-  --muted:  #94a3b8;
   --tx-mut: #94a3b8;
-  --muted2: #64748b;
   --tx-dim: #64748b;
+
+  --ok:#34d399;   --ok-soft:rgba(52,211,153,.14);
+  --warn:#fbbf24; --warn-soft:rgba(251,191,36,.14);
+  --err:#f87171;  --err-soft:rgba(248,113,113,.12);
+  --info:#60a5fa; --info-soft:rgba(96,165,250,.12);
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.4);
+  --shadow-md: 0 8px 24px rgba(0,0,0,.45);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,.5);
+
+  --sb-bg:   #0b1220;
+  --sb-surf: #18233a;
+  --sb-bd:   rgba(148,163,184,.12);
 }
 
-/* Inputs del flujo de registro (/register) — focus ring premium retail. */
+/* ─────────────────────────────────────────────────────────────
+   @deprecated — aliases puente para páginas aún no migradas.
+   Borrar en la wave final cuando `grep` dé cero usos.
+   ───────────────────────────────────────────────────────────── */
+:root,
+[data-theme="light"],
+[data-theme="dark"] {
+  --surf:    var(--surf-1);
+  --surf2:   var(--surf-2);
+  --surf3:   var(--surf-3);
+  --border:  var(--bd-1);
+  --border2: var(--bd-2);
+  --text:    var(--tx);
+  --muted:   var(--tx-mut);
+  --muted2:  var(--tx-dim);
+  --green:   var(--ok);
+  --amber:   var(--warn);
+  --red:     var(--err);
+  --blue:    var(--info);
+  --gold:    var(--warn);
+  --orange:  var(--warn);
+  --yellow:  var(--warn);
+  --accent:  var(--brand-primary);
+  --iris-400: var(--brand-secondary);
+  --iris-500: var(--brand-primary);
+  --iris-600: var(--brand-secondary);
+  --iris-soft: var(--accent-soft);
+  --iris-glow: var(--accent-glow);
+}
+
+/* @deprecated — el aside nuevo usa --sb-* directamente; este bloque
+   mantiene vivas las páginas/HTML viejos que dependían del hack. */
+.admin-sidebar {
+  --surf: var(--sb-bg); --surf-1: var(--sb-bg);
+  --surf2: var(--sb-surf); --surf-2: var(--sb-surf);
+  --surf3: var(--sb-surf); --surf-3: var(--sb-surf);
+  --border: var(--sb-bd); --bd-1: var(--sb-bd);
+  --border2: rgba(255,255,255,.14); --bd-2: rgba(255,255,255,.14);
+  --text: var(--sb-tx); --tx: var(--sb-tx);
+  --tx-hi: #ffffff; --tx-mid: #cbd5e1;
+  --muted: var(--sb-mut); --tx-mut: var(--sb-mut);
+  --muted2: var(--sb-dim); --tx-dim: var(--sb-dim);
+}
+
+/* Inputs del flujo de registro (/register) — fuera del alcance del v2. */
 .rg-input::placeholder { color: var(--tx-dim); }
 .rg-input:focus {
   border-color: var(--brand-primary);
-  box-shadow: 0 0 0 4px var(--iris-soft);
-}
-
-/* WARMTECH mobile theme. Desktop keeps the canonical admin palette. */
-@media (max-width: 767px) {
-  :root,
-  [data-theme="dark"] {
-    --bg: #17120d;
-    --surf-1: #1f1810;
-    --surf-2: #2a2017;
-    --surf-3: #352a1f;
-    --bd-1: rgba(255,238,220,.09);
-    --bd-2: rgba(255,238,220,.16);
-    --tx: #f7ede1;
-    --tx-hi: #fffaf3;
-    --tx-mid: #dccab6;
-    --tx-mut: #a8957f;
-    --tx-dim: #7a6a59;
-    --brand-primary: #ff8a3d !important;
-    --brand-secondary: #ffb169 !important;
-    --iris-soft: rgba(255,138,61,.15);
-    --iris-glow: rgba(255,138,61,.40);
-    --ok: #4fbf8b;
-    --ok-soft: rgba(79,191,139,.16);
-    --warn: #f6b343;
-    --warn-soft: rgba(246,179,67,.16);
-    --err: #f06a4d;
-    --err-soft: rgba(240,106,77,.16);
-    --info: #62a0e0;
-    --info-soft: rgba(98,160,224,.16);
-    --shadow-sm: 0 1px 0 rgba(255,240,220,.04);
-    --shadow-md: 0 8px 24px rgba(0,0,0,.30);
-  }
-
-  /* Mobile claro = mismo premium retail que desktop (tarjetas blancas). */
-  [data-theme="light"] {
-    --bg: #f6f8fa;
-    --surf-1: #ffffff;
-    --surf-2: #f1f5f9;
-    --surf-3: #e8edf3;
-    --bd-1: #e2e8f0;
-    --bd-2: #cbd5e1;
-    --tx: #0f172a;
-    --tx-hi: #0b1220;
-    --tx-mid: #334155;
-    --tx-mut: #64748b;
-    --tx-dim: #94a3b8;
-    --brand-primary: #22c55e;
-    --brand-secondary: #16a34a;
-    --iris-soft: rgba(34,197,94,.10);
-    --iris-glow: rgba(34,197,94,.22);
-    --ok: #16a34a;
-    --ok-soft: rgba(34,197,94,.12);
-    --warn: #d97706;
-    --warn-soft: rgba(245,158,11,.14);
-    --err: #dc2626;
-    --err-soft: rgba(239,68,68,.10);
-    --info: #2563eb;
-    --info-soft: rgba(59,130,246,.10);
-    --shadow-sm: 0 1px 2px rgba(15,23,42,.05);
-    --shadow-md: 0 10px 28px rgba(15,23,42,.07);
-  }
-
-  body { overscroll-behavior-y: none; }
+  box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
 /* ── BASE ── */
@@ -229,6 +153,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+@media (max-width: 767px) {
+  body { overscroll-behavior-y: none; }
+}
+
 .font-syne    { font-family: var(--f-d); }
 .font-display { font-family: var(--f-d); letter-spacing: -.02em; }
 .font-mono    { font-family: var(--f-m); font-feature-settings: "tnum" 1, "zero" 1; }
@@ -240,29 +168,27 @@ body {
 }
 .animate-pulse { animation: pulse-live 2s ease-in-out infinite; }
 
-@keyframes warmtech-enter {
+/* Entrada suave de página */
+@keyframes ds-enter {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+.ds-enter { animation: ds-enter 320ms cubic-bezier(.22,.7,.3,1) both; }
 
-.warmtech-enter {
-  animation: warmtech-enter 320ms cubic-bezier(.22,.7,.3,1) both;
-}
+/* Scrollbar oculto para carruseles horizontales */
+.ds-scrollbar { scrollbar-width: none; }
+.ds-scrollbar::-webkit-scrollbar { display: none; }
 
+/* @deprecated — clases warmtech; las páginas migradas usan Card/PageShell del ds. */
+.warmtech-enter { animation: ds-enter 320ms cubic-bezier(.22,.7,.3,1) both; }
 .warmtech-card {
   background: var(--surf-1);
   border: 1px solid var(--bd-1);
-  border-radius: 20px;
+  border-radius: var(--r-xl);
   box-shadow: var(--shadow-md);
 }
-
 .warmtech-scrollbar { scrollbar-width: none; }
 .warmtech-scrollbar::-webkit-scrollbar { display: none; }
-
 @media (min-width: 768px) {
-  /* En desktop ya NO forzamos el acento cálido: dejamos fluir el acento
-     premium por defecto (verde) o el del tenant (AccentInjector). */
-  .warmtech-shell .warmtech-card {
-    border-radius: 24px;
-  }
+  .warmtech-shell .warmtech-card { border-radius: 24px; }
 }
