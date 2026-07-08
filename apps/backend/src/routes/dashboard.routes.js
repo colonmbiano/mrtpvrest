@@ -351,6 +351,129 @@ router.get('/hourly-distribution', authenticate, requireTenantAccess, requireAdm
   }
 });
 
+// ── GET /api/dashboard/peak-heatmap ──────────────────────────────────────────
+// Mapa de calor de horas pico: pedidos por (día de la semana × hora) de los
+// últimos 28 días, en hora de México (el servidor corre en UTC — getHours()
+// crudo desfasaría todo 6 horas).
+router.get('/peak-heatmap', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = requireRestaurant(req, res);
+    if (!restaurantId) return;
+    const locationId = getLocationId(req);
+    const from = new Date(localDayRange().from.getTime() - 27 * DAY_MS);
+
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        status: { not: 'CANCELLED' },
+        createdAt: { gte: from },
+        ...(locationId ? { locationId } : {}),
+      },
+      select: { createdAt: true },
+    });
+
+    // grid[dia][hora]: dia 0 = lunes … 6 = domingo (orden natural del negocio).
+    const grid = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Mexico_City',
+      weekday: 'short',
+      hour: 'numeric',
+      hour12: false,
+    });
+    const DAY_INDEX = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+    for (const order of orders) {
+      const parts = fmt.formatToParts(order.createdAt);
+      const day = DAY_INDEX[parts.find((p) => p.type === 'weekday')?.value];
+      const hour = parseInt(parts.find((p) => p.type === 'hour')?.value, 10) % 24;
+      if (day !== undefined && Number.isInteger(hour)) grid[day][hour] += 1;
+    }
+
+    const max = Math.max(0, ...grid.flat());
+    res.json({ grid, max, total: orders.length, days: 28 });
+  } catch (e) {
+    console.error('dashboard/peak-heatmap', e);
+    res.status(500).json({ error: 'Error al obtener el mapa de calor' });
+  }
+});
+
+// ── GET /api/dashboard/agent-health ──────────────────────────────────────────
+// "Cerebro" del agente IA para el dashboard: estado de la conexión de
+// WhatsApp, conversaciones (abiertas / necesitan humano), pedidos y ventas
+// generados por el bot en 7 días, y lo generado por las sugerencias (upsell).
+router.get('/agent-health', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = requireRestaurant(req, res);
+    if (!restaurantId) return;
+    const since7d = new Date(localDayRange().from.getTime() - 6 * DAY_MS);
+    const since24h = new Date(Date.now() - DAY_MS);
+
+    const [integration, convStats, unread, inbound24h, botOrders, upsellTotals] = await Promise.all([
+      prisma.integrationConfig.findFirst({
+        where: { restaurantId, type: 'WHATSAPP' },
+        select: { enabled: true, config: true },
+      }),
+      prisma.whatsappConversation.groupBy({
+        by: ['status'],
+        where: { restaurantId },
+        _count: { _all: true },
+      }),
+      prisma.whatsappConversation.aggregate({
+        where: { restaurantId },
+        _sum: { unreadCount: true },
+      }),
+      prisma.whatsappMessage.count({
+        where: { restaurantId, direction: 'IN', createdAt: { gte: since24h } },
+      }),
+      prisma.order.aggregate({
+        where: {
+          restaurantId,
+          source: 'WHATSAPP',
+          status: { not: 'CANCELLED' },
+          createdAt: { gte: since7d },
+        },
+        _count: { _all: true },
+        _sum: { total: true },
+      }),
+      prisma.upsellRule.aggregate({
+        where: { restaurantId },
+        _sum: { acceptCount: true, revenue: true },
+      }),
+    ]);
+
+    let provider = null;
+    if (integration?.config) {
+      try { provider = String(JSON.parse(integration.config).provider || 'WHAPI').toUpperCase(); } catch { provider = 'WHAPI'; }
+    }
+
+    const conversations = { open: 0, needsHuman: 0, resolved: 0 };
+    for (const row of convStats) {
+      if (row.status === 'OPEN') conversations.open = row._count._all;
+      if (row.status === 'NEEDS_HUMAN') conversations.needsHuman = row._count._all;
+      if (row.status === 'RESOLVED') conversations.resolved = row._count._all;
+    }
+
+    res.json({
+      connection: { configured: !!integration, enabled: !!integration?.enabled, provider },
+      conversations: {
+        ...conversations,
+        unread: unread._sum.unreadCount || 0,
+        inbound24h,
+      },
+      botOrders7d: {
+        count: botOrders._count._all || 0,
+        revenue: Number(botOrders._sum.total) || 0,
+      },
+      upsell: {
+        accepts: upsellTotals._sum.acceptCount || 0,
+        revenue: Number(upsellTotals._sum.revenue) || 0,
+      },
+    });
+  } catch (e) {
+    console.error('dashboard/agent-health', e);
+    res.status(500).json({ error: 'Error al obtener la salud del agente' });
+  }
+});
+
 // ── GET /api/dashboard/active-shift ────────────────────────────────────────
 // Turno activo + empleados con clock-in abierto.
 router.get('/active-shift', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
