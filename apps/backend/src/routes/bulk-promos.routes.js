@@ -21,6 +21,8 @@ function serialize(promo) {
     isActive: promo.isActive,
     startsAt: promo.startsAt,
     endsAt: promo.endsAt,
+    startTime: promo.startTime,
+    endTime: promo.endTime,
     createdAt: promo.createdAt,
     categories: (promo.categories || []).map((c) => ({
       id: c.categoryId,
@@ -30,6 +32,14 @@ function serialize(promo) {
 }
 
 const INCLUDE_CATS = { categories: { include: { category: { select: { name: true } } } } };
+
+// Normaliza un lado de la ventana horaria diaria: ''/null → null (sin límite),
+// "HH:mm" válido → tal cual. Cualquier otra cosa → undefined (inválido).
+function normalizeTimeOfDay(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const s = String(value).trim();
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(s) ? s : undefined;
+}
 
 // Normaliza buy/pay: enteros, pay < buy y >= 0. Devuelve null si inválido.
 function normalizeNxM(buy, pay) {
@@ -86,6 +96,12 @@ router.post('/', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Selecciona al menos una categoría elegible' });
     }
 
+    const startTime = normalizeTimeOfDay(req.body.startTime);
+    const endTime = normalizeTimeOfDay(req.body.endTime);
+    if (startTime === undefined || endTime === undefined) {
+      return res.status(400).json({ error: 'Horario inválido: usa formato HH:mm (ej. 21:00)' });
+    }
+
     const promo = await prisma.bulkPromo.create({
       data: {
         restaurantId,
@@ -95,6 +111,8 @@ router.post('/', requireAdmin, async (req, res) => {
         isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
         startsAt: req.body.startsAt ? new Date(req.body.startsAt) : null,
         endsAt: req.body.endsAt ? new Date(req.body.endsAt) : null,
+        startTime,
+        endTime,
         categories: { create: catIds.map((categoryId) => ({ categoryId })) },
       },
       include: INCLUDE_CATS,
@@ -131,6 +149,16 @@ router.put('/:id', requireAdmin, async (req, res) => {
     if (req.body.isActive !== undefined) data.isActive = Boolean(req.body.isActive);
     if (req.body.startsAt !== undefined) data.startsAt = req.body.startsAt ? new Date(req.body.startsAt) : null;
     if (req.body.endsAt !== undefined) data.endsAt = req.body.endsAt ? new Date(req.body.endsAt) : null;
+    if (req.body.startTime !== undefined) {
+      const t = normalizeTimeOfDay(req.body.startTime);
+      if (t === undefined) return res.status(400).json({ error: 'Horario inválido: usa formato HH:mm (ej. 21:00)' });
+      data.startTime = t;
+    }
+    if (req.body.endTime !== undefined) {
+      const t = normalizeTimeOfDay(req.body.endTime);
+      if (t === undefined) return res.status(400).json({ error: 'Horario inválido: usa formato HH:mm (ej. 21:00)' });
+      data.endTime = t;
+    }
 
     // Categorías: si vienen, reemplazamos el pool completo (delete + create) en
     // una transacción junto al update de los escalares.

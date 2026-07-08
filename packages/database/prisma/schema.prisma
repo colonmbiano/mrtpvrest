@@ -1275,6 +1275,11 @@ model BulkPromo {
   // isActive=true Y (startsAt null o <= now) Y (endsAt null o >= now).
   startsAt    DateTime?
   endsAt      DateTime?
+  // Ventana horaria DIARIA opcional ("HH:mm", hora local del restaurante).
+  // null = sin límite por ese lado. endTime "21:00" = la promo deja de aplicar
+  // después de las 9 pm. startTime > endTime = ventana que cruza medianoche.
+  startTime   String?
+  endTime     String?
 
   // Pool de categorías elegibles (M:N vía tabla join explícita, igual que el
   // resto del schema). Sus productos suman JUNTOS para formar los bloques NxM.

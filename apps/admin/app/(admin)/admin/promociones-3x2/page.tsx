@@ -33,6 +33,8 @@ interface BulkPromo {
   isActive: boolean;
   startsAt: string | null;
   endsAt: string | null;
+  startTime: string | null;
+  endTime: string | null;
   categories: PromoCategory[];
 }
 
@@ -45,6 +47,8 @@ interface FormState {
   isActive: boolean;
   startsAt: string; // yyyy-mm-dd o ""
   endsAt: string;
+  startTime: string; // HH:mm o "" (hora local, sin límite)
+  endTime: string;
   categoryIds: string[];
 }
 
@@ -56,6 +60,8 @@ const EMPTY_FORM: FormState = {
   isActive: true,
   startsAt: "",
   endsAt: "",
+  startTime: "",
+  endTime: "",
   categoryIds: [],
 };
 
@@ -70,6 +76,14 @@ const PRESETS: { label: string; buy: number; pay: number }[] = [
 function toDateInput(iso: string | null): string {
   if (!iso) return "";
   return iso.slice(0, 10);
+}
+
+// Etiqueta legible de la ventana horaria diaria ("hasta 21:00", "16:00–21:00").
+function timeWindowLabel(p: { startTime: string | null; endTime: string | null }): string | null {
+  if (p.startTime && p.endTime) return `${p.startTime}–${p.endTime}`;
+  if (p.endTime) return `hasta ${p.endTime}`;
+  if (p.startTime) return `desde ${p.startTime}`;
+  return null;
 }
 
 export default function BulkPromosPage() {
@@ -115,6 +129,8 @@ export default function BulkPromosPage() {
       isActive: promo.isActive,
       startsAt: toDateInput(promo.startsAt),
       endsAt: toDateInput(promo.endsAt),
+      startTime: promo.startTime || "",
+      endTime: promo.endTime || "",
       categoryIds: promo.categories.map((c) => c.id),
     });
 
@@ -148,6 +164,8 @@ export default function BulkPromosPage() {
       categoryIds: form.categoryIds,
       startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
       endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
+      startTime: form.startTime || null,
+      endTime: form.endTime || null,
     };
     try {
       if (form.id) {
@@ -239,6 +257,7 @@ export default function BulkPromosPage() {
                     <div className="mt-0.5 font-mono text-[11px] text-tx-mut">
                       {promo.buyQuantity}x{promo.payQuantity} · paga {promo.payQuantity} de
                       cada {promo.buyQuantity}
+                      {timeWindowLabel(promo) ? ` · ${timeWindowLabel(promo)}` : ""}
                     </div>
                   </div>
                 </div>
@@ -426,6 +445,34 @@ export default function BulkPromosPage() {
                 className="flex-1 rounded-[12px] px-3 py-2.5 text-[13px] text-tx outline-none"
                 style={{ background: "var(--surf-2)", border: "1px solid var(--bd-2)" }}
               />
+            </div>
+
+            {/* Horario diario opcional */}
+            <label className="mb-1 block text-[12px] font-semibold text-tx-mut">
+              Horario del día (opcional) — fuera de este horario la promo no aplica
+            </label>
+            <div className="mb-4 flex items-center gap-2">
+              <div className="flex-1">
+                <span className="mb-1 block text-[11px] text-tx-dim">Desde</span>
+                <input
+                  type="time"
+                  value={form.startTime}
+                  onChange={(e) => setForm({ ...form, startTime: e.target.value })}
+                  className="w-full rounded-[12px] px-3 py-2.5 text-[13px] text-tx outline-none"
+                  style={{ background: "var(--surf-2)", border: "1px solid var(--bd-2)" }}
+                />
+              </div>
+              <span className="mt-5 text-tx-dim">→</span>
+              <div className="flex-1">
+                <span className="mb-1 block text-[11px] text-tx-dim">Hasta (ej. 21:00 = 9 pm)</span>
+                <input
+                  type="time"
+                  value={form.endTime}
+                  onChange={(e) => setForm({ ...form, endTime: e.target.value })}
+                  className="w-full rounded-[12px] px-3 py-2.5 text-[13px] text-tx outline-none"
+                  style={{ background: "var(--surf-2)", border: "1px solid var(--bd-2)" }}
+                />
+              </div>
             </div>
 
             {/* Activa */}
