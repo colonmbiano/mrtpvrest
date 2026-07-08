@@ -83,6 +83,7 @@ const SECTIONS = [
       { href: "/admin/promociones-3x2", icon: <ITag />,      label: "Promos 3x2 (NxM)" },
       { href: "/admin/inbox",           icon: <IChat />,     label: "Bandeja de entrada" },
       { href: "/admin/whatsapp",        icon: <IChat />,     label: "WhatsApp Bot" },
+      { href: "/admin/plantillas",      icon: <IChat />,     label: "Plantillas WA" },
       { href: "/admin/banners",         icon: <IImage />,    label: "Banners" },
       { href: "/admin/pantalla-cliente", icon: <IImage />,   label: "Pantalla Cliente" },
       { href: "/admin/inventario",          icon: <IBox />,      label: "Inventario" },
