@@ -2443,6 +2443,49 @@ model WhatsappMessage {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SUGERENCIAS DE VENTA (UPSELL) — el chatbot ofrece un producto antes del
+// checkout ("¿le agregas unas papas?") y se mide cuánto genera cada regla.
+//
+// El precio y nombre del producto sugerido NUNCA se guardan aquí: se resuelven
+// contra el menú vivo al momento de ofrecer (misma fuente de verdad del bot;
+// si el producto se desactiva, la regla simplemente no se ofrece). Métricas:
+// offerCount/acceptCount/revenue se actualizan desde el flujo del bot.
+// Dinero en Decimal (regla del repo). Tenant-scope por columna plana
+// (sin relación inversa, patrón PromoGamePlay).
+// ─────────────────────────────────────────────────────────────────────────────
+model UpsellRule {
+  id           String @id @default(cuid())
+  restaurantId String
+
+  name    String
+  enabled Boolean @default(true)
+
+  // Producto sugerido.
+  menuItemId String
+  variantId  String?
+
+  // Disparador: ALWAYS (siempre) | CATEGORY (el carrito trae esa categoría) |
+  // ITEM (el carrito trae ese producto). triggerId = categoryId o menuItemId.
+  triggerType String  @default("ALWAYS")
+  triggerId   String?
+  minSubtotal Decimal @default(0) @db.Decimal(12, 2)
+
+  // Primera línea del mensaje (opcional; si falta se usa el copy default).
+  offerText String?
+
+  // Métricas de rendimiento.
+  offerCount  Int     @default(0)
+  acceptCount Int     @default(0)
+  revenue     Decimal @default(0) @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, enabled])
+  @@map("upsell_rules")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // JUEGOS PROMOCIONALES — "ruleta de premios" que amarra ventas.
 //
 // El dueño configura premios con peso (probabilidad). El chatbot juega por

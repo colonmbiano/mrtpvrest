@@ -19,6 +19,7 @@ const STATES = {
   ITEM: 'ITEM',
   QUANTITY: 'QUANTITY',
   CART: 'CART',
+  UPSELL: 'UPSELL',
   NAME: 'NAME',
   ADDRESS: 'ADDRESS',
   LOCATION_PIN: 'LOCATION_PIN',
@@ -48,6 +49,9 @@ function freshData(phone, lastOrderId = null) {
     paymentMethod: null,
     nav: { categoryId: null },
     pending: null,
+    // Upsell: solo se ofrece una vez por conversación.
+    upsellOffered: false,
+    pendingUpsell: null,
     lastOrderId,
   };
 }
@@ -136,7 +140,7 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
 
     case STATES.CATEGORY: {
       if (command === 'finalizar' || command === 'pagar') {
-        return goToCheckout(data, config, result, m);
+        return goToCheckout(deps, data, config, result, m);
       }
       const menu = await deps.loadMenu();
       if (!menu || menu.length === 0) {
@@ -194,7 +198,7 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
 
     case STATES.CART: {
       if (command === 'finalizar' || command === 'pagar') {
-        return goToCheckout(data, config, result, m);
+        return goToCheckout(deps, data, config, result, m);
       }
       if (['menu', 'agregar', 'mas', 'carta'].includes(command)) {
         return showCategories(deps, data, result, m);
@@ -211,6 +215,23 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
         }
       }
       return result(`${m.cartSummary(data.cart)}\n\nEscribe *finalizar*, *menú* para agregar, *quitar N* o *cancelar*.`, STATES.CART);
+    }
+
+    case STATES.UPSELL: {
+      const pendingUpsell = data.pendingUpsell;
+      data.pendingUpsell = null;
+      const accepted = ['si', '1', 'claro', 'ok', 'va', 'sale', 'agregar', 'agregalo'].includes(command);
+      if (accepted && pendingUpsell) {
+        addToCart(data.cart, pendingUpsell, 1);
+        if (deps.recordUpsellAccept) {
+          await deps
+            .recordUpsellAccept(pendingUpsell.ruleId, pendingUpsell.unitPrice)
+            .catch(() => {});
+        }
+        return result([m.added(1, pendingUpsell.name), m.askName], STATES.NAME);
+      }
+      // Cualquier otra respuesta = no, gracias → seguimos con el checkout.
+      return result(m.askName, STATES.NAME);
     }
 
     case STATES.NAME: {
@@ -327,13 +348,24 @@ async function showCategories(deps, data, result, msg) {
   return result(msg.categories(menu, data.cart), STATES.CATEGORY, data);
 }
 
-function goToCheckout(data, config, result, msg) {
+async function goToCheckout(deps, data, config, result, msg) {
   const subtotal = cartSubtotal(data.cart);
   if (!data.cart || data.cart.length === 0) {
     return result(msg.cartEmpty, STATES.CATEGORY);
   }
   if (config?.minOrderAmount > 0 && subtotal < config.minOrderAmount) {
     return result(msg.minOrder(config.minOrderAmount, subtotal), STATES.CATEGORY);
+  }
+  // Sugerencia de venta (upsell): una sola vez por conversación, solo si hay
+  // una regla aplicable y el producto sigue en el menú (deps la resuelve).
+  // Best-effort: si falla, el checkout continúa normal.
+  if (!data.upsellOffered && deps.loadUpsellOffer) {
+    const offer = await deps.loadUpsellOffer(data.cart).catch(() => null);
+    if (offer) {
+      data.upsellOffered = true;
+      data.pendingUpsell = offer;
+      return result(msg.upsellOffer(offer), STATES.UPSELL);
+    }
   }
   return result(msg.askName, STATES.NAME);
 }

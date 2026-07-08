@@ -89,6 +89,11 @@ module.exports = {
 
   askName: '📝 ¿A nombre de quién va el pedido?',
 
+  // Sugerencia de venta antes del checkout. `offerText` permite personalizar
+  // el gancho desde el panel; el producto y precio salen del menú vivo.
+  upsellOffer: ({ name, unitPrice, offerText }) =>
+    `✨ ${offerText || '¿Se te antoja agregar algo más?'}\n\n*${name}* — ${money(unitPrice)}\n\nResponde *SÍ* para agregarlo o *NO* para continuar con tu pedido.`,
+
   askAddress:
     '🏠 Escríbeme tu *dirección completa* (calle, número, colonia y referencias).',
 
