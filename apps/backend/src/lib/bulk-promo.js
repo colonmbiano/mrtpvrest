@@ -101,9 +101,40 @@ function computeBulkPromoDiscount(items, promos) {
 }
 
 /**
+ * Ventana horaria DIARIA de una promo ("HH:mm" hora local del restaurante).
+ * A diferencia de banner-schedule, cada lado es independiente:
+ *   - solo endTime   → aplica desde medianoche hasta endTime ("hasta las 9 pm").
+ *   - solo startTime → aplica desde startTime hasta medianoche.
+ *   - ambos y start > end → ventana que cruza medianoche (22:00–02:00).
+ *
+ * @param {string} timeStr  Hora actual local "HH:mm".
+ * @param {string|null} start
+ * @param {string|null} end
+ */
+function withinDailyWindow(timeStr, start, end) {
+  if (!start && !end) return true;
+  if (!start) return timeStr <= end;
+  if (!end) return timeStr >= start;
+  if (start <= end) return timeStr >= start && timeStr <= end;
+  return timeStr >= start || timeStr <= end;
+}
+
+/** Hora local "HH:mm" en la TZ de la tienda (mismo default que banners). */
+function localTimeHHmm(now = new Date(), tz = process.env.STORE_TIMEZONE || 'America/Mexico_City') {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(now);
+}
+
+/**
  * Carga las promos NxM activas y vigentes de un restaurante, listas para
  * `computeBulkPromoDiscount`. Determinista (orden por createdAt) para que el
  * reparto anti doble-conteo sea estable entre crear-orden y agregar-ronda.
+ * Además de la vigencia por fecha (startsAt/endsAt), respeta la ventana
+ * horaria diaria (startTime/endTime): fuera de ella la promo NO descuenta.
  *
  * @param {import('@prisma/client').PrismaClient} prisma  Cliente o `tx`.
  * @param {string} restaurantId
@@ -124,7 +155,8 @@ async function loadActiveBulkPromos(prisma, restaurantId, now = new Date()) {
     orderBy: { createdAt: 'asc' },
     include: { categories: { select: { categoryId: true } } },
   });
-  return rows.map((p) => ({
+  const timeStr = localTimeHHmm(now);
+  return rows.filter((p) => withinDailyWindow(timeStr, p.startTime, p.endTime)).map((p) => ({
     id: p.id,
     name: p.name,
     buyQuantity: p.buyQuantity,
@@ -136,5 +168,7 @@ async function loadActiveBulkPromos(prisma, restaurantId, now = new Date()) {
 module.exports = {
   computeBulkPromoDiscount,
   loadActiveBulkPromos,
+  withinDailyWindow,
+  localTimeHHmm,
   round2,
 };

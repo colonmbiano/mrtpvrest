@@ -1,6 +1,6 @@
 'use strict';
 
-const { computeBulkPromoDiscount } = require('../src/lib/bulk-promo');
+const { computeBulkPromoDiscount, withinDailyWindow, localTimeHHmm } = require('../src/lib/bulk-promo');
 const { computeOrderTotals } = require('../src/lib/money');
 
 // Categorías de prueba
@@ -103,6 +103,48 @@ describe('computeBulkPromoDiscount :: anti doble-conteo', () => {
     const bad = { id: 'x', name: 'bad', buyQuantity: 2, payQuantity: 2, categoryIds: [ALITAS] };
     const items = [{ price: 100, quantity: 4, categoryId: ALITAS }];
     expect(computeBulkPromoDiscount(items, [bad]).promoDiscount).toBe(0);
+  });
+});
+
+describe('withinDailyWindow :: ventana horaria diaria', () => {
+  test('sin ventana → siempre aplica', () => {
+    expect(withinDailyWindow('23:59', null, null)).toBe(true);
+    expect(withinDailyWindow('00:00', null, null)).toBe(true);
+  });
+
+  test('solo endTime ("hasta las 9 pm"): aplica antes, NO después', () => {
+    expect(withinDailyWindow('12:00', null, '21:00')).toBe(true);
+    expect(withinDailyWindow('21:00', null, '21:00')).toBe(true); // inclusive
+    expect(withinDailyWindow('21:01', null, '21:00')).toBe(false);
+    expect(withinDailyWindow('23:30', null, '21:00')).toBe(false);
+    expect(withinDailyWindow('00:10', null, '21:00')).toBe(true); // madrugada = antes del corte
+  });
+
+  test('solo startTime: aplica desde esa hora hasta medianoche', () => {
+    expect(withinDailyWindow('15:59', '16:00', null)).toBe(false);
+    expect(withinDailyWindow('16:00', '16:00', null)).toBe(true);
+    expect(withinDailyWindow('23:59', '16:00', null)).toBe(true);
+  });
+
+  test('ventana normal 16:00–21:00', () => {
+    expect(withinDailyWindow('15:59', '16:00', '21:00')).toBe(false);
+    expect(withinDailyWindow('18:00', '16:00', '21:00')).toBe(true);
+    expect(withinDailyWindow('21:01', '16:00', '21:00')).toBe(false);
+  });
+
+  test('ventana que cruza medianoche 22:00–02:00', () => {
+    expect(withinDailyWindow('23:00', '22:00', '02:00')).toBe(true);
+    expect(withinDailyWindow('01:30', '22:00', '02:00')).toBe(true);
+    expect(withinDailyWindow('12:00', '22:00', '02:00')).toBe(false);
+  });
+});
+
+describe('localTimeHHmm :: hora local de la tienda', () => {
+  test('convierte UTC a hora de México (formato HH:mm h23)', () => {
+    // 2026-07-08 03:30 UTC = 21:30 del 7 de julio en CDMX (UTC-6, sin DST).
+    expect(localTimeHHmm(new Date('2026-07-08T03:30:00Z'), 'America/Mexico_City')).toBe('21:30');
+    // Medianoche local no debe salir como "24:xx".
+    expect(localTimeHHmm(new Date('2026-07-08T06:05:00Z'), 'America/Mexico_City')).toBe('00:05');
   });
 });
 
