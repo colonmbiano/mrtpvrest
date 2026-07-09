@@ -93,6 +93,8 @@ const isShippingCat = (name?: string | null) => !!name && /env[ií]o/i.test(name
 type Info = {
   id: string; name: string; slug: string; logo: string | null; hasWebStore: boolean;
   whatsappNumber: string | null; minOrderAmount?: number; estimatedDelivery?: number; isOpen?: boolean;
+  whatsappOrder?: { enabled: boolean; number: string | null };
+  dineIn?: { table: string; locationId: string | null } | null;
   onlinePayment?: boolean; delivery?: DeliveryConfig; heroImageUrl?: string | null;
   themeConfig: { theme?: string; primaryColor?: string } | null;
 };
@@ -324,7 +326,8 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
 
       <StoreCheckout open={checkoutOpen} onClose={() => setCheckoutOpen(false)} slug={slug} primary={GOLD}
         locations={locations} delivery={info.delivery} minOrderAmount={info.minOrderAmount}
-        onlinePayment={info.onlinePayment} initialOrderType={orderMode} whatsappOrder={info.whatsappOrder} />
+        onlinePayment={info.onlinePayment} initialOrderType={info.dineIn ? 'DINE_IN' : orderMode} whatsappOrder={info.whatsappOrder}
+        lockedTable={info.dineIn?.table} lockedLocationId={info.dineIn?.locationId} />
 
       <style dangerouslySetInnerHTML={{ __html: `.no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}` }} />
     </div>

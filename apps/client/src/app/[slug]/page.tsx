@@ -182,13 +182,15 @@ export default async function StorefrontPage({
   // params.slug de forma síncrona devuelve undefined -> fetchStore(undefined)
   // -> 404 para CUALQUIER slug. Este era el bug que tiraba 404 en toda tienda.
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ theme?: string }>;
+  searchParams: Promise<{ theme?: string; mesa?: string; l?: string }>;
 }) {
   const { slug } = await params;
   // Vista previa de tema: ?theme=MUNDIALISTA permite al dueño ver cualquier
   // skin ANTES de activarlo en /admin/tienda. Solo afecta el render (lectura),
   // no cambia nada en la BD ni el pedido.
-  const { theme: themeOverride } = await searchParams;
+  // Menú QR en mesa: ?mesa=<n>&l=<locationId> fija el pedido a DINE_IN con esa
+  // mesa/sucursal (el QR pegado en cada mesa lo genera el admin).
+  const { theme: themeOverride, mesa, l: qrLocationId } = await searchParams;
 
   const [store, menu, locations] = await Promise.all([
     fetchStore(slug),
@@ -271,9 +273,15 @@ export default async function StorefrontPage({
     );
   }
 
+  // Menú QR en mesa: si el enlace trae ?mesa=, el checkout se fija en DINE_IN
+  // con esa mesa (y sucursal, si vino ?l=). Se pasa a los temas vía info.
+  const dineIn = mesa && String(mesa).trim()
+    ? { table: String(mesa).trim(), locationId: qrLocationId ? String(qrLocationId) : null }
+    : null;
+
   // Los componentes de tema tipan info.themeConfig; lo sintetizamos a partir
   // de los campos planos para mantener compatibilidad de tipos y runtime.
-  const info = { ...store, themeConfig: { theme, primaryColor: primary } };
+  const info = { ...store, themeConfig: { theme, primaryColor: primary }, dineIn };
   const data = { info, menu, locations };
 
   // Store base para el cliente legacy (temas Kawaii/Halo/Brutalist con checkout).

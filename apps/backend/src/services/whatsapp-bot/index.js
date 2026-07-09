@@ -162,6 +162,15 @@ async function handleWebhook({ restaurantId, body, io }) {
     return;
   }
 
+  // Gate del add-on facturable: el plan del tenant debe incluir el módulo
+  // 'whatsapp_bot'. Rollout suave (ENFORCE_BOT_MODULE off → deja pasar) para no
+  // romper bots ya activos; con enforce on, un tenant sin el módulo no procesa.
+  const { botModuleAllowed } = require('../../lib/modules');
+  if (!(await botModuleAllowed(restaurant.id))) {
+    console.warn(`[wa-bot] restaurante ${restaurantId} sin el módulo whatsapp_bot en su plan — ignorando webhook`);
+    return;
+  }
+
   const messages = provider.normalizeInbound(body);
   for (const message of messages) {
     if (alreadyProcessed(message.id)) continue;

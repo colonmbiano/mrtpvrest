@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const { localDayRange } = require('../utils/dayRange');
-const { sendPushToDriver, notifyDriversNewDeliveryOrder } = require('../services/notifications.service');
+const { sendPushToDriver, notifyDriversNewDeliveryOrder, notifyOrderStatus } = require('../services/notifications.service');
 const router = express.Router();
 
 const STAFF_ROLES = ['CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'];
@@ -264,6 +264,12 @@ router.post('/:driverId/claim/:orderId', authenticate, requireTenantAccess, asyn
       io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
     }
 
+    // Avisar al cliente que su pedido va en camino (push + WhatsApp). Best-effort.
+    if (order) {
+      notifyOrderStatus(order, 'ON_THE_WAY').catch((err) =>
+        console.error('[delivery] notifyOrderStatus:', err.message));
+    }
+
     res.json(order);
   } catch (e) { console.error('POST /delivery/claim:', e); res.status(500).json({ error: 'Error interno' }); }
 });
@@ -411,6 +417,10 @@ router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_RO
       url: '/',
     }).catch(() => {});
 
+    // Avisar al cliente que su pedido va en camino (push + WhatsApp). Best-effort.
+    notifyOrderStatus(order, 'ON_THE_WAY').catch((err) =>
+      console.error('[delivery] notifyOrderStatus:', err.message));
+
     res.json(order);
   } catch (e) { console.error('PUT /delivery/assign:', e); res.status(500).json({ error: 'Error interno' }); }
 });
@@ -509,6 +519,13 @@ router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAcces
       io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
     }
 
+    // Avisar al cliente el cambio (en camino / entregado). Solo si el estado
+    // realmente cambió, para no repetir push/WhatsApp. Best-effort.
+    if (existing.status !== order.status) {
+      notifyOrderStatus(order, order.status).catch((err) =>
+        console.error('[delivery] notifyOrderStatus:', err.message));
+    }
+
     res.json(order);
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
@@ -583,6 +600,16 @@ router.put('/:driverId/orders/:orderId/deliver', authenticate, requireTenantAcce
       include: { items: { include: { menuItem: true } } },
     });
     await ensureCashOnDeliveryMovement(order);
+
+    // Avisar al cliente que su pedido fue entregado. Solo en la transición real
+    // → DELIVERED (best-effort). El objeto no incluye `user`, así que caemos en
+    // notifyOrderStatusById para recargar el teléfono del cliente.
+    if (existing.status !== 'DELIVERED') {
+      require('../services/notifications.service')
+        .notifyOrderStatusById(order.id, 'DELIVERED')
+        .catch((err) => console.error('[delivery] notifyOrderStatus:', err.message));
+    }
+
     res.json(order);
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
