@@ -1954,7 +1954,7 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
 router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), validateBody(updatePaymentSchema), async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
-    const { paymentMethod, payments, tip } = req.body;
+    const { paymentMethod, payments, tip, keepStatus } = req.body;
     const now = new Date();
 
     // COBRO MIXTO (split-tender): si vienen renglones `payments[]`, se valida
@@ -2007,7 +2007,10 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
         data: {
           paymentMethod: resolvedMethod,
           paymentStatus: 'PAID',
-          status: 'DELIVERED',
+          // Cobro desde el kanban (keepStatus): marca pagado sin forzar la
+          // entrega — un pedido puede pagarse por anticipado. Sin el flag, el
+          // cobro cierra la orden en DELIVERED (comportamiento del TPV).
+          ...(keepStatus ? {} : { status: 'DELIVERED' }),
           paidAt: now,
           cashCollected,
           cashCollectedAt: cashCollected ? now : null,
