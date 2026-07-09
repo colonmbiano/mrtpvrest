@@ -319,6 +319,8 @@ model Restaurant {
   suppliers        Supplier[]
   whatsappSessions WhatsappSession[]
   whatsappContacts WhatsappContact[]
+  whatsappConversations WhatsappConversation[]
+  deliveryZones    DeliveryZone[]
   promoGames       PromoGame[]
   bulkPromos       BulkPromo[]
 
@@ -588,6 +590,7 @@ model MenuItem {
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   categoryId   String
   category     Category   @relation(fields: [categoryId], references: [id])
+  reactions    DishReaction[]
 
   name            String
   description     String?
@@ -1369,9 +1372,12 @@ model RestaurantConfig {
   //   FLAT     → tarifa fija = deliveryFee (comportamiento histórico).
   //   DISTANCE → deliveryBaseFee + (deliveryPerKm × distancia_km), con radio
   //              de envío gratis y distancia máxima de cobertura opcionales.
+  //   ZONES    → tarifa por polígono: la coordenada del cliente cae dentro de
+  //              una DeliveryZone dibujada en el mapa y se cobra su fee. Fuera
+  //              de toda zona = OUT_OF_RANGE (sin cobertura).
   // El origen (originLat/originLng) es la ubicación de la tienda desde donde
   // se mide la distancia al cliente (GPS del navegador en el checkout).
-  deliveryMode         String @default("FLAT") // FLAT | DISTANCE
+  deliveryMode         String @default("FLAT") // FLAT | DISTANCE | ZONES
   originLat            Float?
   originLng            Float?
   deliveryBaseFee      Float  @default(0)
@@ -1383,6 +1389,14 @@ model RestaurantConfig {
   pointsValuePesos Float @default(0.10)
 
   storefrontTheme String @default("KAWAII") // KAWAII | HALO | BRUTALIST | ANTOJO | MUNDIALISTA
+
+  // Moneda de la tienda. Antes el símbolo "$" y "es-MX" estaban hardcodeados en
+  // el storefront; ahora cada negocio elige su moneda (ISO 4217) y locale de
+  // formato. El precio se guarda igual (Float en la moneda base); esto solo
+  // cambia cómo se muestra.
+  currency       String @default("MXN") // ISO 4217: MXN, USD, EUR, COP…
+  currencyLocale String @default("es-MX") // locale de formato Intl
+
   // Imagen de portada (hero) opcional del storefront. La usa el tema Mundialista
   // a todo lo ancho. Se sube sin recorte (mode=hero). null → hero por defecto.
   storefrontHeroUrl String?
@@ -2384,6 +2398,161 @@ model WhatsappContact {
   @@unique([restaurantId, phone])
   @@index([restaurantId])
   @@map("whatsapp_contacts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BANDEJA DE ENTRADA DE WHATSAPP — conversaciones y mensajes persistidos.
+//
+// A diferencia de WhatsappSession (estado efímero de la máquina de estados,
+// TTL 6h), aquí se guarda el HISTORIAL: cada mensaje entrante del cliente y
+// cada respuesta del bot o del dueño. Es lo que alimenta la bandeja de entrada
+// del panel admin. `lastInboundAt` ancla la ventana de 24h de Meta (fuera de
+// ella solo se puede contestar con plantilla aprobada, que aún no manejamos:
+// el panel bloquea la respuesta libre). `status` gobierna el handoff humano:
+// mientras esté en NEEDS_HUMAN el bot guarda los mensajes pero NO contesta —
+// el dueño responde desde el panel y al marcar RESOLVED el bot retoma.
+// ─────────────────────────────────────────────────────────────────────────────
+model WhatsappConversation {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  // Número del cliente, normalizado a solo dígitos (mismo formato que WhatsappSession).
+  phone String
+  // Último nombre de perfil conocido (viene del webhook del proveedor).
+  name  String?
+
+  status String @default("OPEN") // OPEN | NEEDS_HUMAN | RESOLVED
+
+  lastMessageAt    DateTime  @default(now())
+  lastInboundAt    DateTime? // ancla de la ventana de 24h
+  lastOutboundAt   DateTime?
+  unreadCount      Int       @default(0) // entrantes no vistos en el panel
+  needsHumanReason String? // por qué se escaló (comando del cliente, error del bot)
+  escalatedAt      DateTime?
+
+  messages WhatsappMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, phone])
+  @@index([restaurantId, status, lastMessageAt])
+  @@map("whatsapp_conversations")
+}
+
+model WhatsappMessage {
+  id             String               @id @default(cuid())
+  conversationId String
+  conversation   WhatsappConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  // Scope de tenant (columna plana, sin relación inversa para no inflar Restaurant).
+  restaurantId String
+
+  direction String @default("IN") // IN (cliente) | OUT (bot/dueño)
+  type      String @default("text") // text | location | other
+  body      String @default("")
+  // Id del mensaje en el proveedor (solo entrantes) — dedupe de reintentos de webhook.
+  waMessageId String?
+  sentBy      String @default("BOT") // BOT | HUMAN (respuesta desde el panel)
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([restaurantId, createdAt])
+  @@map("whatsapp_messages")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUGERENCIAS DE VENTA (UPSELL) — el chatbot ofrece un producto antes del
+// checkout ("¿le agregas unas papas?") y se mide cuánto genera cada regla.
+//
+// El precio y nombre del producto sugerido NUNCA se guardan aquí: se resuelven
+// contra el menú vivo al momento de ofrecer (misma fuente de verdad del bot;
+// si el producto se desactiva, la regla simplemente no se ofrece). Métricas:
+// offerCount/acceptCount/revenue se actualizan desde el flujo del bot.
+// Dinero en Decimal (regla del repo). Tenant-scope por columna plana
+// (sin relación inversa, patrón PromoGamePlay).
+// ─────────────────────────────────────────────────────────────────────────────
+model UpsellRule {
+  id           String @id @default(cuid())
+  restaurantId String
+
+  name    String
+  enabled Boolean @default(true)
+
+  // Producto sugerido.
+  menuItemId String
+  variantId  String?
+
+  // Disparador: ALWAYS (siempre) | CATEGORY (el carrito trae esa categoría) |
+  // ITEM (el carrito trae ese producto). triggerId = categoryId o menuItemId.
+  triggerType String  @default("ALWAYS")
+  triggerId   String?
+  minSubtotal Decimal @default(0) @db.Decimal(12, 2)
+
+  // Primera línea del mensaje (opcional; si falta se usa el copy default).
+  offerText String?
+
+  // Métricas de rendimiento.
+  offerCount  Int     @default(0)
+  acceptCount Int     @default(0)
+  revenue     Decimal @default(0) @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, enabled])
+  @@map("upsell_rules")
+}
+
+// Zona de entrega por polígono. Cuando RestaurantConfig.deliveryMode = ZONES,
+// la coordenada del cliente (GPS del checkout / pin de WhatsApp) se prueba
+// contra estos polígonos y se cobra la fee de la zona que la contiene. Si no
+// cae en ninguna, el pedido queda fuera de cobertura (OUT_OF_RANGE). La lógica
+// vive en lib/delivery-fee.js (fuente única para tienda web y bot).
+model DeliveryZone {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name  String
+  fee   Decimal @default(0) @db.Decimal(12, 2)
+  color String  @default("#22c55e") // color del polígono en el mapa del admin
+
+  // Vértices del polígono: array JSON de { lat, lng } en orden. Se cierra solo
+  // (el último vértice conecta con el primero). Mínimo 3 puntos.
+  polygon Json
+
+  active Boolean @default(true)
+  // En solapes gana la de menor priority (se evalúa primero). Empates: por id.
+  priority Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, active, priority])
+  @@map("delivery_zones")
+}
+
+// Reacción ("me gusta") de un cliente a un platillo en la tienda pública. El
+// cliente es anónimo: se identifica por un id generado en su navegador
+// (localStorage). El @@unique evita que un mismo navegador cuente doble; el
+// conteo del platillo = número de reacciones. Es engagement, no dinero.
+model DishReaction {
+  id           String   @id @default(cuid())
+  restaurantId String
+  menuItemId   String
+  menuItem     MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  // Id anónimo del navegador (no es un usuario autenticado).
+  clientId String
+
+  createdAt DateTime @default(now())
+
+  @@unique([menuItemId, clientId])
+  @@index([restaurantId, menuItemId])
+  @@map("dish_reactions")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

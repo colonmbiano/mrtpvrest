@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useCart } from '../lib/cartStore';
 import { cldImage } from '@/lib/cloudinary';
+import { useMoney } from './StoreLocaleContext';
 
 type Variant = { id: string; name: string; price: number };
 type Modifier = { id: string; name: string; priceAdd: number; isAvailable?: boolean };
@@ -39,9 +40,10 @@ export function needsModal(p: StoreProduct) {
     || (!!p.isCombo && !!p.comboComponents && p.comboComponents.length > 0);
 }
 
-const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
+// fmt viene de useMoney() (moneda/locale del tenant).
 
 export default function ProductModal({ product, accent = '#ff5c35', variant = 'light', onClose }: ProductModalProps) {
+  const fmt = useMoney();
   const add = useCart(s => s.add);
   const dark = variant === 'dark';
 

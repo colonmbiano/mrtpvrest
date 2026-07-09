@@ -16,6 +16,7 @@ import HomeKpis from "./_components/HomeKpis";
 import AiInsightBanner from "./_components/AiInsightBanner";
 import TopItemsCard from "./_components/TopItemsCard";
 import QuickActions from "./_components/QuickActions";
+import { AgentHealthCard, LiveDeliveryMap, PeakHoursHeatmap } from "@/components/dashboard/widgets";
 
 export default function AdminHomePage() {
   const [period, setPeriod] = useState<Period>("HOY");
@@ -107,6 +108,15 @@ export default function AdminHomePage() {
       <SalesHero period={period} sales={stats?.sales ?? { value: 0, delta: 0 }} series={series} />
       <HomeKpis stats={stats} staffCount={staffCount} />
       <AiInsightBanner stats={stats} />
+
+      {/* Operación en vivo: cerebro del agente IA + mapa de entregas + horas pico */}
+      <div className="my-3 grid gap-3 md:my-5 md:grid-cols-2 md:gap-4">
+        <AgentHealthCard />
+        <LiveDeliveryMap />
+      </div>
+      <div className="mb-3 md:mb-5">
+        <PeakHoursHeatmap />
+      </div>
 
       <div className="md:grid md:grid-cols-[minmax(0,1.45fr)_minmax(300px,.55fr)] md:gap-5">
         <TopItemsCard items={topItems} />

@@ -80,6 +80,10 @@ const updatePaymentSchema = z.object({
   paymentMethod: z.string().min(1).optional(),
   payments:      z.array(paymentTenderSchema).min(1).optional(),
   tip:           z.coerce.number().nonnegative().optional(),
+  // Cobro desde el kanban del admin: marca PAID pero conserva el estado del
+  // pedido (no lo salta a DELIVERED). El TPV y los demás callers no lo mandan,
+  // así que el comportamiento por defecto no cambia.
+  keepStatus:    z.boolean().optional(),
 }).passthrough().refine(
   (d) => Boolean(d.paymentMethod) || (Array.isArray(d.payments) && d.payments.length > 0),
   { message: 'paymentMethod o payments requerido' },

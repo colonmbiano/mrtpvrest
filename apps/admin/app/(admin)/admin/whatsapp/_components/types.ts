@@ -1,6 +1,6 @@
 /* Tipos compartidos por las pestañas de la página WhatsApp. */
 
-export type Tab = "asistente" | "reportes" | "contactos" | "campanas" | "juegos";
+export type Tab = "asistente" | "reportes" | "contactos" | "campanas" | "juegos" | "sugerencias";
 
 export type Contact = {
   id: string;

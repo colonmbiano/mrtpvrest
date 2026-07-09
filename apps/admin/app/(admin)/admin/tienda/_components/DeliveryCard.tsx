@@ -1,6 +1,6 @@
 "use client";
 import type { Dispatch, SetStateAction } from "react";
-import { Truck, Crosshair } from "lucide-react";
+import { Truck, Crosshair, MapPin } from "lucide-react";
 import { Field, Input, Button } from "@/components/ds";
 import { MapLocationPicker } from "@/components/MapLocationPicker";
 import { SectionCard, FieldLabel } from "./ui";
@@ -101,6 +101,20 @@ export function DeliveryCard({ config, setConfig, geoStatus, useMyLocation }: Pr
           <p className="text-[11px] leading-relaxed text-tx-mut">
             Fórmula: <span className="text-primary">tarifa base + (costo por km × distancia)</span>. La distancia se mide en línea recta desde el origen hasta la ubicación GPS del cliente en el checkout.
           </p>
+        </div>
+      )}
+
+      {config.deliveryMode === "ZONES" && (
+        <div className="mt-4 space-y-4 rounded-3xl p-5" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[.12em] text-primary">Zonas de entrega</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-tx-mut">
+              Dibuja polígonos en el mapa y asigna una tarifa a cada uno. La ubicación GPS del cliente en el checkout decide la zona y su costo; si cae fuera de todas, el pedido queda <span className="text-primary">fuera de cobertura</span>.
+            </p>
+          </div>
+          <Button href="/admin/zonas" icon={MapPin}>
+            Administrar zonas en el mapa
+          </Button>
         </div>
       )}
     </SectionCard>

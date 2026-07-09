@@ -5,10 +5,11 @@ import { useCart } from '../lib/cartStore';
 import { getApiUrl } from '../lib/config';
 import { computeDeliveryPreview, type DeliveryConfig } from '../lib/delivery';
 import { MapLocationPicker } from './MapLocationPicker';
+import { useMoney } from './StoreLocaleContext';
 import { generateWhatsAppOrderMessage } from '../lib/waOrderMessage';
 
 const API = getApiUrl();
-const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
+// fmt viene de useMoney() (moneda/locale del tenant).
 
 type OrderType = 'DELIVERY' | 'TAKEOUT' | 'DINE_IN';
 
@@ -46,6 +47,7 @@ export default function StoreCheckout({
   initialOrderType = 'DELIVERY', whatsappOrder,
   lockedTable = null, lockedLocationId = null,
 }: StoreCheckoutProps) {
+  const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
   const add = useCart(s => s.add);

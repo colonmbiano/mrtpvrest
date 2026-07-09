@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Flame, Home, Inbox, RotateCw, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, Flame, Home, Inbox, RotateCw, Wallet, X } from "lucide-react";
 import api from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import {
-  Button, EmptyState, IconButton, PageHeader, PageShell, Pill,
+  Button, EmptyState, IconButton, Modal, PageHeader, PageShell, Pill,
   Segmented, Select, Skeleton, StatTile, Toolbar, useToast,
 } from "@/components/ds";
 import OrderCard from "./_components/OrderCard";
@@ -14,6 +15,7 @@ import { STATUSES, type Driver, type Order, type StatusKey } from "./_components
 
 export default function PedidosPage() {
   const toast = useToast();
+  const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +24,7 @@ export default function PedidosPage() {
   const [filterSource, setFilterSource] = useState("all");
   const [search, setSearch] = useState("");
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [cobrarOrder, setCobrarOrder] = useState<Order | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -92,6 +95,41 @@ export default function PedidosPage() {
       const err = e as { response?: { data?: { error?: string } } };
       toast.error(err?.response?.data?.error || "Error al desasignar repartidor");
     }
+  }
+
+  // Cobra el pedido desde el tablero sin saltar su estado operativo
+  // (keepStatus). El total lo recalcula el backend; aquí solo el método.
+  async function cobrar(orderId: string, paymentMethod: string) {
+    try {
+      await api.put(`/api/orders/${orderId}/payment`, { paymentMethod, keepStatus: true });
+      setOrders((prev) => prev.map((o) =>
+        o.id === orderId
+          ? { ...o, paymentStatus: "PAID", cashCollected: paymentMethod === "CASH", paymentMethod }
+          : o));
+      setCobrarOrder(null);
+      toast.success("Pedido cobrado");
+    } catch (e) {
+      const err = e as { response?: { data?: { error?: string } } };
+      toast.error(err?.response?.data?.error || "Error al cobrar el pedido");
+    }
+  }
+
+  async function printTicket(orderId: string) {
+    try {
+      await api.post(`/api/orders/${orderId}/print-bill`);
+      toast.success("Ticket enviado a impresión");
+    } catch (e) {
+      const err = e as { response?: { data?: { error?: string } } };
+      toast.error(err?.response?.data?.error || "No se pudo imprimir");
+    }
+  }
+
+  // Abre el hilo de WhatsApp que originó el pedido. No hay FK Order↔conversación:
+  // se resuelve por teléfono del cliente en la bandeja de entrada.
+  function openConversation(order: Order) {
+    const digits = (order.customerPhone || "").replace(/\D/g, "");
+    if (!digits) return;
+    router.push(`/admin/inbox?phone=${digits}`);
   }
 
   const filtered = useMemo(() => orders.filter((o) => {
@@ -195,6 +233,9 @@ export default function PedidosPage() {
           onStatusChange={changeStatus}
           onAssignDriver={assignDriver}
           onUnassignDriver={unassignDriver}
+          onCobrar={setCobrarOrder}
+          onPrint={printTicket}
+          onOpenConversation={openConversation}
         />
       ) : filtered.length === 0 ? (
         <EmptyState
@@ -212,10 +253,88 @@ export default function PedidosPage() {
               onStatusChange={changeStatus}
               onAssignDriver={assignDriver}
               onUnassignDriver={unassignDriver}
+              onCobrar={setCobrarOrder}
+              onPrint={printTicket}
+              onOpenConversation={openConversation}
             />
           ))}
         </div>
       )}
+
+      <CobrarModal
+        order={cobrarOrder}
+        onClose={() => setCobrarOrder(null)}
+        onConfirm={cobrar}
+      />
     </PageShell>
+  );
+}
+
+/* ── Modal de cobro desde el tablero ─────────────────────────────── */
+const PAY_METHODS: { value: string; label: string }[] = [
+  { value: "CASH", label: "Efectivo" },
+  { value: "CARD", label: "Tarjeta" },
+  { value: "TRANSFER", label: "Transferencia" },
+];
+
+function CobrarModal({
+  order,
+  onClose,
+  onConfirm,
+}: {
+  order: Order | null;
+  onClose: () => void;
+  onConfirm: (orderId: string, method: string) => Promise<void>;
+}) {
+  const [method, setMethod] = useState("CASH");
+  const [saving, setSaving] = useState(false);
+
+  async function confirm() {
+    if (!order || saving) return;
+    setSaving(true);
+    try {
+      await onConfirm(order.id, method);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={Boolean(order)}
+      onClose={() => !saving && onClose()}
+      title="Cobrar pedido"
+      subtitle={order ? `${order.orderNumber} · ${formatMoney(order.total ?? 0)}` : undefined}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button icon={Wallet} onClick={confirm} disabled={saving} loading={saving}>
+            {saving ? "Cobrando…" : "Confirmar cobro"}
+          </Button>
+        </>
+      }
+    >
+      <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Método de pago</div>
+      <div className="grid grid-cols-3 gap-2">
+        {PAY_METHODS.map((m) => {
+          const activeM = method === m.value;
+          return (
+            <button
+              key={m.value}
+              type="button"
+              onClick={() => setMethod(m.value)}
+              className="rounded-ds-md py-2.5 text-xs font-bold transition-colors"
+              style={{
+                background: activeM ? "var(--ok)" : "var(--surf-2)",
+                color: activeM ? "#fff" : "var(--tx)",
+                border: `1px solid ${activeM ? "var(--ok)" : "var(--bd-1)"}`,
+              }}
+            >
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
+    </Modal>
   );
 }

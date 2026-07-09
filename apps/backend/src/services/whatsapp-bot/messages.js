@@ -89,6 +89,11 @@ module.exports = {
 
   askName: '📝 ¿A nombre de quién va el pedido?',
 
+  // Sugerencia de venta antes del checkout. `offerText` permite personalizar
+  // el gancho desde el panel; el producto y precio salen del menú vivo.
+  upsellOffer: ({ name, unitPrice, offerText }) =>
+    `✨ ${offerText || '¿Se te antoja agregar algo más?'}\n\n*${name}* — ${money(unitPrice)}\n\nResponde *SÍ* para agregarlo o *NO* para continuar con tu pedido.`,
+
   askAddress:
     '🏠 Escríbeme tu *dirección completa* (calle, número, colonia y referencias).',
 
@@ -171,6 +176,22 @@ module.exports = {
 
   genericError:
     '⚠️ Ocurrió un problema procesando tu mensaje. Escribe *menú* para reintentar o *cancelar* para empezar de nuevo.',
+
+  // ── Handoff a humano ──────────────────────────────────────────────────────
+  humanHandoff:
+    '🙋 ¡Claro! Ya avisé al equipo para que una persona te atienda por aquí en un momento. Gracias por tu paciencia 🙏.',
+
+  ownerEscalation: ({ restaurantName, phone, reason }) =>
+    [
+      `🚨 *${restaurantName}* — un cliente necesita atención humana.`,
+      '',
+      `📱 Cliente: +${phone}`,
+      reason ? `💬 Motivo: ${reason}` : null,
+      '',
+      'Respóndele desde tu panel: *Admin → Bandeja de entrada*. El asistente pausó sus respuestas en esa conversación hasta que la marques como resuelta.',
+    ]
+      .filter((line) => line !== null)
+      .join('\n'),
 
   // ── Juegos promocionales ──────────────────────────────────────────────────
   prizeWon: (label, code, expiresAt) => {

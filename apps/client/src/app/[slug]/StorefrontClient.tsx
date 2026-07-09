@@ -10,8 +10,8 @@ import type { StoreProps } from './themes/types';
 
 import { computeDeliveryPreview } from '../../lib/delivery';
 import { MapLocationPicker } from '../../components/MapLocationPicker';
+import { formatMoney } from '../../lib/money';
 
-const fmt = (n: number) => `$${n.toFixed(0)}`;
 const API = getApiUrl();
 
 const THEME_ALIAS: Record<string, string> = {
@@ -29,6 +29,7 @@ export default function StorefrontClient({
 }) {
   const raw = store.storefrontTheme || 'KAWAII';
   const theme = THEME_ALIAS[raw] || raw;
+  const fmt = (n: number) => formatMoney(n, store.currency ?? undefined, store.currencyLocale ?? undefined);
 
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
