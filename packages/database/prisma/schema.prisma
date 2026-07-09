@@ -590,6 +590,7 @@ model MenuItem {
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   categoryId   String
   category     Category   @relation(fields: [categoryId], references: [id])
+  reactions    DishReaction[]
 
   name            String
   description     String?
@@ -2516,6 +2517,26 @@ model DeliveryZone {
 
   @@index([restaurantId, active, priority])
   @@map("delivery_zones")
+}
+
+// Reacción ("me gusta") de un cliente a un platillo en la tienda pública. El
+// cliente es anónimo: se identifica por un id generado en su navegador
+// (localStorage). El @@unique evita que un mismo navegador cuente doble; el
+// conteo del platillo = número de reacciones. Es engagement, no dinero.
+model DishReaction {
+  id           String   @id @default(cuid())
+  restaurantId String
+  menuItemId   String
+  menuItem     MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  // Id anónimo del navegador (no es un usuario autenticado).
+  clientId String
+
+  createdAt DateTime @default(now())
+
+  @@unique([menuItemId, clientId])
+  @@index([restaurantId, menuItemId])
+  @@map("dish_reactions")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

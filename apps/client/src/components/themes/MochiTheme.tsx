@@ -12,6 +12,7 @@ import { productEmoji } from '../../lib/productEmoji';
 import BannerCarousel, { collectBanners } from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
 import StoreCheckout from '../StoreCheckout';
+import { ReactionButton } from '../ReactionButton';
 import type { DeliveryConfig } from '../../lib/delivery';
 import {
   getAuth, clearAuth, loginCustomer, registerCustomer, type AuthState,
@@ -204,7 +205,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
           <main className="max-w-7xl mx-auto px-4 py-8">
             <SectionHead title={results.length > 0 ? `Resultados (${results.length})` : `Sin resultados para “${query}”`} />
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-5">
-              {results.map((p: any) => <ProductCard key={p.id} p={p} accent={ACCENT} onOpen={() => pick(p)} />)}
+              {results.map((p: any) => <ProductCard key={p.id} p={p} accent={ACCENT} slug={slug} onOpen={() => pick(p)} />)}
             </div>
           </main>
         ) : (
@@ -226,7 +227,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
                   <section className="mb-12">
                     <SectionHead title="Favoritos de todos" heart accent={ACCENT} />
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-5">
-                      {favorites.map((p: any) => <ProductCard key={`fav-${p.id}`} p={p} accent={ACCENT} onOpen={() => pick(p)} />)}
+                      {favorites.map((p: any) => <ProductCard key={`fav-${p.id}`} p={p} accent={ACCENT} slug={slug} onOpen={() => pick(p)} />)}
                     </div>
                   </section>
                 )}
@@ -237,7 +238,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
                     <section key={category.id} id={`mk-cat-${category.id}`} data-cat={category.id} className="mb-12 scroll-mt-[150px]">
                       <SectionHead title={category.name} icon={category.imageUrl ? undefined : categoryIcon(category.name)} image={category.imageUrl} />
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-5">
-                        {(category.items || []).map((p: any) => <ProductCard key={p.id} p={p} accent={ACCENT} onOpen={() => pick(p)} />)}
+                        {(category.items || []).map((p: any) => <ProductCard key={p.id} p={p} accent={ACCENT} slug={slug} onOpen={() => pick(p)} />)}
                       </div>
                     </section>
                   ))}
@@ -544,7 +545,7 @@ function Badge({ kind }: { kind: 'top' | 'promo' | 'new' }) {
 }
 function accentForBadge() { return '#8B5CF6'; }
 
-function ProductCard({ p, accent, onOpen }: { p: any; accent: string; onOpen: () => void }) {
+function ProductCard({ p, accent, onOpen, slug }: { p: any; accent: string; onOpen: () => void; slug: string }) {
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
   const remove = useCart(s => s.remove);
@@ -565,6 +566,10 @@ function ProductCard({ p, accent, onOpen }: { p: any; accent: string; onOpen: ()
           <img src={cldImage(p.imageUrl, { width: 480 })} alt={p.name} loading="lazy" decoding="async" className={`w-full h-full transition-transform duration-500 group-hover:scale-110 ${p.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
         ) : <div className="w-full h-full flex items-center justify-center text-5xl opacity-40">{productEmoji(p.name)}</div>}
       </button>
+
+      <div className="absolute top-2.5 right-2.5 z-20" style={{ color: INK }}>
+        <ReactionButton slug={slug} itemId={p.id} initialCount={p.reactionCount || 0} accent={PINK} />
+      </div>
 
       <button onClick={onOpen} className="text-left">
         <h4 className="font-extrabold text-[14.5px] leading-tight line-clamp-1" style={{ color: INK }}>{p.name}</h4>
