@@ -92,8 +92,11 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
-   @deprecated — aliases puente para páginas aún no migradas.
-   Borrar en la wave final cuando `grep` dé cero usos.
+   Aliases puente. El panel admin tenant ya no los usa (grep = 0),
+   pero se conservan para las pantallas fuera del alcance de este
+   rediseño que aún dependen de ellos: login, register, verify-email,
+   onboarding, repartidor y componentes de delivery. Migrar esas
+   pantallas para poder borrar este bloque.
    ───────────────────────────────────────────────────────────── */
 :root,
 [data-theme="light"],
@@ -178,17 +181,3 @@ body {
 /* Scrollbar oculto para carruseles horizontales */
 .ds-scrollbar { scrollbar-width: none; }
 .ds-scrollbar::-webkit-scrollbar { display: none; }
-
-/* @deprecated — clases warmtech; las páginas migradas usan Card/PageShell del ds. */
-.warmtech-enter { animation: ds-enter 320ms cubic-bezier(.22,.7,.3,1) both; }
-.warmtech-card {
-  background: var(--surf-1);
-  border: 1px solid var(--bd-1);
-  border-radius: var(--r-xl);
-  box-shadow: var(--shadow-md);
-}
-.warmtech-scrollbar { scrollbar-width: none; }
-.warmtech-scrollbar::-webkit-scrollbar { display: none; }
-@media (min-width: 768px) {
-  .warmtech-shell .warmtech-card { border-radius: 24px; }
-}
