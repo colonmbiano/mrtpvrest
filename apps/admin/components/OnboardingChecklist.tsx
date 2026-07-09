@@ -67,7 +67,7 @@ export default function OnboardingChecklist() {
 
   return (
     <div className="rounded-2xl border overflow-hidden mb-6"
-      style={{ background: "var(--surf)", borderColor: "var(--border)" }}>
+      style={{ background: "var(--surf-1)", borderColor: "var(--bd-1)" }}>
 
       {/* Header */}
       <button onClick={() => setCollapsed(c => !c)}
@@ -75,10 +75,10 @@ export default function OnboardingChecklist() {
         <div className="flex items-center gap-3">
           <span className="text-xl">🚀</span>
           <div className="text-left">
-            <p className="text-sm font-black" style={{ color: "var(--text)" }}>
+            <p className="text-sm font-black" style={{ color: "var(--tx)" }}>
               Configura tu restaurante
             </p>
-            <p className="text-xs" style={{ color: "var(--muted)" }}>
+            <p className="text-xs" style={{ color: "var(--tx-mut)" }}>
               {completed}/{total} tareas completadas
             </p>
           </div>
@@ -88,7 +88,7 @@ export default function OnboardingChecklist() {
             <div className="h-full rounded-full bg-orange-500 transition-all duration-500"
               style={{ width: `${pct}%` }} />
           </div>
-          <span className="text-xs font-black" style={{ color: "var(--muted)" }}>
+          <span className="text-xs font-black" style={{ color: "var(--tx-mut)" }}>
             {collapsed ? "▾" : "▴"}
           </span>
         </div>
@@ -110,7 +110,7 @@ export default function OnboardingChecklist() {
                   ${done ? "bg-green-500 text-black" : "bg-white/10 text-gray-500"}`}>
                   {done ? "✓" : "·"}
                 </div>
-                <span className="text-sm" style={{ color: done ? "var(--muted)" : "var(--text)" }}>
+                <span className="text-sm" style={{ color: done ? "var(--tx-mut)" : "var(--tx)" }}>
                   <span className="mr-2">{item.icon}</span>
                   {done ? <s>{item.label}</s> : item.label}
                 </span>

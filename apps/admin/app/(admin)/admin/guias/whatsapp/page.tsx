@@ -5,12 +5,9 @@ import {
   Gamepad2, Megaphone, MessageCircle, AlertTriangle,
 } from "lucide-react";
 import {
-  WtScreen, PageHeader, WtCard, SectionHead,
-} from "@/components/warmtech";
+  PageShell, PageHeader, Card, SectionHead, IconBadge, Pill, Button,
+} from "@/components/ds";
 import Link from "next/link";
-
-const GREEN = "#39c46e";
-const GREEN_GRADIENT = "linear-gradient(140deg,#39c46e,#1faa55)";
 
 // Ruta rápida: Whapi.
 const whapiSteps = [
@@ -90,7 +87,7 @@ export default function GuiaWhatsappPage() {
   };
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Chatbot de WhatsApp"
         title="Activa tu asistente de pedidos"
@@ -106,29 +103,27 @@ export default function GuiaWhatsappPage() {
         <ArrowLeft size={13} /> Guías
       </Link>
 
-      {/* Hero verde */}
-      <WtCard
+      {/* Hero */}
+      <Card
         className="p-5 md:p-7"
-        style={{ background: "linear-gradient(135deg, rgba(57,196,110,0.18), transparent), var(--surf-1)", borderColor: "rgba(57,196,110,0.4)" }}
+        style={{ background: "linear-gradient(135deg, var(--ok-soft), transparent), var(--surf-1)" }}
       >
         <div className="flex items-start gap-4">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[14px] text-white" style={{ background: GREEN_GRADIENT }}>
-            <MessageCircle size={24} strokeWidth={1.9} />
-          </span>
+          <IconBadge icon={MessageCircle} tone="ok" size={48} />
           <div>
             <h2 className="font-display text-2xl font-extrabold tracking-[-.03em] text-tx-hi md:text-3xl">
               Activa tu asistente de pedidos en WhatsApp
             </h2>
-            <p className="mt-3 max-w-2xl text-sm text-tx-mut" style={{ lineHeight: 1.7 }}>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-tx-mut">
               En pocos pasos tu chatbot tomará pedidos solo: muestra el menú, calcula el envío, cobra y manda todo a tu cocina. Sigue esta guía de principio a fin.
             </p>
           </div>
         </div>
-      </WtCard>
+      </Card>
 
       {/* Webhook URL destacada */}
-      <WtCard className="mt-4 p-5 md:p-6" style={{ borderColor: "rgba(57,196,110,0.45)" }}>
-        <div className="font-mono text-[11px] uppercase tracking-[.14em]" style={{ color: GREEN }}>
+      <Card className="mt-4 p-5 md:p-6">
+        <div className="font-mono text-[11px] uppercase tracking-[.14em] text-ok">
           Tu URL de webhook
         </div>
         <p className="mt-2 text-sm text-tx-mut">
@@ -136,57 +131,52 @@ export default function GuiaWhatsappPage() {
         </p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
           <code
-            className="flex-1 overflow-x-auto rounded-xl px-4 py-3 font-mono text-xs text-tx sm:text-sm"
+            className="flex-1 overflow-x-auto rounded-ds-md px-4 py-3 font-mono text-xs text-tx sm:text-sm"
             style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
           >
             {webhookUrl}
           </code>
-          <button
-            onClick={copy}
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[13px] px-4 text-[13px] font-bold text-white transition-transform active:scale-[.98]"
-            style={{ background: GREEN_GRADIENT, boxShadow: "0 6px 18px rgba(57,196,110,0.3)" }}
-          >
-            {copied ? <Check size={16} /> : <Copy size={16} />}
+          <Button icon={copied ? Check : Copy} onClick={copy}>
             {copied ? "¡Copiado!" : "Copiar"}
-          </button>
+          </Button>
         </div>
         {!restaurantId && (
           <p className="mt-3 flex items-center gap-1.5 text-xs text-warn">
             <AlertTriangle size={13} /> Selecciona tu marca en el menú lateral para ver tu ID real.
           </p>
         )}
-      </WtCard>
+      </Card>
 
       {/* 1. Conecta WhatsApp */}
       <Section title="1. Conecta WhatsApp" subtitle="Elige UNA de las dos rutas. Lo configuras una sola vez.">
-        <div className="mb-3 inline-flex rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-[.12em] text-white" style={{ background: "#1faa55" }}>
-          Opción A · Whapi (rápido, recomendado)
+        <div className="mb-3">
+          <Pill tone="ok">Opción A · Whapi (rápido, recomendado)</Pill>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {whapiSteps.map((step, i) => (
-            <NumberedCard key={step.title} index={i + 1} {...step} accent={GREEN_GRADIENT} />
+            <NumberedCard key={step.title} index={i + 1} {...step} accent="var(--ok)" />
           ))}
         </div>
 
-        <div className="mb-3 mt-8 inline-flex rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-[.12em] text-white" style={{ background: "#1877F2" }}>
-          Opción B · WhatsApp Cloud API (Meta, oficial)
+        <div className="mb-3 mt-8">
+          <Pill tone="info">Opción B · WhatsApp Cloud API (Meta, oficial)</Pill>
         </div>
-        <p className="mb-4 text-sm text-tx-mut" style={{ lineHeight: 1.6 }}>
+        <p className="mb-4 text-sm leading-relaxed text-tx-mut">
           Más pasos, pero es la API oficial de Meta (mejor a gran escala). Necesitas una cuenta de Meta Business.
           Sigue el orden exacto — el <strong className="text-tx">Verify token</strong> debe ser idéntico aquí y en Meta.
         </p>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {metaSteps.map((step, i) => (
-            <NumberedCard key={step.title} index={i + 1} {...step} accent="#1877F2" />
+            <NumberedCard key={step.title} index={i + 1} {...step} accent="var(--info)" />
           ))}
         </div>
 
-        <WtCard className="mt-5 p-4 text-sm text-tx" style={{ background: "var(--info-soft)", borderColor: "rgba(24,119,242,0.3)" }}>
+        <Card className="mt-5 p-4 text-sm text-tx" style={{ background: "var(--info-soft)", borderColor: "var(--info)" }}>
           <strong className="text-info">Resumen Meta:</strong> en <em>Integraciones → Mensajería (Chatbot)</em> pones
           Proveedor = <strong className="text-tx">Meta</strong>, Token, Phone number ID y Verify token. En
           <em> Meta → WhatsApp → Configuration</em> pegas tu URL de webhook (arriba) + el mismo
           Verify token y te suscribes al campo <strong className="text-tx">messages</strong>.
-        </WtCard>
+        </Card>
       </Section>
 
       {/* 2. Envío y pago */}
@@ -240,12 +230,12 @@ export default function GuiaWhatsappPage() {
       <Section title="Checklist antes de activar" subtitle="Valida estos puntos.">
         <div className="grid gap-3 md:grid-cols-2">
           {checklist.map((item) => (
-            <WtCard key={item} className="flex items-center gap-3 p-4">
+            <Card key={item} className="flex items-center gap-3 p-4">
               <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full" style={{ background: "var(--ok-soft)", color: "var(--ok)" }}>
                 <CheckCircle2 size={16} />
               </span>
               <span className="text-sm font-semibold text-tx">{item}</span>
-            </WtCard>
+            </Card>
           ))}
         </div>
       </Section>
@@ -254,14 +244,14 @@ export default function GuiaWhatsappPage() {
       <Section title="Problemas comunes" subtitle="Soluciones rápidas.">
         <div className="grid gap-3 md:grid-cols-2">
           {faqs.map((f) => (
-            <WtCard key={f.q} className="p-5">
+            <Card key={f.q} className="p-5">
               <h3 className="font-display font-extrabold text-tx-hi">{f.q}</h3>
-              <p className="mt-2 text-sm text-tx-mut" style={{ lineHeight: 1.6 }}>{f.a}</p>
-            </WtCard>
+              <p className="mt-2 text-sm leading-relaxed text-tx-mut">{f.a}</p>
+            </Card>
           ))}
         </div>
       </Section>
-    </WtScreen>
+    </PageShell>
   );
 }
 
@@ -278,41 +268,41 @@ function Section({ title, subtitle, children }: { title: string; subtitle: strin
 
 function NumberedCard({ index, title, text, accent }: { index: number; title: string; text: string; accent: string }) {
   return (
-    <WtCard className="p-5">
+    <Card className="p-5">
       <span className="mb-3 grid h-9 w-9 place-items-center rounded-full font-display text-sm font-extrabold text-white" style={{ background: accent }}>{index}</span>
       <h3 className="font-display text-base font-extrabold text-tx-hi">{title}</h3>
-      <p className="mt-2 text-sm text-tx-mut" style={{ lineHeight: 1.6 }}>{text}</p>
-    </WtCard>
+      <p className="mt-2 text-sm leading-relaxed text-tx-mut">{text}</p>
+    </Card>
   );
 }
 
 function InfoCard({ icon, tag, title, text }: { icon: ReactNode; tag: string; title: string; text: string }) {
   return (
-    <WtCard className="p-5">
+    <Card className="p-5">
       <div className="mb-3 flex items-center gap-2">
-        <span className="grid h-9 w-9 place-items-center rounded-[10px] text-primary" style={{ background: "var(--iris-soft)" }}>{icon}</span>
+        <span className="grid h-9 w-9 place-items-center rounded-ds-sm text-primary" style={{ background: "var(--accent-soft)" }}>{icon}</span>
         <span className="font-mono text-[10px] uppercase tracking-[.12em] text-tx-mut">{tag}</span>
       </div>
       <h3 className="font-display text-base font-extrabold text-tx-hi">{title}</h3>
-      <p className="mt-2 text-sm text-tx-mut" style={{ lineHeight: 1.6 }}>{text}</p>
-    </WtCard>
+      <p className="mt-2 text-sm leading-relaxed text-tx-mut">{text}</p>
+    </Card>
   );
 }
 
 function LinkCard({ href, icon, tag, title, text }: { href: string; icon: ReactNode; tag: string; title: string; text: string }) {
   return (
     <Link href={href} className="block">
-      <WtCard className="h-full p-5 transition-transform active:scale-[.99]">
+      <Card className="h-full p-5 transition-transform active:scale-[.99]">
         <div className="mb-3 flex items-center gap-2">
-          <span className="grid h-9 w-9 place-items-center rounded-[10px] text-primary" style={{ background: "var(--iris-soft)" }}>{icon}</span>
+          <span className="grid h-9 w-9 place-items-center rounded-ds-sm text-primary" style={{ background: "var(--accent-soft)" }}>{icon}</span>
           <span className="font-mono text-[10px] uppercase tracking-[.12em] text-tx-mut">{tag}</span>
         </div>
         <h3 className="font-display text-base font-extrabold text-tx-hi">{title}</h3>
-        <p className="mt-2 text-sm text-tx-mut" style={{ lineHeight: 1.6 }}>{text}</p>
+        <p className="mt-2 text-sm leading-relaxed text-tx-mut">{text}</p>
         <div className="mt-3 flex items-center gap-1 font-mono text-[10px] uppercase tracking-[.12em] text-primary">
           Abrir panel <ChevronRight size={13} />
         </div>
-      </WtCard>
+      </Card>
     </Link>
   );
 }

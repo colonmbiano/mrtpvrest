@@ -7,9 +7,9 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import {
-  WtScreen, PageHeader, WtCard, SectionLabel, Pill, PrimaryBtn,
+  PageShell, PageHeader, Card, SectionLabel, Pill, Button, Skeleton,
   type Tone,
-} from "@/components/warmtech";
+} from "@/components/ds";
 
 type Plan = {
   id: string;
@@ -72,7 +72,7 @@ function fmtDate(iso: string | null | undefined) {
 
 export default function BillingPage() {
   return (
-    <Suspense fallback={<WtScreen><WtCard className="p-6 text-sm text-tx-mut">Cargando…</WtCard></WtScreen>}>
+    <Suspense fallback={<PageShell><Card className="p-6 text-sm text-tx-mut">Cargando…</Card></PageShell>}>
       <BillingInner />
     </Suspense>
   );
@@ -156,7 +156,7 @@ function BillingInner() {
   }, [status]);
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Suscripción SaaS"
         title="Facturación"
@@ -165,27 +165,27 @@ function BillingInner() {
 
       {/* Return banner from checkout */}
       {returnStatus === "success" && (
-        <WtCard className="mb-6 flex items-center gap-2 p-4 text-sm"
+        <Card className="mb-6 flex items-center gap-2 p-4 text-sm"
           style={{ background: "var(--ok-soft)", borderColor: "var(--ok)", color: "var(--ok)" }}>
           <CheckCircle2 size={16} className="shrink-0" /> Pago procesado. Tu suscripción se activará en unos segundos.
-        </WtCard>
+        </Card>
       )}
       {returnStatus === "cancel" && (
-        <WtCard className="mb-6 flex items-center gap-2 p-4 text-sm"
+        <Card className="mb-6 flex items-center gap-2 p-4 text-sm"
           style={{ background: "var(--warn-soft)", borderColor: "var(--warn)", color: "var(--warn)" }}>
           <AlertTriangle size={16} className="shrink-0" /> Checkout cancelado. No se realizó ningún cargo.
-        </WtCard>
+        </Card>
       )}
       {error && (
-        <WtCard className="mb-6 flex items-center gap-2 p-4 text-sm"
+        <Card className="mb-6 flex items-center gap-2 p-4 text-sm"
           style={{ background: "var(--err-soft)", borderColor: "var(--err)", color: "var(--err)" }}>
           <XCircle size={16} className="shrink-0" /> {error}
-        </WtCard>
+        </Card>
       )}
 
       {/* Current subscription card */}
       <SectionLabel>Estado actual</SectionLabel>
-      <WtCard className="p-5 md:p-6">
+      <Card className="p-5 md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             {loading ? (
@@ -236,18 +236,19 @@ function BillingInner() {
           </div>
 
           <div className="w-full shrink-0 md:w-auto">
-            <PrimaryBtn
+            <Button
               onClick={openPortal}
               disabled={!canManageBilling || actionLoading === "portal"}
+              loading={actionLoading === "portal"}
               icon={CreditCard}
-              full={false}
+              full
             >
               {actionLoading === "portal"
                 ? "Abriendo…"
                 : billingProvider === "MERCADOPAGO"
                   ? "Abrir Mercado Pago"
                   : "Gestionar facturación"}
-            </PrimaryBtn>
+            </Button>
             {!canManageBilling && (
               <div className="mt-1.5 text-center text-[10px] text-tx-dim md:text-right">
                 Disponible tras iniciar la suscripción
@@ -255,13 +256,13 @@ function BillingInner() {
             )}
           </div>
         </div>
-      </WtCard>
+      </Card>
 
       {/* Plans grid */}
       <SectionLabel>Planes disponibles</SectionLabel>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {loading && [1, 2, 3].map((i) => (
-          <div key={i} className="h-72 animate-pulse rounded-[18px] bg-surf-2" />
+          <Skeleton key={i} className="h-72 rounded-ds-lg" />
         ))}
         {!loading && plans.map((plan) => {
           const isCurrent = plan.id === currentPlanId;
@@ -278,7 +279,7 @@ function BillingInner() {
           ].filter(Boolean) as string[];
 
           return (
-            <WtCard
+            <Card
               key={plan.id}
               className="relative flex flex-col p-5 md:p-6"
               style={isCurrent ? { borderColor: "var(--brand-primary)", boxShadow: "0 0 0 1px var(--brand-primary)" } : undefined}
@@ -309,10 +310,12 @@ function BillingInner() {
                 ))}
               </ul>
               <div className="mt-5">
-                <PrimaryBtn
+                <Button
                   onClick={() => startCheckout(plan.id)}
                   disabled={disabled}
-                  ghost={isCurrent}
+                  loading={actionLoading === `checkout:${plan.id}`}
+                  variant={isCurrent ? "secondary" : "primary"}
+                  full
                 >
                   {actionLoading === `checkout:${plan.id}`
                     ? "Redirigiendo al pago…"
@@ -321,17 +324,17 @@ function BillingInner() {
                       : hasGatewayPrice
                         ? "Contratar"
                         : "No disponible"}
-                </PrimaryBtn>
+                </Button>
               </div>
               {!hasGatewayPrice && !isCurrent && (
                 <div className="mt-2 text-[10px] text-tx-dim">
                   Precio de pago pendiente de configurar
                 </div>
               )}
-            </WtCard>
+            </Card>
           );
         })}
       </div>
-    </WtScreen>
+    </PageShell>
   );
 }

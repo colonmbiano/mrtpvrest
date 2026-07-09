@@ -1,14 +1,15 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ChevronLeft, Wallet, Receipt, ShoppingCart, Bike,
+  Wallet, Receipt, ShoppingCart, Bike,
   Banknote, CreditCard, ArrowLeftRight, BarChart3, Tag,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
-  WtScreen, PageHeader, WtCard, StatTile, SectionHead, Segmented,
-  ProgressBar, EmptyState, LoadingCards, money,
-} from "@/components/warmtech";
+  PageShell, PageHeader, PageTabs, Toolbar, DataCard, StatTile,
+  Segmented, EmptyState, LoadingCards,
+} from "@/components/ds";
+import { formatMoney } from "@/lib/format";
 
 // /admin/inventario/gastos · Dashboard de gastos operativos + compras.
 // Consume /api/reports/expenses-summary y /api/reports/expenses-daily.
@@ -30,6 +31,8 @@ interface Daily {
   range: { from: string; to: string };
   days: Array<{ date: string; opExpenses: number; purchases: number; driver?: number; total: number }>;
 }
+
+const mny = (n: number) => formatMoney(n, false);
 
 function rangeFromPreset(p: PresetKey): { from: string; to: string } {
   const now = new Date();
@@ -114,26 +117,15 @@ export default function GastosReportPage() {
     : undefined;
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
-        eyebrow="Finanzas · Inventario"
+        eyebrow="Finanzas · Gastos"
         title="Reporte de gastos"
         subtitle="Gastos operativos y compras de inventario por periodo"
-        actions={
-          <Segmented value={preset} onChange={setPreset} options={PRESETS} className="md:max-w-[420px]" />
-        }
       />
+      <PageTabs set="finanzas" />
 
-      {/* navegación + selector de periodo en mobile */}
-      <div className="mb-4 md:hidden">
-        <a
-          href="/admin/inventario"
-          className="mb-3 inline-flex min-h-9 items-center gap-1 text-xs font-bold text-tx-mut"
-        >
-          <ChevronLeft size={15} /> Inventario
-        </a>
-        <Segmented value={preset} onChange={setPreset} options={PRESETS} />
-      </div>
+      <Toolbar filters={<Segmented value={preset} onChange={setPreset} options={PRESETS} />} />
 
       {loading || !summary ? (
         <LoadingCards count={3} />
@@ -143,28 +135,28 @@ export default function GastosReportPage() {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <StatTile
               icon={Wallet}
-              value={money(summary.grandTotal)}
+              value={mny(summary.grandTotal)}
               label="Total gastado"
               delta={grandDelta?.text}
               deltaUp={grandDelta?.up ?? true}
             />
             <StatTile
               icon={Receipt}
-              value={money(summary.operatingExpenses.total)}
+              value={mny(summary.operatingExpenses.total)}
               label={`Operativos · ${summary.operatingExpenses.count} reg.`}
               delta={opDelta?.text}
               deltaUp={opDelta?.up ?? true}
             />
             <StatTile
               icon={ShoppingCart}
-              value={money(summary.purchases.total)}
+              value={mny(summary.purchases.total)}
               label={`Compras · ${summary.purchases.count} órdenes`}
               delta={purchasesDelta?.text}
               deltaUp={purchasesDelta?.up ?? true}
             />
             <StatTile
               icon={Bike}
-              value={money(summary.driverExpenses.total)}
+              value={mny(summary.driverExpenses.total)}
               label={`Repartidores · ${summary.driverExpenses.count} mov.`}
               delta={driverDelta?.text}
               deltaUp={driverDelta?.up ?? true}
@@ -172,19 +164,17 @@ export default function GastosReportPage() {
           </div>
 
           {/* Por método de pago */}
-          <WtCard className="p-4 md:p-5">
-            <SectionHead title="Por método de pago" />
+          <DataCard title="Por método de pago">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <MethodCell icon={Banknote} label="Efectivo de caja" amount={summary.byPaymentMethod.CASH_DRAWER} color="var(--warn)" />
               <MethodCell icon={CreditCard} label="Tarjeta corporativa" amount={summary.byPaymentMethod.CORPORATE_CARD} color="var(--info)" />
               <MethodCell icon={ArrowLeftRight} label="Transferencia" amount={summary.byPaymentMethod.TRANSFER} color="var(--brand-primary)" />
             </div>
-          </WtCard>
+          </DataCard>
 
           {/* Tendencia + Top categorías */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <WtCard className="p-4 md:p-5">
-              <SectionHead title="Tendencia diaria" />
+            <DataCard title="Tendencia diaria">
               {daily && daily.days.length > 0 ? (
                 <div className="flex h-32 items-end gap-0.5">
                   {daily.days.map((d, i) => {
@@ -192,7 +182,7 @@ export default function GastosReportPage() {
                     return (
                       <div
                         key={i}
-                        title={`${d.date}: ${money(d.total)}`}
+                        title={`${d.date}: ${mny(d.total)}`}
                         className="flex-1 rounded-t"
                         style={{
                           height: `${h}%`,
@@ -208,10 +198,9 @@ export default function GastosReportPage() {
               ) : (
                 <EmptyState icon={BarChart3} title="Sin datos en el rango" />
               )}
-            </WtCard>
+            </DataCard>
 
-            <WtCard className="p-4 md:p-5">
-              <SectionHead title="Top categorías de gasto" />
+            <DataCard title="Top categorías de gasto">
               {summary.topCategories.length === 0 ? (
                 <EmptyState icon={Tag} title="Sin gastos" hint="No hay gastos en este rango." />
               ) : (
@@ -228,7 +217,7 @@ export default function GastosReportPage() {
                             <span className="truncate font-semibold text-tx">{c.name.replace(/_/g, " ")}</span>
                             <span className="shrink-0 text-xs text-tx-mut">· {c.count}</span>
                           </span>
-                          <span className="shrink-0 font-mono font-bold tabular-nums text-tx-hi">{money(c.total)}</span>
+                          <span className="shrink-0 font-mono font-bold tabular-nums text-tx-hi">{mny(c.total)}</span>
                         </div>
                         <div
                           className="h-1.5 overflow-hidden rounded-full"
@@ -244,11 +233,11 @@ export default function GastosReportPage() {
                   })}
                 </div>
               )}
-            </WtCard>
+            </DataCard>
           </div>
         </div>
       )}
-    </WtScreen>
+    </PageShell>
   );
 }
 
@@ -265,7 +254,7 @@ function MethodCell({
 }) {
   return (
     <div
-      className="rounded-2xl p-4"
+      className="rounded-ds-lg p-4"
       style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
     >
       <div className="mb-2 flex items-center gap-2">
@@ -275,7 +264,7 @@ function MethodCell({
         <span className="text-[11px] font-bold uppercase tracking-wider text-tx-mut">{label}</span>
       </div>
       <p className="font-display text-xl font-extrabold tabular-nums" style={{ color }}>
-        {money(amount)}
+        {mny(amount)}
       </p>
     </div>
   );

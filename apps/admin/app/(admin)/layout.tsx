@@ -9,6 +9,7 @@ import FloatingVoiceAgent from "@/components/FloatingVoiceAgent";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import MobileAdminChrome from "@/components/mobile/MobileAdminChrome";
 import AdminTopbar from "@/components/admin/AdminTopbar";
+import { ToastProvider, ConfirmProvider } from "@/components/ds";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -25,6 +26,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [pathname]);
 
   return (
+    <ToastProvider>
+    <ConfirmProvider>
     <div className="min-h-screen" style={{background:"var(--bg)"}}>
       <AccentInjector />
       <div className="hidden md:block">
@@ -44,9 +47,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <AdminTopbar />
         </div>
         <div className="hidden md:block"><TrialBanner /></div>
-        <main className="flex-1 pb-24 md:p-8 md:pb-8">
+        <main className="mx-auto w-full max-w-[1440px] flex-1 pb-24 md:p-8 md:pb-8">
           <div className="hidden md:block"><OnboardingChecklist /></div>
-          {/* Cada pantalla controla su propio padding vía <WtScreen> (WarmTech). */}
+          {/* Cada pantalla controla su propio padding vía <PageShell> (ds). */}
           {children}
         </main>
       </div>
@@ -54,5 +57,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {!pathname?.startsWith("/admin/reportes/ia") && <FloatingVoiceAgent />}
       </div>
     </div>
+    </ConfirmProvider>
+    </ToastProvider>
   );
 }

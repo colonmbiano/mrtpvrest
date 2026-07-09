@@ -1,10 +1,24 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import {
-  Bike, Wallet, Banknote, AlertTriangle, Download, Printer, RotateCw, Package,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Bike, Wallet, Banknote, AlertTriangle, Download, Printer, Package } from "lucide-react";
 import api from "@/lib/api";
-import { WtScreen, PageHeader, WtCard, StatTile, Pill, EmptyState } from "@/components/warmtech";
+import {
+  PageShell,
+  PageHeader,
+  PageTabs,
+  Card,
+  Select,
+  Input,
+  Button,
+  StatTile,
+  Pill,
+  DataTable,
+  LoadingState,
+  ErrorState,
+  EmptyState,
+  type Col,
+} from "@/components/ds";
+import { formatMoney } from "@/lib/format";
 
 /* ── Tipos del reporte (espejo de GET /api/driver-cash/:id/report) ── */
 type ReportOrder = {
@@ -31,9 +45,6 @@ type Report = {
 type Driver = { id: string; name: string; photo: string | null; ordersToday?: number };
 
 /* ── Helpers ── */
-const mny = (n: number) =>
-  new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n || 0);
-
 const horaMx = (iso: string) =>
   new Date(iso).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" });
 
@@ -49,15 +60,12 @@ const STATUS_LABEL: Record<string, string> = {
 const payLabel = (m: string | null) => (m ? PAY_LABEL[m] || m : "—");
 const statusLabel = (s: string) => STATUS_LABEL[s] || s;
 
+/* Solo reglas de impresión — colores con keywords CSS (no hex) a propósito. */
 const PRINT_CSS = `
-@keyframes rep-spin { to { transform: rotate(360deg); } }
-.ia-spin { animation: rep-spin .9s linear infinite; display: inline-block; }
-@keyframes rep-pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-.ia-pulse { animation: rep-pulse 1.6s ease-in-out infinite; }
 @media print {
   aside, nav, [data-sidebar], .ia-no-print, .rep-no-print { display: none !important; }
-  body { background: #fff !important; }
-  .rep-print { color: #000 !important; }
+  body { background: white !important; }
+  .rep-print { color: black !important; }
 }
 `;
 
@@ -128,222 +136,176 @@ export default function ReportesRepartidoresPage() {
   const cs = report?.cashSummary;
   const os = report?.ordersSummary;
 
+  const orderCols: Col<ReportOrder>[] = [
+    { key: "orderNumber", header: "Pedido", mono: true, render: (o) => <span className="text-tx-hi">{o.orderNumber}</span> },
+    { key: "customer", header: "Cliente", render: (o) => o.customer || "—" },
+    { key: "phone", header: "Teléfono", mono: true, hideBelowMd: true, render: (o) => <span className="text-tx-mut">{o.phone || "—"}</span> },
+    { key: "pay", header: "Pago", render: (o) => payLabel(o.paymentMethod) },
+    {
+      key: "status", header: "Estado",
+      render: (o) => (
+        <Pill tone={o.paymentStatus === "PAID" ? "ok" : "warn"}>{o.paymentStatus === "PAID" ? "Pagado" : statusLabel(o.status)}</Pill>
+      ),
+    },
+    {
+      key: "shipping", header: "Envío",
+      render: (o) => (
+        <span style={{ color: o.shipping ? "var(--tx-mid)" : "var(--err)" }}>
+          {o.shipping ? `${formatMoney(o.shipping)}${o.shippingZones.length ? ` · ${o.shippingZones.join(", ")}` : ""}` : "sin envío"}
+        </span>
+      ),
+    },
+    { key: "total", header: "Total", align: "right", mono: true, render: (o) => <span className="font-semibold text-tx-hi">{formatMoney(o.total)}</span> },
+    { key: "hora", header: "Hora", mono: true, render: (o) => <span className="text-tx-mut">{horaMx(o.createdAt)}</span> },
+  ];
+
+  const zoneCols: Col<Zone>[] = [
+    { key: "zone", header: "Zona", render: (z) => z.zone },
+    { key: "count", header: "Pedidos", mono: true, render: (z) => z.count },
+    { key: "amount", header: "Monto", align: "right", mono: true, render: (z) => <span className="font-semibold text-tx-hi">{formatMoney(z.amount)}</span> },
+  ];
+
   return (
-    <WtScreen>
+    <PageShell>
       <style>{PRINT_CSS}</style>
       <PageHeader
         eyebrow="Reportes · Caja de repartidores"
         title="Reporte de repartidor"
         subtitle="Corte pendiente, pedidos del día y desglose de envíos — todo cuadrado server-side."
       />
+      <div className="rep-no-print">
+        <PageTabs set="reportes" />
+      </div>
 
       {/* Barra de controles — siempre visible (PageHeader se oculta en móvil). */}
-      <div
-        className="rep-no-print"
-        style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 18 }}
-      >
-        <select value={driverId} onChange={(e) => setDriverId(e.target.value)} style={selectStyle}>
-          {drivers.length === 0 && <option value="">Sin repartidores</option>}
-          {drivers.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}{d.ordersToday ? ` · ${d.ordersToday} hoy` : ""}
-            </option>
-          ))}
-        </select>
-        <input
-          type="date"
-          value={date}
-          max={todayMx()}
-          onChange={(e) => setDate(e.target.value)}
-          style={selectStyle}
-        />
+      <div className="rep-no-print mb-4 flex flex-wrap items-center gap-2">
+        <div className="w-56">
+          <Select value={driverId} onChange={(e) => setDriverId(e.target.value)}>
+            {drivers.length === 0 && <option value="">Sin repartidores</option>}
+            {drivers.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}{d.ordersToday ? ` · ${d.ordersToday} hoy` : ""}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="w-40">
+          <Input type="date" value={date} max={todayMx()} onChange={(e) => setDate(e.target.value)} />
+        </div>
         {date === todayMx() && (
-          <span
-            title={updatedAt ? `Actualizado ${horaMx(new Date(updatedAt).toISOString())}` : "En vivo"}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600,
-              color: "var(--ok)", background: "var(--ok-soft)", border: "1px solid var(--ok)",
-              borderRadius: 999, padding: "6px 11px",
-            }}
-          >
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--ok)", display: "inline-block" }} className="ia-pulse" />
-            En vivo
+          <span title={updatedAt ? `Actualizado ${horaMx(new Date(updatedAt).toISOString())}` : "En vivo"}>
+            <Pill tone="ok" live>En vivo</Pill>
           </span>
         )}
-        <div style={{ flex: 1 }} />
-        <button onClick={exportCsv} disabled={!report} style={btnStyle} title="Descargar CSV (Excel)">
-          <Download size={14} /> CSV
-        </button>
-        <button onClick={() => window.print()} disabled={!report} style={btnStyle} title="Imprimir / Guardar PDF">
-          <Printer size={14} /> PDF
-        </button>
+        <div className="flex-1" />
+        <span title="Descargar CSV (Excel)">
+          <Button variant="secondary" size="sm" icon={Download} onClick={exportCsv} disabled={!report}>CSV</Button>
+        </span>
+        <span title="Imprimir / Guardar PDF">
+          <Button variant="secondary" size="sm" icon={Printer} onClick={() => window.print()} disabled={!report}>PDF</Button>
+        </span>
       </div>
 
       {error && (
-        <WtCard className="rep-no-print" style={{ padding: 16, borderColor: "var(--err)", marginBottom: 16 }}>
-          <span style={{ color: "var(--err)", fontSize: 13 }}>{error}</span>
-        </WtCard>
+        report ? (
+          <Card className="rep-no-print mb-4 p-4" style={{ borderColor: "var(--err)" }}>
+            <span className="text-[13px]" style={{ color: "var(--err)" }}>{error}</span>
+          </Card>
+        ) : (
+          <div className="rep-no-print">
+            <ErrorState hint={error} onRetry={() => loadReport(false)} />
+          </div>
+        )
       )}
 
-      {loading && !report && (
-        <WtCard style={{ padding: 40, textAlign: "center", color: "var(--tx-mut)" }}>
-          <RotateCw size={18} className="ia-spin" /> Cargando reporte…
-        </WtCard>
-      )}
+      {loading && !report && <LoadingState label="Cargando reporte…" />}
 
       {report && (
-        <div className="rep-print" style={{ display: "flex", flexDirection: "column", gap: 18, opacity: loading ? 0.6 : 1 }}>
+        <div className="rep-print flex flex-col" style={{ gap: 18, opacity: loading ? 0.6 : 1 }}>
 
           {/* Encabezado del reporte */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div className="flex flex-wrap items-center gap-2.5">
             <Pill tone="ac"><Bike size={12} /> {report.driver.name}</Pill>
-            <span style={{ fontSize: 13, color: "var(--tx-mut)" }}>
+            <span className="text-[13px] text-tx-mut">
               {date === todayMx() ? "Hoy" : new Date(date + "T12:00:00").toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}
             </span>
           </div>
 
           {/* Aviso si ya tuvo corte ese día */}
           {report.lastCut && (
-            <WtCard style={{ padding: 14, borderColor: "var(--warn)", background: "var(--warn-soft)" }}>
-              <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                <AlertTriangle size={18} style={{ color: "var(--warn)", flexShrink: 0, marginTop: 2 }} />
-                <div style={{ fontSize: 13, color: "var(--tx-mid)" }}>
-                  Este repartidor <b>ya tuvo un corte</b> ese día (balance {mny(report.lastCut.balance)}, {report.lastCut.movements} movimientos).
+            <Card className="p-3.5" style={{ borderColor: "var(--warn)", background: "var(--warn-soft)" }}>
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle size={18} className="mt-0.5 shrink-0" style={{ color: "var(--warn)" }} />
+                <div className="text-[13px] text-tx-mid">
+                  Este repartidor <b>ya tuvo un corte</b> ese día (balance {formatMoney(report.lastCut.balance)}, {report.lastCut.movements} movimientos).
                   El saldo pendiente de abajo es lo acumulado <b>después</b> del corte.
                 </div>
               </div>
-            </WtCard>
+            </Card>
           )}
 
           {/* Resumen de caja (pendiente de corte) */}
           <div>
             <SectionTitle icon={<Wallet size={14} />} title="Caja · pendiente de corte" hint="Efectivo que debe entregar (movimientos sin aprobar)" />
-            <div style={gridStats}>
-              <StatTile icon={Banknote} value={mny(cs!.balance)} label="Saldo a entregar" />
-              <StatTile value={mny(cs!.income)} label="Cobrado (efectivo)" />
-              <StatTile value={mny(cs!.float)} label="Fondo de cambio" />
-              <StatTile value={mny(cs!.expense)} label="Gastos" />
+            <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+              <StatTile icon={Banknote} value={formatMoney(cs!.balance)} label="Saldo a entregar" />
+              <StatTile value={formatMoney(cs!.income)} label="Cobrado (efectivo)" />
+              <StatTile value={formatMoney(cs!.float)} label="Fondo de cambio" />
+              <StatTile value={formatMoney(cs!.expense)} label="Gastos" />
             </div>
           </div>
 
           {/* Resumen de pedidos */}
           <div>
             <SectionTitle icon={<Package size={14} />} title="Pedidos del día" hint={`${os!.count} pedidos asignados`} />
-            <div style={gridStats}>
-              <StatTile value={mny(os!.total)} label="Venta total" />
-              <StatTile value={mny(os!.paid)} label="Pagado" />
-              <StatTile value={mny(os!.pending)} label="Sin cobrar" />
-              <StatTile value={mny(report.shipping.total)} label="Envíos cobrados" />
+            <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+              <StatTile value={formatMoney(os!.total)} label="Venta total" />
+              <StatTile value={formatMoney(os!.paid)} label="Pagado" />
+              <StatTile value={formatMoney(os!.pending)} label="Sin cobrar" />
+              <StatTile value={formatMoney(report.shipping.total)} label="Envíos cobrados" />
             </div>
           </div>
 
           {/* Tabla de pedidos */}
           <div>
             <SectionTitle title="Detalle de pedidos" />
-            {report.orders.length === 0 ? (
-              <EmptyState icon={Package} title="Sin pedidos" hint="Este repartidor no tiene pedidos en la fecha seleccionada." />
-            ) : (
-              <WtCard style={{ overflow: "hidden", overflowX: "auto", padding: 0 }}>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      {["Pedido", "Cliente", "Teléfono", "Pago", "Estado", "Envío", "Total", "Hora"].map((h) => (
-                        <th key={h} style={thStyle}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.orders.map((o) => (
-                      <tr key={o.id}>
-                        <td style={tdStyle}><span style={{ fontFamily: "'DM Mono',monospace", color: "var(--tx-hi)" }}>{o.orderNumber}</span></td>
-                        <td style={tdStyle}>{o.customer || "—"}</td>
-                        <td style={{ ...tdStyle, fontFamily: "'DM Mono',monospace", color: "var(--tx-mut)" }}>{o.phone || "—"}</td>
-                        <td style={tdStyle}>{payLabel(o.paymentMethod)}</td>
-                        <td style={tdStyle}>
-                          <Pill tone={o.paymentStatus === "PAID" ? "ok" : "warn"}>{o.paymentStatus === "PAID" ? "Pagado" : statusLabel(o.status)}</Pill>
-                        </td>
-                        <td style={{ ...tdStyle, color: o.shipping ? "var(--tx-mid)" : "var(--err)" }}>
-                          {o.shipping ? `${mny(o.shipping)}${o.shippingZones.length ? ` · ${o.shippingZones.join(", ")}` : ""}` : "sin envío"}
-                        </td>
-                        <td style={{ ...tdStyle, fontFamily: "'DM Mono',monospace", color: "var(--tx-hi)", fontWeight: 600 }}>{mny(o.total)}</td>
-                        <td style={{ ...tdStyle, fontFamily: "'DM Mono',monospace", color: "var(--tx-mut)" }}>{horaMx(o.createdAt)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </WtCard>
-            )}
+            <DataTable
+              columns={orderCols}
+              rows={report.orders}
+              rowKey={(o) => o.id}
+              empty={{ icon: Package, title: "Sin pedidos", hint: "Este repartidor no tiene pedidos en la fecha seleccionada." }}
+            />
           </div>
 
           {/* Envíos por zona */}
           <div>
-            <SectionTitle title="Envíos por zona" hint={`Total ${mny(report.shipping.total)}`} />
+            <SectionTitle title="Envíos por zona" hint={`Total ${formatMoney(report.shipping.total)}`} />
             {report.shipping.byZone.length === 0 ? (
               <EmptyState icon={Bike} title="Sin envíos cobrados" hint="Ningún pedido trae línea de la categoría Envíos." />
             ) : (
-              <WtCard style={{ overflow: "hidden", padding: 0 }}>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>{["Zona", "Pedidos", "Monto"].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr>
-                  </thead>
-                  <tbody>
-                    {report.shipping.byZone.map((z) => (
-                      <tr key={z.zone}>
-                        <td style={tdStyle}>{z.zone}</td>
-                        <td style={{ ...tdStyle, fontFamily: "'DM Mono',monospace" }}>{z.count}</td>
-                        <td style={{ ...tdStyle, fontFamily: "'DM Mono',monospace", color: "var(--tx-hi)", fontWeight: 600 }}>{mny(z.amount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </WtCard>
+              <DataTable columns={zoneCols} rows={report.shipping.byZone} rowKey={(z) => z.zone} />
             )}
             {report.shipping.ordersWithoutShipping.length > 0 && (
-              <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--warn)", display: "flex", gap: 8, alignItems: "flex-start" }}>
-                <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+              <div className="mt-2.5 flex items-start gap-2 text-[12.5px]" style={{ color: "var(--warn)" }}>
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 <span>Pedidos sin línea de envío: {report.shipping.ordersWithoutShipping.join(", ")}</span>
               </div>
             )}
           </div>
         </div>
       )}
-    </WtScreen>
+    </PageShell>
   );
 }
 
 /* ── Subcomponente de título de sección ── */
 function SectionTitle({ icon, title, hint }: { icon?: ReactNode; title: string; hint?: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-      <span style={{ width: 3, height: 14, background: "var(--brand-primary)", borderRadius: 2, display: "inline-block" }} />
-      {icon && <span style={{ color: "var(--brand-primary)" }}>{icon}</span>}
-      <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 15, color: "var(--tx-hi)" }}>{title}</h3>
-      {hint && <span style={{ fontSize: 12, color: "var(--tx-mut)", marginLeft: 4 }}>· {hint}</span>}
+    <div className="mb-2.5 flex items-center gap-2">
+      <span className="inline-block h-3.5 w-[3px] rounded-sm" style={{ background: "var(--brand-primary)" }} />
+      {icon && <span className="text-primary">{icon}</span>}
+      <h3 className="font-display text-[15px] font-extrabold text-tx-hi">{title}</h3>
+      {hint && <span className="ml-1 text-xs text-tx-mut">· {hint}</span>}
     </div>
   );
 }
-
-/* ── Estilos inline reutilizados ── */
-const selectStyle: CSSProperties = {
-  background: "var(--surf-2)", border: "1px solid var(--bd-1)", borderRadius: 10,
-  color: "var(--tx)", fontSize: 13, padding: "8px 10px", fontFamily: "inherit", minHeight: 38,
-};
-const btnStyle: CSSProperties = {
-  display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 13px", borderRadius: 10,
-  border: "1px solid var(--bd-1)", background: "var(--surf-1)", color: "var(--tx-mid)",
-  fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", minHeight: 38,
-};
-const gridStats: CSSProperties = {
-  display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10,
-};
-const tableStyle: CSSProperties = {
-  width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 640,
-};
-const thStyle: CSSProperties = {
-  textAlign: "left", fontFamily: "'DM Mono',monospace", fontSize: 10, color: "var(--tx-dim)",
-  letterSpacing: ".12em", textTransform: "uppercase", padding: "11px 12px",
-  borderBottom: "1px solid var(--bd-1)", fontWeight: 600, whiteSpace: "nowrap",
-};
-const tdStyle: CSSProperties = {
-  padding: "11px 12px", borderBottom: "1px solid var(--bd-1)", color: "var(--tx-mid)", whiteSpace: "nowrap",
-};

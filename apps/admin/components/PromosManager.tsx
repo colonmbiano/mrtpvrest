@@ -7,9 +7,9 @@
  * todas las terminales del tenant.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { GripVertical, ImagePlus, Trash2 } from "lucide-react";
 import api from "@/lib/api";
-
-const ACCENT = "#ff5c35";
+import { Button, Pill } from "@/components/ds";
 
 interface Promo {
   id: string;
@@ -18,20 +18,6 @@ interface Promo {
   subtitle?: string | null;
   order: number;
   active: boolean;
-}
-
-// Manija de arrastre (GripVertical) como SVG inline — el admin no usa lucide.
-function GripVertical() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <circle cx="9" cy="6" r="1.6" />
-      <circle cx="9" cy="12" r="1.6" />
-      <circle cx="9" cy="18" r="1.6" />
-      <circle cx="15" cy="6" r="1.6" />
-      <circle cx="15" cy="12" r="1.6" />
-      <circle cx="15" cy="18" r="1.6" />
-    </svg>
-  );
 }
 
 function fileToBase64(file: File): Promise<string> {
@@ -138,41 +124,37 @@ export default function PromosManager() {
     [promos, load]
   );
 
+  const inputCls =
+    "w-full rounded-ds-sm px-3 py-1.5 text-sm outline-none transition-shadow focus:shadow-[0_0_0_3px_var(--accent-soft)]";
+  const inputStyle = { background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
+
   return (
-    <div className="bg-[#0f0f1c] border border-white/10 rounded-[1.5rem] p-6">
-      <div className="flex items-center justify-between mb-1">
-        <h2 className="text-lg font-bold text-white">Pantalla de cliente · Publicidad</h2>
-        <button
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          className="px-4 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-50"
-          style={{ background: ACCENT }}
-        >
-          {uploading ? "Subiendo…" : "+ Subir imagen"}
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleUpload}
-        />
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <h3 className="font-display text-base font-extrabold text-tx-hi">Pantalla de cliente · Publicidad</h3>
+        <Button size="sm" icon={ImagePlus} onClick={() => fileRef.current?.click()} disabled={uploading}>
+          {uploading ? "Subiendo…" : "Subir imagen"}
+        </Button>
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
       </div>
-      <p className="text-sm text-white/50 mb-5">
-        Estas imágenes rotan en la pantalla de cliente de todas las terminales cuando no
-        hay venta activa. Arrastra para reordenar.
+      <p className="mb-5 text-sm text-tx-mut">
+        Estas imágenes rotan en la pantalla de cliente de todas las terminales cuando no hay venta activa.
+        Arrastra para reordenar.
       </p>
 
       {error && (
-        <div className="mb-4 px-4 py-2 rounded-xl text-sm bg-red-500/10 border border-red-500/30 text-red-300">
+        <div
+          className="mb-4 rounded-ds-md px-4 py-2 text-sm"
+          style={{ background: "var(--err-soft)", border: "1px solid var(--err)", color: "var(--err)" }}
+        >
           {error}
         </div>
       )}
 
       {loading ? (
-        <p className="text-white/40 text-sm py-8 text-center">Cargando…</p>
+        <p className="py-8 text-center text-sm text-tx-dim">Cargando…</p>
       ) : promos.length === 0 ? (
-        <p className="text-white/40 text-sm py-8 text-center">
+        <p className="py-8 text-center text-sm text-tx-dim">
           Aún no hay imágenes. Sube la primera con “Subir imagen”.
         </p>
       ) : (
@@ -188,22 +170,22 @@ export default function PromosManager() {
               }}
               onDragLeave={() => setDragOver((d) => (d === index ? null : d))}
               onDrop={() => handleDrop(index)}
-              className="flex items-center gap-4 rounded-2xl border p-3 transition-colors"
+              className="flex items-center gap-4 rounded-ds-lg border p-3 transition-colors"
               style={{
-                background: "#15152a",
-                borderColor: dragOver === index ? ACCENT : "rgba(255,255,255,0.08)",
+                background: "var(--surf-1)",
+                borderColor: dragOver === index ? "var(--brand-primary)" : "var(--bd-1)",
               }}
             >
-              <span className="cursor-grab text-white/40 hover:text-white/70" title="Arrastrar">
-                <GripVertical />
+              <span className="cursor-grab text-tx-dim transition-colors hover:text-tx-mid" title="Arrastrar">
+                <GripVertical size={16} />
               </span>
 
-              <div className="w-24 h-16 rounded-xl overflow-hidden bg-black/40 shrink-0">
+              <div className="h-16 w-24 shrink-0 overflow-hidden rounded-ds-md" style={{ background: "var(--surf-3)" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={promo.imageUrl} alt={promo.title ?? ""} className="w-full h-full object-cover" />
+                <img src={promo.imageUrl} alt={promo.title ?? ""} className="h-full w-full object-cover" />
               </div>
 
-              <div className="flex-1 min-w-0 flex flex-col gap-2">
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <input
                   defaultValue={promo.title ?? ""}
                   placeholder="Título (opcional)"
@@ -212,7 +194,8 @@ export default function PromosManager() {
                       patchPromo(promo.id, { title: e.target.value });
                     }
                   }}
-                  className="bg-[#0f0f1c] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white outline-none focus:border-white/30"
+                  className={inputCls}
+                  style={inputStyle}
                 />
                 <input
                   defaultValue={promo.subtitle ?? ""}
@@ -222,28 +205,31 @@ export default function PromosManager() {
                       patchPromo(promo.id, { subtitle: e.target.value });
                     }
                   }}
-                  className="bg-[#0f0f1c] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white outline-none focus:border-white/30"
+                  className={inputCls}
+                  style={inputStyle}
                 />
               </div>
 
               {/* Activar / ocultar */}
               <button
+                type="button"
                 onClick={() => patchPromo(promo.id, { active: !promo.active })}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors shrink-0"
-                style={{
-                  borderColor: promo.active ? "rgba(136,214,108,0.4)" : "rgba(255,255,255,0.12)",
-                  color: promo.active ? "#88d66c" : "rgba(255,255,255,0.5)",
-                  background: promo.active ? "rgba(136,214,108,0.08)" : "transparent",
-                }}
+                className="shrink-0"
+                aria-label={promo.active ? "Ocultar promo" : "Activar promo"}
               >
-                {promo.active ? "Activa" : "Oculta"}
+                <Pill tone={promo.active ? "ok" : "neutral"} live={promo.active}>
+                  {promo.active ? "Activa" : "Oculta"}
+                </Pill>
               </button>
 
               <button
+                type="button"
                 onClick={() => deletePromo(promo.id)}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold text-red-300 border border-red-500/30 hover:bg-red-500/10 shrink-0"
+                aria-label="Eliminar"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-ds-md transition-transform active:scale-95"
+                style={{ background: "var(--err-soft)", color: "var(--err)" }}
               >
-                Eliminar
+                <Trash2 size={16} />
               </button>
             </div>
           ))}
