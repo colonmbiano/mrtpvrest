@@ -307,6 +307,7 @@ router.get('/menu', async (req, res) => {
           id: true, name: true, description: true, price: true,
           isPromo: true, promoPrice: true, imageUrl: true,
           categoryId: true, isCombo: true,
+          _count: { select: { reactions: true } }, // "me gusta" del platillo
           variants: {
             where: { isAvailable: true },
             select: { id: true, name: true, price: true },
@@ -350,7 +351,9 @@ router.get('/menu', async (req, res) => {
 
     // Ventana horaria de promos: fuera del horario, los platillos promo se
     // ocultan de la tienda/kiosko (mismo criterio que el catálogo del TPV).
-    const items = promoOpen ? rawItems : rawItems.filter(i => !i.isPromo);
+    const visible = promoOpen ? rawItems : rawItems.filter(i => !i.isPromo);
+    // Aplanamos el _count de reacciones a un simple reactionCount.
+    const items = visible.map(({ _count, ...i }) => ({ ...i, reactionCount: _count?.reactions ?? 0 }));
 
     // Agrupar items por categoría
     const categoriesWithItems = categories.map(cat => ({
@@ -378,6 +381,45 @@ router.get('/menu', async (req, res) => {
   } catch (e) {
     console.error('[store] GET /menu error:', e.message);
     res.status(500).json({ error: 'Error al obtener el menú.' });
+  }
+});
+
+// ── POST /api/store/menu/:itemId/react ───────────────────────────────────────
+// Alterna el "me gusta" anónimo de un platillo. El cliente se identifica por un
+// id generado en su navegador (localStorage); el @@unique(menuItemId, clientId)
+// impide contar doble. Público (sin auth), scoped por el slug de la tienda.
+router.post('/menu/:itemId/react', async (req, res) => {
+  const store = await resolveStore(req, res);
+  if (!store) return;
+  const { restaurant } = store;
+
+  try {
+    const clientId = String(req.body?.clientId || '').trim().slice(0, 64);
+    if (!clientId) return res.status(400).json({ error: 'clientId requerido' });
+    const on = req.body?.on !== false; // por defecto reacciona; on:false quita
+
+    // El platillo debe existir y ser del restaurante de la tienda.
+    const item = await prisma.menuItem.findFirst({
+      where: { id: req.params.itemId, restaurantId: restaurant.id },
+      select: { id: true },
+    });
+    if (!item) return res.status(404).json({ error: 'Platillo no encontrado' });
+
+    if (on) {
+      // Idempotente: si ya existía la reacción de este navegador, no duplica.
+      await prisma.dishReaction.createMany({
+        data: [{ restaurantId: restaurant.id, menuItemId: item.id, clientId }],
+        skipDuplicates: true,
+      });
+    } else {
+      await prisma.dishReaction.deleteMany({ where: { menuItemId: item.id, clientId } });
+    }
+
+    const reactionCount = await prisma.dishReaction.count({ where: { menuItemId: item.id } });
+    res.json({ reactionCount, reacted: on });
+  } catch (e) {
+    console.error('[store] react:', e.message);
+    res.status(500).json({ error: 'No se pudo registrar la reacción' });
   }
 });
 

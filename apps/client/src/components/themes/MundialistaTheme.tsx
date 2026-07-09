@@ -12,6 +12,7 @@ import { cldImage } from '@/lib/cloudinary';
 import { productEmoji } from '../../lib/productEmoji';
 import BannerCarousel, { collectBanners } from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
+import { ReactionButton } from '../ReactionButton';
 import StoreCheckout from '../StoreCheckout';
 import type { DeliveryConfig } from '../../lib/delivery';
 import {
@@ -217,7 +218,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
           <main className="max-w-7xl mx-auto px-4 py-8">
             <SectionHead title={results.length > 0 ? `Resultados (${results.length})` : `Sin resultados para “${query}”`} />
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-              {results.map((p: any) => <ProductCard key={p.id} p={p} onOpen={() => pick(p)} />)}
+              {results.map((p: any) => <ProductCard key={p.id} p={p} slug={slug} onOpen={() => pick(p)} />)}
             </div>
           </main>
         ) : (
@@ -250,7 +251,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
                     <p className="py-10 text-center text-sm" style={{ color: MUTED }}>Sin platillos en esta selección.</p>
                   ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                      {featured.map((p: any) => <ProductCard key={p.id} p={p} onOpen={() => pick(p)} />)}
+                      {featured.map((p: any) => <ProductCard key={p.id} p={p} slug={slug} onOpen={() => pick(p)} />)}
                     </div>
                   )}
                 </section>
@@ -269,7 +270,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
                         <button onClick={() => scrollToCat(category.id)} className="text-[12px] font-bold" style={{ color: GOLD }}>Ver todas</button>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                        {(category.items || []).map((p: any) => <ProductCard key={p.id} p={p} onOpen={() => pick(p)} />)}
+                        {(category.items || []).map((p: any) => <ProductCard key={p.id} p={p} slug={slug} onOpen={() => pick(p)} />)}
                       </div>
                     </section>
                   ))}
@@ -576,7 +577,7 @@ function Badge({ kind }: { kind: 'pop' | 'promo' | 'new' }) {
   return <span className="text-[8.5px] font-extrabold px-2 py-1 rounded-[6px] tracking-wide" style={{ background: map.bg, color: map.fg }}>{map.t}</span>;
 }
 
-function ProductCard({ p, onOpen }: { p: any; onOpen: () => void }) {
+function ProductCard({ p, onOpen, slug }: { p: any; onOpen: () => void; slug: string }) {
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
   const remove = useCart(s => s.remove);
@@ -597,6 +598,10 @@ function ProductCard({ p, onOpen }: { p: any; onOpen: () => void }) {
           <img src={cldImage(p.imageUrl, { width: 480 })} alt={p.name} loading="lazy" decoding="async" className={`w-full h-full transition-transform duration-500 group-hover:scale-105 ${p.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
         ) : <div className="w-full h-full flex items-center justify-center text-4xl opacity-30">{productEmoji(p.name)}</div>}
       </button>
+
+      <div className="absolute top-2 right-2 z-20" style={{ color: '#FFFFFFcc' }}>
+        <ReactionButton slug={slug} itemId={p.id} initialCount={p.reactionCount || 0} accent={GOLD} />
+      </div>
 
       <button onClick={onOpen} className="text-left">
         <h4 className="font-bold text-[14px] leading-tight line-clamp-1" style={{ fontFamily: BODY }}>{p.name}</h4>
