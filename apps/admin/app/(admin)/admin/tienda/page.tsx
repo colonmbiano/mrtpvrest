@@ -103,6 +103,8 @@ export default function TiendaConfigPage() {
     estimatedDelivery: 40,
     storefrontTheme: "KAWAII",
     storefrontHeroUrl: "",
+    currency: "MXN",
+    currencyLocale: "es-MX",
     // Módulo OlaClick
     whatsappOrderingEnabled: false,
     hasWhatsappOrdersModule: false,
@@ -209,6 +211,8 @@ export default function TiendaConfigPage() {
           scheduleEnabled: d.scheduleEnabled ?? false,
           countryCode: d.countryCode || "MX",
           timezone: d.timezone || "America/Mexico_City",
+          currency: d.currency || "MXN",
+          currencyLocale: d.currencyLocale || "es-MX",
           businessHours: (() => {
             try {
               const parsed = JSON.parse(d.businessHours || "[]");

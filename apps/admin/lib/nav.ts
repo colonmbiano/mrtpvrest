@@ -146,6 +146,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/admin/integraciones", label: "Integraciones", subtitle: "Servicios conectados" },
       { href: "/admin/modulos", label: "Módulos", subtitle: "Funciones del negocio" },
       { href: "/admin/billing", label: "Facturación y plan", subtitle: "Suscripción y pagos" },
+      { href: "/admin/mi-cuenta", label: "Mi Cuenta", subtitle: "Perfil, región y apariencia" },
       { href: "/admin/descargas", label: "Apps & descargas", subtitle: "Herramientas del equipo" },
       { href: "/admin/guias", label: "Guías de uso", subtitle: "Aprende a sacarle jugo" },
     ],
