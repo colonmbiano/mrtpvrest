@@ -7,11 +7,12 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import {
-  WtScreen, PageHeader, WtCard, StatTile, Pill, IconBadge, Avatar,
-  PrimaryBtn, EmptyState,
-} from "@/components/warmtech";
+  PageShell, PageHeader, Card, StatTile, Pill, IconBadge, Avatar,
+  Button, EmptyState, Modal, Textarea, useToast,
+} from "@/components/ds";
 
 export default function CajaRepartidoresPage() {
+  const toast = useToast();
   const [summary, setSummary]   = useState<any[]>([]);
   const [cuts, setCuts]         = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
@@ -60,7 +61,7 @@ export default function CajaRepartidoresPage() {
       await api.put(`/api/orders/${order.id}/confirm-cash`, { paymentMethod: method });
       setPending((prev) => prev.filter((o) => o.id !== order.id));
       fetchAll();
-    } catch (err: any) { alert(err.response?.data?.error || "Error al confirmar el cobro"); }
+    } catch (err: any) { toast.error(err.response?.data?.error || "Error al confirmar el cobro"); }
     finally { setConfirmingId(null); }
   }
 
@@ -93,8 +94,8 @@ export default function CajaRepartidoresPage() {
       await api.post(`/api/driver-cash/${driver.id}/cut`, { notes: cutNotes });
       setShowCutModal(null); setCutNotes("");
       fetchAll();
-      alert(`Corte de caja realizado para ${driver.name}`);
-    } catch (err: any) { alert(err.response?.data?.error || "Error"); }
+      toast.success(`Corte de caja realizado para ${driver.name}`);
+    } catch (err: any) { toast.error(err.response?.data?.error || "Error"); }
     finally { setCuttingId(null); }
   }
 
@@ -106,8 +107,8 @@ export default function CajaRepartidoresPage() {
       await api.post(`/api/driver-cash/${driver.id}/float`, { amount: n });
       setShowFloatModal(null); setFloatAmount("");
       fetchAll();
-      alert(`Fondo de cambio asignado a ${driver.name}: $${n.toFixed(0)}`);
-    } catch (err: any) { alert(err.response?.data?.error || "Error"); }
+      toast.success(`Fondo de cambio asignado a ${driver.name}: $${n.toFixed(0)}`);
+    } catch (err: any) { toast.error(err.response?.data?.error || "Error"); }
     finally { setFloatBusy(false); }
   }
 
@@ -129,26 +130,24 @@ export default function CajaRepartidoresPage() {
   }
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Caja & Turnos"
         title="Caja Repartidores"
         subtitle="Control de efectivo en tiempo real"
         actions={
-          <PrimaryBtn ghost full={false} icon={RotateCw} onClick={fetchAll}>
-            Actualizar
-          </PrimaryBtn>
+          <Button variant="secondary" icon={RotateCw} onClick={fetchAll}>Actualizar</Button>
         }
       />
 
       {/* mobile actions */}
       <div className="mb-4 md:hidden">
-        <PrimaryBtn ghost icon={RotateCw} onClick={fetchAll}>Actualizar</PrimaryBtn>
+        <Button variant="secondary" full icon={RotateCw} onClick={fetchAll}>Actualizar</Button>
       </div>
 
       {/* solicitudes de cierre de turno (repartidor → admin) */}
       {requests.length > 0 && (
-        <WtCard className="mb-6 overflow-hidden" style={{ borderColor: "var(--warn)" }}>
+        <Card className="mb-6 overflow-hidden" style={{ borderColor: "var(--warn)" }}>
           <div className="flex items-center gap-2 px-5 py-3 font-display font-bold" style={{ borderBottom: "1px solid var(--bd-1)", background: "var(--warn-soft)", color: "var(--warn)" }}>
             <BellRing size={16} /> Solicitudes de cierre de turno
             <Pill tone="warn">{requests.length}</Pill>
@@ -166,19 +165,19 @@ export default function CajaRepartidoresPage() {
                 <div className="text-[10px] text-tx-mut">Efectivo en mano</div>
                 <div className="font-display font-extrabold text-primary">${(r.balance || 0).toFixed(0)}</div>
               </div>
-              <PrimaryBtn full={false} icon={Scissors} onClick={() => setShowCutModal({ id: r.driverId, name: r.driverName })}>
+              <Button icon={Scissors} onClick={() => setShowCutModal({ id: r.driverId, name: r.driverName })}>
                 Hacer corte
-              </PrimaryBtn>
+              </Button>
             </div>
           ))}
-        </WtCard>
+        </Card>
       )}
 
       {/* pendientes de cobro: entregas sin pago confirmado (efectivo en mano
           del repartidor o "por cobrar"). Quedan abiertas hasta que la caja
           confirme el cobro. */}
       {pending.length > 0 && (
-        <WtCard className="mb-6 overflow-hidden">
+        <Card className="mb-6 overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 font-display font-bold text-tx-hi" style={{ borderBottom: "1px solid var(--bd-1)", background: "var(--surf-2)" }}>
             <Banknote size={16} style={{ color: "var(--brand-primary)" }} /> Pendientes de cobro
             <Pill tone="warn">{pending.length}</Pill>
@@ -203,17 +202,16 @@ export default function CajaRepartidoresPage() {
                 <div className="text-[10px] text-tx-mut">Total</div>
                 <div className="font-display font-extrabold text-primary">${(o.total || 0).toFixed(0)}</div>
               </div>
-              <PrimaryBtn
-                full={false}
+              <Button
                 icon={CheckCircle2}
                 disabled={confirmingId === o.id}
                 onClick={() => doConfirmCash(o)}
               >
                 {confirmingId === o.id ? "..." : "Confirmar cobro"}
-              </PrimaryBtn>
+              </Button>
             </div>
           ))}
-        </WtCard>
+        </Card>
       )}
 
       {/* resumen global */}
@@ -226,7 +224,7 @@ export default function CajaRepartidoresPage() {
       {/* tarjetas por repartidor */}
       <div className="mt-6 grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))" }}>
         {loading ? (
-          Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-52 animate-pulse rounded-[18px] bg-surf-2" />)
+          Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-52 animate-pulse rounded-ds-xl bg-surf-2" />)
         ) : summary.length === 0 ? (
           <div className="col-span-full">
             <EmptyState icon={Bike} title="Sin repartidores activos" hint="No hay repartidores con movimientos de efectivo registrados hoy." />
@@ -235,11 +233,11 @@ export default function CajaRepartidoresPage() {
           const inHand = (d.float || 0) + d.income - d.expense - (d.returned || 0);
           const isSel = selected?.driver?.id === d.driver.id;
           return (
-            <WtCard key={d.driver.id} className="overflow-hidden" style={{ borderColor: isSel ? "var(--brand-primary)" : undefined }}>
+            <Card key={d.driver.id} className="overflow-hidden" style={{ borderColor: isSel ? "var(--brand-primary)" : undefined }}>
               <div className="flex items-center gap-3 p-4">
                 {d.driver.photo ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={d.driver.photo} alt="" className="h-12 w-12 rounded-xl object-cover" />
+                  <img src={d.driver.photo} alt="" className="h-12 w-12 rounded-ds-md object-cover" />
                 ) : (
                   <Avatar initials={initials(d.driver.name)} size={48} />
                 )}
@@ -267,7 +265,7 @@ export default function CajaRepartidoresPage() {
                 <button
                   type="button"
                   onClick={async () => { setSelected(d); await fetchDriverMovements(d.driver.id); }}
-                  className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl text-xs font-bold text-tx-mut"
+                  className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-ds-md text-xs font-bold text-tx-mut"
                   style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
                 >
                   <ListChecks size={14} /> Movimientos
@@ -276,7 +274,7 @@ export default function CajaRepartidoresPage() {
                   type="button"
                   onClick={() => { setFloatAmount(""); setShowFloatModal(d.driver); }}
                   aria-label="Asignar cambio"
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-xl"
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-ds-md"
                   style={{ background: "var(--info-soft)", color: "var(--info)" }}
                 >
                   <Banknote size={15} />
@@ -285,23 +283,23 @@ export default function CajaRepartidoresPage() {
                   type="button"
                   onClick={() => setShowCutModal(d.driver)}
                   aria-label="Corte"
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-xl"
-                  style={{ background: "var(--iris-soft)", color: "var(--brand-primary)" }}
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-ds-md"
+                  style={{ background: "var(--accent-soft)", color: "var(--brand-primary)" }}
                 >
                   <Scissors size={15} />
                 </button>
               </div>
-            </WtCard>
+            </Card>
           );
         })}
       </div>
 
       {/* movimientos del repartidor seleccionado */}
       {selected && (
-        <WtCard className="mt-6 overflow-hidden">
+        <Card className="mt-6 overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3" style={{ background: "var(--surf-2)", borderBottom: "1px solid var(--bd-1)" }}>
             <h2 className="font-display font-bold text-tx-hi">Movimientos — {selected.driver.name}</h2>
-            <button type="button" onClick={() => setSelected(null)} aria-label="Cerrar" className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut" style={{ background: "var(--surf-1)" }}>
+            <button type="button" onClick={() => setSelected(null)} aria-label="Cerrar" className="grid h-9 w-9 place-items-center rounded-ds-md text-tx-mut" style={{ background: "var(--surf-1)" }}>
               <X size={15} />
             </button>
           </div>
@@ -322,7 +320,7 @@ export default function CajaRepartidoresPage() {
                   </div>
                 </div>
                 {m.photoUrl && (
-                  <a href={m.photoUrl} target="_blank" rel="noreferrer" className="h-12 w-12 shrink-0 overflow-hidden rounded-xl" style={{ border: "1px solid var(--bd-1)" }}>
+                  <a href={m.photoUrl} target="_blank" rel="noreferrer" className="h-12 w-12 shrink-0 overflow-hidden rounded-ds-md" style={{ border: "1px solid var(--bd-1)" }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={m.photoUrl} alt="ticket" className="h-full w-full object-cover" />
                   </a>
@@ -348,12 +346,12 @@ export default function CajaRepartidoresPage() {
               ))}
             </div>
           )}
-        </WtCard>
+        </Card>
       )}
 
       {/* historial de cortes */}
       {cuts.length > 0 && (
-        <WtCard className="mt-6 overflow-hidden">
+        <Card className="mt-6 overflow-hidden">
           <div className="px-5 py-3 font-display font-bold text-tx-hi" style={{ background: "var(--surf-2)", borderBottom: "1px solid var(--bd-1)" }}>
             Historial de cortes
           </div>
@@ -375,61 +373,63 @@ export default function CajaRepartidoresPage() {
               </div>
             </div>
           ))}
-        </WtCard>
+        </Card>
       )}
 
       {/* modal asignar fondo de cambio */}
-      {showFloatModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.8)" }}>
-          <WtCard className="w-full max-w-sm p-6">
-            <h3 className="mb-1 flex items-center gap-2 font-display text-xl font-extrabold text-tx-hi">
-              <Banknote size={20} style={{ color: "var(--info)" }} /> Asignar cambio
-            </h3>
+      <Modal
+        open={!!showFloatModal}
+        onClose={() => { if (!floatBusy) { setShowFloatModal(null); setFloatAmount(""); } }}
+        title="Asignar cambio"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" disabled={floatBusy} onClick={() => { setShowFloatModal(null); setFloatAmount(""); }}>Cancelar</Button>
+            <Button disabled={floatBusy || !(Number(floatAmount) > 0)} onClick={() => doAssignFloat(showFloatModal)}>
+              {floatBusy ? "..." : "Asignar"}
+            </Button>
+          </>
+        }
+      >
+        {showFloatModal && (
+          <>
             <p className="mb-4 text-sm text-tx-mut">
               Fondo de caja para <b className="text-tx">{showFloatModal.name}</b>. Suma a su efectivo en mano para dar cambio y cubrir compras; no cuenta como venta.
             </p>
-            <div className="relative mb-4">
+            <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 font-display text-2xl font-extrabold" style={{ color: "var(--info)" }}>$</span>
               <input
                 type="number" inputMode="decimal" autoFocus value={floatAmount}
                 onChange={(e) => setFloatAmount(e.target.value)} placeholder="0"
-                className="h-16 w-full rounded-xl pl-9 pr-4 font-display text-2xl font-extrabold outline-none"
+                className="h-16 w-full rounded-ds-md pl-9 pr-4 font-display text-2xl font-extrabold outline-none"
                 style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
               />
             </div>
-            <div className="flex gap-3">
-              <PrimaryBtn ghost disabled={floatBusy} onClick={() => { setShowFloatModal(null); setFloatAmount(""); }}>Cancelar</PrimaryBtn>
-              <PrimaryBtn disabled={floatBusy || !(Number(floatAmount) > 0)} onClick={() => doAssignFloat(showFloatModal)}>
-                {floatBusy ? "..." : "Asignar"}
-              </PrimaryBtn>
-            </div>
-          </WtCard>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
 
       {/* modal corte de caja */}
-      {showCutModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.8)" }}>
-          <WtCard className="w-full max-w-sm p-6">
-            <h3 className="mb-1 flex items-center gap-2 font-display text-xl font-extrabold text-tx-hi">
-              <Scissors size={20} className="text-primary" /> Corte de caja
-            </h3>
-            <p className="mb-4 text-sm text-tx-mut">{showCutModal.name}</p>
-            <textarea
-              value={cutNotes} onChange={(e) => setCutNotes(e.target.value)}
-              placeholder="Notas del corte (opcional)" rows={3}
-              className="mb-4 w-full resize-none rounded-xl px-4 py-3 text-sm outline-none"
-              style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
-            />
-            <div className="flex gap-3">
-              <PrimaryBtn ghost onClick={() => { setShowCutModal(null); setCutNotes(""); }}>Cancelar</PrimaryBtn>
-              <PrimaryBtn disabled={cuttingId === showCutModal.id} onClick={() => doCut(showCutModal)}>
-                {cuttingId === showCutModal.id ? "..." : "Confirmar corte"}
-              </PrimaryBtn>
-            </div>
-          </WtCard>
-        </div>
-      )}
-    </WtScreen>
+      <Modal
+        open={!!showCutModal}
+        onClose={() => { setShowCutModal(null); setCutNotes(""); }}
+        title="Corte de caja"
+        subtitle={showCutModal?.name}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setShowCutModal(null); setCutNotes(""); }}>Cancelar</Button>
+            <Button disabled={cuttingId === showCutModal?.id} onClick={() => doCut(showCutModal)}>
+              {cuttingId === showCutModal?.id ? "..." : "Confirmar corte"}
+            </Button>
+          </>
+        }
+      >
+        <Textarea
+          value={cutNotes} onChange={(e) => setCutNotes(e.target.value)}
+          placeholder="Notas del corte (opcional)" rows={3}
+        />
+      </Modal>
+    </PageShell>
   );
 }

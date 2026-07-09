@@ -1,13 +1,11 @@
 "use client";
 import { Monitor, MonitorPlay, RefreshCw, Images } from "lucide-react";
 import PromosManager from "@/components/PromosManager";
-import {
-  WtScreen, PageHeader, WtCard, SectionHead, SettingRow,
-} from "@/components/warmtech";
+import { PageShell, PageHeader, Card, SectionHead, SettingRow } from "@/components/ds";
 
 export default function PantallaClientePage() {
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="TPV · Segunda pantalla"
         title="Pantalla de cliente"
@@ -20,13 +18,13 @@ export default function PantallaClientePage() {
       </p>
 
       {/* Preview del display + cómo funciona */}
-      <WtCard className="mb-4 p-5 md:p-6">
+      <Card className="mb-4 p-5 md:p-6">
         <SectionHead title="Cómo se ve" />
         <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-stretch">
           {/* Mock del display de cliente */}
           <div className="w-full max-w-[280px] shrink-0">
             <div
-              className="relative aspect-video w-full overflow-hidden rounded-2xl"
+              className="relative aspect-video w-full overflow-hidden rounded-ds-xl"
               style={{ background: "linear-gradient(140deg,var(--surf-3),var(--surf-2))", border: "1px solid var(--bd-2)" }}
             >
               <div className="absolute inset-0 grid place-items-center">
@@ -53,7 +51,7 @@ export default function PantallaClientePage() {
           </div>
 
           {/* Ajustes / explicación con SettingRow */}
-          <div className="w-full flex-1 overflow-hidden rounded-2xl" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+          <div className="w-full flex-1 overflow-hidden rounded-ds-xl" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
             <SettingRow
               icon={Monitor}
               label="Se muestra en reposo"
@@ -72,13 +70,13 @@ export default function PantallaClientePage() {
             />
           </div>
         </div>
-      </WtCard>
+      </Card>
 
       {/* Gestor de promociones (lógica intacta) */}
-      <WtCard className="p-5 md:p-6">
+      <Card className="p-5 md:p-6">
         <SectionHead title="Promociones" />
         <PromosManager />
-      </WtCard>
-    </WtScreen>
+      </Card>
+    </PageShell>
   );
 }
