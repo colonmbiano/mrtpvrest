@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Store, Star, Ticket } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import api from "@/lib/api";
 import { getStoreUrl } from "@/lib/config";
 import { PageShell, PageHeader, Button, Field, Input, Skeleton, useToast } from "@/components/ds";
@@ -13,6 +14,76 @@ import { DeliveryCard } from "./_components/DeliveryCard";
 import { RewardsSection } from "./_components/RewardsSection";
 import { CouponsSection } from "./_components/CouponsSection";
 import type { BusinessHour, TiendaConfig } from "./_components/types";
+
+// QR por mesa: el comensal escanea → abre el menú en DINE_IN con su mesa fija.
+// El enlace codifica el número de mesa (extraído del nombre) + la sucursal, que
+// el storefront lee de ?mesa=&l= (ver apps/client/src/app/[slug]/page.tsx).
+function MesasQrCard({ storeUrl }: { storeUrl: string }) {
+  const [tables, setTables] = useState<Array<{ id: string; name: string; locationId: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api.get("/api/tables")
+      .then((r) => setTables(Array.isArray(r.data) ? r.data : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const mesaNum = (name: string) => (String(name).match(/\d+/) || [])[0] || "";
+  const linkFor = (t: { name: string; locationId: string }) => {
+    const num = mesaNum(t.name);
+    if (!num || !storeUrl) return "";
+    const sep = storeUrl.includes("?") ? "&" : "?";
+    return `${storeUrl}${sep}mesa=${encodeURIComponent(num)}&l=${encodeURIComponent(t.locationId)}`;
+  };
+  const usable = tables.filter((t) => linkFor(t));
+
+  return (
+    <div className="mt-3 rounded-2xl px-4 py-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+      <div className="mb-3 flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-extrabold text-tx-hi">QR de mesas (autoservicio)</p>
+          <p className="mt-0.5 text-[11.5px] leading-relaxed text-tx-mut">
+            Pega un QR en cada mesa. El comensal escanea, ve el menú y su pedido entra al TPV con la mesa ya puesta.
+          </p>
+        </div>
+        {usable.length > 0 && (
+          <button type="button" onClick={() => window.print()} className="shrink-0 rounded-xl px-3 py-2 text-[12px] font-extrabold text-white" style={{ background: "var(--brand-primary)" }}>
+            Imprimir
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <p className="text-[12px] text-tx-mut">Cargando mesas…</p>
+      ) : usable.length === 0 ? (
+        <p className="text-[12px] text-tx-mut">
+          No hay mesas con número en esta sucursal. Crea mesas (con un número en el nombre, ej. «Mesa 1») desde el mapa del TPV.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          {usable.map((t) => {
+            const link = linkFor(t);
+            return (
+              <div key={t.id} className="flex flex-col items-center gap-2 rounded-2xl p-3" style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>
+                <div className="rounded-xl bg-white p-2">
+                  <QRCodeSVG value={link} size={112} marginSize={1} />
+                </div>
+                <p className="text-[12px] font-extrabold text-tx-hi">{t.name}</p>
+                <button
+                  type="button"
+                  onClick={() => { navigator.clipboard?.writeText(link).catch(() => {}); }}
+                  className="text-[11px] font-bold text-tx-mut hover:text-tx-hi"
+                >
+                  Copiar enlace
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function TiendaConfigPage() {
   const toast = useToast();
@@ -35,6 +106,9 @@ export default function TiendaConfigPage() {
     // Módulo OlaClick
     whatsappOrderingEnabled: false,
     hasWhatsappOrdersModule: false,
+    // Aviso al dueño por WhatsApp cuando entra un pedido web.
+    orderAlertEnabled: false,
+    orderAlertWhatsapp: "",
     // Estado de la tienda
     isOpen: true,
     closedMessage: "",
@@ -126,6 +200,8 @@ export default function TiendaConfigPage() {
           deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : "FLAT",
           whatsappOrderingEnabled: d.whatsappOrderingEnabled ?? false,
           hasWhatsappOrdersModule: d.hasWhatsappOrdersModule ?? false,
+          orderAlertEnabled: d.orderAlertEnabled ?? false,
+          orderAlertWhatsapp: d.orderAlertWhatsapp ?? "",
           isOpen: d.isOpen ?? true,
           adminCanViewExpectedCash: d.adminCanViewExpectedCash ?? true,
           cashCutEmailEnabled: d.cashCutEmailEnabled ?? false,
@@ -209,6 +285,13 @@ export default function TiendaConfigPage() {
         <ContactThemeCard config={config} setConfig={setConfig} heroUploading={heroUploading} uploadHero={uploadHero} />
 
         <DeliveryCard config={config} setConfig={setConfig} geoStatus={geoStatus} useMyLocation={useMyLocation} />
+
+        {/* QR por mesa (autoservicio dine-in) — el comensal escanea y su pedido entra al TPV con la mesa puesta */}
+        {storeUrl && (
+          <SectionCard icon={Store} title="QR de mesas" subtitle="Autoservicio en mesa para tus comensales">
+            <MesasQrCard storeUrl={storeUrl} />
+          </SectionCard>
+        )}
 
         {/* Programa de puntos */}
         <SectionCard icon={Star} title="Programa de puntos" subtitle="Lealtad de tus clientes">

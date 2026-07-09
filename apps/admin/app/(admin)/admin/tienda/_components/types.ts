@@ -81,6 +81,9 @@ export type TiendaConfig = {
   // Módulo OlaClick: pedir por WhatsApp desde el menú digital (gateado por plan).
   whatsappOrderingEnabled: boolean;
   hasWhatsappOrdersModule: boolean;
+  // Aviso al dueño por WhatsApp cuando entra un pedido web.
+  orderAlertEnabled: boolean;
+  orderAlertWhatsapp: string;
   isOpen: boolean;
   closedMessage: string;
   maxOpenOrders: number;

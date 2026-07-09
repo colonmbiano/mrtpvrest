@@ -42,6 +42,8 @@ export type AssistantConfig = { extraInstructions: string; ignoreNumbers: string
 export type AssistantState = {
   configured: boolean;
   enabled: boolean;
+  // Entitlement del add-on (plan): en rollout suave el backend devuelve true.
+  entitled?: boolean;
   provisioned: boolean;
   phoneNumber: string | null;
   updatedAt: string | null;

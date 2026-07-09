@@ -116,6 +116,8 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       'deliveryMode','originLat','originLng','deliveryBaseFee','deliveryPerKm',
       'deliveryFreeRadiusKm','deliveryMaxKm',
       'whatsappOrderingEnabled',
+      // Aviso al dueño por WhatsApp de nuevos pedidos web
+      'orderAlertEnabled','orderAlertWhatsapp',
     ];
     // Numéricos que SÍ admiten null (campos opcionales en el schema).
     const NULLABLE_NUMERIC = new Set([
@@ -140,9 +142,11 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
         // Freno de saturación: entero positivo; vacío/0 → null (sin freno).
         const n = Math.floor(Number(v));
         data[k] = Number.isFinite(n) && n > 0 ? n : null;
-      } else if (k === 'cashCutEmails' || k === 'saturatedMessage') {
+      } else if (k === 'cashCutEmails' || k === 'saturatedMessage' || k === 'orderAlertWhatsapp') {
         // String opcional: un vacío se guarda como null (cae al default).
         data[k] = (typeof v === 'string' && v.trim()) ? v.trim() : null;
+      } else if (k === 'orderAlertEnabled') {
+        data[k] = Boolean(v);
       } else if (k === 'promoStartTime' || k === 'promoEndTime') {
         // Ventana horaria de promos: "HH:mm" válido o null (sin límite).
         const s = typeof v === 'string' ? v.trim() : '';
@@ -220,12 +224,20 @@ router.get('/whatsapp-assistant', authenticate, requireTenantAccess, requireAdmi
       where: { restaurantId_type: { restaurantId, type: WA_ASSISTANT_TYPE } },
     });
     const cfg = rawAssistantConfig(row);
+    // Entitlement del add-on facturable: el backend conoce ENFORCE_BOT_MODULE,
+    // así que la UI no necesita el env. En rollout suave devuelve siempre true
+    // (no oculta un bot que sigue corriendo); con enforce on, false si el plan
+    // no incluye el módulo whatsapp_bot.
+    const { botModuleAllowed } = require('../lib/modules');
+    const entitled = await botModuleAllowed(restaurantId);
     res.set('Cache-Control', 'no-store');
     // Sin fila configurada aún → el bot opera con sus env vars: reflejamos
     // enabled:true para que el toggle muestre el estado real (encendido).
     res.json({
       configured: !!row,
       enabled: row ? row.enabled : true,
+      // ¿el plan del tenant incluye el bot? (respeta el rollout suave)
+      entitled,
       // ¿ya tiene una instancia de bot asignada? (statusUrl propia o env piloto)
       provisioned: !!assistantStatusUrl(row),
       phoneNumber: cfg.phoneNumber || null,
