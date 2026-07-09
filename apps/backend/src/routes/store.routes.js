@@ -22,6 +22,7 @@ const {
   getProviderForRestaurant,
   instantiateFromIntegration,
 } = require('../lib/payment-providers');
+const { toWhatsappNumber } = require('@mrtpvrest/config/phone');
 // Cálculo de envío: fuente única compartida con el chatbot de WhatsApp.
 const { resolveComboSelection } = require('../lib/money');
 const { isPromoWindowOpen } = require('../lib/promo-window');
@@ -231,6 +232,10 @@ router.get('/info', async (req, res) => {
     location: location ? { id: location.id, name: location.name, address: location.address } : null,
     hasWebStore:    tenantConfig.hasWebStore,
     whatsappNumber: config?.whatsappNumber || tenantConfig.whatsappNumber,
+    whatsappOrder: {
+      enabled: Boolean(config?.whatsappOrderingEnabled && (config?.whatsappNumber || tenantConfig.whatsappNumber)),
+      number: (config?.whatsappNumber || tenantConfig.whatsappNumber) ? toWhatsappNumber((config?.whatsappNumber || tenantConfig.whatsappNumber), config?.countryCode) : null
+    },
     storefrontTheme: (() => { const t = config?.storefrontTheme; const map = { MOCHI: "KAWAII", BENTO: "HALO", POCKET: "BRUTALIST", WAGBA: "ANTOJO" }; return map[t] || t || "KAWAII"; })(),
     primaryColor:    restaurant.accentColor || "#ff5c35",
     heroImageUrl:    config?.storefrontHeroUrl || null,
