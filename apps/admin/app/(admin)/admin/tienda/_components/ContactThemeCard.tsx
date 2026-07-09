@@ -62,6 +62,33 @@ export function ContactThemeCard({ config, setConfig, heroUploading, uploadHero 
         </div>
       </div>
 
+      {/* Aviso al dueño de nuevos pedidos web */}
+      <div className="mt-3 rounded-2xl px-4 py-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-extrabold text-tx-hi">Avisarme por WhatsApp cada pedido web</p>
+            <p className="mt-0.5 text-[11.5px] leading-relaxed text-tx-mut">
+              {config.orderAlertEnabled
+                ? "Recibirás un WhatsApp con el resumen cada vez que entre un pedido de la tienda online."
+                : "Apagado — solo llega el aviso al TPV."}
+            </p>
+          </div>
+          <Toggle checked={config.orderAlertEnabled} onChange={(v) => setConfig((p) => ({ ...p, orderAlertEnabled: v }))} label="Avisarme por WhatsApp" />
+        </div>
+        {config.orderAlertEnabled && (
+          <div className="mt-3">
+            <Field label="Número que recibe los avisos" hint="Si lo dejas vacío, se usa el teléfono de contacto">
+              <Input
+                type="text"
+                value={config.orderAlertWhatsapp}
+                onChange={(e) => { const v = e.target.value; setConfig((p) => ({ ...p, orderAlertWhatsapp: v })); }}
+                placeholder="Si lo dejas vacío, se usa el teléfono de contacto"
+              />
+            </Field>
+          </div>
+        )}
+      </div>
+
       <div className="mt-4">
         <Field label="Dirección principal">
           <Input type="text" value={config.address} onChange={(e) => { const v = e.target.value; setConfig((p) => ({ ...p, address: v })); }} />
