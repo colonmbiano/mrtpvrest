@@ -66,6 +66,7 @@ const SECTIONS = [
       { href: "/admin/integraciones",        icon: <IPlug />,      label: "Integraciones" },
       { href: "/admin/modulos",             icon: <IPuzzle />,    label: "Módulos" },
       { href: "/admin/billing",              icon: <ICreditCard />, label: "Facturación" },
+      { href: "/admin/mi-cuenta",            icon: <IUsers />,     label: "Mi Cuenta" },
       { href: "/admin/descargas",           icon: <IDownload />,  label: "Apps & Descargas" },
       { href: "/admin/guias",               icon: <IBook />,      label: "Guias de uso" },
     ],
