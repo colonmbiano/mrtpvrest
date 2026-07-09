@@ -100,6 +100,7 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       // Freno de saturación (tope de pedidos abiertos para canales remotos)
       'maxOpenOrders','saturatedMessage',
       'pointsPerTen','pointsValuePesos','storefrontTheme','storefrontHeroUrl',
+      'currency','currencyLocale',
       'centralWarehouseEnabled','adminCanViewExpectedCash','blockOnInsufficientStock','hasPackingStage',
       // Corte de caja por correo (toggle + lista de destinatarios)
       'cashCutEmailEnabled','cashCutEmails',

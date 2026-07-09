@@ -13,6 +13,7 @@ import BannerCarousel, { collectBanners } from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
 import StoreCheckout from '../StoreCheckout';
 import { ReactionButton } from '../ReactionButton';
+import { StoreLocaleProvider, useMoney } from '../StoreLocaleContext';
 import type { DeliveryConfig } from '../../lib/delivery';
 import {
   getAuth, clearAuth, loginCustomer, registerCustomer, type AuthState,
@@ -42,7 +43,7 @@ const WA = '#25D366';
 const DISP = 'var(--font-baloo), var(--font-syne), system-ui, sans-serif';
 const BODY = 'var(--font-quicksand), var(--font-dm-sans), system-ui, sans-serif';
 
-const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
+// fmt ahora viene de useMoney() (moneda/locale del tenant), no de un const global.
 const priceOf = (p: any) => (p.isPromo && p.promoPrice ? p.promoPrice : p.price);
 // Precio "Desde" para productos con variantes: menor precio de variante > 0; si no
 // hay variantes con precio, cae al precio base (evita mostrar "Desde $0").
@@ -89,6 +90,7 @@ type Info = {
   whatsappNumber: string | null; minOrderAmount?: number; estimatedDelivery?: number;
   isOpen?: boolean;
   onlinePayment?: boolean; delivery?: DeliveryConfig; heroImageUrl?: string | null;
+  currency?: string | null; currencyLocale?: string | null;
   themeConfig: { theme?: string; primaryColor?: string } | null;
 };
 
@@ -100,6 +102,7 @@ type OrderMode = 'DELIVERY' | 'TAKEOUT';
 
 export function MochiTheme({ data }: MochiThemeProps) {
   const { info, menu, locations } = data;
+  const fmt = useMoney();
 
   // Acento de la tienda. Si el tenant no personalizó (sigue en el naranja
   // default), usamos un morado kawaii; si sí, respetamos su color de marca.
@@ -189,6 +192,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
   const goCheckout = () => { setCartOpen(false); setCheckoutOpen(true); };
 
   return (
+    <StoreLocaleProvider currency={info.currency} locale={info.currencyLocale}>
     <div className="min-h-screen relative" style={{ color: INK, fontFamily: BODY, background: `radial-gradient(1100px 520px at 50% -8%, #FBE6F5 0%, transparent 55%), radial-gradient(900px 500px at 92% 8%, #E4E0FF 0%, transparent 55%), linear-gradient(180deg, #F4EDFD 0%, #EFE9FB 100%)` }}>
       <Decor />
 
@@ -304,6 +308,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
         .mk-slide{animation:mkSlide .28s cubic-bezier(.22,1,.36,1)}
       ` }} />
     </div>
+    </StoreLocaleProvider>
   );
 }
 
@@ -338,6 +343,7 @@ function Decor() {
 //  HEADER
 // ══════════════════════════════════════════════════════════════════════════════
 function Header({ info, accent, waNumber, quantity, total, query, setQuery, orderMode, setOrderMode, auth, onLogin, onSignOut, onCart, onWhatsApp }: any) {
+  const fmt = useMoney();
   return (
     <header className="sticky top-0 z-40 backdrop-blur-xl" style={{ background: 'rgba(255,253,248,0.82)', borderBottom: `1px solid ${CARD_BD}` }}>
       <div className="max-w-7xl mx-auto px-4">
@@ -546,6 +552,7 @@ function Badge({ kind }: { kind: 'top' | 'promo' | 'new' }) {
 function accentForBadge() { return '#8B5CF6'; }
 
 function ProductCard({ p, accent, onOpen, slug }: { p: any; accent: string; onOpen: () => void; slug: string }) {
+  const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
   const remove = useCart(s => s.remove);
@@ -627,6 +634,7 @@ function TrustBadges({ accent, estimated }: { accent: string; estimated?: number
 //  CARRITO — líneas + variantes desktop/móvil
 // ══════════════════════════════════════════════════════════════════════════════
 function CartLines({ allItems, accent }: { allItems: any[]; accent: string }) {
+  const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
   const remove = useCart(s => s.remove);
@@ -663,6 +671,7 @@ function Row({ label, value, muted }: { label: string; value: string; muted?: bo
 }
 
 function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhatsApp, waNumber, suggestions, onAddSuggestion }: any) {
+  const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
@@ -721,6 +730,7 @@ function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhats
 }
 
 function MobileCart({ accent, onClose, onCheckout, onWhatsApp, waNumber, allItems, minOrder }: any) {
+  const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
@@ -784,6 +794,7 @@ function Newsletter({ accent, onSubscribe }: { accent: string; onSubscribe: () =
 //  FOOTER
 // ══════════════════════════════════════════════════════════════════════════════
 function Footer({ info, accent, primaryLocation, waNumber, minOrder, onWhatsApp, onNav }: any) {
+  const fmt = useMoney();
   return (
     <footer className="relative" style={{ borderTop: `1px solid ${CARD_BD}`, background: CREAM }}>
       <div className="max-w-7xl mx-auto px-4 py-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">

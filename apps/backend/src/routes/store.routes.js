@@ -234,6 +234,8 @@ router.get('/info', async (req, res) => {
     storefrontTheme: (() => { const t = config?.storefrontTheme; const map = { MOCHI: "KAWAII", BENTO: "HALO", POCKET: "BRUTALIST", WAGBA: "ANTOJO" }; return map[t] || t || "KAWAII"; })(),
     primaryColor:    restaurant.accentColor || "#ff5c35",
     heroImageUrl:    config?.storefrontHeroUrl || null,
+    currency:        config?.currency || "MXN",
+    currencyLocale:  config?.currencyLocale || "es-MX",
 
     // Estado de la tienda — el storefront debe bloquear pedidos si está cerrada.
     // isOpen se calcula combinando el override manual y el horario automático.
