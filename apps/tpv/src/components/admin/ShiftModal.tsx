@@ -22,9 +22,13 @@ interface Props {
   /** Al cerrar el turno se invoca esto para botar al cajero a la pantalla
    *  de PIN (logout + /locked). Si no se pasa, solo se cierra el modal. */
   onShiftClosed?: () => void;
+  /** Al abrir el turno con éxito se invoca esto — se usa para abrir el cajón
+   *  monedero (el fondo de caja entra físicamente a la gaveta). Best-effort;
+   *  si no se pasa, no ocurre nada extra. */
+  onShiftOpened?: () => void;
 }
 
-export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) {
+export default function ShiftModal({ employee, onClose, onShiftClosed, onShiftOpened }: Props) {
   const [shift, setShift]           = useState<any>(null);
   const [loading, setLoading]       = useState(true);
   const [openingFloat, setOpeningFloat] = useState("");
@@ -106,6 +110,8 @@ export default function ShiftModal({ employee, onClose, onShiftClosed }: Props) 
         if (typeof window !== "undefined") {
           localStorage.setItem("tpv-shift-open", "true");
         }
+        // Turno abierto → abrir el cajón para colocar el fondo de caja.
+        onShiftOpened?.();
         setTab("summary");
         return;
       }
