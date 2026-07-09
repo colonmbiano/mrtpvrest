@@ -172,9 +172,17 @@ router.put('/item/:orderItemId/done', kdsWriteRoles, async (req, res) => {
           where: { restaurantId: req.restaurantId || req.user?.restaurantId },
           select: { hasPackingStage: true },
         });
+        const nextStatus = cfg?.hasPackingStage ? 'PACKING' : 'READY';
         await prisma.order.update({
-          where: { id: orderId }, data: { status: cfg?.hasPackingStage ? 'PACKING' : 'READY' }
+          where: { id: orderId }, data: { status: nextStatus }
         });
+        // READY es un estado visible para el cliente (pedido web): avisarle.
+        // PACKING es interno (empaque), no se notifica. Best-effort.
+        if (nextStatus === 'READY') {
+          require('../services/notifications.service')
+            .notifyOrderStatusById(orderId, 'READY')
+            .catch((err) => console.error('[kds] notifyOrderStatus:', err.message));
+        }
       }
     }
     res.json({ ok: true });
@@ -244,6 +252,13 @@ router.put('/packing/:orderId/check', kdsWriteRoles, async (req, res) => {
       }
       return { allDone, advanced };
     });
+    // Empaque completo → READY: avisar al cliente (pedido web). Best-effort,
+    // solo cuando esta petición realmente hizo la transición (idempotente).
+    if (result.advanced) {
+      require('../services/notifications.service')
+        .notifyOrderStatusById(order.id, 'READY')
+        .catch((err) => console.error('[kds] notifyOrderStatus:', err.message));
+    }
     res.json({ ok: true, ...result });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -255,6 +270,10 @@ router.put('/order/:orderId/ready', kdsWriteRoles, async (req, res) => {
       where: { id: req.params.orderId },
       data: { status: 'READY' }
     });
+    // Avisar al cliente que su pedido está listo (push + WhatsApp). Best-effort.
+    require('../services/notifications.service')
+      .notifyOrderStatusById(req.params.orderId, 'READY')
+      .catch((err) => console.error('[kds] notifyOrderStatus:', err.message));
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

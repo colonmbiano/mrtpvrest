@@ -12,7 +12,7 @@
 
 import {
   Boxes, Truck, Globe, MonitorSmartphone, Heart, ChefHat, BarChart3, Wallet,
-  Utensils, Coins, Users, Receipt,
+  Utensils, Coins, Users, Receipt, MessageCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -46,6 +46,7 @@ export const MODULE_CATALOG: ModuleDef[] = [
   { key: "cash_shift",          label: "Turnos de Caja",  shortLabel: "Turnos",    description: "Apertura y corte de turno de caja.",   Icon: Coins,    accent: "green",  kind: "key" },
   { key: "employee_management", label: "Empleados",       shortLabel: "Empleados", description: "Gestión de empleados, roles y PINs.",  Icon: Users,    accent: "blue",   kind: "key" },
   { key: "payroll",             label: "Nómina",          shortLabel: "Nómina",    description: "Pago por día trabajado (la raya).",    Icon: Receipt,  accent: "orange", kind: "key" },
+  { key: "whatsapp_bot",        label: "Bot de WhatsApp", shortLabel: "Bot WA",    description: "Asistente de pedidos por WhatsApp.",   Icon: MessageCircle, accent: "green", kind: "key", aliases: ["chatbot"] },
 ];
 
 const ALIAS_TO_CANONICAL: Record<string, string> = {};

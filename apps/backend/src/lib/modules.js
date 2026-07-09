@@ -27,15 +27,21 @@ const MODULE_CASH_SHIFT   = 'cash_shift'
 const MODULE_EMPLOYEES    = 'employee_management'
 const MODULE_MULTICURRENCY = 'multi_currency'
 const MODULE_PAYROLL      = 'payroll'
+const MODULE_WHATSAPP_BOT = 'whatsapp_bot'
 
 const MODULES = {
   MODULE_POS_STANDARD, MODULE_KIOSK, MODULE_DELIVERY, MODULE_WEBSTORE,
   MODULE_LOYALTY, MODULE_KDS, MODULE_REPORTS, MODULE_INVENTORY,
   MODULE_WAITERS, MODULE_CASH_SHIFT, MODULE_EMPLOYEES, MODULE_MULTICURRENCY,
-  MODULE_PAYROLL,
+  MODULE_PAYROLL, MODULE_WHATSAPP_BOT,
 }
 
 const ENFORCE = String(process.env.ENFORCE_PLAN_FLAGS || '').toLowerCase() === 'true'
+// Gate específico del bot de WhatsApp (add-on facturable). Separado de ENFORCE
+// para poder cobrar el bot SIN endurecer aún el resto de módulos. Rollout suave:
+// apagado por default → no rompe los bots ya activos al desplegar. El operador
+// pone ENFORCE_BOT_MODULE=true en Railway cuando los planes ya incluyen el módulo.
+const ENFORCE_BOT = String(process.env.ENFORCE_BOT_MODULE || '').toLowerCase() === 'true'
 
 const MODULE_ALIASES = {
   WEBSTORE: ['client_menu', 'webstore'],
@@ -47,6 +53,7 @@ const MODULE_ALIASES = {
   REPORTS: ['reports'],
   INVENTORY: ['inventory'],
   FINANCE: ['finance'],
+  WHATSAPP_BOT: ['whatsapp_bot'],
 }
 
 function moduleKeys(moduleKey) {
@@ -165,9 +172,26 @@ function requireFeatureFlag(flagName, friendlyName) {
   }
 }
 
+/**
+ * ¿El tenant puede correr el bot de WhatsApp? Gate del add-on facturable.
+ * Rollout suave: con ENFORCE_BOT_MODULE apagado siempre deja pasar (no rompe
+ * bots activos). Con enforce on, exige el módulo 'whatsapp_bot' en el plan
+ * (o el override manual del tenant). Best-effort: ante error, deja pasar.
+ */
+async function botModuleAllowed(restaurantId) {
+  if (!ENFORCE_BOT) return true
+  try {
+    return await restaurantHasModule(restaurantId, MODULE_WHATSAPP_BOT)
+  } catch (err) {
+    console.error('[plan-gate] botModuleAllowed error:', err.message)
+    return true
+  }
+}
+
 module.exports = {
   MODULES,
-  restaurantHasModule, restaurantHasFeatureFlag,
+  restaurantHasModule, restaurantHasFeatureFlag, botModuleAllowed,
   requireModule, requireFeatureFlag,
   isEnforceMode: () => ENFORCE,
+  isBotEnforceMode: () => ENFORCE_BOT,
 }

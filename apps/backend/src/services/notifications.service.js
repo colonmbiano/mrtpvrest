@@ -223,6 +223,22 @@ async function notifyOrderStatus(order, status) {
   }
 }
 
+// Variante por id: recarga solo los campos que necesita notifyOrderStatus y
+// notifica. Pensada para los sitios que cambian el estado con order.update /
+// updateMany y no tienen a mano el objeto completo (KDS, delivery). Best-effort
+// desde el punto de llamada: los pedidos sin teléfono se omiten aguas abajo.
+async function notifyOrderStatusById(orderId, status) {
+  if (!orderId || !MESSAGES[status]) return;
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true, orderNumber: true, userId: true, customerPhone: true, restaurantId: true,
+      user: { select: { phone: true } },
+    },
+  });
+  if (order) await notifyOrderStatus(order, status);
+}
+
 // ── Notificar falta de ingrediente ────────────────────────────────────────
 async function notifyIngredientShortage(order, missingItem, options) {
   const phone = order.customerPhone || order.user?.phone;
@@ -309,4 +325,4 @@ async function notifyLowStock(ingredient, locationId) {
   } catch (e) { console.error('notifyLowStock:', e.message); }
 }
 
-module.exports = { notifyOrderStatus, notifyIngredientShortage, notifyNewOrder, notifyLowStock, sendWhatsApp, sendOrderWhatsApp, sendPushToOrder, sendPushToDriver, notifyDriversNewDeliveryOrder };
+module.exports = { notifyOrderStatus, notifyOrderStatusById, notifyIngredientShortage, notifyNewOrder, notifyLowStock, sendWhatsApp, sendOrderWhatsApp, sendPushToOrder, sendPushToDriver, notifyDriversNewDeliveryOrder };
