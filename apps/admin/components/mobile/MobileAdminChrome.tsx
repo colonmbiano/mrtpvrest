@@ -22,7 +22,7 @@ const moreGroups = [
   { label: "Negocio", items: [["/admin/mi-marca", "Mi Marca"], ["/admin/tienda", "Tienda online"], ["/admin/zonas", "Zonas de entrega"], ["/admin/pantalla-cliente", "Pantalla cliente"]] },
   { label: "Operación", items: [["/admin/inventario", "Inventario"], ["/admin/inventario/compras", "Compras & Bodega"], ["/admin/rastreo", "Logística & Flota"], ["/admin/caja-repartidores", "Caja repartidores"], ["/admin/nomina", "Nómina"], ["/admin/reportes/cortes", "Cortes"]] },
   { label: "Crecimiento", items: [["/admin/reportes/ia", "Reportes IA"], ["/admin/promociones", "Promociones IA"], ["/admin/inbox", "Bandeja de entrada"], ["/admin/whatsapp", "WhatsApp Bot"], ["/admin/plantillas", "Plantillas WA"], ["/admin/banners", "Banners"]] },
-  { label: "Cuenta", items: [["/admin/modulos", "Módulos"], ["/admin/integraciones", "Integraciones"], ["/admin/billing", "Facturación"], ["/admin/descargas", "Apps & Descargas"]] },
+  { label: "Cuenta", items: [["/admin/mi-cuenta", "Mi Cuenta"], ["/admin/modulos", "Módulos"], ["/admin/integraciones", "Integraciones"], ["/admin/billing", "Facturación"], ["/admin/descargas", "Apps & Descargas"]] },
 ] as const;
 
 const routeTitles: Array<[string, string, string]> = [
@@ -44,6 +44,7 @@ const routeTitles: Array<[string, string, string]> = [
   ["/admin/integraciones", "Integraciones", "Servicios conectados"],
   ["/admin/modulos", "Módulos", "Funciones del negocio"],
   ["/admin/billing", "Facturación", "Plan y pagos"],
+  ["/admin/mi-cuenta", "Mi Cuenta", "Perfil, región y apariencia"],
   ["/admin/descargas", "Apps & Descargas", "Herramientas del equipo"],
   ["/admin/mi-marca", "Mi Marca", "Identidad del restaurante"],
   ["/admin/tienda", "Tienda online", "Canal de venta digital"],
