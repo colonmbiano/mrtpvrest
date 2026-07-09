@@ -320,6 +320,7 @@ model Restaurant {
   whatsappSessions WhatsappSession[]
   whatsappContacts WhatsappContact[]
   whatsappConversations WhatsappConversation[]
+  deliveryZones    DeliveryZone[]
   promoGames       PromoGame[]
   bulkPromos       BulkPromo[]
 
@@ -1362,9 +1363,12 @@ model RestaurantConfig {
   //   FLAT     → tarifa fija = deliveryFee (comportamiento histórico).
   //   DISTANCE → deliveryBaseFee + (deliveryPerKm × distancia_km), con radio
   //              de envío gratis y distancia máxima de cobertura opcionales.
+  //   ZONES    → tarifa por polígono: la coordenada del cliente cae dentro de
+  //              una DeliveryZone dibujada en el mapa y se cobra su fee. Fuera
+  //              de toda zona = OUT_OF_RANGE (sin cobertura).
   // El origen (originLat/originLng) es la ubicación de la tienda desde donde
   // se mide la distancia al cliente (GPS del navegador en el checkout).
-  deliveryMode         String @default("FLAT") // FLAT | DISTANCE
+  deliveryMode         String @default("FLAT") // FLAT | DISTANCE | ZONES
   originLat            Float?
   originLng            Float?
   deliveryBaseFee      Float  @default(0)
@@ -2483,6 +2487,35 @@ model UpsellRule {
 
   @@index([restaurantId, enabled])
   @@map("upsell_rules")
+}
+
+// Zona de entrega por polígono. Cuando RestaurantConfig.deliveryMode = ZONES,
+// la coordenada del cliente (GPS del checkout / pin de WhatsApp) se prueba
+// contra estos polígonos y se cobra la fee de la zona que la contiene. Si no
+// cae en ninguna, el pedido queda fuera de cobertura (OUT_OF_RANGE). La lógica
+// vive en lib/delivery-fee.js (fuente única para tienda web y bot).
+model DeliveryZone {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name  String
+  fee   Decimal @default(0) @db.Decimal(12, 2)
+  color String  @default("#22c55e") // color del polígono en el mapa del admin
+
+  // Vértices del polígono: array JSON de { lat, lng } en orden. Se cierra solo
+  // (el último vértice conecta con el primero). Mínimo 3 puntos.
+  polygon Json
+
+  active Boolean @default(true)
+  // En solapes gana la de menor priority (se evalúa primero). Empates: por id.
+  priority Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, active, priority])
+  @@map("delivery_zones")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

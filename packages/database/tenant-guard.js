@@ -73,6 +73,7 @@ const SCOPED_MODELS = new Set([
   'WhatsappConversation',
   'WhatsappMessage',
   'UpsellRule',
+  'DeliveryZone',
   'PromoGame',
   'PromoGamePlay',
   // Módulo retail (SKU-based). Todo modelo con columna restaurantId debe estar

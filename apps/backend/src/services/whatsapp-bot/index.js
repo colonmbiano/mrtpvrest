@@ -112,6 +112,15 @@ async function processMessage({ restaurant, integration, message, io }) {
     orderSvc.hasOnlinePayment(prisma, restaurant.id),
   ]);
 
+  // Modo ZONES: adjuntamos las zonas activas para que computeDeliveryFee (en el
+  // engine y al crear la orden) ubique el pin del cliente en su polígono.
+  if (config && config.deliveryMode === 'ZONES') {
+    config.deliveryZones = await prisma.deliveryZone.findMany({
+      where: { restaurantId: restaurant.id, active: true },
+      orderBy: { priority: 'asc' },
+    });
+  }
+
   // Tienda cerrada → no tomamos pedidos nuevos. Respeta el override manual y el
   // horario automático; el mensaje dinámico indica cuándo volvemos a abrir.
   if (config) {

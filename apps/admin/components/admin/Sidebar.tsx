@@ -62,6 +62,7 @@ const SECTIONS = [
       { href: "/admin/reportes/ia",          icon: <ITrending />,  label: "Reportes" },
       { href: "/admin/mi-marca",             icon: <IBuilding />,  label: "Mi Marca" },
       { href: "/admin/tienda",               icon: <IStore />,     label: "Tienda" },
+      { href: "/admin/zonas",                icon: <IMapPin />,    label: "Zonas de entrega" },
       { href: "/admin/integraciones",        icon: <IPlug />,      label: "Integraciones" },
       { href: "/admin/modulos",             icon: <IPuzzle />,    label: "Módulos" },
       { href: "/admin/billing",              icon: <ICreditCard />, label: "Facturación" },
