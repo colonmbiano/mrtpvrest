@@ -1381,6 +1381,14 @@ model RestaurantConfig {
   pointsValuePesos Float @default(0.10)
 
   storefrontTheme String @default("KAWAII") // KAWAII | HALO | BRUTALIST | ANTOJO | MUNDIALISTA
+
+  // Moneda de la tienda. Antes el símbolo "$" y "es-MX" estaban hardcodeados en
+  // el storefront; ahora cada negocio elige su moneda (ISO 4217) y locale de
+  // formato. El precio se guarda igual (Float en la moneda base); esto solo
+  // cambia cómo se muestra.
+  currency       String @default("MXN") // ISO 4217: MXN, USD, EUR, COP…
+  currencyLocale String @default("es-MX") // locale de formato Intl
+
   // Imagen de portada (hero) opcional del storefront. La usa el tema Mundialista
   // a todo lo ancho. Se sube sin recorte (mode=hero). null → hero por defecto.
   storefrontHeroUrl String?

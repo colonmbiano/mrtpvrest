@@ -72,6 +72,28 @@ const DEFAULT_HOUR: Omit<BusinessHour, "day"> = { enabled: false, open: "09:00",
 const INPUT_CLS = "min-h-12 w-full rounded-xl px-4 text-sm font-medium outline-none transition-colors focus:border-[var(--brand-primary)]";
 const INPUT_STYLE = { background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
 
+// Monedas soportadas (código ISO 4217 + locale de formato). El precio se guarda
+// igual; esto solo cambia cómo se muestra en la tienda pública.
+const CURRENCIES = [
+  { code: "MXN", locale: "es-MX", label: "Peso mexicano (MXN)" },
+  { code: "USD", locale: "en-US", label: "Dólar estadounidense (USD)" },
+  { code: "EUR", locale: "es-ES", label: "Euro (EUR)" },
+  { code: "COP", locale: "es-CO", label: "Peso colombiano (COP)" },
+  { code: "ARS", locale: "es-AR", label: "Peso argentino (ARS)" },
+  { code: "CLP", locale: "es-CL", label: "Peso chileno (CLP)" },
+  { code: "PEN", locale: "es-PE", label: "Sol peruano (PEN)" },
+  { code: "GTQ", locale: "es-GT", label: "Quetzal (GTQ)" },
+  { code: "BRL", locale: "pt-BR", label: "Real brasileño (BRL)" },
+];
+
+function formatPreview(currency: string, locale: string): string {
+  try {
+    return new Intl.NumberFormat(locale, { style: "currency", currency, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(199);
+  } catch {
+    return "$199";
+  }
+}
+
 // ── Recompensas por puntos (lealtad Fase 3) ─────────────────────────────────
 // CRUD contra /api/loyalty/rewards. Una recompensa da un producto gratis o un
 // descuento fijo en $; el cliente la canjea en el checkout de la tienda online.
@@ -392,6 +414,8 @@ export default function TiendaConfigPage() {
     freeDeliveryFrom: 0,
     estimatedDelivery: 40,
     storefrontTheme: "KAWAII",
+    currency: "MXN",
+    currencyLocale: "es-MX",
     storefrontHeroUrl: "",
     // Estado de la tienda
     isOpen: true,
@@ -505,6 +529,8 @@ export default function TiendaConfigPage() {
           scheduleEnabled: d.scheduleEnabled ?? false,
           countryCode: d.countryCode || "MX",
           timezone: d.timezone || "America/Mexico_City",
+          currency: d.currency || "MXN",
+          currencyLocale: d.currencyLocale || "es-MX",
           businessHours: (() => {
             try {
               const parsed = JSON.parse(d.businessHours || "[]");
@@ -821,6 +847,21 @@ export default function TiendaConfigPage() {
           <div className="mt-4">
             <FieldLabel><MapPin size={11} className="mr-1 inline" /> Dirección principal</FieldLabel>
             <input type="text" value={config.address} onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, address: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
+          </div>
+
+          <div className="mt-4">
+            <FieldLabel>Moneda de la tienda</FieldLabel>
+            <select
+              value={config.currency}
+              onChange={(e) => {
+                const c = CURRENCIES.find(x => x.code === e.target.value) ?? { code: "MXN", locale: "es-MX" };
+                setConfig(p => ({ ...p, currency: c.code, currencyLocale: c.locale }));
+              }}
+              className={INPUT_CLS} style={INPUT_STYLE}
+            >
+              {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+            </select>
+            <p className="ml-1 mt-1 text-[10px] text-tx-dim">Cómo se muestran los precios en la tienda. Vista previa: {formatPreview(config.currency, config.currencyLocale)}</p>
           </div>
 
           <div className="mt-5">

@@ -54,6 +54,8 @@ type StoreInfo = {
   storefrontTheme?: string | null;
   primaryColor?: string | null;
   heroImageUrl?: string | null;
+  currency?: string | null;
+  currencyLocale?: string | null;
   // Retrocompat: algunas respuestas antiguas anidaban el tema aquí.
   themeConfig?: {
     theme?: string;
@@ -285,6 +287,8 @@ export default async function StorefrontPage({
     slug: store.slug,
     minOrderAmount: store.minOrderAmount,
     delivery: store.delivery,
+    currency: store.currency,
+    currencyLocale: store.currencyLocale,
   };
 
   return (

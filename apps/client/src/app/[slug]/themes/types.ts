@@ -19,6 +19,8 @@ export type StoreProps = {
   storefrontTheme?: string;
   minOrderAmount?: number;
   delivery?: DeliveryConfig;
+  currency?: string | null;
+  currencyLocale?: string | null;
 };
 
 export type CartLine = { id: string; name: string; quantity: number; price: number };

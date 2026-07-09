@@ -13,6 +13,7 @@ import { productEmoji } from '../../lib/productEmoji';
 import BannerCarousel, { collectBanners } from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
 import { ReactionButton } from '../ReactionButton';
+import { StoreLocaleProvider, useMoney } from '../StoreLocaleContext';
 import StoreCheckout from '../StoreCheckout';
 import type { DeliveryConfig } from '../../lib/delivery';
 import {
@@ -46,7 +47,7 @@ const GOLD_BD = 'rgba(255,193,7,0.45)';
 const DISP = 'var(--font-bebas), Impact, sans-serif';
 const BODY = 'var(--font-montserrat), system-ui, sans-serif';
 
-const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
+// fmt ahora viene de useMoney() (moneda/locale del tenant), no de un const global.
 const priceOf = (p: any) => (p.isPromo && p.promoPrice ? p.promoPrice : p.price);
 // Precio "Desde" para productos con variantes: menor precio de variante > 0; si no
 // hay variantes con precio, cae al precio base (evita mostrar "Desde $0").
@@ -95,6 +96,7 @@ type Info = {
   id: string; name: string; slug: string; logo: string | null; hasWebStore: boolean;
   whatsappNumber: string | null; minOrderAmount?: number; estimatedDelivery?: number; isOpen?: boolean;
   onlinePayment?: boolean; delivery?: DeliveryConfig; heroImageUrl?: string | null;
+  currency?: string | null; currencyLocale?: string | null;
   themeConfig: { theme?: string; primaryColor?: string } | null;
 };
 
@@ -106,6 +108,7 @@ type OrderMode = 'DELIVERY' | 'TAKEOUT';
 
 export function MundialistaTheme({ data }: MundialistaThemeProps) {
   const { info, menu, locations } = data;
+  const fmt = useMoney();
   // Ocultamos "Envíos" del grilla (es un recargo, no un platillo) y categorías vacías.
   const categories: any[] = (menu.categories || [])
     .filter((c: any) => (c.items || []).length > 0 && !isShippingCat(c.name));
@@ -200,6 +203,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
   const goCheckout = () => { setCartOpen(false); setCheckoutOpen(true); };
 
   return (
+    <StoreLocaleProvider currency={info.currency} locale={info.currencyLocale}>
     <div className="min-h-screen" style={{ background: BG, color: TEXT, fontFamily: BODY }}>
       <div aria-hidden className="fixed inset-0 pointer-events-none" style={{
         background: `radial-gradient(1000px 460px at 50% -10%, ${GOLD}1c, transparent 60%), radial-gradient(760px 420px at 88% 6%, ${GREEN}14, transparent 55%), linear-gradient(180deg, #04040A, ${BG} 36%)`,
@@ -329,6 +333,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
 
       <style dangerouslySetInnerHTML={{ __html: `.no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}` }} />
     </div>
+    </StoreLocaleProvider>
   );
 }
 
@@ -336,6 +341,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
 //  HEADER
 // ══════════════════════════════════════════════════════════════════════════════
 function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, orderMode, setOrderMode, auth, onLogin, onSignOut, onCart, onWhatsApp }: any) {
+  const fmt = useMoney();
   return (
     <header className="sticky top-0 z-40 backdrop-blur-xl" style={{ background: `${BG}e6`, borderBottom: `1px solid ${BORDER}` }}>
       <div className="max-w-7xl mx-auto px-4">
@@ -578,6 +584,7 @@ function Badge({ kind }: { kind: 'pop' | 'promo' | 'new' }) {
 }
 
 function ProductCard({ p, onOpen, slug }: { p: any; onOpen: () => void; slug: string }) {
+  const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
   const remove = useCart(s => s.remove);
@@ -658,6 +665,7 @@ function CombosSection({ id, dataCat, category, onOpen }: { id: string; dataCat:
 }
 
 function ComboCard({ p, onOpen }: { p: any; onOpen: () => void }) {
+  const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
   const remove = useCart(s => s.remove);
@@ -719,6 +727,7 @@ function TrustBadges({ estimated }: { estimated?: number }) {
 //  CARRITO — contenido compartido + variantes desktop/móvil
 // ══════════════════════════════════════════════════════════════════════════════
 function CartLines({ allItems, accent }: { allItems: any[]; accent: string }) {
+  const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
   const remove = useCart(s => s.remove);
@@ -751,6 +760,7 @@ function CartLines({ allItems, accent }: { allItems: any[]; accent: string }) {
 }
 
 function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhatsApp, waNumber, suggestions, onAddSuggestion }: any) {
+  const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
@@ -809,6 +819,7 @@ function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhats
 }
 
 function MobileCart({ onClose, onCheckout, onWhatsApp, waNumber, allItems, minOrder, accent }: any) {
+  const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
@@ -876,6 +887,7 @@ function Newsletter({ onSubscribe }: { onSubscribe: () => void }) {
 //  FOOTER
 // ══════════════════════════════════════════════════════════════════════════════
 function Footer({ info, primaryLocation, waNumber, minOrder, onWhatsApp, onNav, onCombos }: any) {
+  const fmt = useMoney();
   const Nav = ({ label, onClick }: { label: string; onClick: () => void }) => (
     <li><button onClick={onClick} className="hover:text-white transition" style={{ color: MUTED }}>{label}</button></li>
   );
