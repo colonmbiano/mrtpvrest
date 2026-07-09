@@ -48,7 +48,19 @@ const corsOptions = {
       callback(null, true);
     } else {
       console.log('CORS Blocked Origin:', origin);
-      callback(new Error('CORS not allowed for ' + origin));
+      // Preflight/origen bloqueado = 4xx de cliente, NO un CRITICAL de servidor.
+      // Marcamos el error para que error.middleware.js lo trate como 403/WARN
+      // usando los hooks que YA lee del error (statusCode/code/level/isOperational):
+      //  - statusCode 403 -> isCritical=false (no CRITICAL, no 500, no notifyAdmin)
+      //  - level 'WARN'   -> nivel explícito en el SystemLog
+      //  - code 'CORS_BLOCKED' -> errorCode dedicado y filtrable (no INTERNAL_ERROR)
+      //  - isOperational  -> mensaje público controlado
+      const corsError = new Error('CORS not allowed for ' + origin);
+      corsError.statusCode = 403;
+      corsError.code = 'CORS_BLOCKED';
+      corsError.level = 'WARN';
+      corsError.isOperational = true;
+      callback(corsError);
     }
   },
   credentials: true,

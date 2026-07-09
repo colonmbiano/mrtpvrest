@@ -44,7 +44,7 @@ const tools = [
       parameters: {
         type: 'object',
         properties: {
-          limit: { type: 'integer', default: 10 }
+          limit: { type: ['integer', 'null'], default: 10 }
         }
       }
     }
@@ -90,8 +90,8 @@ const tools = [
           code: { type: 'string', description: 'Código del cupón (ej: VERANO20)' },
           discountType: { type: 'string', enum: ['PERCENTAGE', 'FIXED'] },
           value: { type: 'number', description: 'Valor del descuento' },
-          description: { type: 'string', description: 'Descripción breve' },
-          expiresInDays: { type: 'integer', description: 'Días hasta que venza el cupón' }
+          description: { type: ['string', 'null'], description: 'Descripción breve' },
+          expiresInDays: { type: ['integer', 'null'], description: 'Días hasta que venza el cupón' }
         },
         required: ['restaurantId', 'code', 'discountType', 'value']
       }
@@ -107,7 +107,7 @@ const tools = [
         properties: {
           tenantId: { type: 'string', description: 'ID del tenant' },
           newMonthlyPrice: { type: 'number', description: 'Nuevo precio mensual en USD' },
-          reason: { type: 'string', description: 'Razón del descuento' }
+          reason: { type: ['string', 'null'], description: 'Razón del descuento' }
         },
         required: ['tenantId', 'newMonthlyPrice']
       }
