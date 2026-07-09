@@ -32,6 +32,9 @@ export default function TiendaConfigPage() {
     estimatedDelivery: 40,
     storefrontTheme: "KAWAII",
     storefrontHeroUrl: "",
+    // Módulo OlaClick
+    whatsappOrderingEnabled: false,
+    hasWhatsappOrdersModule: false,
     // Estado de la tienda
     isOpen: true,
     closedMessage: "",
@@ -121,6 +124,8 @@ export default function TiendaConfigPage() {
           maxOpenOrders: d.maxOpenOrders ?? 0,
           saturatedMessage: d.saturatedMessage ?? "",
           deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : "FLAT",
+          whatsappOrderingEnabled: d.whatsappOrderingEnabled ?? false,
+          hasWhatsappOrdersModule: d.hasWhatsappOrdersModule ?? false,
           isOpen: d.isOpen ?? true,
           adminCanViewExpectedCash: d.adminCanViewExpectedCash ?? true,
           cashCutEmailEnabled: d.cashCutEmailEnabled ?? false,
@@ -143,7 +148,7 @@ export default function TiendaConfigPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      const { slug: _slug, ...rest } = config;
+      const { slug: _slug, hasWhatsappOrdersModule: _hwom, ...rest } = config;
       await api.put("/api/admin/config", {
         ...rest,
         freeDeliveryFrom: config.freeDeliveryFrom > 0 ? config.freeDeliveryFrom : null,

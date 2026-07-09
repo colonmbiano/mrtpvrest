@@ -78,6 +78,9 @@ export type TiendaConfig = {
   estimatedDelivery: number;
   storefrontTheme: string;
   storefrontHeroUrl: string;
+  // Módulo OlaClick: pedir por WhatsApp desde el menú digital (gateado por plan).
+  whatsappOrderingEnabled: boolean;
+  hasWhatsappOrdersModule: boolean;
   isOpen: boolean;
   closedMessage: string;
   maxOpenOrders: number;

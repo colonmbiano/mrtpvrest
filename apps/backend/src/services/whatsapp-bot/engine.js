@@ -79,6 +79,14 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
 
   // ── Comandos globales (texto) ─────────────────────────────────────────────
   if (message?.type === 'text') {
+    // Si es un pedido web prellenado (tiene folio generado por la tienda online)
+    const webOrderMatch = text.match(/\*Folio:\*\s*#([A-Z0-9\-]+)/i);
+    if (webOrderMatch) {
+      const folio = webOrderMatch[1];
+      // Reconocer el pedido y resetear estado para que el bot no se quede colgado
+      return result(m.webOrderAck(folio), STATES.GREETING, freshData(data.phone, data.lastOrderId));
+    }
+
     if (['cancelar', 'salir', 'reiniciar'].includes(command)) {
       return result(m.cancelled, STATES.GREETING, freshData(data.phone, data.lastOrderId));
     }

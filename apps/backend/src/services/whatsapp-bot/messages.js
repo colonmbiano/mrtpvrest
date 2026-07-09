@@ -163,6 +163,9 @@ module.exports = {
   cancelled:
     '❌ Tu pedido fue cancelado. Cuando quieras empezar de nuevo, solo escríbeme 🙂.',
 
+  webOrderAck: (folio) =>
+    `🎉 ¡Hola! Recibimos tu pedido con folio *${folio}*.\n\nEn breve confirmaremos tu orden. Puedes revisar el estado actualizado en cualquier momento desde el link de tu pedido. 🙌`,
+
   storeClosed: (msg) =>
     `😴 ${msg || 'La tienda está cerrada en este momento.'} Vuelve a escribirnos en nuestro horario, ¡con gusto te atenderemos!`,
 
