@@ -1,12 +1,12 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import {
-  ChevronLeft, Wallet, TrendingUp, AlertTriangle, CalendarRange, Lock, ArrowDown, ArrowUp,
-} from "lucide-react";
+import { Wallet, TrendingUp, AlertTriangle, CalendarRange, Lock, ArrowDown, ArrowUp } from "lucide-react";
 import api from "@/lib/api";
 import {
-  WtScreen, PageHeader, WtCard, StatTile, SectionHead, Segmented, EmptyState, LoadingCards, money,
-} from "@/components/warmtech";
+  PageShell, PageHeader, PageTabs, Toolbar, DataCard, StatTile,
+  Segmented, EmptyState, LoadingCards,
+} from "@/components/ds";
+import { formatMoney } from "@/lib/format";
 
 // /admin/finanzas/flujo · Flujo de caja proyectado (deudas por vencer +
 // recurrentes vs efectivo + ventas esperadas), semana por semana.
@@ -23,6 +23,8 @@ const PRESETS = [
   { value: "30", label: "30 días" },
   { value: "60", label: "60 días" },
 ] as const;
+
+const mny = (n: number) => formatMoney(n, false);
 
 const fmtRange = (a: string, b: string) => {
   const o: Intl.DateTimeFormatOptions = { timeZone: "America/Mexico_City", day: "2-digit", month: "short" };
@@ -51,57 +53,49 @@ export default function FlujoCajaPage() {
 
   if (moduleOff) {
     return (
-      <WtScreen>
-        <PageHeader eyebrow="Finanzas" title="Flujo de caja" subtitle="Proyección de efectivo" />
+      <PageShell>
+        <PageHeader eyebrow="Finanzas · Tesorería" title="Flujo de caja" subtitle="Proyección de efectivo" />
+        <PageTabs set="finanzas" />
         <EmptyState icon={Lock} title="Módulo de Finanzas no activado" hint="Actívalo (módulo FINANCE) para ver la proyección de flujo de caja." />
-      </WtScreen>
+      </PageShell>
     );
   }
 
   const maxBar = data ? Math.max(1, ...data.weeks.map((w) => Math.max(w.expectedSales, w.due))) : 1;
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Finanzas · Tesorería"
         title="Flujo de caja proyectado"
         subtitle="Lo que vas a deber vs lo que esperas tener"
-        actions={<Segmented value={days} onChange={setDays} options={PRESETS} className="md:max-w-[320px]" />}
       />
-      <div className="mb-4 md:hidden flex items-center justify-between">
-        <a href="/admin/finanzas" className="inline-flex min-h-9 items-center gap-1 text-xs font-bold text-tx-mut">
-          <ChevronLeft size={15} /> Finanzas
-        </a>
-        <Segmented value={days} onChange={setDays} options={PRESETS} />
-      </div>
+      <PageTabs set="finanzas" />
+
+      <Toolbar filters={<Segmented value={days} onChange={setDays} options={PRESETS} />} />
 
       {loading || !data ? (
         <LoadingCards count={4} />
       ) : (
         <div className="space-y-5">
           {data.cashCrunch && (
-            <div className="flex items-center gap-3 rounded-2xl p-4" style={{ background: "var(--err-soft)", border: "1px solid var(--err)" }}>
-              <AlertTriangle size={20} className="shrink-0 text-[color:var(--err)]" />
+            <div className="flex items-center gap-3 rounded-ds-lg p-4" style={{ background: "var(--err-soft)", border: "1px solid var(--err)" }}>
+              <AlertTriangle size={20} className="shrink-0" style={{ color: "var(--err)" }} />
               <div>
-                <p className="text-sm font-bold text-[color:var(--err)]">Alerta de flujo: el saldo proyectado se vuelve negativo</p>
-                <p className="text-[11px] text-tx-mut">Llega hasta {money(data.minBalance)}. Difiere pagos, acelera cobros o consigue fondeo.</p>
+                <p className="text-sm font-bold" style={{ color: "var(--err)" }}>Alerta de flujo: el saldo proyectado se vuelve negativo</p>
+                <p className="text-[11px] text-tx-mut">Llega hasta {mny(data.minBalance)}. Difiere pagos, acelera cobros o consigue fondeo.</p>
               </div>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <StatTile icon={Wallet} value={money(data.startingCash)} label="Efectivo disponible" />
-            <StatTile icon={TrendingUp} value={money(data.avgDailySales)} label="Ventas esperadas/día" />
-            <StatTile icon={ArrowDown} value={money(data.totalDue)} label={`Por pagar (${data.horizonDays}d)`} />
-            <StatTile
-              icon={CalendarRange}
-              value={money(data.minBalance)}
-              label="Saldo mínimo proyectado"
-            />
+            <StatTile icon={Wallet} value={mny(data.startingCash)} label="Efectivo disponible" />
+            <StatTile icon={TrendingUp} value={mny(data.avgDailySales)} label="Ventas esperadas/día" />
+            <StatTile icon={ArrowDown} value={mny(data.totalDue)} label={`Por pagar (${data.horizonDays}d)`} />
+            <StatTile icon={CalendarRange} value={mny(data.minBalance)} label="Saldo mínimo proyectado" />
           </div>
 
-          <WtCard className="overflow-hidden">
-            <div className="p-4 md:p-5"><SectionHead title="Proyección semanal" /></div>
+          <DataCard title="Proyección semanal" bodyClassName="p-0">
             {data.weeks.map((w, i) => {
               const neg = w.balance < 0;
               return (
@@ -109,26 +103,26 @@ export default function FlujoCajaPage() {
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-[12px] font-bold text-tx">{fmtRange(w.weekStart, w.weekEnd)}</span>
                     <span className="font-mono text-sm font-extrabold tabular-nums" style={{ color: neg ? "var(--err)" : "var(--tx-hi)" }}>
-                      saldo {money(w.balance)}
+                      saldo {mny(w.balance)}
                     </span>
                   </div>
                   <div className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1.5">
                     <Bar value={w.expectedSales} max={maxBar} color="var(--ok)" />
-                    <span className="flex items-center gap-1 font-mono text-[11px] tabular-nums text-[color:var(--ok)]"><ArrowUp size={11} />{money(w.expectedSales)}</span>
+                    <span className="flex items-center gap-1 font-mono text-[11px] tabular-nums" style={{ color: "var(--ok)" }}><ArrowUp size={11} />{mny(w.expectedSales)}</span>
                     <Bar value={w.due} max={maxBar} color="var(--warn)" />
-                    <span className="flex items-center gap-1 font-mono text-[11px] tabular-nums text-[color:var(--warn)]"><ArrowDown size={11} />{money(w.due)}</span>
+                    <span className="flex items-center gap-1 font-mono text-[11px] tabular-nums" style={{ color: "var(--warn)" }}><ArrowDown size={11} />{mny(w.due)}</span>
                   </div>
                   <div className="mt-1.5 text-right text-[11px] text-tx-mut">
-                    neto <span className="font-mono font-bold" style={{ color: w.net < 0 ? "var(--err)" : "var(--ok)" }}>{w.net >= 0 ? "+" : "−"}{money(Math.abs(w.net))}</span>
+                    neto <span className="font-mono font-bold" style={{ color: w.net < 0 ? "var(--err)" : "var(--ok)" }}>{w.net >= 0 ? "+" : "−"}{mny(Math.abs(w.net))}</span>
                   </div>
                 </div>
               );
             })}
-          </WtCard>
+          </DataCard>
 
           {data.noDateTotal > 0 && (
             <p className="text-[12px] text-tx-mut">
-              ⚠️ {money(data.noDateTotal)} en deudas <strong>sin fecha de vencimiento</strong> no entran en la proyección. Asígnales fecha en Cuentas por pagar para verlas aquí.
+              ⚠️ {mny(data.noDateTotal)} en deudas <strong>sin fecha de vencimiento</strong> no entran en la proyección. Asígnales fecha en Cuentas por pagar para verlas aquí.
             </p>
           )}
           <p className="text-[11px] text-tx-dim">
@@ -136,7 +130,7 @@ export default function FlujoCajaPage() {
           </p>
         </div>
       )}
-    </WtScreen>
+    </PageShell>
   );
 }
 

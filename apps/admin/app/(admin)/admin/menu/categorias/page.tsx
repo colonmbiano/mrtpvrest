@@ -2,14 +2,15 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
-  Plus, X, FolderOpen, Pencil, Trash2, Lock, Search,
+  Plus, FolderOpen, Pencil, Trash2, Lock, Search,
   ArrowUpRight, UtensilsCrossed,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
-  WtScreen, PageHeader, WtCard, PrimaryBtn, Pill, EmptyState,
-  IconBadge, money,
-} from "@/components/warmtech";
+  PageShell, PageHeader, PageTabs, Card, Modal, Button, Pill, EmptyState,
+  IconBadge, Input, Select, useToast, useConfirm,
+} from "@/components/ds";
+import { formatMoney } from "@/lib/format";
 
 interface MenuItem {
   id: string;
@@ -25,6 +26,9 @@ interface Category {
 }
 
 export default function CategoriasPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
+
   const [cats, setCats] = useState<Category[]>([]);
   const [allItems, setAllItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,7 +82,7 @@ export default function CategoriasPage() {
       fetchData();
     } catch (err) {
       const e = err as { response?: { data?: { error?: string } } };
-      alert(e.response?.data?.error || "Error al guardar");
+      toast.error(e.response?.data?.error || "Error al guardar");
     } finally {
       setSaving(false);
     }
@@ -92,28 +96,8 @@ export default function CategoriasPage() {
         p.map((i) => (i.id === item.id ? { ...i, categoryId: catId } : i)),
       );
     } catch {
-      alert("Error al reasignar");
+      toast.error("Error al reasignar");
     }
-  }
-
-  async function removeFromCategory(item: MenuItem) {
-    // No se puede quitar sin asignar a otra — mejor mover a otra categoría
-    // (constraint impide dejar sin categoryId). Mostramos un selector.
-    const otherCats = cats.filter((c) => c.id !== editCat?.id);
-    if (otherCats.length === 0) {
-      alert("No hay otras categorías disponibles. Crea otra categoría primero.");
-      return;
-    }
-    const options = otherCats.map((c, i) => `${i + 1}. ${c.name}`).join("\n");
-    const input = prompt(`¿A qué categoría mover "${item.name}"?\n\n${options}\n\nEscribe el número:`);
-    if (!input) return;
-    const idx = parseInt(input) - 1;
-    const target = otherCats[idx];
-    if (isNaN(idx) || !target) {
-      alert("Opción inválida");
-      return;
-    }
-    await assignItem(item, target.id);
   }
 
   async function toggleActive(cat: Category) {
@@ -121,27 +105,28 @@ export default function CategoriasPage() {
       await api.put(`/api/menu/categories/${cat.id}`, { isActive: !cat.isActive });
       fetchData();
     } catch {
-      alert("Error al actualizar");
+      toast.error("Error al actualizar");
     }
   }
 
   async function deleteCat(cat: Category) {
     const itemCount = allItems.filter((i) => i.categoryId === cat.id).length;
     if (itemCount > 0) {
-      alert(`No puedes eliminar "${cat.name}" porque tiene ${itemCount} producto(s) asignado(s).\n\nPrimero mueve los productos a otra categoría desde "Ver productos".`);
+      toast.error(`No puedes eliminar "${cat.name}" porque tiene ${itemCount} producto(s) asignado(s). Primero mueve los productos a otra categoría desde "Ver productos".`);
       return;
     }
-    if (!confirm(`¿Eliminar "${cat.name}"?`)) return;
+    if (!(await confirm({ title: `¿Eliminar "${cat.name}"?`, danger: true, confirmLabel: "Eliminar" }))) return;
     try {
       await api.delete(`/api/menu/categories/${cat.id}`);
       fetchData();
     } catch (err) {
       const e = err as { response?: { data?: { error?: string } } };
-      alert(e.response?.data?.error || "Error al eliminar");
+      toast.error(e.response?.data?.error || "Error al eliminar");
     }
   }
 
   const catItems = allItems.filter((i) => i.categoryId === editCat?.id);
+  const otherCats = cats.filter((c) => c.id !== editCat?.id);
   const otherItems = allItems.filter(
     (i) =>
       i.categoryId !== editCat?.id &&
@@ -149,189 +134,136 @@ export default function CategoriasPage() {
   );
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Menú"
         title="Categorías"
         subtitle="Organiza tu menú por secciones"
         actions={
-          <PrimaryBtn full={false} icon={Plus} onClick={() => openForm()}>
-            Nueva categoría
-          </PrimaryBtn>
+          <Button icon={Plus} onClick={() => openForm()}>Nueva categoría</Button>
         }
       />
 
+      <PageTabs set="menu" />
+
       {/* mobile action */}
       <div className="mb-4 md:hidden">
-        <PrimaryBtn icon={Plus} onClick={() => openForm()}>
-          Nueva categoría
-        </PrimaryBtn>
+        <Button full icon={Plus} onClick={() => openForm()}>Nueva categoría</Button>
       </div>
 
       {/* Modal nombre */}
-      {showForm && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
-          style={{ background: "rgba(0,0,0,0.7)" }}
-        >
-          <WtCard className="w-full max-w-sm p-6">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="font-display text-xl font-extrabold text-tx-hi">
-                {editCat ? "Editar categoría" : "Nueva categoría"}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                aria-label="Cerrar"
-                className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut"
-                style={{ background: "var(--surf-2)" }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <form onSubmit={save} className="flex flex-col gap-4">
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ej: Hamburguesas, Tacos, Bebidas…"
-                required
-                autoFocus
-                className="min-h-12 w-full rounded-xl px-4 text-sm outline-none"
-                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
-              />
-              <div className="flex gap-3">
-                <PrimaryBtn ghost onClick={() => setShowForm(false)}>
-                  Cancelar
-                </PrimaryBtn>
-                <PrimaryBtn type="submit" disabled={saving}>
-                  {saving ? "Guardando…" : "Guardar"}
-                </PrimaryBtn>
-              </div>
-            </form>
-          </WtCard>
-        </div>
-      )}
+      <Modal open={showForm} onClose={() => setShowForm(false)} title={editCat ? "Editar categoría" : "Nueva categoría"} size="sm">
+        <form onSubmit={save} className="flex flex-col gap-4">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ej: Hamburguesas, Tacos, Bebidas…"
+            required
+            autoFocus
+          />
+          <div className="flex gap-3">
+            <Button variant="secondary" full onClick={() => setShowForm(false)}>Cancelar</Button>
+            <Button type="submit" full disabled={saving}>{saving ? "Guardando…" : "Guardar"}</Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Modal productos */}
-      {showItems && editCat && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
-          style={{ background: "rgba(0,0,0,0.8)" }}
-        >
-          <WtCard className="flex w-full max-w-2xl flex-col p-0" style={{ maxHeight: "90vh" }}>
-            <div
-              className="flex shrink-0 items-center justify-between gap-3 px-5 py-4"
-              style={{ borderBottom: "1px solid var(--bd-1)" }}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <IconBadge icon={FolderOpen} tone="ac" />
-                <div className="min-w-0">
-                  <h2 className="truncate font-display text-lg font-extrabold text-tx-hi">{editCat.name}</h2>
-                  <p className="text-[11px] text-tx-mut">{catItems.length} productos en esta categoría</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowItems(false)}
-                aria-label="Cerrar"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-tx-mut"
-                style={{ background: "var(--surf-2)" }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-5 warmtech-scrollbar">
-              {/* Productos en esta categoría */}
-              <div>
-                <h3 className="mb-3 font-mono text-[10px] uppercase tracking-[.14em] text-primary">
-                  En esta categoría ({catItems.length})
-                </h3>
-                {catItems.length === 0 ? (
-                  <p className="text-sm text-tx-mut">Sin productos aún</p>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {catItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center gap-3 rounded-xl px-3 py-2.5"
-                        style={{ background: "var(--iris-soft)", border: "1px solid var(--bd-1)" }}
-                      >
-                        <ItemThumb item={item} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-semibold text-tx">{item.name}</div>
-                          <div className="text-xs text-primary">{money(item.price)}</div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeFromCategory(item)}
-                          className="flex min-h-9 shrink-0 items-center gap-1 rounded-xl px-3 text-xs font-bold"
-                          style={{ background: "var(--err-soft)", color: "var(--err)" }}
-                        >
-                          Mover <ArrowUpRight size={13} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Agregar productos de otras categorías */}
-              <div>
-                <h3 className="mb-3 font-mono text-[10px] uppercase tracking-[.14em] text-tx-dim">
-                  Agregar desde otras categorías
-                </h3>
-                <div className="relative mb-3">
-                  <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-tx-mut" />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar producto…"
-                    className="min-h-11 w-full rounded-xl pl-9 pr-3 text-sm outline-none"
-                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  {otherItems.slice(0, 20).map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center gap-3 rounded-xl px-3 py-2.5"
-                      style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
-                    >
-                      <ItemThumb item={item} />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold text-tx">{item.name}</div>
-                        <div className="truncate text-xs text-tx-mut">
-                          {cats.find((c) => c.id === item.categoryId)?.name || "Sin categoría"}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => assignItem(item, editCat.id)}
-                        className="flex min-h-9 shrink-0 items-center gap-1 rounded-xl px-3 text-xs font-bold text-white"
-                        style={{ background: "var(--brand-primary)" }}
-                      >
-                        <Plus size={13} /> Agregar
-                      </button>
+      <Modal open={showItems && !!editCat} onClose={() => setShowItems(false)} size="lg"
+        title={editCat?.name}
+        subtitle={editCat ? `${catItems.length} productos en esta categoría` : undefined}>
+        <div className="flex flex-col gap-6">
+          {/* Productos en esta categoría */}
+          <div>
+            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-[.14em] text-primary">
+              En esta categoría ({catItems.length})
+            </h3>
+            {catItems.length === 0 ? (
+              <p className="text-sm text-tx-mut">Sin productos aún</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {catItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 rounded-ds-md px-3 py-2.5"
+                    style={{ background: "var(--accent-soft)", border: "1px solid var(--bd-1)" }}
+                  >
+                    <ItemThumb item={item} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-tx">{item.name}</div>
+                      <div className="text-xs text-primary">{formatMoney(item.price)}</div>
                     </div>
-                  ))}
-                  {otherItems.length === 0 && (
-                    <p className="py-4 text-center text-sm text-tx-mut">
-                      Todos los productos están en esta categoría
-                    </p>
-                  )}
-                </div>
+                    {otherCats.length === 0 ? (
+                      <Pill tone="neutral">única categoría</Pill>
+                    ) : (
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <ArrowUpRight size={14} className="text-tx-mut" />
+                        <Select
+                          aria-label={`Mover ${item.name} a otra categoría`}
+                          value=""
+                          onChange={(e) => { if (e.target.value) assignItem(item, e.target.value); }}
+                          className="min-h-9 py-1.5 text-xs"
+                        >
+                          <option value="">Mover a…</option>
+                          {otherCats.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
+            )}
+          </div>
+
+          {/* Agregar productos de otras categorías */}
+          <div>
+            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-[.14em] text-tx-dim">
+              Agregar desde otras categorías
+            </h3>
+            <div className="relative mb-3">
+              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-tx-mut" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar producto…"
+                className="min-h-11 w-full rounded-ds-md pl-9 pr-3 text-sm outline-none"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
+              />
             </div>
-          </WtCard>
+            <div className="flex flex-col gap-2">
+              {otherItems.slice(0, 20).map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 rounded-ds-md px-3 py-2.5"
+                  style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+                >
+                  <ItemThumb item={item} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-tx">{item.name}</div>
+                    <div className="truncate text-xs text-tx-mut">
+                      {cats.find((c) => c.id === item.categoryId)?.name || "Sin categoría"}
+                    </div>
+                  </div>
+                  <Button size="sm" icon={Plus} onClick={() => editCat && assignItem(item, editCat.id)}>Agregar</Button>
+                </div>
+              ))}
+              {otherItems.length === 0 && (
+                <p className="py-4 text-center text-sm text-tx-mut">
+                  Todos los productos están en esta categoría
+                </p>
+              )}
+            </div>
+          </div>
         </div>
-      )}
+      </Modal>
 
       {/* Lista de categorías */}
       {loading ? (
         <div className="flex flex-col gap-3">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-20 animate-pulse rounded-[18px] bg-surf-2" />
+            <div key={i} className="h-20 animate-pulse rounded-ds-xl bg-surf-2" />
           ))}
         </div>
       ) : cats.length === 0 ? (
@@ -340,9 +272,7 @@ export default function CategoriasPage() {
           title="Sin categorías"
           hint="Crea tu primera sección para organizar el menú."
           action={
-            <PrimaryBtn full={false} icon={Plus} onClick={() => openForm()}>
-              Nueva categoría
-            </PrimaryBtn>
+            <Button icon={Plus} onClick={() => openForm()}>Nueva categoría</Button>
           }
         />
       ) : (
@@ -350,7 +280,7 @@ export default function CategoriasPage() {
           {cats.map((cat) => {
             const itemCount = allItems.filter((i) => i.categoryId === cat.id).length;
             return (
-              <WtCard
+              <Card
                 key={cat.id}
                 className="flex flex-wrap items-center gap-3 p-4"
                 style={{ opacity: cat.isActive ? 1 : 0.55 }}
@@ -364,15 +294,15 @@ export default function CategoriasPage() {
                   <button
                     type="button"
                     onClick={() => openItems(cat)}
-                    className="min-h-9 rounded-xl px-3 text-xs font-bold text-primary"
-                    style={{ background: "var(--iris-soft)" }}
+                    className="min-h-9 rounded-ds-md px-3 text-xs font-bold text-primary"
+                    style={{ background: "var(--accent-soft)" }}
                   >
                     Ver productos
                   </button>
                   <button
                     type="button"
                     onClick={() => toggleActive(cat)}
-                    className="min-h-9 rounded-xl px-2"
+                    className="min-h-9 rounded-ds-md px-2"
                     aria-label={cat.isActive ? "Desactivar" : "Activar"}
                   >
                     <Pill tone={cat.isActive ? "ok" : "err"}>
@@ -383,7 +313,7 @@ export default function CategoriasPage() {
                     type="button"
                     onClick={() => openForm(cat)}
                     aria-label="Editar"
-                    className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut"
+                    className="grid h-9 w-9 place-items-center rounded-ds-md text-tx-mut"
                     style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
                   >
                     <Pencil size={15} />
@@ -393,7 +323,7 @@ export default function CategoriasPage() {
                     onClick={() => deleteCat(cat)}
                     title={itemCount > 0 ? `Mueve los ${itemCount} productos primero` : "Eliminar categoría"}
                     aria-label="Eliminar"
-                    className="grid h-9 w-9 place-items-center rounded-xl"
+                    className="grid h-9 w-9 place-items-center rounded-ds-md"
                     style={{
                       background: itemCount > 0 ? "var(--surf-2)" : "var(--err-soft)",
                       color: itemCount > 0 ? "var(--tx-mut)" : "var(--err)",
@@ -403,12 +333,12 @@ export default function CategoriasPage() {
                     {itemCount > 0 ? <Lock size={14} /> : <Trash2 size={15} />}
                   </button>
                 </div>
-              </WtCard>
+              </Card>
             );
           })}
         </div>
       )}
-    </WtScreen>
+    </PageShell>
   );
 }
 
@@ -416,7 +346,7 @@ export default function CategoriasPage() {
 function ItemThumb({ item }: { item: MenuItem }) {
   return (
     <div
-      className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl text-tx-mut"
+      className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-ds-md text-tx-mut"
       style={{ background: "var(--surf-3)" }}
     >
       {item.imageUrl ? (
