@@ -11,12 +11,18 @@ export default function OrdersKanban({
   onStatusChange,
   onAssignDriver,
   onUnassignDriver,
+  onCobrar,
+  onPrint,
+  onOpenConversation,
 }: {
   orders: Order[];
   drivers: Driver[];
   onStatusChange: (id: string, status: string) => void;
   onAssignDriver: (orderId: string, driverId: string) => void;
   onUnassignDriver: (orderId: string) => void;
+  onCobrar?: (order: Order) => void;
+  onPrint?: (orderId: string) => void;
+  onOpenConversation?: (order: Order) => void;
 }) {
   return (
     <div className="ds-scrollbar flex gap-4 overflow-x-auto pb-4">
@@ -56,6 +62,9 @@ export default function OrdersKanban({
                   onStatusChange={onStatusChange}
                   onAssignDriver={onAssignDriver}
                   onUnassignDriver={onUnassignDriver}
+                  onCobrar={onCobrar}
+                  onPrint={onPrint}
+                  onOpenConversation={onOpenConversation}
                 />
               ))
             )}

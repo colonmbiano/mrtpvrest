@@ -1,9 +1,9 @@
 "use client";
 import type { Dispatch, SetStateAction } from "react";
 import { Upload, ImagePlus, X } from "lucide-react";
-import { Card, Field, Input, IconButton, Toggle, useToast } from "@/components/ds";
+import { Card, Field, Input, Select, IconButton, Toggle, useToast } from "@/components/ds";
 import { FieldLabel } from "./ui";
-import { THEMES, type TiendaConfig } from "./types";
+import { CURRENCIES, formatPreview, THEMES, type TiendaConfig } from "./types";
 
 type Props = {
   config: TiendaConfig;
@@ -92,6 +92,23 @@ export function ContactThemeCard({ config, setConfig, heroUploading, uploadHero 
       <div className="mt-4">
         <Field label="Dirección principal">
           <Input type="text" value={config.address} onChange={(e) => { const v = e.target.value; setConfig((p) => ({ ...p, address: v })); }} />
+        </Field>
+      </div>
+
+      <div className="mt-4">
+        <Field
+          label="Moneda de la tienda"
+          hint={`Cómo se muestran los precios en la tienda. Vista previa: ${formatPreview(config.currency, config.currencyLocale)}`}
+        >
+          <Select
+            value={config.currency}
+            onChange={(e) => {
+              const c = CURRENCIES.find((x) => x.code === e.target.value) ?? { code: "MXN", locale: "es-MX" };
+              setConfig((p) => ({ ...p, currency: c.code, currencyLocale: c.locale }));
+            }}
+          >
+            {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
+          </Select>
         </Field>
       </div>
 

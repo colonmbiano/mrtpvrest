@@ -12,6 +12,9 @@ import { cldImage } from '@/lib/cloudinary';
 import { productEmoji } from '../../lib/productEmoji';
 import BannerCarousel, { collectBanners } from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
+import { ReactionButton } from '../ReactionButton';
+import { StoreLocaleProvider, useMoney, useLang } from '../StoreLocaleContext';
+import { LanguageSwitcher } from '../LanguageSwitcher';
 import StoreCheckout from '../StoreCheckout';
 import type { DeliveryConfig } from '../../lib/delivery';
 import {
@@ -45,7 +48,7 @@ const GOLD_BD = 'rgba(255,193,7,0.45)';
 const DISP = 'var(--font-bebas), Impact, sans-serif';
 const BODY = 'var(--font-montserrat), system-ui, sans-serif';
 
-const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
+// fmt ahora viene de useMoney() (moneda/locale del tenant), no de un const global.
 const priceOf = (p: any) => (p.isPromo && p.promoPrice ? p.promoPrice : p.price);
 // Precio "Desde" para productos con variantes: menor precio de variante > 0; si no
 // hay variantes con precio, cae al precio base (evita mostrar "Desde $0").
@@ -96,6 +99,7 @@ type Info = {
   whatsappOrder?: { enabled: boolean; number: string | null };
   dineIn?: { table: string; locationId: string | null } | null;
   onlinePayment?: boolean; delivery?: DeliveryConfig; heroImageUrl?: string | null;
+  currency?: string | null; currencyLocale?: string | null;
   themeConfig: { theme?: string; primaryColor?: string } | null;
 };
 
@@ -107,6 +111,8 @@ type OrderMode = 'DELIVERY' | 'TAKEOUT';
 
 export function MundialistaTheme({ data }: MundialistaThemeProps) {
   const { info, menu, locations } = data;
+  const fmt = useMoney();
+  const { t } = useLang();
   // Ocultamos "Envíos" del grilla (es un recargo, no un platillo) y categorías vacías.
   const categories: any[] = (menu.categories || [])
     .filter((c: any) => (c.items || []).length > 0 && !isShippingCat(c.name));
@@ -201,6 +207,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
   const goCheckout = () => { setCartOpen(false); setCheckoutOpen(true); };
 
   return (
+    <StoreLocaleProvider currency={info.currency} locale={info.currencyLocale}>
     <div className="min-h-screen" style={{ background: BG, color: TEXT, fontFamily: BODY }}>
       <div aria-hidden className="fixed inset-0 pointer-events-none" style={{
         background: `radial-gradient(1000px 460px at 50% -10%, ${GOLD}1c, transparent 60%), radial-gradient(760px 420px at 88% 6%, ${GREEN}14, transparent 55%), linear-gradient(180deg, #04040A, ${BG} 36%)`,
@@ -219,7 +226,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
           <main className="max-w-7xl mx-auto px-4 py-8">
             <SectionHead title={results.length > 0 ? `Resultados (${results.length})` : `Sin resultados para “${query}”`} />
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-              {results.map((p: any) => <ProductCard key={p.id} p={p} onOpen={() => pick(p)} />)}
+              {results.map((p: any) => <ProductCard key={p.id} p={p} slug={slug} onOpen={() => pick(p)} />)}
             </div>
           </main>
         ) : (
@@ -252,7 +259,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
                     <p className="py-10 text-center text-sm" style={{ color: MUTED }}>Sin platillos en esta selección.</p>
                   ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                      {featured.map((p: any) => <ProductCard key={p.id} p={p} onOpen={() => pick(p)} />)}
+                      {featured.map((p: any) => <ProductCard key={p.id} p={p} slug={slug} onOpen={() => pick(p)} />)}
                     </div>
                   )}
                 </section>
@@ -271,7 +278,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
                         <button onClick={() => scrollToCat(category.id)} className="text-[12px] font-bold" style={{ color: GOLD }}>Ver todas</button>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                        {(category.items || []).map((p: any) => <ProductCard key={p.id} p={p} onOpen={() => pick(p)} />)}
+                        {(category.items || []).map((p: any) => <ProductCard key={p.id} p={p} slug={slug} onOpen={() => pick(p)} />)}
                       </div>
                     </section>
                   ))}
@@ -306,7 +313,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
               <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: SURF2 }}><ShoppingBag className="w-5 h-5" style={{ color: GOLD }} /></span>
               <span className="text-left leading-tight"><span className="block text-[11px]" style={{ color: MUTED }}>{quantity} {quantity === 1 ? 'producto' : 'productos'}</span><span className="block">{fmt(total)}</span></span>
             </span>
-            <span className="flex items-center gap-1.5 px-4 py-2.5 rounded-[12px] text-[14px]" style={{ background: GOLD, color: '#1A1206' }}>Ir a pagar <ChevronRight className="w-4 h-4" /></span>
+            <span className="flex items-center gap-1.5 px-4 py-2.5 rounded-[12px] text-[14px]" style={{ background: GOLD, color: '#1A1206' }}>{t('checkout')} <ChevronRight className="w-4 h-4" /></span>
           </button>
         </div>
       )}
@@ -331,6 +338,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
 
       <style dangerouslySetInnerHTML={{ __html: `.no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}` }} />
     </div>
+    </StoreLocaleProvider>
   );
 }
 
@@ -338,6 +346,8 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
 //  HEADER
 // ══════════════════════════════════════════════════════════════════════════════
 function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, orderMode, setOrderMode, auth, onLogin, onSignOut, onCart, onWhatsApp }: any) {
+  const fmt = useMoney();
+  const { t } = useLang();
   return (
     <header className="sticky top-0 z-40 backdrop-blur-xl" style={{ background: `${BG}e6`, borderBottom: `1px solid ${BORDER}` }}>
       <div className="max-w-7xl mx-auto px-4">
@@ -372,7 +382,7 @@ function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, o
           {/* Buscador (desktop) */}
           <div className="hidden md:flex items-center gap-2 px-3.5 h-10 rounded-full flex-1 max-w-md" style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
             <Search className="w-4 h-4 shrink-0" style={{ color: MUTED }} />
-            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar productos…" className="flex-1 bg-transparent outline-none text-sm placeholder:text-[#7A7A82]" />
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('search')} className="flex-1 bg-transparent outline-none text-sm placeholder:text-[#7A7A82]" />
             {query && <button onClick={() => setQuery('')} aria-label="Limpiar"><X className="w-4 h-4" style={{ color: MUTED }} /></button>}
           </div>
 
@@ -380,6 +390,8 @@ function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, o
 
           {/* Toggle Entrega / Recoger (desktop) */}
           <DeliveryToggle orderMode={orderMode} setOrderMode={setOrderMode} className="hidden lg:flex" />
+
+          <div className="hidden sm:block shrink-0" style={{ color: TEXT }}><LanguageSwitcher accent={GOLD} /></div>
 
           {waNumber && (
             <button onClick={onWhatsApp} className="hidden md:flex items-center gap-2 px-4 h-10 rounded-full font-bold text-sm text-white active:scale-95 transition shrink-0" style={{ background: '#25D366' }}>
@@ -413,7 +425,7 @@ function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, o
           </div>
           <div className="flex items-center gap-2 px-3.5 h-10 rounded-full" style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
             <Search className="w-4 h-4 shrink-0" style={{ color: MUTED }} />
-            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar productos…" className="flex-1 bg-transparent outline-none text-sm placeholder:text-[#7A7A82]" />
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('search')} className="flex-1 bg-transparent outline-none text-sm placeholder:text-[#7A7A82]" />
             {query && <button onClick={() => setQuery('')} aria-label="Limpiar"><X className="w-4 h-4" style={{ color: MUTED }} /></button>}
           </div>
         </div>
@@ -423,9 +435,10 @@ function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, o
 }
 
 function DeliveryToggle({ orderMode, setOrderMode, className = '' }: { orderMode: OrderMode; setOrderMode: (m: OrderMode) => void; className?: string }) {
+  const { t } = useLang();
   return (
     <div className={`flex p-1 rounded-full shrink-0 ${className}`} style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
-      {([['DELIVERY', 'Entrega'], ['TAKEOUT', 'Recoger']] as [OrderMode, string][]).map(([m, label]) => (
+      {([['DELIVERY', t('delivery')], ['TAKEOUT', t('pickup')]] as [OrderMode, string][]).map(([m, label]) => (
         <button key={m} onClick={() => setOrderMode(m)} className="px-3.5 py-1.5 rounded-full text-[12px] font-bold transition-all"
           style={orderMode === m ? { background: GOLD, color: '#1A1206' } : { color: MUTED }}>{label}</button>
       ))}
@@ -579,7 +592,8 @@ function Badge({ kind }: { kind: 'pop' | 'promo' | 'new' }) {
   return <span className="text-[8.5px] font-extrabold px-2 py-1 rounded-[6px] tracking-wide" style={{ background: map.bg, color: map.fg }}>{map.t}</span>;
 }
 
-function ProductCard({ p, onOpen }: { p: any; onOpen: () => void }) {
+function ProductCard({ p, onOpen, slug }: { p: any; onOpen: () => void; slug: string }) {
+  const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
   const remove = useCart(s => s.remove);
@@ -600,6 +614,10 @@ function ProductCard({ p, onOpen }: { p: any; onOpen: () => void }) {
           <img src={cldImage(p.imageUrl, { width: 480 })} alt={p.name} loading="lazy" decoding="async" className={`w-full h-full transition-transform duration-500 group-hover:scale-105 ${p.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
         ) : <div className="w-full h-full flex items-center justify-center text-4xl opacity-30">{productEmoji(p.name)}</div>}
       </button>
+
+      <div className="absolute top-2 right-2 z-20" style={{ color: '#FFFFFFcc' }}>
+        <ReactionButton slug={slug} itemId={p.id} initialCount={p.reactionCount || 0} accent={GOLD} />
+      </div>
 
       <button onClick={onOpen} className="text-left">
         <h4 className="font-bold text-[14px] leading-tight line-clamp-1" style={{ fontFamily: BODY }}>{p.name}</h4>
@@ -656,6 +674,7 @@ function CombosSection({ id, dataCat, category, onOpen }: { id: string; dataCat:
 }
 
 function ComboCard({ p, onOpen }: { p: any; onOpen: () => void }) {
+  const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
   const remove = useCart(s => s.remove);
@@ -717,6 +736,7 @@ function TrustBadges({ estimated }: { estimated?: number }) {
 //  CARRITO — contenido compartido + variantes desktop/móvil
 // ══════════════════════════════════════════════════════════════════════════════
 function CartLines({ allItems, accent }: { allItems: any[]; accent: string }) {
+  const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const add = useCart(s => s.add);
   const remove = useCart(s => s.remove);
@@ -749,6 +769,8 @@ function CartLines({ allItems, accent }: { allItems: any[]; accent: string }) {
 }
 
 function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhatsApp, waNumber, suggestions, onAddSuggestion }: any) {
+  const fmt = useMoney();
+  const { t } = useLang();
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
@@ -790,16 +812,16 @@ function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhats
           )}
 
           <div className="mt-3.5 pt-3 space-y-1.5" style={{ borderTop: `1px solid ${BORDER}` }}>
-            <Row label="Subtotal" value={fmt(total)} />
+            <Row label={t('subtotal')} value={fmt(total)} />
             <Row label="Costo de envío" value="Se calcula al pagar" muted />
             <div className="flex items-center justify-between pt-1.5">
-              <span className="font-bold">Total</span>
+              <span className="font-bold">{t('total')}</span>
               <span className="text-2xl font-extrabold" style={{ color: accent }}>{fmt(total)}</span>
             </div>
           </div>
           {belowMin && <p className="text-[11px] font-bold text-center mt-2" style={{ color: accent }}>Pedido mínimo: {fmt(minOrder)}.</p>}
-          <button onClick={onCheckout} disabled={belowMin} className="w-full mt-3 py-3.5 rounded-[12px] font-extrabold flex items-center justify-center gap-2 active:scale-95 transition disabled:opacity-50" style={{ background: accent, color: '#1A1206' }}>Ir a pagar <ChevronRight className="w-5 h-5" /></button>
-          {waNumber && <button onClick={onWhatsApp} className="w-full mt-2 py-2.5 rounded-[12px] font-bold text-white text-[13px] flex items-center justify-center gap-2 active:scale-95 transition" style={{ background: '#25D366' }}><MessageCircle className="w-4 h-4" /> Pedir por WhatsApp</button>}
+          <button onClick={onCheckout} disabled={belowMin} className="w-full mt-3 py-3.5 rounded-[12px] font-extrabold flex items-center justify-center gap-2 active:scale-95 transition disabled:opacity-50" style={{ background: accent, color: '#1A1206' }}>{t('checkout')} <ChevronRight className="w-5 h-5" /></button>
+          {waNumber && <button onClick={onWhatsApp} className="w-full mt-2 py-2.5 rounded-[12px] font-bold text-white text-[13px] flex items-center justify-center gap-2 active:scale-95 transition" style={{ background: '#25D366' }}><MessageCircle className="w-4 h-4" /> {t('send_whatsapp')}</button>}
         </div>
       )}
     </div>
@@ -807,6 +829,8 @@ function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhats
 }
 
 function MobileCart({ onClose, onCheckout, onWhatsApp, waNumber, allItems, minOrder, accent }: any) {
+  const fmt = useMoney();
+  const { t } = useLang();
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
@@ -832,12 +856,12 @@ function MobileCart({ onClose, onCheckout, onWhatsApp, waNumber, allItems, minOr
         {lines.length > 0 && (
           <div className="px-5 pt-4 pb-5 shrink-0 space-y-3" style={{ borderTop: `1px solid ${BORDER}`, background: '#06060C' }}>
             <div className="flex items-center justify-between">
-              <div><p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: MUTED }}>Subtotal</p><p className="text-[10px]" style={{ color: FAINT }}>Envío y descuentos se calculan al pagar</p></div>
+              <div><p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: MUTED }}>{t('subtotal')}</p><p className="text-[10px]" style={{ color: FAINT }}>Envío y descuentos se calculan al pagar</p></div>
               <span className="text-2xl font-extrabold" style={{ color: accent }}>{fmt(total)}</span>
             </div>
             {belowMin && <p className="text-xs font-bold text-center" style={{ color: accent }}>Pedido mínimo: {fmt(minOrder)}.</p>}
-            <button onClick={onCheckout} disabled={belowMin} className="w-full py-4 rounded-[14px] font-extrabold active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: accent, color: '#1A1206' }}>Ir a pagar <ChevronRight className="w-5 h-5" /></button>
-            {waNumber && <button onClick={onWhatsApp} className="w-full py-3.5 rounded-[14px] font-extrabold text-white active:scale-95 transition flex items-center justify-center gap-2" style={{ background: '#25D366' }}><MessageCircle className="w-5 h-5" /> Pedir por WhatsApp</button>}
+            <button onClick={onCheckout} disabled={belowMin} className="w-full py-4 rounded-[14px] font-extrabold active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: accent, color: '#1A1206' }}>{t('checkout')} <ChevronRight className="w-5 h-5" /></button>
+            {waNumber && <button onClick={onWhatsApp} className="w-full py-3.5 rounded-[14px] font-extrabold text-white active:scale-95 transition flex items-center justify-center gap-2" style={{ background: '#25D366' }}><MessageCircle className="w-5 h-5" /> {t('send_whatsapp')}</button>}
           </div>
         )}
       </div>
@@ -874,6 +898,7 @@ function Newsletter({ onSubscribe }: { onSubscribe: () => void }) {
 //  FOOTER
 // ══════════════════════════════════════════════════════════════════════════════
 function Footer({ info, primaryLocation, waNumber, minOrder, onWhatsApp, onNav, onCombos }: any) {
+  const fmt = useMoney();
   const Nav = ({ label, onClick }: { label: string; onClick: () => void }) => (
     <li><button onClick={onClick} className="hover:text-white transition" style={{ color: MUTED }}>{label}</button></li>
   );

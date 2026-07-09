@@ -103,6 +103,8 @@ export default function TiendaConfigPage() {
     estimatedDelivery: 40,
     storefrontTheme: "KAWAII",
     storefrontHeroUrl: "",
+    currency: "MXN",
+    currencyLocale: "es-MX",
     // Módulo OlaClick
     whatsappOrderingEnabled: false,
     hasWhatsappOrdersModule: false,
@@ -197,7 +199,7 @@ export default function TiendaConfigPage() {
           closedMessage: d.closedMessage ?? "",
           maxOpenOrders: d.maxOpenOrders ?? 0,
           saturatedMessage: d.saturatedMessage ?? "",
-          deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : "FLAT",
+          deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : d.deliveryMode === "ZONES" ? "ZONES" : "FLAT",
           whatsappOrderingEnabled: d.whatsappOrderingEnabled ?? false,
           hasWhatsappOrdersModule: d.hasWhatsappOrdersModule ?? false,
           orderAlertEnabled: d.orderAlertEnabled ?? false,
@@ -209,6 +211,8 @@ export default function TiendaConfigPage() {
           scheduleEnabled: d.scheduleEnabled ?? false,
           countryCode: d.countryCode || "MX",
           timezone: d.timezone || "America/Mexico_City",
+          currency: d.currency || "MXN",
+          currencyLocale: d.currencyLocale || "es-MX",
           businessHours: (() => {
             try {
               const parsed = JSON.parse(d.businessHours || "[]");

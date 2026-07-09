@@ -23,6 +23,7 @@ const FIELD_META: Record<string, { label: string; hint?: string; placeholder?: s
   phoneNumberId: { label: "Phone number ID", secret: false, placeholder: "Solo Meta — ej. 123456789012345", hint: "Solo Meta: lo ves en la app de Meta → WhatsApp → API Setup." },
   verifyToken:   { label: "Verify token", secret: false, placeholder: "Solo Meta — un texto que tú inventes", hint: "Solo Meta: invéntalo y úsalo igual al configurar el webhook en Meta." },
   wabaId:        { label: "WABA ID (opcional)", secret: false, placeholder: "Solo Meta — WhatsApp Business Account ID", hint: "Solo Meta y opcional." },
+  ownerPhone:    { label: "WhatsApp del dueño (opcional)", secret: false, placeholder: "Ej. 5215512345678 (con código de país)", hint: "Cuando un cliente pida atención humana, el asistente te avisa a este número y pausa esa conversación hasta que la resuelvas en la Bandeja de entrada." },
 };
 
 type IntegrationType = { label: string; icon?: string; fields: string[] };

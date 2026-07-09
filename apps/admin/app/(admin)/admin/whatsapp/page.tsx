@@ -6,6 +6,7 @@ import ReportsTab from "./_components/ReportsTab";
 import ContactsTab from "./_components/ContactsTab";
 import CampaignsTab from "./_components/CampaignsTab";
 import GamesTab from "./_components/GamesTab";
+import UpsellTab from "./_components/UpsellTab";
 import type { Tab } from "./_components/types";
 
 const TAB_OPTIONS: { value: Tab; label: string }[] = [
@@ -14,6 +15,7 @@ const TAB_OPTIONS: { value: Tab; label: string }[] = [
   { value: "contactos", label: "Clientes" },
   { value: "campanas", label: "Campañas" },
   { value: "juegos", label: "Juegos" },
+  { value: "sugerencias", label: "Sugerencias" },
 ];
 
 export default function WhatsappPage() {
@@ -35,6 +37,7 @@ export default function WhatsappPage() {
       {tab === "contactos" && <ContactsTab />}
       {tab === "campanas" && <CampaignsTab />}
       {tab === "juegos" && <GamesTab />}
+      {tab === "sugerencias" && <UpsellTab />}
     </PageShell>
   );
 }

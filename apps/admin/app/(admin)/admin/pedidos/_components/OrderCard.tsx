@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import {
-  Bike, ChevronDown, ChevronUp, Inbox, MapPin, MessageCircle,
-  StickyNote, Store, X,
+  Bike, ChevronDown, ChevronUp, Inbox, MapPin, MessageCircle, MessagesSquare,
+  Printer, StickyNote, Store, Wallet, X,
 } from "lucide-react";
 import { Card, Pill, Select, TONE_FG } from "@/components/ds";
 import { formatMoney } from "@/lib/format";
@@ -20,12 +20,21 @@ export default function OrderCard({
   onStatusChange,
   onAssignDriver,
   onUnassignDriver,
+  onCobrar,
+  onPrint,
+  onOpenConversation,
 }: {
   order: Order;
   drivers: Driver[];
   onStatusChange: (id: string, status: string) => void;
   onAssignDriver: (orderId: string, driverId: string) => void;
   onUnassignDriver: (orderId: string) => void;
+  /** Acciones opcionales del tablero: cobrar, imprimir ticket y abrir la
+   *  conversación de WhatsApp que originó el pedido. Se muestran solo si el
+   *  contenedor las provee. */
+  onCobrar?: (order: Order) => void;
+  onPrint?: (orderId: string) => void;
+  onOpenConversation?: (order: Order) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const meta = STATUS_META[order.status];
@@ -176,6 +185,44 @@ export default function OrderCard({
           </button>
         )}
       </div>
+
+      {/* Fila de acciones del tablero: cobrar, imprimir y ver conversación.
+          Solo aparece si el contenedor cablea al menos una acción. */}
+      {(onCobrar || onPrint || onOpenConversation) && (
+        <div className="flex gap-2 px-3 pb-3">
+          {onCobrar && !paid && (
+            <button
+              type="button"
+              onClick={() => onCobrar(order)}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-ds-md py-2 font-display text-xs font-extrabold text-white transition-transform active:scale-95"
+              style={{ background: "var(--ok)" }}
+            >
+              <Wallet size={14} strokeWidth={2.2} /> Cobrar
+            </button>
+          )}
+          {onPrint && (
+            <button
+              type="button"
+              onClick={() => onPrint(order.id)}
+              className={`flex items-center justify-center gap-1.5 rounded-ds-md py-2 text-xs font-semibold text-tx-mut ${onCobrar && !paid ? "px-3" : "flex-1"}`}
+              style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+            >
+              <Printer size={14} strokeWidth={2} /> Ticket
+            </button>
+          )}
+          {onOpenConversation && order.source === "WHATSAPP" && order.customerPhone && (
+            <button
+              type="button"
+              onClick={() => onOpenConversation(order)}
+              aria-label="Ver conversación"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-ds-md"
+              style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--brand-primary)" }}
+            >
+              <MessagesSquare size={16} />
+            </button>
+          )}
+        </div>
+      )}
     </Card>
   );
 }
