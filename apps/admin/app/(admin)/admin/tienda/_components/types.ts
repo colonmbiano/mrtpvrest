@@ -55,6 +55,28 @@ export const COUNTRIES = [
 
 export const DEFAULT_HOUR: Omit<BusinessHour, "day"> = { enabled: false, open: "09:00", close: "22:00" };
 
+// Moneda de la tienda (código ISO 4217 + locale de formato). El precio se guarda
+// igual; solo cambia cómo lo muestra el storefront (Intl.NumberFormat).
+export const CURRENCIES = [
+  { code: "MXN", locale: "es-MX", label: "Peso mexicano (MXN)" },
+  { code: "USD", locale: "en-US", label: "Dólar estadounidense (USD)" },
+  { code: "EUR", locale: "es-ES", label: "Euro (EUR)" },
+  { code: "COP", locale: "es-CO", label: "Peso colombiano (COP)" },
+  { code: "ARS", locale: "es-AR", label: "Peso argentino (ARS)" },
+  { code: "CLP", locale: "es-CL", label: "Peso chileno (CLP)" },
+  { code: "PEN", locale: "es-PE", label: "Sol peruano (PEN)" },
+  { code: "GTQ", locale: "es-GT", label: "Quetzal (GTQ)" },
+  { code: "BRL", locale: "pt-BR", label: "Real brasileño (BRL)" },
+];
+
+export function formatPreview(currency: string, locale: string): string {
+  try {
+    return new Intl.NumberFormat(locale, { style: "currency", currency, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(199);
+  } catch {
+    return "$199";
+  }
+}
+
 export const THEMES: { id: string; name: string; icon: LucideIcon; desc: string }[] = [
   { id: "KAWAII", name: "Kawaii", icon: Flower2, desc: "Pastel lavanda · bubble-tea · cute 🧋" },
   { id: "MUNDIALISTA", name: "Mundialista", icon: Trophy, desc: "Estadio oscuro · Dorado · Mundial ⚽" },
@@ -79,6 +101,8 @@ export type TiendaConfig = {
   estimatedDelivery: number;
   storefrontTheme: string;
   storefrontHeroUrl: string;
+  currency: string;
+  currencyLocale: string;
   // Módulo OlaClick: pedir por WhatsApp desde el menú digital (gateado por plan).
   whatsappOrderingEnabled: boolean;
   hasWhatsappOrdersModule: boolean;
