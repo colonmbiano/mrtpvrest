@@ -44,6 +44,7 @@ type StoreInfo = {
   logo: string | null;
   hasWebStore: boolean;
   whatsappNumber: string | null;
+  whatsappOrder?: { enabled: boolean; number: string | null };
   isOpen?: boolean;
   closedMessage?: string | null;
   minOrderAmount?: number;
@@ -281,6 +282,7 @@ export default async function StorefrontPage({
     name: store.name,
     logo: store.logo,
     whatsappNumber: store.whatsappNumber,
+    whatsappOrder: store.whatsappOrder,
     primaryColor: primary,
     slug: store.slug,
     minOrderAmount: store.minOrderAmount,

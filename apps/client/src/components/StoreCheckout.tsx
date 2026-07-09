@@ -5,6 +5,7 @@ import { useCart } from '../lib/cartStore';
 import { getApiUrl } from '../lib/config';
 import { computeDeliveryPreview, type DeliveryConfig } from '../lib/delivery';
 import { MapLocationPicker } from './MapLocationPicker';
+import { generateWhatsAppOrderMessage } from '../lib/waOrderMessage';
 
 const API = getApiUrl();
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
@@ -23,6 +24,7 @@ type StoreCheckoutProps = {
   // Tipo de pedido preseleccionado (ej. el toggle Entrega/Recoger del tema).
   // Si la sucursal no lo permite, el efecto de `allowed` lo corrige a uno válido.
   initialOrderType?: OrderType;
+  whatsappOrder?: { enabled: boolean; number: string | null };
 };
 
 const STATUS_LABEL: Record<string, { t: string; c: string }> = {
@@ -37,7 +39,7 @@ const STATUS_LABEL: Record<string, { t: string; c: string }> = {
 
 export default function StoreCheckout({
   open, onClose, slug, primary, locations = [], delivery, minOrderAmount = 0, onlinePayment = false,
-  initialOrderType = 'DELIVERY',
+  initialOrderType = 'DELIVERY', whatsappOrder
 }: StoreCheckoutProps) {
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
@@ -300,6 +302,9 @@ export default function StoreCheckout({
   // ── Pantalla de éxito + seguimiento ──────────────────────────────────────
   if (success) {
     const st = STATUS_LABEL[liveStatus] || STATUS_LABEL.PENDING;
+    const isWa = whatsappOrder?.enabled && !!whatsappOrder?.number;
+    const waUrl = isWa ? `https://wa.me/${whatsappOrder.number}?text=${generateWhatsAppOrderMessage(success, '')}` : '';
+
     return (
       <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
         <div className="bg-white p-8 rounded-[32px] shadow-2xl max-w-sm w-full text-center">
@@ -313,9 +318,17 @@ export default function StoreCheckout({
             </p>
           </div>
           <p className="text-xs text-gray-400 mb-5">El estado se actualiza automáticamente.</p>
+
+          {isWa && (
+            <a href={waUrl} target="_blank" rel="noopener noreferrer" className="block w-full py-4 text-white rounded-2xl font-black uppercase tracking-widest mb-3 bg-[#25D366] shadow-lg hover:brightness-105 active:scale-95 transition-all flex justify-center items-center gap-2">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.711.927 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.391.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm.029 18.88c-1.161 0-2.305-.292-3.318-.844l-3.677.964 1.003-3.582c-.605-1.054-.925-2.269-.926-3.504.001-3.882 3.161-7.042 7.046-7.044 3.881 0 7.041 3.162 7.043 7.046.002 3.884-3.159 7.044-7.043 7.044z"/></svg>
+              Enviar por WhatsApp
+            </a>
+          )}
+
           <button onClick={() => { setSuccess(null); onClose(); }}
-            className="w-full py-4 text-white rounded-2xl font-black uppercase tracking-widest" style={{ background: primary }}>
-            Listo
+            className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest ${isWa ? 'bg-gray-100 text-gray-600' : 'text-white'}`} style={!isWa ? { background: primary } : {}}>
+            {isWa ? 'Cerrar' : 'Listo'}
           </button>
         </div>
       </div>
@@ -559,7 +572,7 @@ export default function StoreCheckout({
             <button disabled={isSubmitting || belowMin || (isDelivery && preview.outOfRange)} type="submit"
               className="w-full py-5 text-white font-black rounded-2xl shadow-xl transition-all active:scale-95 disabled:opacity-50"
               style={{ background: primary }}>
-              {isSubmitting ? 'PROCESANDO...' : `${paymentMethod === 'ONLINE' ? 'PAGAR' : 'CONFIRMAR'} · ${fmt(grandTotal)}`}
+              {isSubmitting ? 'PROCESANDO...' : `${paymentMethod === 'ONLINE' ? 'PAGAR' : (whatsappOrder?.enabled && !!whatsappOrder?.number ? 'CONFIRMAR Y ENVIAR POR WA' : 'CONFIRMAR')} · ${fmt(grandTotal)}`}
             </button>
           </form>
         )}

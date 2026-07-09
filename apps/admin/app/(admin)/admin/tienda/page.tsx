@@ -393,6 +393,9 @@ export default function TiendaConfigPage() {
     estimatedDelivery: 40,
     storefrontTheme: "KAWAII",
     storefrontHeroUrl: "",
+    // Módulo OlaClick
+    whatsappOrderingEnabled: false,
+    hasWhatsappOrdersModule: false,
     // Estado de la tienda
     isOpen: true,
     closedMessage: "",
@@ -498,6 +501,8 @@ export default function TiendaConfigPage() {
           maxOpenOrders: d.maxOpenOrders ?? 0,
           saturatedMessage: d.saturatedMessage ?? "",
           deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : "FLAT",
+          whatsappOrderingEnabled: d.whatsappOrderingEnabled ?? false,
+          hasWhatsappOrdersModule: d.hasWhatsappOrdersModule ?? false,
           isOpen: d.isOpen ?? true,
           adminCanViewExpectedCash: d.adminCanViewExpectedCash ?? true,
           cashCutEmailEnabled: d.cashCutEmailEnabled ?? false,
@@ -520,7 +525,7 @@ export default function TiendaConfigPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      const { slug: _slug, ...rest } = config;
+      const { slug: _slug, hasWhatsappOrdersModule: _hwom, ...rest } = config;
       await api.put("/api/admin/config", {
         ...rest,
         freeDeliveryFrom: config.freeDeliveryFrom > 0 ? config.freeDeliveryFrom : null,
@@ -817,6 +822,40 @@ export default function TiendaConfigPage() {
               <input type="text" value={config.whatsappNumber} onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, whatsappNumber: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
             </div>
           </div>
+          
+          {/* Pedir por WhatsApp (Estilo OlaClick) */}
+          <div className="mt-6 flex items-start gap-3 rounded-2xl p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="font-display text-sm font-extrabold text-tx-hi">Pedir por WhatsApp</p>
+                {!config.hasWhatsappOrdersModule && (
+                  <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider" style={{ background: "var(--brand-primary)", color: "#fff" }}>Pro</span>
+                )}
+              </div>
+              <p className="mt-1 text-[12px] text-tx-mut">
+                Permite a los clientes armar su pedido en tu menú digital y enviarlo directamente a tu WhatsApp, prellenado con los productos y su total.
+              </p>
+              {!config.hasWhatsappOrdersModule && (
+                <p className="mt-2 text-[12px] font-bold" style={{ color: "var(--brand-primary)" }}>
+                  Este módulo requiere el plan Pro o superior.
+                </p>
+              )}
+            </div>
+            <div className="pt-1">
+              <Toggle 
+                checked={config.whatsappOrderingEnabled} 
+                onChange={(v) => {
+                  if (config.hasWhatsappOrdersModule) {
+                    setConfig(p => ({ ...p, whatsappOrderingEnabled: v }));
+                  } else {
+                    alert("Para habilitar los pedidos por WhatsApp necesitas actualizar al plan Pro o superior.");
+                  }
+                }} 
+                label="Pedir por WhatsApp" 
+              />
+            </div>
+          </div>
+
 
           <div className="mt-4">
             <FieldLabel><MapPin size={11} className="mr-1 inline" /> Dirección principal</FieldLabel>

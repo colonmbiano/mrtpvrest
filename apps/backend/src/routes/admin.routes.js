@@ -61,15 +61,20 @@ router.get('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       prisma.restaurantConfig.findUnique({ where: { restaurantId } }),
       prisma.restaurant.findUnique({
         where: { id: restaurantId },
-        select: { name: true, logoUrl: true, slug: true }
+        select: { name: true, logoUrl: true, slug: true, tenant: { select: { activeModules: true } } }
       })
     ]);
+    let activeModules = [];
+    try { activeModules = (typeof restaurant?.tenant?.activeModules === 'string' ? JSON.parse(restaurant.tenant.activeModules) : restaurant?.tenant?.activeModules) || []; } catch(e){}
+    if (!Array.isArray(activeModules)) activeModules = [];
+
     res.set('Cache-Control', 'no-store');
     res.json({
       ...(config || {}),
       name: restaurant?.name || 'Nuevo Restaurante',
       logoUrl: restaurant?.logoUrl || null,
-      slug: restaurant?.slug || null
+      slug: restaurant?.slug || null,
+      hasWhatsappOrdersModule: activeModules.includes('WHATSAPP_ORDERS')
     });
   } catch (e) { res.status(500).json({ error: 'Error al obtener configuracion' }) }
 })
@@ -110,6 +115,7 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       // Envío por distancia
       'deliveryMode','originLat','originLng','deliveryBaseFee','deliveryPerKm',
       'deliveryFreeRadiusKm','deliveryMaxKm',
+      'whatsappOrderingEnabled',
     ];
     // Numéricos que SÍ admiten null (campos opcionales en el schema).
     const NULLABLE_NUMERIC = new Set([
@@ -145,6 +151,21 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
           return res.status(400).json({ error: 'Horario de promos inválido: usa formato HH:mm (ej. 21:00)' });
         }
         data[k] = s;
+      } else if (k === 'whatsappOrderingEnabled') {
+        data[k] = Boolean(v);
+        // Verificar si tiene el módulo
+        if (data[k]) {
+          const r = await prisma.restaurant.findUnique({
+            where: { id: restaurantId },
+            include: { tenant: { select: { activeModules: true } } }
+          });
+          let activeModules = [];
+          try { activeModules = (typeof r?.tenant?.activeModules === 'string' ? JSON.parse(r.tenant.activeModules) : r?.tenant?.activeModules) || []; } catch(e){}
+          if (!Array.isArray(activeModules)) activeModules = [];
+          if (!activeModules.includes('WHATSAPP_ORDERS')) {
+            data[k] = false; // Ignorar y forzar false si no tiene el módulo
+          }
+        }
       } else {
         data[k] = v;
       }

@@ -1315,6 +1315,7 @@ model RestaurantConfig {
 
   phone             String?
   whatsappNumber    String?
+  whatsappOrderingEnabled Boolean @default(false)
   address           String?
 
   // País del restaurante (ISO 3166-1 alpha-2: "MX", "US", "CO", …). Determina la

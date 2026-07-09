@@ -324,7 +324,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
 
       <StoreCheckout open={checkoutOpen} onClose={() => setCheckoutOpen(false)} slug={slug} primary={GOLD}
         locations={locations} delivery={info.delivery} minOrderAmount={info.minOrderAmount}
-        onlinePayment={info.onlinePayment} initialOrderType={orderMode} />
+        onlinePayment={info.onlinePayment} initialOrderType={orderMode} whatsappOrder={info.whatsappOrder} />
 
       <style dangerouslySetInnerHTML={{ __html: `.no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}` }} />
     </div>
