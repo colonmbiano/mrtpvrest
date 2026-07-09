@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import {
-  Plug, ShieldCheck, CheckCircle2, XCircle, KeyRound,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plug, ShieldCheck, KeyRound } from "lucide-react";
 import api from "@/lib/api";
 import AiKeyCard from "@/components/AiKeyCard";
 import {
-  WtScreen, PageHeader, WtCard, SectionLabel, IconBadge, Toggle,
-  PrimaryBtn, Pill,
-} from "@/components/warmtech";
+  PageShell, PageHeader, Card, SectionLabel, IconBadge, Toggle,
+  Button, Pill, Field, Input, Select, LoadingState, useToast,
+} from "@/components/ds";
 
 function safeParseConfig(raw: unknown): Record<string, string> {
   if (!raw) return {};
@@ -30,29 +28,12 @@ const FIELD_META: Record<string, { label: string; hint?: string; placeholder?: s
 type IntegrationType = { label: string; icon?: string; fields: string[] };
 type ConfigForm = { enabled: boolean; mode: string; config: Record<string, string> };
 
-const inputStyle = {
-  background: "var(--surf-2)",
-  border: "1px solid var(--bd-1)",
-  color: "var(--tx)",
-} as const;
-
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<Array<{ type: string; enabled?: boolean; mode?: string; config?: unknown }>>([]);
   const [types, setTypes] = useState<Record<string, IntegrationType>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => { if (toastTimer.current) clearTimeout(toastTimer.current); };
-  }, []);
-
-  function showToast(msg: string, ok = true) {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast({ msg, ok });
-    toastTimer.current = setTimeout(() => setToast(null), 2800);
-  }
+  const toast = useToast();
 
   // Estados locales para los formularios
   const [configForms, setConfigForms] = useState<Record<string, ConfigForm>>({});
@@ -83,16 +64,20 @@ export default function IntegrationsPage() {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // integrations se conserva para paridad con la carga original.
+  void integrations;
 
   const handleSave = async (type: string) => {
     setSaving(type);
     try {
       await api.put(`/api/integrations/${type}`, configForms[type]);
-      showToast(`Configuración de ${type} guardada con éxito.`);
+      toast.success(`Configuración de ${type} guardada con éxito.`);
       fetchData();
     } catch {
-      showToast("Error al guardar la configuración.", false);
+      toast.error("Error al guardar la configuración.");
     } finally {
       setSaving(null);
     }
@@ -110,7 +95,7 @@ export default function IntegrationsPage() {
   };
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Ecosistema"
         title="Conexiones & APIs"
@@ -118,9 +103,7 @@ export default function IntegrationsPage() {
       />
 
       {loading ? (
-        <WtCard className="p-6 text-center text-sm text-tx-mut">
-          Cargando ecosistema de integraciones…
-        </WtCard>
+        <LoadingState label="Cargando ecosistema de integraciones…" />
       ) : (
         <>
           <AiKeyCard />
@@ -133,7 +116,7 @@ export default function IntegrationsPage() {
               if (!typeInfo || !form) return null;
 
               return (
-                <WtCard key={key} className="flex flex-col p-5">
+                <Card key={key} className="flex flex-col p-5">
                   <div className="flex items-start gap-3">
                     <IconBadge icon={Plug} tone={form.enabled ? "ok" : "neutral"} size={42} />
                     <div className="min-w-0 flex-1">
@@ -153,96 +136,69 @@ export default function IntegrationsPage() {
                     />
                   </div>
 
-                  <div className="mt-5 flex flex-1 flex-col gap-4">
-                    <div>
-                      <label className="mb-1.5 ml-1 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
-                        Modo de operación
-                      </label>
-                      <select
+                  <div className="mt-5 flex flex-1 flex-col">
+                    <Field label="Modo de operación">
+                      <Select
                         value={form.mode}
                         onChange={(e) => setConfigForms((p) => ({ ...p, [key]: { ...form, mode: e.target.value } }))}
-                        className="min-h-11 w-full rounded-xl px-3 text-xs font-bold outline-none"
-                        style={inputStyle}
                       >
                         <option value="sandbox">Pruebas (Sandbox)</option>
                         <option value="production">Producción (Live)</option>
-                      </select>
-                    </div>
+                      </Select>
+                    </Field>
 
                     {typeInfo.fields.map((field) => {
                       const meta = FIELD_META[field];
                       const label = meta?.label || field;
                       return (
-                        <div key={field}>
-                          <label className="mb-1.5 ml-1 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
-                            {label}
-                          </label>
+                        <Field key={field} label={label} hint={meta?.hint}>
                           {field === "provider" ? (
-                            <select
+                            <Select
                               value={form.config.provider || "WHAPI"}
                               onChange={(e) => updateField(key, "provider", e.target.value)}
-                              className="min-h-11 w-full rounded-xl px-3 text-xs font-bold outline-none"
-                              style={inputStyle}
                             >
                               <option value="WHAPI">Whapi (gate.whapi.cloud)</option>
                               <option value="META">WhatsApp Cloud API (Meta)</option>
-                            </select>
+                            </Select>
                           ) : (
-                            <input
+                            <Input
                               type={meta?.secret === false ? "text" : "password"}
                               placeholder={meta?.placeholder || `Ingresa tu ${field}`}
                               value={form.config[field] || ""}
                               onChange={(e) => updateField(key, field, e.target.value)}
-                              className="min-h-11 w-full rounded-xl px-3 font-mono text-xs outline-none"
-                              style={inputStyle}
+                              className="font-mono"
                             />
                           )}
-                          {meta?.hint && (
-                            <p className="ml-1 mt-1 text-[10px] leading-snug text-tx-dim">{meta.hint}</p>
-                          )}
-                        </div>
+                        </Field>
                       );
                     })}
                   </div>
 
-                  <div className="mt-6">
-                    <PrimaryBtn
+                  <div className="mt-3">
+                    <Button
                       onClick={() => handleSave(key)}
                       disabled={saving === key}
+                      loading={saving === key}
                       icon={KeyRound}
+                      full
                     >
                       {saving === key ? "Guardando…" : "Guardar configuración"}
-                    </PrimaryBtn>
+                    </Button>
                   </div>
-                </WtCard>
+                </Card>
               );
             })}
           </div>
 
-          <WtCard className="mt-6 flex items-start gap-3 p-4">
+          <Card className="mt-6 flex items-start gap-3 p-4">
             <IconBadge icon={ShieldCheck} tone="ac" size={38} />
             <p className="text-[11px] leading-relaxed text-tx-mut">
               <span className="font-bold text-tx">Seguridad:</span> tus credenciales se
               encriptan antes de guardarse. Nunca compartas tus llaves secretas con nadie.
             </p>
-          </WtCard>
+          </Card>
         </>
       )}
-
-      {toast && (
-        <div
-          className="fixed bottom-24 right-5 z-[9999] flex items-center gap-2 rounded-xl px-4 py-3 text-[13px] font-medium md:bottom-7 md:right-7"
-          style={{
-            background: toast.ok ? "var(--ok-soft)" : "var(--err-soft)",
-            border: `1px solid ${toast.ok ? "var(--ok)" : "var(--err)"}`,
-            color: toast.ok ? "var(--ok)" : "var(--err)",
-            boxShadow: "0 4px 24px rgba(0,0,0,.4)",
-          }}
-        >
-          {toast.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-          {toast.msg}
-        </div>
-      )}
-    </WtScreen>
+    </PageShell>
   );
 }

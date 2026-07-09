@@ -1,13 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import {
-  Bike, Car, Truck, Play, Lock, AlertTriangle, Clock, Plus, MapPin,
+  Bike, Car, Play, Lock, AlertTriangle, Clock, Plus, MapPin,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
-  WtScreen, PageHeader, WtCard, SectionHead, Pill, PrimaryBtn,
-  EmptyState,
-} from "@/components/warmtech";
+  PageShell, PageHeader, Card, SectionHead, Pill, Button, Field, Input, Select,
+  EmptyState, useToast,
+} from "@/components/ds";
 
 type VehicleType = "MOTO" | "CARRO" | "BICI";
 
@@ -48,10 +48,9 @@ const VEHICLE_ICON: Record<VehicleType, typeof Bike> = {
   MOTO: Bike, CARRO: Car, BICI: Bike,
 };
 
-const inputCls = "min-h-12 w-full rounded-xl px-3 text-sm outline-none";
-const inputStyle = { background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
-
 export default function LogisticaPage() {
+  const toast = useToast();
+
   // Gate state
   const [hasDelivery, setHasDelivery] = useState<boolean | null>(null);
   const [loadingGate, setLoadingGate] = useState(true);
@@ -145,7 +144,7 @@ export default function LogisticaPage() {
       });
       await loadAll();
     } catch (e: any) {
-      alert(e?.response?.data?.error || "Error al cerrar turno");
+      toast.error(e?.response?.data?.error || "Error al cerrar turno");
     }
   }
 
@@ -164,7 +163,7 @@ export default function LogisticaPage() {
       setVType("MOTO");
       await loadAll();
     } catch (e: any) {
-      alert(e?.response?.data?.error || "Error al crear vehículo");
+      toast.error(e?.response?.data?.error || "Error al crear vehículo");
     } finally {
       setSavingVehicle(false);
     }
@@ -173,21 +172,18 @@ export default function LogisticaPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loadingGate) {
     return (
-      <WtScreen>
+      <PageShell>
         <div className="grid place-items-center py-24 text-sm text-tx-mut">
           Cargando módulo de Logística…
         </div>
-      </WtScreen>
+      </PageShell>
     );
   }
 
   if (!hasDelivery) {
     return (
-      <WtScreen>
-        <PageHeader
-          eyebrow="Flota & repartos"
-          title="Logística & Flota"
-        />
+      <PageShell>
+        <PageHeader eyebrow="Flota & repartos" title="Logística & Flota" />
         <EmptyState
           icon={Lock}
           title="Módulo no activado"
@@ -196,14 +192,14 @@ export default function LogisticaPage() {
             "El módulo de Logística requiere que la opción hasDelivery esté activa en tu plan. Actívalo desde el panel SaaS."
           }
         />
-      </WtScreen>
+      </PageShell>
     );
   }
 
   const activeVehicles = vehicles.filter(v => v.isActive);
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Flota & repartos"
         title="Logística & Flota"
@@ -212,39 +208,23 @@ export default function LogisticaPage() {
 
       <div className="flex flex-col gap-4 md:gap-6">
         {/* ── Iniciar turno ─────────────────────────────────────────────── */}
-        <WtCard className="p-4 md:p-6">
+        <Card className="p-4 md:p-6">
           <SectionHead title="Iniciar turno (Ride)" />
 
           <form onSubmit={handleStartRide} className="grid gap-3 md:grid-cols-4">
-            <div className="md:col-span-1">
-              <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
-                Empleado
-              </label>
-              <select
-                value={employeeId}
-                onChange={e => setEmployeeId(e.target.value)}
-                className={inputCls}
-                style={inputStyle}
-              >
+            <Field label="Empleado" className="mb-0">
+              <Select value={employeeId} onChange={e => setEmployeeId(e.target.value)}>
                 <option value="">Selecciona…</option>
                 {employees.map(emp => (
                   <option key={emp.id} value={emp.id}>
                     {emp.name} {emp.role ? `· ${emp.role}` : ""}
                   </option>
                 ))}
-              </select>
-            </div>
+              </Select>
+            </Field>
 
-            <div className="md:col-span-1">
-              <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
-                Vehículo
-              </label>
-              <select
-                value={vehicleId}
-                onChange={e => setVehicleId(e.target.value)}
-                className={inputCls}
-                style={inputStyle}
-              >
+            <Field label="Vehículo" className="mb-0">
+              <Select value={vehicleId} onChange={e => setVehicleId(e.target.value)}>
                 <option value="">Selecciona…</option>
                 {activeVehicles.map(v => (
                   <option key={v.id} value={v.id}>
@@ -252,28 +232,23 @@ export default function LogisticaPage() {
                     {v.plate ? ` · ${v.plate}` : ""}
                   </option>
                 ))}
-              </select>
-            </div>
+              </Select>
+            </Field>
 
-            <div className="md:col-span-1">
-              <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
-                Km inicial (opcional)
-              </label>
-              <input
+            <Field label="Km inicial (opcional)" className="mb-0">
+              <Input
                 type="number"
                 min={0}
                 value={startMileage}
                 onChange={e => setStartMileage(e.target.value)}
-                className={inputCls}
-                style={inputStyle}
                 placeholder="p. ej. 12450"
               />
-            </div>
+            </Field>
 
-            <div className="flex items-end md:col-span-1">
-              <PrimaryBtn type="submit" icon={Play} disabled={savingRide}>
+            <div className="flex items-end">
+              <Button type="submit" full icon={Play} loading={savingRide}>
                 {savingRide ? "Guardando…" : "Iniciar turno"}
-              </PrimaryBtn>
+              </Button>
             </div>
 
             {rideError && (
@@ -287,10 +262,10 @@ export default function LogisticaPage() {
               </p>
             )}
           </form>
-        </WtCard>
+        </Card>
 
         {/* ── Turnos activos ────────────────────────────────────────────── */}
-        <WtCard className="p-4 md:p-6">
+        <Card className="p-4 md:p-6">
           <SectionHead title="Turnos activos" />
 
           {openRides.length === 0 ? (
@@ -302,12 +277,12 @@ export default function LogisticaPage() {
                 return (
                   <div
                     key={r.id}
-                    className="flex items-center justify-between gap-3 rounded-2xl px-4 py-3"
+                    className="flex items-center justify-between gap-3 rounded-ds-lg px-4 py-3"
                     style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-primary"
-                        style={{ background: "var(--iris-soft)" }}>
+                        style={{ background: "var(--accent-soft)" }}>
                         <VIcon size={17} strokeWidth={1.9} />
                       </span>
                       <div className="min-w-0">
@@ -331,57 +306,54 @@ export default function LogisticaPage() {
                         </p>
                       </div>
                     </div>
-                    <PrimaryBtn full={false} ghost icon={Clock} onClick={() => handleCloseRide(r.id)}>
+                    <Button variant="secondary" icon={Clock} onClick={() => handleCloseRide(r.id)}>
                       Cerrar turno
-                    </PrimaryBtn>
+                    </Button>
                   </div>
                 );
               })}
             </div>
           )}
-        </WtCard>
+        </Card>
 
         {/* ── Vehículos ─────────────────────────────────────────────────── */}
-        <WtCard className="p-4 md:p-6">
+        <Card className="p-4 md:p-6">
           <SectionHead title="Vehículos" />
 
           <form
             onSubmit={handleCreateVehicle}
-            className="mb-5 grid gap-3 md:grid-cols-4"
+            className="mb-5 grid items-end gap-3 md:grid-cols-4"
           >
-            <input
-              type="text"
-              value={vName}
-              onChange={e => setVName(e.target.value)}
-              placeholder="Nombre (ej. Moto A)"
-              className={`${inputCls} md:col-span-1`}
-              style={inputStyle}
-              required
-            />
-            <input
-              type="text"
-              value={vPlate}
-              onChange={e => setVPlate(e.target.value)}
-              placeholder="Placas (opcional)"
-              className={`${inputCls} md:col-span-1`}
-              style={inputStyle}
-            />
-            <select
-              value={vType}
-              onChange={e => setVType(e.target.value as VehicleType)}
-              className={`${inputCls} md:col-span-1`}
-              style={inputStyle}
-            >
-              {VEHICLE_TYPES.map(t => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-            <div className="md:col-span-1">
-              <PrimaryBtn type="submit" icon={Plus} disabled={savingVehicle}>
+            <Field label="Nombre" className="mb-0">
+              <Input
+                type="text"
+                value={vName}
+                onChange={e => setVName(e.target.value)}
+                placeholder="Nombre (ej. Moto A)"
+                required
+              />
+            </Field>
+            <Field label="Placas (opcional)" className="mb-0">
+              <Input
+                type="text"
+                value={vPlate}
+                onChange={e => setVPlate(e.target.value)}
+                placeholder="Placas (opcional)"
+              />
+            </Field>
+            <Field label="Tipo" className="mb-0">
+              <Select value={vType} onChange={e => setVType(e.target.value as VehicleType)}>
+                {VEHICLE_TYPES.map(t => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="flex items-end">
+              <Button type="submit" full icon={Plus} loading={savingVehicle}>
                 {savingVehicle ? "Guardando…" : "Agregar"}
-              </PrimaryBtn>
+              </Button>
             </div>
           </form>
 
@@ -394,7 +366,7 @@ export default function LogisticaPage() {
                 return (
                   <div
                     key={v.id}
-                    className="flex items-center gap-3 rounded-2xl px-4 py-3"
+                    className="flex items-center gap-3 rounded-ds-lg px-4 py-3"
                     style={{
                       background: v.isActive ? "var(--surf-2)" : "var(--surf-1)",
                       border: "1px solid var(--bd-1)",
@@ -403,7 +375,7 @@ export default function LogisticaPage() {
                   >
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px]"
                       style={{
-                        background: v.isActive ? "var(--iris-soft)" : "var(--surf-3)",
+                        background: v.isActive ? "var(--accent-soft)" : "var(--surf-3)",
                         color: v.isActive ? "var(--brand-primary)" : "var(--tx-mut)",
                       }}>
                       <VIcon size={17} strokeWidth={1.9} />
@@ -420,8 +392,8 @@ export default function LogisticaPage() {
               })}
             </div>
           )}
-        </WtCard>
+        </Card>
       </div>
-    </WtScreen>
+    </PageShell>
   );
 }

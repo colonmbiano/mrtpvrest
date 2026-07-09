@@ -3,8 +3,8 @@ import {
   CheckCircle2, MessageCircle, UtensilsCrossed, Sparkles, ChevronRight, Layers,
 } from "lucide-react";
 import {
-  WtScreen, PageHeader, WtCard, SectionHead, IconBadge,
-} from "@/components/warmtech";
+  PageShell, PageHeader, Card, SectionHead, IconBadge, Pill,
+} from "@/components/ds";
 import Link from "next/link";
 
 const manualSteps = [
@@ -97,11 +97,9 @@ const checklist = [
   "Se hizo una venta de prueba.",
 ];
 
-const GREEN_GRADIENT = "linear-gradient(140deg,#39c46e,#1faa55)";
-
 export default function GuiasUsoPage() {
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Guías de uso"
         title="Registrar el menú"
@@ -109,33 +107,33 @@ export default function GuiasUsoPage() {
       />
 
       {/* Hero / rutas */}
-      <WtCard
+      <Card
         className="p-5 md:p-7"
         style={{
           background:
-            "linear-gradient(135deg, var(--iris-soft), transparent), var(--surf-1)",
+            "linear-gradient(135deg, var(--accent-soft), transparent), var(--surf-1)",
         }}
       >
         <div className="grid gap-6 md:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="mb-3 inline-flex rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-[.14em] text-primary" style={{ background: "var(--iris-soft)" }}>
+            <div className="mb-3 inline-flex rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-[.14em] text-primary" style={{ background: "var(--accent-soft)" }}>
               Guía visual
             </div>
             <h2 className="font-display text-2xl font-extrabold tracking-[-.03em] text-tx-hi md:text-3xl">
               Registrar el menú en MRTPVREST
             </h2>
-            <p className="mt-3 max-w-2xl text-sm text-tx-mut" style={{ lineHeight: 1.7 }}>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-tx-mut">
               Carga categorías, platillos, variantes y modificadores manualmente, o genera un primer menú con IA.
             </p>
           </div>
           <div className="grid content-end gap-3">
-            <div className="rounded-2xl p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+            <div className="rounded-ds-lg p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
               <div className="font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Ruta manual</div>
               <div className="mt-1.5 font-display text-base font-extrabold text-tx-hi">
                 Categorías → Variantes → Platillos → Prueba en TPV
               </div>
             </div>
-            <div className="rounded-2xl p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+            <div className="rounded-ds-lg p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
               <div className="font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Ruta con IA</div>
               <div className="mt-1.5 font-display text-base font-extrabold text-tx-hi">
                 Platillos → Escaneo IA → Revisar → Prueba en TPV
@@ -143,63 +141,53 @@ export default function GuiasUsoPage() {
             </div>
           </div>
         </div>
-      </WtCard>
+      </Card>
 
       {/* Todas las guías */}
       <SectionHead title="Todas las guías" />
       <div className="grid gap-4 md:grid-cols-2">
         <Link href="/admin/guias/whatsapp" className="block">
-          <WtCard className="h-full p-5 transition-transform active:scale-[.99]" style={{ borderColor: "rgba(57,196,110,0.4)" }}>
+          <Card className="h-full p-5 transition-transform active:scale-[.99]">
             <div className="mb-3 flex items-center justify-between">
-              <span className="grid h-11 w-11 place-items-center rounded-[12px] text-white" style={{ background: GREEN_GRADIENT }}>
-                <MessageCircle size={20} strokeWidth={1.9} />
-              </span>
-              <span className="rounded-full px-2.5 py-1 font-mono text-[9px] uppercase tracking-[.12em] text-white" style={{ background: "#1faa55" }}>
-                Nuevo
-              </span>
+              <IconBadge icon={MessageCircle} tone="ok" size={44} />
+              <Pill tone="ok">Nuevo</Pill>
             </div>
             <h3 className="font-display text-lg font-extrabold text-tx-hi">Chatbot de WhatsApp</h3>
-            <p className="mt-2 text-sm text-tx-mut" style={{ lineHeight: 1.6 }}>
+            <p className="mt-2 text-sm leading-relaxed text-tx-mut">
               Activa tu asistente que toma pedidos solo: conexión, envío, pago en línea, juegos de premios y campañas.
             </p>
-            <div className="mt-3 flex items-center gap-1 font-mono text-[10px] uppercase tracking-[.12em]" style={{ color: "#39c46e" }}>
+            <div className="mt-3 flex items-center gap-1 font-mono text-[10px] uppercase tracking-[.12em] text-ok">
               Abrir guía <ChevronRight size={13} />
             </div>
-          </WtCard>
+          </Card>
         </Link>
 
         <Link href="/admin/guias/combos" className="block">
-          <WtCard className="h-full p-5 transition-transform active:scale-[.99]" style={{ borderColor: "rgba(57,196,110,0.4)" }}>
+          <Card className="h-full p-5 transition-transform active:scale-[.99]">
             <div className="mb-3 flex items-center justify-between">
-              <span className="grid h-11 w-11 place-items-center rounded-[12px] text-white" style={{ background: GREEN_GRADIENT }}>
-                <Layers size={20} strokeWidth={1.9} />
-              </span>
-              <span className="rounded-full px-2.5 py-1 font-mono text-[9px] uppercase tracking-[.12em] text-white" style={{ background: "#1faa55" }}>
-                Nuevo
-              </span>
+              <IconBadge icon={Layers} tone="ok" size={44} />
+              <Pill tone="ok">Nuevo</Pill>
             </div>
             <h3 className="font-display text-lg font-extrabold text-tx-hi">Combos por estación</h3>
-            <p className="mt-2 text-sm text-tx-mut" style={{ lineHeight: 1.6 }}>
+            <p className="mt-2 text-sm leading-relaxed text-tx-mut">
               Arma combos configurables que se cobran como un solo producto pero mandan cada parte a su estación de cocina.
             </p>
-            <div className="mt-3 flex items-center gap-1 font-mono text-[10px] uppercase tracking-[.12em]" style={{ color: "#39c46e" }}>
+            <div className="mt-3 flex items-center gap-1 font-mono text-[10px] uppercase tracking-[.12em] text-ok">
               Abrir guía <ChevronRight size={13} />
             </div>
-          </WtCard>
+          </Card>
         </Link>
 
-        <WtCard className="p-5">
+        <Card className="p-5">
           <div className="mb-3 flex items-center justify-between">
             <IconBadge icon={UtensilsCrossed} tone="ac" size={44} />
-            <span className="rounded-full px-2.5 py-1 font-mono text-[9px] uppercase tracking-[.12em] text-primary" style={{ background: "var(--iris-soft)" }}>
-              Esta guía
-            </span>
+            <Pill tone="ac">Esta guía</Pill>
           </div>
           <h3 className="font-display text-lg font-extrabold text-tx-hi">Registrar el menú</h3>
-          <p className="mt-2 text-sm text-tx-mut" style={{ lineHeight: 1.6 }}>
+          <p className="mt-2 text-sm leading-relaxed text-tx-mut">
             Carga categorías, platillos, variantes y modificadores (manual o con Escaneo IA). Continúa leyendo abajo.
           </p>
-        </WtCard>
+        </Card>
       </div>
 
       {/* Flujo manual */}
@@ -207,7 +195,7 @@ export default function GuiasUsoPage() {
       <p className="-mt-2 mb-3 text-sm text-tx-mut">Recomendado cuando quieres capturar el menú con control total.</p>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {manualSteps.map((step, index) => (
-          <WtCard key={step.title} className="p-5">
+          <Card key={step.title} className="p-5">
             <div className="mb-4 flex items-center justify-between">
               <span className="grid h-9 w-9 place-items-center rounded-full font-display text-sm font-extrabold text-white" style={{ background: "var(--brand-primary)" }}>
                 {index + 1}
@@ -217,43 +205,43 @@ export default function GuiasUsoPage() {
               </span>
             </div>
             <h3 className="font-display text-base font-extrabold text-tx-hi">{step.title}</h3>
-            <p className="mt-2 text-sm text-tx-mut" style={{ lineHeight: 1.6 }}>{step.text}</p>
-            <div className="mt-4 rounded-xl px-3 py-2 text-sm font-bold text-tx" style={{ background: "var(--surf-2)" }}>
+            <p className="mt-2 text-sm leading-relaxed text-tx-mut">{step.text}</p>
+            <div className="mt-4 rounded-ds-md px-3 py-2 text-sm font-bold text-tx" style={{ background: "var(--surf-2)" }}>
               {step.action}
             </div>
-          </WtCard>
+          </Card>
         ))}
       </div>
 
       {/* Menú con IA */}
       <SectionHead title="Crear el menú con IA" />
       <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
-        <WtCard className="p-6" style={{ background: "linear-gradient(140deg, var(--iris-soft), var(--surf-2))" }}>
+        <Card className="p-6" style={{ background: "linear-gradient(140deg, var(--accent-soft), var(--surf-2))" }}>
           <div className="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.14em] text-primary">
             <Sparkles size={14} /> Menú con IA
           </div>
           <h3 className="font-display text-2xl font-extrabold tracking-[-.03em] text-tx-hi md:text-3xl">
             Escaneo IA
           </h3>
-          <p className="mt-3 text-sm text-tx-mut" style={{ lineHeight: 1.7 }}>
+          <p className="mt-3 text-sm leading-relaxed text-tx-mut">
             Si ya tienes fotos del menú, la IA puede crear un primer borrador con categorías, productos, precios y algunas opciones.
           </p>
-          <div className="mt-5 rounded-xl p-4 text-sm font-bold text-warn" style={{ background: "var(--warn-soft)" }}>
+          <div className="mt-5 rounded-ds-md p-4 text-sm font-bold text-warn" style={{ background: "var(--warn-soft)" }}>
             Usa la IA para avanzar rápido, pero revisa todo antes de vender.
           </div>
-        </WtCard>
+        </Card>
 
         <div className="grid gap-3">
           {aiSteps.map((step, index) => (
-            <WtCard key={step.title} className="grid grid-cols-[40px_1fr] gap-3 p-4">
+            <Card key={step.title} className="grid grid-cols-[40px_1fr] gap-3 p-4">
               <span className="grid h-9 w-9 place-items-center rounded-full font-display text-sm font-extrabold text-white" style={{ background: "var(--brand-primary)" }}>
                 {index + 1}
               </span>
               <div>
                 <h3 className="font-display font-extrabold text-tx-hi">{step.title}</h3>
-                <p className="mt-1 text-sm text-tx-mut" style={{ lineHeight: 1.55 }}>{step.text}</p>
+                <p className="mt-1 text-sm leading-relaxed text-tx-mut">{step.text}</p>
               </div>
-            </WtCard>
+            </Card>
           ))}
         </div>
       </div>
@@ -263,13 +251,13 @@ export default function GuiasUsoPage() {
       <p className="-mt-2 mb-3 text-sm text-tx-mut">Usa estos ejemplos para decidir si algo es categoría, variante o modificador.</p>
       <div className="grid gap-4 md:grid-cols-2">
         {examples.map((example) => (
-          <WtCard key={example.title} className="p-5">
+          <Card key={example.title} className="p-5">
             <h3 className="font-display text-base font-extrabold text-tx-hi">{example.title}</h3>
             <div className="mt-4 grid gap-2">
               {example.lines.map(([label, value]) => (
                 <div
                   key={`${example.title}-${label}`}
-                  className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm text-tx"
+                  className="flex items-center justify-between gap-3 rounded-ds-md px-3 py-2 text-sm text-tx"
                   style={{ background: "var(--surf-2)" }}
                 >
                   <span className="font-bold text-tx-mut">{label}</span>
@@ -277,7 +265,7 @@ export default function GuiasUsoPage() {
                 </div>
               ))}
             </div>
-          </WtCard>
+          </Card>
         ))}
       </div>
 
@@ -286,14 +274,14 @@ export default function GuiasUsoPage() {
       <p className="-mt-2 mb-3 text-sm text-tx-mut">Antes de empezar a vender, valida estos puntos.</p>
       <div className="grid gap-3 md:grid-cols-2">
         {checklist.map((item) => (
-          <WtCard key={item} className="flex items-center gap-3 p-4">
+          <Card key={item} className="flex items-center gap-3 p-4">
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full" style={{ background: "var(--ok-soft)", color: "var(--ok)" }}>
               <CheckCircle2 size={16} />
             </span>
             <span className="text-sm font-semibold text-tx">{item}</span>
-          </WtCard>
+          </Card>
         ))}
       </div>
-    </WtScreen>
+    </PageShell>
   );
 }
