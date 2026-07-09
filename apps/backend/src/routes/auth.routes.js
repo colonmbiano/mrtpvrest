@@ -6,8 +6,9 @@ const { z }      = require('zod')
 const { prisma, runWithBypass } = require('@mrtpvrest/database')
 const { authenticate } = require('../middleware/auth.middleware')
 const rateLimit  = require('express-rate-limit')
-const { refreshLimiter, resendVerifyLimiter } = require('../lib/rate-limiters')
-const { sendEmail, verificationEmailHtml } = require('../utils/mailer')
+const { refreshLimiter, resendVerifyLimiter, forgotPasswordLimiter } = require('../lib/rate-limiters')
+const { sendEmail, verificationEmailHtml, passwordResetEmailHtml } = require('../utils/mailer')
+const { notifyPlatformAdmin } = require('../lib/platform-notify')
 const { verifyTurnstile } = require('../lib/turnstile')
 const { isDisposableEmail } = require('../lib/email-domains')
 const { resolveTrialDays } = require('../lib/promo')
@@ -356,6 +357,22 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
       verificationEmailHtml(ownerName, restaurantName, verifyUrl)
     ).catch(err => log.error('register.email.failed', { tenantId: tenant.id, err }))
 
+    // Aviso al SUPER_ADMIN de plataforma (best-effort, no bloquea el registro)
+    const saasBase = (process.env.SAAS_URL || 'https://saas.mrtpvrest.com').replace(/\/$/, '')
+    notifyPlatformAdmin({
+      subject: `🎉 Nuevo restaurante: ${restaurantName}`,
+      title: 'Nuevo restaurante registrado',
+      lines: [
+        `Restaurante: ${restaurantName}`,
+        `Dueño: ${ownerName}`,
+        `Email: ${email.toLowerCase()}`,
+        `Plan: ${plan.displayName || plan.name}`,
+        `Prueba: ${trialDays} día${trialDays === 1 ? '' : 's'}`,
+      ],
+      ctaUrl: saasBase ? `${saasBase}/dashboard` : null,
+      ctaLabel: 'Ver en la central',
+    }).catch(err => log.error('register.notify_admin.failed', { tenantId: tenant.id, err }))
+
     res.status(201).json({
       user: {
         id:    user.id,
@@ -462,6 +479,91 @@ router.post('/resend-verification', resendVerifyLimiter, authenticate, async (re
   } catch (e) {
     console.error('Error en /resend-verification:', e)
     res.status(500).json({ error: 'Error al reenviar' })
+  }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OLVIDÉ MI CONTRASEÑA — POST /api/auth/forgot-password
+// Genera token de un solo uso (1h) y envía email con enlace de restablecimiento.
+// Responde SIEMPRE 200 con el mismo mensaje (anti-enumeración de cuentas).
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/forgot-password', forgotPasswordLimiter, async (req, res) => {
+  const { email } = req.body
+  if (!email || typeof email !== 'string') return res.status(400).json({ error: 'Email requerido' })
+  const normalized = email.trim().toLowerCase()
+
+  // Respuesta uniforme: no revela si el correo existe o no.
+  const genericOk = () => res.json({
+    ok: true,
+    message: 'Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña.',
+  })
+
+  try {
+    const user = await runWithBypass(() => prisma.user.findUnique({
+      where: { email: normalized },
+      select: { id: true, name: true, email: true, isActive: true },
+    }))
+    if (!user || !user.isActive) return genericOk()
+
+    const token  = crypto.randomBytes(32).toString('hex')
+    const expiry = new Date(Date.now() + 60 * 60 * 1000) // 1 hora
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordResetToken: token, passwordResetExpiry: expiry },
+    })
+
+    // El enlace SIEMPRE va al panel SaaS (ahí viven /forgot-password y
+    // /reset-password), nunca al admin. SAAS_URL solo overridea (ej. staging).
+    const base = (process.env.SAAS_URL || 'https://saas.mrtpvrest.com').replace(/\/$/, '')
+    const resetUrl = `${base}/reset-password?token=${token}`
+    sendEmail(
+      user.email,
+      'Restablece tu contraseña — MRTPVREST',
+      passwordResetEmailHtml(user.name, resetUrl)
+    ).catch(err => log.error('forgot_password.email.failed', { userId: user.id, err }))
+
+    return genericOk()
+  } catch (e) {
+    // Ni siquiera revelamos errores del servidor: respuesta uniforme.
+    log.error('forgot_password.failed', { err: e })
+    return genericOk()
+  }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTABLECER CONTRASEÑA — POST /api/auth/reset-password
+// Valida token + expiry, re-hashea (bcrypt 12), limpia el token e invalida
+// todas las sesiones (refresh tokens) del usuario.
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body
+  if (!token || !newPassword) return res.status(400).json({ error: 'token y newPassword son requeridos' })
+  if (String(newPassword).length < 8) return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 8 caracteres' })
+
+  try {
+    const user = await runWithBypass(() => prisma.user.findFirst({
+      where: { passwordResetToken: token },
+      select: { id: true, passwordResetExpiry: true },
+    }))
+    if (!user) return res.status(400).json({ error: 'Enlace inválido o ya utilizado', code: 'TOKEN_INVALID' })
+    if (!user.passwordResetExpiry || user.passwordResetExpiry < new Date()) {
+      return res.status(410).json({ error: 'El enlace ha expirado. Solicita uno nuevo.', code: 'TOKEN_EXPIRED' })
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12)
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash, passwordResetToken: null, passwordResetExpiry: null },
+      }),
+      // Cierra todas las sesiones activas: quien tenga el enlace es el dueño.
+      prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
+    ])
+
+    res.json({ ok: true, message: 'Contraseña actualizada. Ya puedes iniciar sesión.' })
+  } catch (e) {
+    log.error('reset_password.failed', { err: e })
+    res.status(500).json({ error: 'Error al restablecer la contraseña' })
   }
 })
 
