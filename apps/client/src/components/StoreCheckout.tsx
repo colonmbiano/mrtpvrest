@@ -25,6 +25,10 @@ type StoreCheckoutProps = {
   // Si la sucursal no lo permite, el efecto de `allowed` lo corrige a uno válido.
   initialOrderType?: OrderType;
   whatsappOrder?: { enabled: boolean; number: string | null };
+  // Menú QR en mesa: cuando llega de un QR (?mesa=&l=), el pedido queda fijo en
+  // DINE_IN con esa mesa y sucursal (sin selector de tipo, mesa bloqueada).
+  lockedTable?: string | null;
+  lockedLocationId?: string | null;
 };
 
 const STATUS_LABEL: Record<string, { t: string; c: string }> = {
@@ -39,7 +43,8 @@ const STATUS_LABEL: Record<string, { t: string; c: string }> = {
 
 export default function StoreCheckout({
   open, onClose, slug, primary, locations = [], delivery, minOrderAmount = 0, onlinePayment = false,
-  initialOrderType = 'DELIVERY', whatsappOrder
+  initialOrderType = 'DELIVERY', whatsappOrder,
+  lockedTable = null, lockedLocationId = null,
 }: StoreCheckoutProps) {
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
@@ -56,9 +61,9 @@ export default function StoreCheckout({
   const [geoStatus, setGeoStatus] = useState<'' | 'loading' | 'ok' | 'error'>('');
 
   // Tipo de pedido + sucursal
-  const [orderType, setOrderType] = useState<OrderType>(initialOrderType);
-  const [tableNumber, setTableNumber] = useState('');
-  const [locationId, setLocationId] = useState<string>(locations[0]?.id || '');
+  const [orderType, setOrderType] = useState<OrderType>(lockedTable ? 'DINE_IN' : initialOrderType);
+  const [tableNumber, setTableNumber] = useState(lockedTable || '');
+  const [locationId, setLocationId] = useState<string>(lockedLocationId || locations[0]?.id || '');
   const selectedLocation = locations.find(l => l.id === locationId) || locations[0] || null;
 
   // Pago
@@ -151,7 +156,8 @@ export default function StoreCheckout({
     return a.length ? a : ['DELIVERY'];
   }, [selectedLocation]);
 
-  useEffect(() => { if (!allowed.includes(orderType)) setOrderType(allowed[0]); }, [allowed]); // eslint-disable-line
+  // Con mesa fija (QR) el tipo no se corrige: el pedido es DINE_IN sí o sí.
+  useEffect(() => { if (!lockedTable && !allowed.includes(orderType)) setOrderType(allowed[0]); }, [allowed]); // eslint-disable-line
 
   const isDelivery = orderType === 'DELIVERY';
   const preview = useMemo(() => computeDeliveryPreview(delivery, total, coords), [delivery, total, coords]);
@@ -372,24 +378,31 @@ export default function StoreCheckout({
               </div>
             </div>
 
-            {/* Tipo de pedido */}
-            <div>
-              <p className={sectionTitle}>Tipo de pedido</p>
-              <div className="grid grid-cols-3 gap-2">
-                {([['DELIVERY', '🛵 Domicilio'], ['TAKEOUT', '🥡 Para llevar'], ['DINE_IN', '🍽 En mesa']] as [OrderType, string][])
-                  .filter(([t]) => allowed.includes(t))
-                  .map(([t, label]) => (
-                    <button key={t} type="button" onClick={() => setOrderType(t)}
-                      className="py-3 rounded-2xl text-xs font-bold border-2 transition-all"
-                      style={{ borderColor: orderType === t ? primary : '#e5e7eb', background: orderType === t ? `${primary}14` : 'transparent', color: orderType === t ? primary : '#6b7280' }}>
-                      {label}
-                    </button>
-                  ))}
+            {/* Tipo de pedido — oculto cuando el pedido viene de un QR de mesa */}
+            {lockedTable ? (
+              <div className="flex items-center gap-2 rounded-2xl px-4 py-3" style={{ background: `${primary}14` }}>
+                <span className="text-lg">🍽</span>
+                <span className="text-sm font-bold" style={{ color: primary }}>Pedido para la Mesa {lockedTable}</span>
               </div>
-            </div>
+            ) : (
+              <div>
+                <p className={sectionTitle}>Tipo de pedido</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {([['DELIVERY', '🛵 Domicilio'], ['TAKEOUT', '🥡 Para llevar'], ['DINE_IN', '🍽 En mesa']] as [OrderType, string][])
+                    .filter(([t]) => allowed.includes(t))
+                    .map(([t, label]) => (
+                      <button key={t} type="button" onClick={() => setOrderType(t)}
+                        className="py-3 rounded-2xl text-xs font-bold border-2 transition-all"
+                        style={{ borderColor: orderType === t ? primary : '#e5e7eb', background: orderType === t ? `${primary}14` : 'transparent', color: orderType === t ? primary : '#6b7280' }}>
+                        {label}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
 
-            {/* Sucursal (si hay más de una) */}
-            {locations.length > 1 && (
+            {/* Sucursal (si hay más de una) — fija cuando el QR trae sucursal */}
+            {locations.length > 1 && !lockedLocationId && (
               <div>
                 <p className={sectionTitle}>Sucursal</p>
                 <select value={locationId} onChange={e => setLocationId(e.target.value)} className={field}>
@@ -430,7 +443,10 @@ export default function StoreCheckout({
                 </>
               )}
               {orderType === 'DINE_IN' && (
-                <input required placeholder="Número de mesa" type="number" min="1" className={field} value={tableNumber} onChange={e => setTableNumber(e.target.value)} />
+                <input required placeholder="Número de mesa" type="number" min="1" className={field}
+                  value={tableNumber} onChange={e => setTableNumber(e.target.value)}
+                  disabled={!!lockedTable} readOnly={!!lockedTable}
+                  style={lockedTable ? { opacity: 0.7 } : undefined} />
               )}
 
               {/* Registro rápido: guardar datos para próximos pedidos */}

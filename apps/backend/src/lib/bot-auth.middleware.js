@@ -64,7 +64,10 @@ async function botAuth(req, res, next) {
     req.restaurantId = parsed.restaurantId;
     req.botAuthed = true;
     req.botConfig = cfg;
-    req.botEnabled = row.enabled !== false;
+    // `active` refleja la pausa manual (enabled) Y el entitlement del plan
+    // (add-on facturable). Rollout suave vía ENFORCE_BOT_MODULE dentro del helper.
+    const { botModuleAllowed } = require('./modules');
+    req.botEnabled = row.enabled !== false && (await botModuleAllowed(parsed.restaurantId));
     next();
   } catch (e) {
     console.error('botAuth error:', e?.message || e);

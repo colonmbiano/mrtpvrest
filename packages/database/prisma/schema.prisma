@@ -1316,6 +1316,13 @@ model RestaurantConfig {
   phone             String?
   whatsappNumber    String?
   whatsappOrderingEnabled Boolean @default(false)
+
+  // Aviso al DUEÑO/negocio por WhatsApp cuando entra un pedido web (además del
+  // push al TPV). Número separado del público para no chocar con el bot/
+  // contacto. Si orderAlertWhatsapp está vacío se cae a `phone`. Requiere
+  // orderAlertEnabled + un número resoluble para disparar.
+  orderAlertEnabled   Boolean @default(false)
+  orderAlertWhatsapp  String?
   address           String?
 
   // País del restaurante (ISO 3166-1 alpha-2: "MX", "US", "CO", …). Determina la
