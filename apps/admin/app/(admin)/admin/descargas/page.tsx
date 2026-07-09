@@ -6,9 +6,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
-  WtScreen, PageHeader, WtCard, SectionLabel, IconBadge,
+  PageShell, PageHeader, Card, SectionLabel, IconBadge, Field, Select,
   type Tone,
-} from "@/components/warmtech";
+} from "@/components/ds";
 import api from "@/lib/api";
 
 const DELIVERY_URL = "https://delivery.mrtpvrest.com";
@@ -97,7 +97,7 @@ export default function DescargasPage() {
       : "";
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Instaladores"
         title="Aplicaciones Android"
@@ -107,7 +107,7 @@ export default function DescargasPage() {
       <SectionLabel>Apps disponibles</SectionLabel>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {APPS.map((app) => (
-          <WtCard key={app.id} className="flex flex-col p-5">
+          <Card key={app.id} className="flex flex-col p-5">
             <div className="flex items-start gap-3">
               <IconBadge icon={app.icon} tone={app.tone} size={46} />
               <div className="min-w-0 flex-1">
@@ -122,7 +122,7 @@ export default function DescargasPage() {
 
             {/* preview image */}
             <div
-              className="mt-4 aspect-[16/9] w-full overflow-hidden rounded-2xl"
+              className="mt-4 aspect-[16/9] w-full overflow-hidden rounded-ds-lg"
               style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -131,10 +131,10 @@ export default function DescargasPage() {
 
             {/* QR + install */}
             <div
-              className="mt-4 flex items-center gap-4 rounded-2xl p-3"
+              className="mt-4 flex items-center gap-4 rounded-ds-lg p-3"
               style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
             >
-              <div className="grid h-20 w-20 shrink-0 place-items-center rounded-xl bg-white p-1.5">
+              <div className="grid h-20 w-20 shrink-0 place-items-center rounded-ds-md bg-white p-1.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(origin + app.apkUrl)}`}
@@ -151,23 +151,23 @@ export default function DescargasPage() {
             <a
               href={app.apkUrl}
               download
-              className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[13px] px-4 text-[13px] font-bold transition-transform active:scale-[.98]"
+              className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-ds-md px-4 text-[13px] font-bold transition-transform active:scale-[.98]"
               style={{
                 background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))",
-                color: "#fffaf4",
-                boxShadow: "0 6px 18px var(--iris-glow)",
+                color: "var(--accent-contrast)",
+                boxShadow: "0 6px 18px var(--accent-glow)",
               }}
             >
               <Download size={16} strokeWidth={2} />
               Instalar APK
             </a>
-          </WtCard>
+          </Card>
         ))}
       </div>
 
       {/* Vinculación de la app de repartidor (PWA iPhone / Web) por QR */}
       <SectionLabel>Vincular repartidor (iPhone / Web)</SectionLabel>
-      <WtCard className="flex flex-col gap-4 p-5">
+      <Card className="flex flex-col gap-4 p-5">
         <div className="flex items-start gap-3">
           <IconBadge icon={Bike} tone="ok" size={46} />
           <div className="min-w-0 flex-1">
@@ -182,28 +182,20 @@ export default function DescargasPage() {
           </div>
         </div>
 
-        <div>
-          <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-tx-mut">
-            Sucursal
-          </label>
-          <select
-            value={selectedLoc}
-            onChange={(e) => setSelectedLoc(e.target.value)}
-            className="w-full rounded-2xl px-4 py-3 text-sm text-tx-hi outline-none"
-            style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
-          >
+        <Field label="Sucursal">
+          <Select value={selectedLoc} onChange={(e) => setSelectedLoc(e.target.value)}>
             {locations.length === 0 && <option value="">Cargando sucursales…</option>}
             {locations.map((l) => (
               <option key={l.id} value={l.id}>{l.name}</option>
             ))}
-          </select>
-        </div>
+          </Select>
+        </Field>
 
         <div
-          className="flex items-center gap-4 rounded-2xl p-4"
+          className="flex items-center gap-4 rounded-ds-lg p-4"
           style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
         >
-          <div className="grid h-32 w-32 shrink-0 place-items-center rounded-xl bg-white p-2">
+          <div className="grid h-32 w-32 shrink-0 place-items-center rounded-ds-md bg-white p-2">
             {linkUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -212,7 +204,7 @@ export default function DescargasPage() {
                 className="h-full w-full object-contain"
               />
             ) : (
-              <QrCode size={36} className="text-gray-300" />
+              <QrCode size={36} className="text-tx-dim" />
             )}
           </div>
           <div className="min-w-0 flex-1 text-[11px] leading-snug text-tx-mut">
@@ -221,11 +213,11 @@ export default function DescargasPage() {
               El QR lleva solo el ID de restaurante y sucursal (no son contraseñas; el repartidor igual entra con su PIN).
             </p>
             {linkUrl && (
-              <p className="mt-2 break-all font-mono text-[9px] text-tx-dim/70">{linkUrl}</p>
+              <p className="mt-2 break-all font-mono text-[9px] text-tx-dim">{linkUrl}</p>
             )}
           </div>
         </div>
-      </WtCard>
-    </WtScreen>
+      </Card>
+    </PageShell>
   );
 }

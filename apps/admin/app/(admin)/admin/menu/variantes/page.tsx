@@ -5,9 +5,10 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import {
-  WtScreen, PageHeader, WtCard, PrimaryBtn, Pill, EmptyState,
-  SectionLabel, money,
-} from "@/components/warmtech";
+  PageShell, PageHeader, PageTabs, Card, Modal, Button, Pill, EmptyState,
+  SectionLabel, Field, Input, useToast, useConfirm,
+} from "@/components/ds";
+import { formatMoney } from "@/lib/format";
 
 interface VariantOption {
   id: string;
@@ -21,6 +22,9 @@ interface VariantTemplate {
 }
 
 export default function VariantesPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
+
   const [templates, setTemplates] = useState<VariantTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -74,20 +78,20 @@ export default function VariantesPage() {
       fetchTemplates();
     } catch (err) {
       const e = err as { response?: { data?: { error?: string } } };
-      alert(e.response?.data?.error || "Error al guardar");
+      toast.error(e.response?.data?.error || "Error al guardar");
     } finally {
       setSaving(false);
     }
   }
 
   async function deleteTemplate(id: string) {
-    if (!confirm("¿Eliminar este grupo de variantes?")) return;
+    if (!(await confirm({ title: "¿Eliminar este grupo de variantes?", danger: true, confirmLabel: "Eliminar" }))) return;
     try {
       await api.delete(`/api/menu/variant-templates/${id}`);
       if (selectedTemplate?.id === id) setSelectedTemplate(null);
       fetchTemplates();
     } catch {
-      alert("Error al eliminar");
+      toast.error("Error al eliminar");
     }
   }
 
@@ -103,7 +107,7 @@ export default function VariantesPage() {
       fetchTemplates();
     } catch (err) {
       const e = err as { response?: { data?: { error?: string } } };
-      alert(e.response?.data?.error || "Error al agregar");
+      toast.error(e.response?.data?.error || "Error al agregar");
     } finally {
       setSavingOption(false);
     }
@@ -118,17 +122,17 @@ export default function VariantesPage() {
       setEditingOption(null);
       fetchTemplates();
     } catch {
-      alert("Error al guardar");
+      toast.error("Error al guardar");
     }
   }
 
   async function deleteOption(id: string) {
-    if (!confirm("¿Eliminar esta opción?")) return;
+    if (!(await confirm({ title: "¿Eliminar esta opción?", danger: true, confirmLabel: "Eliminar" }))) return;
     try {
       await api.delete(`/api/menu/variant-templates/options/${id}`);
       fetchTemplates();
     } catch {
-      alert("Error al eliminar");
+      toast.error("Error al eliminar");
     }
   }
 
@@ -139,88 +143,51 @@ export default function VariantesPage() {
   }
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Menú"
         title="Grupos de variantes"
         subtitle="Crea grupos reutilizables y aplícalos a varios productos a la vez"
         actions={
-          <PrimaryBtn full={false} icon={Plus} onClick={openNewForm}>
-            Nuevo grupo
-          </PrimaryBtn>
+          <Button icon={Plus} onClick={openNewForm}>Nuevo grupo</Button>
         }
       />
 
+      <PageTabs set="menu" />
+
       {/* mobile back + action */}
       <div className="mb-4 flex items-center justify-between gap-3 md:hidden">
-        <PrimaryBtn full={false} ghost href="/admin/menu" icon={ChevronLeft}>
-          Menú
-        </PrimaryBtn>
-        <PrimaryBtn full={false} icon={Plus} onClick={openNewForm}>
-          Nuevo grupo
-        </PrimaryBtn>
+        <Button variant="secondary" href="/admin/menu" icon={ChevronLeft}>Menú</Button>
+        <Button icon={Plus} onClick={openNewForm}>Nuevo grupo</Button>
       </div>
 
       {/* Modal nombre */}
-      {showForm && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
-          style={{ background: "rgba(0,0,0,0.7)" }}
-        >
-          <WtCard className="w-full max-w-sm p-6">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="font-display text-xl font-extrabold text-tx-hi">
-                {editTemplate ? "Editar grupo" : "Nuevo grupo de variantes"}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                aria-label="Cerrar"
-                className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut"
-                style={{ background: "var(--surf-2)" }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <form onSubmit={saveTemplate} className="flex flex-col gap-4">
-              <div>
-                <label className="mb-1.5 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">
-                  Nombre del grupo
-                </label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ej: Sabores Alitas, Tamaños, Carnes…"
-                  required
-                  autoFocus
-                  className="min-h-12 w-full rounded-xl px-4 text-sm outline-none"
-                  style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
-                />
-              </div>
-              <div className="flex gap-3">
-                <PrimaryBtn ghost onClick={() => setShowForm(false)}>
-                  Cancelar
-                </PrimaryBtn>
-                <PrimaryBtn type="submit" disabled={saving}>
-                  {saving ? "Guardando…" : "Guardar"}
-                </PrimaryBtn>
-              </div>
-            </form>
-          </WtCard>
-        </div>
-      )}
+      <Modal open={showForm} onClose={() => setShowForm(false)} title={editTemplate ? "Editar grupo" : "Nuevo grupo de variantes"} size="sm">
+        <form onSubmit={saveTemplate} className="flex flex-col gap-4">
+          <Field label="Nombre del grupo">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ej: Sabores Alitas, Tamaños, Carnes…"
+              required
+              autoFocus
+            />
+          </Field>
+          <div className="flex gap-3">
+            <Button variant="secondary" full onClick={() => setShowForm(false)}>Cancelar</Button>
+            <Button type="submit" full disabled={saving}>{saving ? "Guardando…" : "Guardar"}</Button>
+          </div>
+        </form>
+      </Modal>
 
       {loading ? (
         <div className="flex flex-col gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-[18px] bg-surf-2" />
+            <div key={i} className="h-24 animate-pulse rounded-ds-xl bg-surf-2" />
           ))}
         </div>
       ) : (
-        <div
-          className="grid gap-4 md:gap-6"
-          style={{ gridTemplateColumns: selectedTemplate ? undefined : "1fr" }}
-        >
+        <div className="grid gap-4 md:gap-6" style={{ gridTemplateColumns: selectedTemplate ? undefined : "1fr" }}>
           <div className={selectedTemplate ? "grid gap-4 md:grid-cols-[1fr_1.5fr] md:gap-6" : ""}>
             {/* Lista de grupos */}
             <div className="flex flex-col gap-3">
@@ -230,24 +197,18 @@ export default function VariantesPage() {
                   title="Sin grupos de variantes"
                   hint='Crea grupos reutilizables como "Sabores Alitas" o "Tamaños".'
                   action={
-                    <PrimaryBtn full={false} icon={Plus} onClick={openNewForm}>
-                      Nuevo grupo
-                    </PrimaryBtn>
+                    <Button icon={Plus} onClick={openNewForm}>Nuevo grupo</Button>
                   }
                 />
               )}
               {templates.map((template) => {
                 const active = selectedTemplate?.id === template.id;
                 return (
-                  <WtCard
+                  <Card
                     key={template.id}
                     onClick={() => setSelectedTemplate(template)}
                     className="p-4"
-                    style={
-                      active
-                        ? { background: "var(--iris-soft)", borderColor: "var(--brand-primary)" }
-                        : undefined
-                    }
+                    style={active ? { background: "var(--accent-soft)", borderColor: "var(--brand-primary)" } : undefined}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -268,8 +229,8 @@ export default function VariantesPage() {
                             setName(template.name);
                             setShowForm(true);
                           }}
-                          className="grid h-9 w-9 place-items-center rounded-xl text-primary"
-                          style={{ background: "var(--iris-soft)" }}
+                          className="grid h-9 w-9 place-items-center rounded-ds-md text-primary"
+                          style={{ background: "var(--accent-soft)" }}
                         >
                           <Pencil size={14} />
                         </button>
@@ -280,7 +241,7 @@ export default function VariantesPage() {
                             e.stopPropagation();
                             deleteTemplate(template.id);
                           }}
-                          className="grid h-9 w-9 place-items-center rounded-xl"
+                          className="grid h-9 w-9 place-items-center rounded-ds-md"
                           style={{ background: "var(--err-soft)", color: "var(--err)" }}
                         >
                           <Trash2 size={14} />
@@ -294,7 +255,7 @@ export default function VariantesPage() {
                         {template.options.slice(0, 5).map((opt) => (
                           <Pill key={opt.id} tone="neutral">
                             {opt.name}
-                            {opt.price > 0 ? ` ${money(opt.price)}` : ""}
+                            {opt.price > 0 ? ` ${formatMoney(opt.price)}` : ""}
                           </Pill>
                         ))}
                         {template.options.length > 5 && (
@@ -304,18 +265,15 @@ export default function VariantesPage() {
                         )}
                       </div>
                     )}
-                  </WtCard>
+                  </Card>
                 );
               })}
             </div>
 
             {/* Panel de edición del grupo seleccionado */}
             {selectedTemplate && (
-              <WtCard className="flex flex-col p-0">
-                <div
-                  className="flex items-center justify-between gap-3 px-5 py-4"
-                  style={{ borderBottom: "1px solid var(--bd-1)" }}
-                >
+              <Card className="flex flex-col p-0">
+                <div className="flex items-center justify-between gap-3 px-5 py-4" style={{ borderBottom: "1px solid var(--bd-1)" }}>
                   <div className="min-w-0">
                     <h2 className="truncate font-display text-lg font-extrabold text-tx-hi">
                       {selectedTemplate.name}
@@ -326,7 +284,7 @@ export default function VariantesPage() {
                     type="button"
                     onClick={() => setSelectedTemplate(null)}
                     aria-label="Cerrar"
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-tx-mut"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-ds-md text-tx-mut"
                     style={{ background: "var(--surf-2)" }}
                   >
                     <X size={16} />
@@ -347,13 +305,13 @@ export default function VariantesPage() {
                       editingOption === opt.id ? (
                         <div
                           key={opt.id}
-                          className="flex items-center gap-2 rounded-xl p-2"
+                          className="flex items-center gap-2 rounded-ds-md p-2"
                           style={{ background: "var(--surf-2)", border: "1.5px solid var(--brand-primary)" }}
                         >
                           <input
                             value={editOptionForm.name}
                             onChange={(e) => setEditOptionForm((p) => ({ ...p, name: e.target.value }))}
-                            className="min-h-10 min-w-0 flex-1 rounded-lg px-2 text-sm outline-none"
+                            className="min-h-10 min-w-0 flex-1 rounded-ds-sm px-2 text-sm outline-none"
                             style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
                           />
                           <div className="flex w-24 shrink-0 items-center gap-1">
@@ -362,7 +320,7 @@ export default function VariantesPage() {
                               value={editOptionForm.price}
                               type="number"
                               onChange={(e) => setEditOptionForm((p) => ({ ...p, price: e.target.value }))}
-                              className="min-h-10 w-full rounded-lg px-2 text-right text-sm outline-none"
+                              className="min-h-10 w-full rounded-ds-sm px-2 text-right text-sm outline-none"
                               style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
                             />
                           </div>
@@ -371,8 +329,8 @@ export default function VariantesPage() {
                               type="button"
                               onClick={() => saveEditOption(opt.id)}
                               aria-label="Guardar"
-                              className="grid h-10 w-10 place-items-center rounded-lg text-white"
-                              style={{ background: "var(--brand-primary)" }}
+                              className="grid h-10 w-10 place-items-center rounded-ds-sm"
+                              style={{ background: "var(--brand-primary)", color: "var(--accent-contrast)" }}
                             >
                               <Check size={15} strokeWidth={2.4} />
                             </button>
@@ -380,7 +338,7 @@ export default function VariantesPage() {
                               type="button"
                               onClick={() => setEditingOption(null)}
                               aria-label="Cancelar"
-                              className="grid h-10 w-10 place-items-center rounded-lg text-tx-mut"
+                              className="grid h-10 w-10 place-items-center rounded-ds-sm text-tx-mut"
                               style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
                             >
                               <X size={15} />
@@ -390,14 +348,14 @@ export default function VariantesPage() {
                       ) : (
                         <div
                           key={opt.id}
-                          className="flex items-center gap-2 rounded-xl px-3 py-2.5"
+                          className="flex items-center gap-2 rounded-ds-md px-3 py-2.5"
                           style={{ background: "var(--surf-2)" }}
                         >
                           <span className="min-w-0 flex-1 truncate text-sm font-medium text-tx">
                             {opt.name}
                           </span>
                           <span className="shrink-0 text-sm font-bold text-primary">
-                            {opt.price > 0 ? money(opt.price) : "Gratis"}
+                            {opt.price > 0 ? formatMoney(opt.price) : "Gratis"}
                           </span>
                           <div className="flex shrink-0 gap-1">
                             <button
@@ -407,8 +365,8 @@ export default function VariantesPage() {
                                 setEditingOption(opt.id);
                                 setEditOptionForm({ name: opt.name, price: String(opt.price) });
                               }}
-                              className="grid h-9 w-9 place-items-center rounded-lg text-primary"
-                              style={{ background: "var(--iris-soft)" }}
+                              className="grid h-9 w-9 place-items-center rounded-ds-sm text-primary"
+                              style={{ background: "var(--accent-soft)" }}
                             >
                               <Pencil size={13} />
                             </button>
@@ -416,7 +374,7 @@ export default function VariantesPage() {
                               type="button"
                               aria-label="Eliminar opción"
                               onClick={() => deleteOption(opt.id)}
-                              className="grid h-9 w-9 place-items-center rounded-lg"
+                              className="grid h-9 w-9 place-items-center rounded-ds-sm"
                               style={{ background: "var(--err-soft)", color: "var(--err)" }}
                             >
                               <Trash2 size={13} />
@@ -435,7 +393,7 @@ export default function VariantesPage() {
                         value={newOption.name}
                         onChange={(e) => setNewOption((p) => ({ ...p, name: e.target.value }))}
                         placeholder="Ej: Hawaiana, BBQ, Arrachera…"
-                        className="min-h-11 min-w-[140px] flex-1 rounded-xl px-3 text-sm outline-none"
+                        className="min-h-11 min-w-[140px] flex-1 rounded-ds-md px-3 text-sm outline-none"
                         style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
                       />
                       <div className="flex w-24 items-center gap-1">
@@ -445,26 +403,18 @@ export default function VariantesPage() {
                           onChange={(e) => setNewOption((p) => ({ ...p, price: e.target.value }))}
                           placeholder="0.00"
                           type="number"
-                          className="min-h-11 w-full rounded-xl px-2 text-sm outline-none"
+                          className="min-h-11 w-full rounded-ds-md px-2 text-sm outline-none"
                           style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}
                         />
                       </div>
-                      <PrimaryBtn
-                        full={false}
-                        icon={Plus}
-                        onClick={addOption}
-                        disabled={savingOption || !newOption.name}
-                      >
+                      <Button icon={Plus} onClick={addOption} disabled={savingOption || !newOption.name}>
                         {savingOption ? "…" : "Agregar"}
-                      </PrimaryBtn>
+                      </Button>
                     </div>
                   </div>
 
                   {/* Info de uso */}
-                  <div
-                    className="mt-4 flex items-start gap-2 rounded-xl px-4 py-3 text-xs"
-                    style={{ background: "var(--info-soft)", color: "var(--info)" }}
-                  >
+                  <div className="mt-4 flex items-start gap-2 rounded-ds-md px-4 py-3 text-xs" style={{ background: "var(--info-soft)", color: "var(--info)" }}>
                     <Info size={15} className="mt-0.5 shrink-0" />
                     <span>
                       Para aplicar este grupo a un producto, ve a{" "}
@@ -472,11 +422,11 @@ export default function VariantesPage() {
                     </span>
                   </div>
                 </div>
-              </WtCard>
+              </Card>
             )}
           </div>
         </div>
       )}
-    </WtScreen>
+    </PageShell>
   );
 }

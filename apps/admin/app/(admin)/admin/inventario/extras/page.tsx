@@ -1,8 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ChevronLeft, Save, Plus, Layers, X, ClipboardList } from "lucide-react";
+import { Save, Plus, Layers, X, ClipboardList } from "lucide-react";
 import api from "@/lib/api";
-import { WtScreen, PageHeader, WtCard, PrimaryBtn, EmptyState, money } from "@/components/warmtech";
+import {
+  PageShell, PageHeader, PageTabs, Card, Button, EmptyState, Input,
+} from "@/components/ds";
+import { formatMoney } from "@/lib/format";
 
 // /admin/inventario/extras · Define qué insumo descuenta cada modificador/extra
 // (Papas Gajo Extra → 150g papa, etc.). El mapeo es por NOMBRE a nivel
@@ -116,22 +119,20 @@ export default function ExtrasPage() {
   const filtered = mods.filter((m) => m.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <WtScreen>
-      <PageHeader title="Extras / Modificadores" subtitle="Qué insumo descuenta cada extra al venderse" />
-      <a href="/admin/inventario" className="mb-3 inline-flex items-center gap-1 text-sm text-tx-mut hover:text-tx">
-        <ChevronLeft size={15} /> Inventario
-      </a>
+    <PageShell>
+      <PageHeader
+        eyebrow="Inventario · Costeo"
+        title="Extras / Modificadores"
+        subtitle="Qué insumo descuenta cada extra al venderse"
+      />
+      <PageTabs set="inventario" />
 
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         {/* Lista */}
-        <WtCard className="p-3">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar extra…"
-            className={cellCls + " mb-3 w-full"}
-            style={cellStyle}
-          />
+        <Card className="p-3">
+          <div className="mb-3">
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar extra…" />
+          </div>
           <div className="max-h-[70vh] space-y-1 overflow-auto">
             {filtered.length === 0 ? (
               <p className="px-2 py-6 text-center text-sm text-tx-mut">Sin modificadores</p>
@@ -143,28 +144,28 @@ export default function ExtrasPage() {
                   <button
                     key={m.name}
                     onClick={() => selectMod(m)}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-colors"
+                    className="flex w-full items-center gap-2 rounded-ds-md px-3 py-2 text-left transition-colors"
                     style={{ background: active ? "var(--surf-2)" : "transparent", border: `1px solid ${active ? "var(--bd-1)" : "transparent"}` }}
                   >
                     <span
                       className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ background: mapped ? "var(--ok)" : "var(--bd-2, #555)" }}
+                      style={{ background: mapped ? "var(--ok)" : "var(--bd-2)" }}
                       title={mapped ? "Mapeado" : "Sin mapear"}
                     />
                     <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-tx">{m.name}</span>
                     {m.isAvailable === false && (
                       <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-black uppercase" style={{ background: "var(--err-soft)", color: "var(--err)" }}>Agotado</span>
                     )}
-                    <span className="font-mono text-[11px] text-tx-mut">{m.priceAdd > 0 ? `+${money(m.priceAdd)}` : "—"}</span>
+                    <span className="font-mono text-[11px] text-tx-mut">{m.priceAdd > 0 ? `+${formatMoney(m.priceAdd)}` : "—"}</span>
                   </button>
                 );
               })
             )}
           </div>
-        </WtCard>
+        </Card>
 
         {/* Editor */}
-        <WtCard className="p-4 md:p-5">
+        <Card className="p-4 md:p-5">
           {!selected ? (
             <EmptyState icon={ClipboardList} title="Selecciona un extra" hint="Elige un modificador para decir qué insumo descuenta." />
           ) : (
@@ -173,30 +174,24 @@ export default function ExtrasPage() {
                 <div className="min-w-0">
                   <h2 className="truncate font-display text-xl font-extrabold text-tx-hi">{selected.name}</h2>
                   <p className="text-sm text-tx-mut">
-                    {selected.priceAdd > 0 ? <>Cobra <strong className="text-tx">+{money(selected.priceAdd)}</strong> · </> : null}
+                    {selected.priceAdd > 0 ? <>Cobra <strong className="text-tx">+{formatMoney(selected.priceAdd)}</strong> · </> : null}
                     aparece en <strong className="text-tx">{selected.count}</strong> platillo(s)
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => toggleAvailability(selected, selected.isAvailable === false)}
-                    className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] px-3 text-xs font-bold"
-                    style={selected.isAvailable === false
-                      ? { background: "var(--err-soft)", color: "var(--err)", border: "1px solid var(--err)" }
-                      : { background: "var(--ok-soft)", color: "var(--ok)", border: "1px solid var(--bd-1)" }}
-                    title="Disponibilidad del extra en la tienda en línea (afecta todas las opciones con este nombre)"
                   >
                     {selected.isAvailable === false ? "Agotado · marcar disponible" : "Disponible · marcar agotado"}
-                  </button>
-                  <PrimaryBtn full={false} icon={Save} onClick={save} disabled={saving}>
-                    {saving ? "Guardando…" : "Guardar"}
-                  </PrimaryBtn>
+                  </Button>
+                  <Button icon={Save} onClick={save} loading={saving}>Guardar</Button>
                 </div>
               </div>
 
               {msg && (
-                <div className="rounded-xl px-3 py-2 text-xs font-bold" style={{ background: msg.kind === "ok" ? "var(--ok-soft)" : "var(--err-soft)", color: msg.kind === "ok" ? "var(--ok)" : "var(--err)" }}>
+                <div className="rounded-ds-md px-3 py-2 text-xs font-bold" style={{ background: msg.kind === "ok" ? "var(--ok-soft)" : "var(--err-soft)", color: msg.kind === "ok" ? "var(--ok)" : "var(--err)" }}>
                   {msg.text}
                 </div>
               )}
@@ -211,7 +206,7 @@ export default function ExtrasPage() {
                 </div>
 
                 {items.length === 0 ? (
-                  <p className="rounded-xl px-3 py-6 text-center text-sm text-tx-mut" style={{ background: "var(--surf-1)" }}>
+                  <p className="rounded-ds-md px-3 py-6 text-center text-sm text-tx-mut" style={{ background: "var(--surf-2)" }}>
                     Sin insumos. Agrega lo que consume este extra (ej. 150g papa) o déjalo vacío si no descuenta nada.
                   </p>
                 ) : (
@@ -219,7 +214,7 @@ export default function ExtrasPage() {
                     {items.map((it, idx) => {
                       const isSub = it.subRecipeId !== null;
                       return (
-                        <div key={idx} className="flex flex-wrap items-center gap-2 rounded-xl p-2" style={{ background: "var(--surf-1)" }}>
+                        <div key={idx} className="flex flex-wrap items-center gap-2 rounded-ds-md p-2" style={{ background: "var(--surf-2)" }}>
                           {isSub ? (
                             <select value={it.subRecipeId || ""} onChange={(e) => pickSub(idx, e.target.value)} className={cellCls + " min-w-[180px] flex-1"} style={cellStyle}>
                               <option value="">— Sub-receta —</option>
@@ -237,7 +232,7 @@ export default function ExtrasPage() {
                             className={cellCls + " w-24 text-right"} style={cellStyle} placeholder="Cant."
                           />
                           <span className="w-8 text-sm text-tx-mut">{UNIT_LABEL[it.unit]}</span>
-                          <button onClick={() => removeRow(idx)} className="rounded-lg p-2 text-tx-mut hover:text-tx" style={{ background: "var(--surf-2)" }} title="Quitar">
+                          <button onClick={() => removeRow(idx)} className="rounded-lg p-2 text-tx-mut hover:text-tx" style={{ background: "var(--surf-1)" }} title="Quitar">
                             <X size={15} strokeWidth={2.4} />
                           </button>
                         </div>
@@ -252,9 +247,9 @@ export default function ExtrasPage() {
               </div>
             </div>
           )}
-        </WtCard>
+        </Card>
       </div>
-    </WtScreen>
+    </PageShell>
   );
 }
 

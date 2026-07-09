@@ -6,8 +6,8 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import {
-  WtScreen, PageHeader, WtCard, SectionLabel, PrimaryBtn,
-} from "@/components/warmtech";
+  PageShell, PageHeader, Card, SectionLabel, Button,
+} from "@/components/ds";
 
 // /admin/ventas/importar · Importador de histórico de ventas desde Excel/CSV.
 //
@@ -92,7 +92,7 @@ export default function ImportarVentasPage() {
   }
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Datos & migración"
         title="Importar histórico de ventas"
@@ -115,14 +115,14 @@ export default function ImportarVentasPage() {
             onDragLeave={() => setDragOver(false)}
             onDrop={onDrop}
             onClick={() => inputRef.current?.click()}
-            className="cursor-pointer rounded-[20px] p-8 text-center transition-all md:p-10"
+            className="cursor-pointer rounded-ds-xl p-8 text-center transition-all md:p-10"
             style={{
               border: `2px dashed ${dragOver ? "var(--brand-primary)" : "var(--bd-1)"}`,
-              background: dragOver ? "var(--iris-soft)" : "var(--surf-1)",
+              background: dragOver ? "var(--accent-soft)" : "var(--surf-1)",
             }}
           >
-            <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl text-primary"
-              style={{ background: "var(--iris-soft)" }}>
+            <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-ds-lg text-primary"
+              style={{ background: "var(--accent-soft)" }}>
               <FileSpreadsheet size={28} strokeWidth={1.8} />
             </span>
             <p className="text-base font-bold text-tx-hi">
@@ -141,7 +141,7 @@ export default function ImportarVentasPage() {
           </div>
 
           {/* Instrucciones de columnas */}
-          <WtCard className="p-4">
+          <Card className="p-4">
             <details>
               <summary className="flex cursor-pointer items-center gap-2 text-sm font-bold text-tx">
                 <ListChecks size={16} className="text-primary" />
@@ -162,17 +162,17 @@ export default function ImportarVentasPage() {
                 </ul>
               </div>
             </details>
-          </WtCard>
+          </Card>
 
           {loading && !preview && (
-            <WtCard className="p-6 text-center">
+            <Card className="p-6 text-center">
               <Loader2 size={24} className="mx-auto mb-2 animate-spin text-primary" />
               <p className="text-sm font-bold text-tx">Analizando archivo…</p>
-            </WtCard>
+            </Card>
           )}
 
           {error && (
-            <div className="flex items-center gap-2 rounded-2xl p-4 text-sm"
+            <div className="flex items-center gap-2 rounded-ds-lg p-4 text-sm"
               style={{ background: "var(--err-soft)", color: "var(--err)" }}>
               <AlertTriangle size={16} className="shrink-0" /> {error}
             </div>
@@ -182,11 +182,11 @@ export default function ImportarVentasPage() {
           {preview && (
             <div className="flex flex-col gap-4">
               {/* Columnas detectadas */}
-              <WtCard className="p-4 md:p-5">
+              <Card className="p-4 md:p-5">
                 <SectionLabel>Columnas detectadas</SectionLabel>
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                   {Object.entries(preview.detectedColumns).map(([key, val]) => (
-                    <div key={key} className="rounded-xl p-2 text-xs"
+                    <div key={key} className="rounded-ds-md p-2 text-xs"
                       style={{
                         background: val ? "var(--ok-soft)" : "var(--surf-2)",
                         border: "1px solid var(--bd-1)",
@@ -200,7 +200,7 @@ export default function ImportarVentasPage() {
                     </div>
                   ))}
                 </div>
-              </WtCard>
+              </Card>
 
               {/* Resumen */}
               <div className="grid grid-cols-3 gap-3">
@@ -211,14 +211,14 @@ export default function ImportarVentasPage() {
 
               {/* Warnings */}
               {preview.warnings.length > 0 && (
-                <WtCard className="p-4" style={{ borderColor: "var(--warn)" }}>
+                <Card className="p-4" style={{ borderColor: "var(--warn)" }}>
                   <details>
                     <summary className="flex cursor-pointer items-center gap-2 text-sm font-bold"
                       style={{ color: "var(--warn)" }}>
                       <AlertTriangle size={15} />
                       {preview.warnings.length} fila(s) tendrán problemas — clic para ver
                     </summary>
-                    <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto text-xs warmtech-scrollbar">
+                    <ul className="ds-scrollbar mt-3 max-h-48 space-y-1 overflow-y-auto text-xs">
                       {preview.warnings.slice(0, 50).map((w, i) => (
                         <li key={i} className="text-tx-mut">• {w}</li>
                       ))}
@@ -229,16 +229,16 @@ export default function ImportarVentasPage() {
                       )}
                     </ul>
                   </details>
-                </WtCard>
+                </Card>
               )}
 
               {/* Sample */}
               {preview.sample && preview.sample.length > 0 && (
-                <WtCard className="p-4 md:p-5">
+                <Card className="p-4 md:p-5">
                   <SectionLabel>Muestra (primeros 5)</SectionLabel>
                   <div className="space-y-2">
                     {preview.sample.map((o, i) => (
-                      <div key={i} className="rounded-xl p-3 text-xs"
+                      <div key={i} className="rounded-ds-md p-3 text-xs"
                         style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <span className="font-bold text-tx">{new Date(o.date).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" })} · {o.paymentMethod}</span>
@@ -255,21 +255,23 @@ export default function ImportarVentasPage() {
                       </div>
                     ))}
                   </div>
-                </WtCard>
+                </Card>
               )}
 
               {/* Acciones */}
               <div className="flex gap-3">
-                <PrimaryBtn ghost icon={X} onClick={reset}>
+                <Button variant="secondary" icon={X} onClick={reset} full>
                   Cancelar
-                </PrimaryBtn>
-                <PrimaryBtn
+                </Button>
+                <Button
                   icon={Check}
                   onClick={confirmImport}
                   disabled={loading || (preview.ordersToCreate || 0) === 0}
+                  loading={loading}
+                  full
                 >
                   {loading ? "Importando…" : `Confirmar e importar ${preview.ordersToCreate} órdenes`}
-                </PrimaryBtn>
+                </Button>
               </div>
             </div>
           )}
@@ -279,8 +281,8 @@ export default function ImportarVentasPage() {
       {/* Resultado final */}
       {result && (
         <div className="flex flex-col gap-4">
-          <WtCard className="p-6 text-center" style={{ borderColor: "var(--ok)" }}>
-            <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl"
+          <Card className="p-6 text-center" style={{ borderColor: "var(--ok)" }}>
+            <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-ds-lg"
               style={{ background: "var(--ok-soft)", color: "var(--ok)" }}>
               <CheckCircle2 size={30} strokeWidth={1.8} />
             </span>
@@ -290,44 +292,44 @@ export default function ImportarVentasPage() {
             <p className="mt-1 text-sm text-tx-mut">
               {result.ordersCreated} orden{result.ordersCreated === 1 ? "" : "es"} · {result.itemsCreated} item{result.itemsCreated === 1 ? "" : "s"} creados
             </p>
-          </WtCard>
+          </Card>
 
           {result.warnings.length > 0 && (
-            <WtCard className="p-4" style={{ borderColor: "var(--warn)" }}>
+            <Card className="p-4" style={{ borderColor: "var(--warn)" }}>
               <details>
                 <summary className="flex cursor-pointer items-center gap-2 text-sm font-bold"
                   style={{ color: "var(--warn)" }}>
                   <AlertTriangle size={15} />
                   {result.warnings.length} advertencia(s)
                 </summary>
-                <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto text-xs warmtech-scrollbar">
+                <ul className="ds-scrollbar mt-3 max-h-48 space-y-1 overflow-y-auto text-xs">
                   {result.warnings.slice(0, 50).map((w, i) => (
                     <li key={i} className="text-tx-mut">• {w}</li>
                   ))}
                 </ul>
               </details>
-            </WtCard>
+            </Card>
           )}
 
           <div className="flex gap-3">
-            <PrimaryBtn icon={FileSpreadsheet} onClick={reset}>
+            <Button icon={FileSpreadsheet} onClick={reset} full>
               Importar otro archivo
-            </PrimaryBtn>
-            <PrimaryBtn ghost icon={FileText} href="/admin/reportes-ia">
+            </Button>
+            <Button variant="secondary" icon={FileText} href="/admin/reportes-ia" full>
               Ver reportes
-            </PrimaryBtn>
+            </Button>
           </div>
         </div>
       )}
-    </WtScreen>
+    </PageShell>
   );
 }
 
 function Stat({ label, value, accent = false }: { label: string; value: number; accent?: boolean }) {
   return (
-    <WtCard className="p-3 md:p-4" style={accent ? { borderLeft: "4px solid var(--brand-primary)" } : undefined}>
+    <Card className="p-3 md:p-4" style={accent ? { borderLeft: "4px solid var(--brand-primary)" } : undefined}>
       <p className="font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">{label}</p>
       <p className="mt-1 font-display text-2xl font-extrabold tabular-nums text-tx-hi">{value}</p>
-    </WtCard>
+    </Card>
   );
 }

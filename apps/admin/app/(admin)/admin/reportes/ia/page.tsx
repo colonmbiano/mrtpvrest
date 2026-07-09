@@ -1,221 +1,47 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
-import {
-  Sparkles, Send, Download, Save, Share2, Plus, X, Bot, MessageSquare,
-  TrendingUp, TrendingDown, Activity, Bookmark,
-} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Download } from "lucide-react";
 import api from "@/lib/api";
+import { Button, PageHeader, PageShell, PageTabs, Segmented, useToast } from "@/components/ds";
+import { AiHero } from "./_components/AiHero";
+import { InsightsGrid } from "./_components/InsightsGrid";
+import { ReportCard } from "./_components/ReportCard";
+import { SavedReports } from "./_components/SavedReports";
+import { ChatPanel } from "./_components/ChatPanel";
+import {
+  INIT_MSGS,
+  PERIOD_DAYS,
+  PERIOD_LABEL,
+  PERIODS,
+  type Insight,
+  type Msg,
+  type Period,
+  type SalesByDay,
+  type SavedReport,
+  type SedeRow,
+  type StatsResponse,
+  type SuggestedAction,
+  type TopItem,
+} from "./_components/types";
 
-/* ── CSS injected once ─────────────────────────────────────── */
-const CSS = `
-@keyframes ia-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
-@keyframes ia-spin  { to{transform:rotate(360deg)} }
-@keyframes ia-tp    { 0%,80%,100%{transform:scale(.55);opacity:.35} 40%{transform:scale(1);opacity:1} }
-.ia-spark { animation: ia-pulse 2s infinite; }
-.ia-spin  { animation: ia-spin  .9s linear infinite; }
-.ia-tp    { animation: ia-tp 1.4s infinite; }
-.ia-tp:nth-child(2) { animation-delay:.15s; }
-.ia-tp:nth-child(3) { animation-delay:.30s; }
-.ia-scroll::-webkit-scrollbar { width:4px; }
-.ia-scroll::-webkit-scrollbar-track { background:transparent; }
-.ia-scroll::-webkit-scrollbar-thumb { background:var(--bd-2); border-radius:4px; }
-
-/* Full-bleed break-out: the (admin) layout adds md:p-8 (32px) on desktop and
-   no padding on mobile. We cancel the desktop padding so the chat pane reaches
-   the viewport edges; on mobile there is nothing to cancel. */
-.ia-root { margin: 0; }
-@media (min-width: 768px) { .ia-root { margin: -32px; } }
-
-.ia-main-panel {
-  flex: 1; padding: 16px; overflow-y: auto; height: 100vh; overflow-x: hidden;
-}
-@media (min-width: 768px) { .ia-main-panel { padding: 24px 28px 64px; } }
-
-.ia-chat-panel {
-  width: 380px; height: 100vh; position: sticky; top: 0;
-  display: flex; flex-direction: column;
-  border-left: 1px solid var(--bd-1); background: var(--surf-3); flex-shrink: 0;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
-  z-index: 40;
-}
-.ia-chat-panel.closed { display: none; }
-.ia-fab {
-  position: fixed; bottom: 88px; right: 18px; z-index: 30;
-  width: 56px; height: 56px; border-radius: 28px;
-  background: linear-gradient(140deg,var(--brand-secondary),var(--brand-primary));
-  color: #fffaf4;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 6px 18px var(--iris-glow);
-  cursor: pointer; border: none; outline: none;
-  transition: transform 0.2s;
-}
-@media (min-width: 768px) { .ia-fab { bottom: 24px; right: 24px; } }
-.ia-fab:hover { transform: scale(1.05); }
-.ia-fab:active { transform: scale(0.95); }
-.ia-overlay {
-  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 35;
-  backdrop-filter: blur(2px);
-}
-
-@media (max-width: 900px) {
-  .ia-chat-panel {
-    position: fixed !important; right: 0; top: 0; bottom: 0;
-    width: 100% !important; max-width: 380px;
-    transform: translateX(100%); display: flex !important;
-  }
-  .ia-chat-panel.open { transform: translateX(0); }
-  .ia-overlay.open { display: block; }
-}
-
-/* KPI strip: 2 cols on mobile, 4 on desktop. */
-@media (min-width: 768px) {
-  .ia-kpi { grid-template-columns: repeat(4,1fr) !important; }
-  .ia-kpi-cell { border-top: none !important; }
-  .ia-kpi-cell:not(:last-child) { border-right: 1px solid var(--bd-1) !important; }
-  .ia-kpi-cell:last-child { border-right: none !important; }
-  .ia-bottom { grid-template-columns: 1.2fr 1fr !important; }
-}
-
-@media print {
-  .ia-chat-panel, .ia-overlay, .ia-fab, .ia-no-print { display: none !important; }
-  .ia-main-panel { height: auto !important; overflow: visible !important; padding: 0 !important; }
-}
-`;
-
-/* ── Tokens (WarmTech) ─────────────────────────────────────── */
-const V = {
-  ac:     "var(--brand-primary)",
-  ac2:    "var(--brand-secondary)",
-  acS:    "var(--iris-soft)",
-  acG:    "var(--iris-glow)",
-  ok:     "var(--ok)",
-  okS:    "var(--ok-soft)",
-  warn:   "var(--warn)",
-  warnS:  "var(--warn-soft)",
-  err:    "var(--err)",
-  errS:   "var(--err-soft)",
-  surf1:  "var(--surf-1)",
-  surf2:  "var(--surf-2)",
-  surf3:  "var(--surf-3)",
-  bd1:    "var(--bd-1)",
-  bd2:    "var(--bd-2)",
-  tx:     "var(--tx)",
-  txHi:   "var(--tx-hi)",
-  txMid:  "var(--tx-mid)",
-  txMut:  "var(--tx-mut)",
-  txDim:  "var(--tx-dim)",
-};
-
-/* ── Tiny helpers ──────────────────────────────────────────── */
-const card = (extra: object = {}): object => ({
-  background: V.surf1, border: `1px solid ${V.bd1}`, borderRadius: 16, ...extra,
-});
-
-const btn = (primary?: boolean, ghost?: boolean): object => ({
-  display: "inline-flex", alignItems: "center", gap: 6,
-  padding: "9px 14px", borderRadius: 11,
-  border: primary ? "none" : `1px solid ${V.bd1}`,
-  background: primary ? `linear-gradient(140deg,${V.ac2},${V.ac})` : ghost ? V.surf2 : V.surf1,
-  color: primary ? "#fffaf4" : V.txMid,
-  fontSize: 12, fontWeight: primary ? 700 : 600,
-  cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" as const,
-  boxShadow: primary ? `0 4px 14px ${V.acG}` : "none",
-  minHeight: 38,
-});
-
-const monoTag = (): object => ({
-  fontFamily: "'DM Mono',monospace", background: V.surf2,
-  padding: "2px 7px", borderRadius: 6,
-  color: V.ac, fontSize: 11, letterSpacing: ".06em",
-});
-
-const delta = (up: boolean): object => ({
-  display: "inline-flex", alignItems: "center", gap: 3,
-  fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: 600,
-  padding: "2px 6px", borderRadius: 5,
-  background: up ? V.okS : V.errS,
-  color: up ? V.ok : V.err,
-});
-
-/* ── Suggestion chips ──────────────────────────────────────── */
-const CHIPS = [
-  { icon: "↘", text: "Producto que más bajó",    q: "¿Qué producto está bajando en ventas este mes?" },
-  { icon: "↗", text: "Ticket promedio por sede", q: "Compara el ticket promedio entre sedes este mes" },
-  { icon: "👤", text: "Ranking de meseros",       q: "¿Qué empleado cerró más ventas este mes?" },
-  { icon: "⏱", text: "Horas pico",               q: "¿Cuáles son las horas pico por sede?" },
-  { icon: "✦",  text: "Predicción de ventas",     q: "Predice las ventas del próximo fin de semana" },
-  { icon: "⚠", text: "Mermas y margen",           q: "¿Dónde estoy perdiendo margen por mermas?" },
-];
-
-/* ── Insight card color tokens (styling, not data) ────────────── */
-const INSIGHT_COLORS = {
-  warn: { border: "var(--warn)", bg: V.warnS, icon: V.warn, iconBg: V.warnS, kind: V.warn },
-  ok:   { border: "var(--ok)",   bg: V.okS,   icon: V.ok,   iconBg: V.okS,   kind: V.ok   },
-  info: { border: "var(--brand-primary)", bg: V.acS, icon: V.ac, iconBg: V.acS, kind: V.ac },
-} as const;
-
-type Insight = {
-  kind: string;
-  variant: keyof typeof INSIGHT_COLORS;
-  title: string;
-  body: string;
-  cta: string;
-};
-
-type StatsResponse = {
-  sales:         { value: number; prev: number; delta: number };
-  orders:        { value: number; prev: number; delta: number };
-  averageTicket: { value: number; prev: number; delta: number };
-  prepMinutes:   { value: number; activeCount: number };
-};
-type SedeRow = { id: string; name: string; slug: string; sales: number; orders: number; avgTicket: number; delta: number };
-type SavedReport = { id: string; title: string; tag: string; tagColor: string; tagBg: string; sub: string; active?: boolean };
-type SuggestedAction = { n: number; title: string; sub: string; cta: string; prompt: string };
-type DailyPoint = { date: string; revenue: number; orders: number };
-type SalesByDay = {
-  days: number;
-  series: DailyPoint[];
-  totals: { current: { revenue: number; orders: number }; previous: { revenue: number; orders: number }; delta: number };
-};
-
-const PERIOD_LABEL: Record<"HOY"|"7D"|"30D"|"90D"|"AÑO"|"HIST", string> = {
-  HOY: "Hoy", "7D": "Últimos 7 días", "30D": "Últimos 30 días", "90D": "Últimos 90 días", "AÑO": "Últimos 365 días", HIST: "Histórico completo",
-};
-const PERIOD_DAYS: Record<"HOY"|"7D"|"30D"|"90D"|"AÑO"|"HIST", number> = {
-  HOY: 1, "7D": 7, "30D": 30, "90D": 90, "AÑO": 90, HIST: 90, // AÑO/HIST se acotan a 90 días para que la gráfica sea legible
-};
-
-/* ── Chat messages ─────────────────────────────────────────── */
-type Msg = { role: "ai" | "user"; text: string; tools?: string[] };
-const INIT_MSGS: Msg[] = [
-  { role: "ai", text: "Hola, soy Mesero. Puedo consultar ventas, productos top, inventario bajo y personal activo de tu sucursal activa. ¿Qué quieres saber?", tools: [] },
-];
-
-/* ════════════════════════════════════════════════════════════ */
+/* Dashboard unificado "Reportes IA": KPIs + gráficas + insights del período,
+   con el asistente Mesero (POST /api/ai/assistant) en un panel lateral.
+   El FloatingVoiceAgent global se oculta en esta ruta desde el layout. */
 export default function ReportesIAPage() {
-  const [prompt, setPrompt] = useState("");
-  const [chatMsg, setChatMsg] = useState("");
+  const toast = useToast();
   const [msgs, setMsgs] = useState<Msg[]>(INIT_MSGS);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  // Períodos alineados con backend (getPeriodRange):
-  // - 90D reemplaza al antiguo "TRIM" (trimestre ~ 90 días)
-  // - AÑO ahora es rolling 365d (no año en curso)
-  // - HIST captura todo el histórico — clave para ver datos importados
-  //   antiguos que no caen en los últimos 365 días.
-  const [period, setPeriod] = useState<"HOY"|"7D"|"30D"|"90D"|"AÑO"|"HIST">("HIST");
-  const chatRef = useRef<HTMLDivElement>(null);
+  const [period, setPeriod] = useState<Period>("HIST");
 
   // Datos reales del dashboard (sin fallbacks mock)
-  const [stats, setStats]       = useState<StatsResponse | null>(null);
-  const [sedes, setSedes]       = useState<SedeRow[]>([]);
+  const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [sedes, setSedes] = useState<SedeRow[]>([]);
   const [insights, setInsights] = useState<Insight[]>([]);
-  const [saved, setSaved]       = useState<SavedReport[]>([]);
-  const [topItems, setTopItems] = useState<Array<{ id?: string; name: string; quantity: number; revenue: number }>>([]);
-  const [actions, setActions]   = useState<SuggestedAction[]>([]);
-  const [daily, setDaily]       = useState<SalesByDay | null>(null);
-  const [loading, setLoading]   = useState(true);
-  // Feedback efímero para acciones (copiar enlace, guardar). Se autodescarta.
-  const [toast, setToast]       = useState<string | null>(null);
+  const [saved, setSaved] = useState<SavedReport[]>([]);
+  const [topItems, setTopItems] = useState<TopItem[]>([]);
+  const [actions, setActions] = useState<SuggestedAction[]>([]);
+  const [daily, setDaily] = useState<SalesByDay | null>(null);
+  const [loading, setLoading] = useState(true);
   // Reportes guardados en el navegador. Backend GET /api/reports/saved es stub
   // que regresa [], así que mientras no exista persistencia real usamos
   // localStorage para que el botón "Guardar" tenga consecuencia visible.
@@ -225,18 +51,18 @@ export default function ReportesIAPage() {
     try {
       const raw = localStorage.getItem("ia-saved-reports");
       if (raw) setSavedLocal(JSON.parse(raw));
-    } catch { /* localStorage no disponible */ }
+    } catch {
+      /* localStorage no disponible */
+    }
   }, []);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2400);
-    return () => clearTimeout(t);
-  }, [toast]);
 
   function persistSaved(list: SavedReport[]) {
     setSavedLocal(list);
-    try { localStorage.setItem("ia-saved-reports", JSON.stringify(list)); } catch { /* noop */ }
+    try {
+      localStorage.setItem("ia-saved-reports", JSON.stringify(list));
+    } catch {
+      /* noop */
+    }
   }
 
   function handleSaveReport() {
@@ -246,21 +72,21 @@ export default function ReportesIAPage() {
       id,
       title: `Ventas por sucursal · ${PERIOD_LABEL[period]}`,
       tag: "LOCAL",
-      tagColor: V.ac as string,
-      tagBg: V.acS as string,
+      tagColor: "var(--brand-primary)",
+      tagBg: "var(--accent-soft)",
       sub: `${sedes.length} ${sedes.length === 1 ? "sede" : "sedes"} · ${ordersTxt} · guardado ${new Date().toLocaleDateString("es-MX")}`,
     };
     persistSaved([next, ...savedLocal]);
-    setToast("Reporte guardado");
+    toast.success("Reporte guardado");
   }
 
   async function handleShareReport() {
     const url = typeof window !== "undefined" ? `${window.location.origin}${window.location.pathname}?period=${period}` : "";
     try {
       await navigator.clipboard.writeText(url);
-      setToast("Enlace copiado al portapapeles");
+      toast.success("Enlace copiado al portapapeles");
     } catch {
-      setToast("No se pudo copiar el enlace");
+      toast.error("No se pudo copiar el enlace");
     }
   }
 
@@ -269,17 +95,32 @@ export default function ReportesIAPage() {
   }
 
   function handleNewSavedReport() {
-    sendChat(`Quiero crear un reporte personalizado nuevo del periodo ${PERIOD_LABEL[period]}. ¿Qué métricas o cortes me sugieres incluir según los datos que ya tienes?`);
+    sendChat(
+      `Quiero crear un reporte personalizado nuevo del periodo ${PERIOD_LABEL[period]}. ¿Qué métricas o cortes me sugieres incluir según los datos que ya tienes?`
+    );
     setIsChatOpen(true);
   }
 
   function handleMoreInsights() {
-    sendChat(`Dame más insights y patrones interesantes del periodo ${PERIOD_LABEL[period]} más allá de los que ya detectaste automáticamente.`);
+    sendChat(
+      `Dame más insights y patrones interesantes del periodo ${PERIOD_LABEL[period]} más allá de los que ya detectaste automáticamente.`
+    );
     setIsChatOpen(true);
   }
 
   function handleDeleteSaved(id: string) {
-    persistSaved(savedLocal.filter(s => s.id !== id));
+    persistSaved(savedLocal.filter((s) => s.id !== id));
+  }
+
+  function handleInsightAction(ins: Insight) {
+    const p = `Sobre este insight: "${ins.title}" (${ins.body}). Quiero ${ins.cta}. ¿Qué me sugieres hacer específicamente?`;
+    sendChat(p);
+    setIsChatOpen(true);
+  }
+
+  function handleSuggestedAction(prompt: string) {
+    sendChat(prompt);
+    setIsChatOpen(true);
   }
 
   useEffect(() => {
@@ -287,17 +128,14 @@ export default function ReportesIAPage() {
     async function load() {
       setLoading(true);
       try {
-        const safe = <T,>(p: Promise<{ data: T }>, fallback: T): Promise<T> =>
-          p.then(r => r.data).catch(() => fallback);
+        const safe = <T,>(p: Promise<{ data: T }>, fallback: T): Promise<T> => p.then((r) => r.data).catch(() => fallback);
 
         const [s, loc, ins, sv, items, acts, dly] = await Promise.all([
           safe<StatsResponse>(api.get(`/api/dashboard/stats?period=${period}`), null as unknown as StatsResponse),
           safe<SedeRow[]>(api.get(`/api/dashboard/sales-by-location?period=${period}`), []),
           safe<Insight[]>(api.get(`/api/dashboard/insights?period=${period}`), []),
           safe<SavedReport[]>(api.get(`/api/reports/saved`), []),
-          safe<Array<{ id?: string; name: string; quantity: number; revenue: number }>>(
-            api.get(`/api/dashboard/top-items?period=${period}&limit=5`), []
-          ),
+          safe<TopItem[]>(api.get(`/api/dashboard/top-items?period=${period}&limit=5`), []),
           safe<SuggestedAction[]>(api.get(`/api/dashboard/suggested-actions?period=${period}`), []),
           safe<SalesByDay>(api.get(`/api/dashboard/sales-by-day?days=${PERIOD_DAYS[period]}`), null as unknown as SalesByDay),
         ]);
@@ -314,12 +152,10 @@ export default function ReportesIAPage() {
       }
     }
     load();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [period]);
-
-  useEffect(() => {
-    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
-  }, [msgs]);
 
   const [sending, setSending] = useState(false);
   // Historial en formato de la API (role "user"|"assistant" + content string|blocks).
@@ -331,8 +167,7 @@ export default function ReportesIAPage() {
     const clean = text.trim();
     if (!clean || sending) return;
     setSending(true);
-    setChatMsg("");
-    setMsgs(m => [...m, { role: "user", text: clean }, { role: "ai", text: "Analizando…", tools: ["Consultando datos"] }]);
+    setMsgs((m) => [...m, { role: "user", text: clean }, { role: "ai", text: "Analizando…", tools: ["Consultando datos"] }]);
 
     try {
       apiHistoryRef.current.push({ role: "user", content: clean });
@@ -345,7 +180,10 @@ export default function ReportesIAPage() {
       let reply = "No recibí una respuesta.";
       const tools: string[] = [];
       if (last && Array.isArray(last.content)) {
-        const texts = last.content.filter((b: { type: string }) => b.type === "text").map((b: { text: string }) => b.text).filter(Boolean);
+        const texts = last.content
+          .filter((b: { type: string }) => b.type === "text")
+          .map((b: { text: string }) => b.text)
+          .filter(Boolean);
         if (texts.length) reply = texts.join("\n\n");
       } else if (typeof last?.content === "string") {
         reply = last.content;
@@ -358,7 +196,7 @@ export default function ReportesIAPage() {
         }
       }
 
-      setMsgs(m => {
+      setMsgs((m) => {
         const next = [...m];
         next[next.length - 1] = { role: "ai", text: reply, tools: tools.length ? tools : undefined };
         return next;
@@ -371,7 +209,7 @@ export default function ReportesIAPage() {
       const msg = needsKey
         ? `⚠ ${data?.error || "Configura tu API key de Groq Cloud para activar el asistente."} → [Ir a Integraciones](/admin/integraciones)`
         : `⚠ ${data?.error || e?.message || "No pude completar la consulta."}`;
-      setMsgs(m => {
+      setMsgs((m) => {
         const next = [...m];
         next[next.length - 1] = { role: "ai", text: msg };
         return next;
@@ -385,669 +223,59 @@ export default function ReportesIAPage() {
 
   return (
     <>
-      <style>{CSS}</style>
-      <div className="ia-root" style={{ display: "flex", overflow: "hidden" }}>
+      <PageShell>
+        <PageHeader
+          eyebrow="Inteligencia de negocio"
+          title="Reportes IA"
+          subtitle={`${sedes.length} ${sedes.length === 1 ? "sede" : "sedes"} · ${PERIOD_LABEL[period]}`}
+        />
+        <PageTabs set="reportes" />
 
-        {/* ═══ MAIN ═══════════════════════════════════════════ */}
-        <div className="ia-scroll ia-main-panel">
-
-          {/* Topbar */}
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", paddingBottom: 20, marginBottom: 20, borderBottom: `1px solid ${V.bd1}`, gap: 20, flexWrap: "wrap" as const }}>
-            <div>
-              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, textTransform: "uppercase" as const, letterSpacing: ".16em", color: V.ac, marginBottom: 8 }}>
-                Inteligencia de negocio
-              </div>
-              <h1 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 30, color: V.txHi, letterSpacing: "-.03em", lineHeight: 1.1 }}>
-                Reportes · Asistente IA
-              </h1>
-              <div style={{ fontSize: 13, color: V.txMut, marginTop: 6, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
-                <span style={monoTag()}>{sedes.length} {sedes.length === 1 ? "sede" : "sedes"}</span>
-                <span style={{ color: V.txDim }}>·</span>
-                <span>Período <span style={{ fontFamily: "'DM Mono',monospace", color: V.txMid }}>{period}</span></span>
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
-              {/* Period selector */}
-              <div style={{ display: "inline-flex", background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 12, padding: 3, flexWrap: "wrap" as const }}>
-                {(["HOY","7D","30D","90D","AÑO","HIST"] as const).map(p => (
-                  <button key={p} onClick={() => setPeriod(p)} style={{
-                    minHeight: 36, padding: "6px 12px", borderRadius: 9,
-                    fontFamily: "'DM Mono',monospace", fontSize: 11,
-                    color: period === p ? "#fffaf4" : V.txMut,
-                    cursor: "pointer", border: "none",
-                    background: period === p ? `linear-gradient(140deg,${V.ac2},${V.ac})` : "transparent",
-                    boxShadow: period === p ? `0 3px 10px ${V.acG}` : "none",
-                    fontWeight: 600, letterSpacing: ".04em",
-                  }}>{p}</button>
-                ))}
-              </div>
-              <button onClick={handleExportPdf} style={btn(false, true)} title="Imprimir o guardar como PDF">
-                <Download size={13} /> Exportar PDF
-              </button>
-            </div>
-          </div>
-
-          {/* ── AI Hero ── */}
-          <div style={{
-            ...card(),
-            background: `radial-gradient(ellipse at top left,${V.acG},transparent 55%),radial-gradient(ellipse at bottom right,${V.warnS},transparent 55%),${V.surf1}`,
-            border: `1px solid ${V.bd2}`, borderRadius: 20, padding: 24, marginBottom: 20,
-            position: "relative", overflow: "hidden",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <div style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                background: V.acS, color: V.ac,
-                padding: "4px 10px", borderRadius: 999,
-                fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".12em",
-              }}>
-                <span className="ia-spark" style={{ width: 6, height: 6, borderRadius: "50%", background: V.ac, boxShadow: `0 0 8px ${V.ac}`, display: "inline-block" }} />
-                MESERO · ASISTENTE DE DATOS
-              </div>
-            </div>
-            <h2 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 22, color: V.txHi, marginBottom: 6, letterSpacing: "-.02em" }}>
-              Pregúntale a Mesero lo que quieras saber
-            </h2>
-            <p style={{ fontSize: 13, color: V.txMid, marginBottom: 18, maxWidth: 720, lineHeight: 1.5 }}>
-              Obtén reportes personalizados en lenguaje natural. Mesero analiza tus ventas, inventario y equipo para darte respuestas claras con gráficos y acciones listas para ejecutar.
-            </p>
-            {/* Prompt box */}
-            <div style={{
-              position: "relative", background: V.surf2,
-              border: `1.5px solid ${V.bd2}`, borderRadius: 14,
-              padding: "14px 16px", display: "flex", alignItems: "flex-end", gap: 10,
-            }}>
-              <textarea
-                value={prompt} onChange={e => setPrompt(e.target.value)}
-                placeholder="Ej: compara las ventas de esta semana vs la anterior por sede, y dime qué productos bajaron más"
-                style={{
-                  flex: 1, background: "transparent", border: "none", outline: "none",
-                  resize: "none", color: V.tx, fontSize: 14, fontFamily: "inherit",
-                  lineHeight: 1.5, minHeight: 24, maxHeight: 120,
-                }}
-              />
-              <button onClick={() => { if (prompt.trim()) { sendChat(prompt); setPrompt(""); } }} style={{
-                width: 44, height: 44, borderRadius: 12, background: `linear-gradient(140deg,${V.ac2},${V.ac})`,
-                border: "none", color: "#fffaf4", display: "grid", placeItems: "center",
-                cursor: "pointer", boxShadow: `0 4px 14px ${V.acG}`, flexShrink: 0,
-              }}>
-                <Send size={16} />
-              </button>
-            </div>
-            {/* Chips */}
-            <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 8, marginTop: 14 }}>
-              {CHIPS.map(c => (
-                <button key={c.text} onClick={() => setPrompt(c.q)} style={{
-                  minHeight: 36, background: V.surf2, border: `1px solid ${V.bd1}`,
-                  padding: "7px 12px", borderRadius: 999, fontSize: 12,
-                  color: V.txMid, cursor: "pointer", display: "inline-flex",
-                  alignItems: "center", gap: 6, fontFamily: "inherit",
-                }}>
-                  <span style={{ color: V.ac }}>{c.icon}</span> {c.text}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* ── Insights ── */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 12, flexWrap: "wrap" as const }}>
-            <div>
-              <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 16, color: V.txHi }}>Insights que encontré para ti</h3>
-              <div style={{ fontSize: 12, color: V.txMut, marginTop: 2 }}>Detectados automáticamente en {PERIOD_LABEL[period].toLowerCase()}</div>
-            </div>
-            <button onClick={handleMoreInsights} style={btn(false, true)} title="Pedir más insights al asistente">Pedir más →</button>
-          </div>
-          <div className="ia-insights" style={{ display: "grid", gridTemplateColumns: insights.length === 0 ? "1fr" : "repeat(auto-fit,minmax(240px,1fr))", gap: 12, marginBottom: 20 }}>
-            {insights.length === 0 && (
-              <div style={{ ...card(), padding: "32px 20px", textAlign: "center", color: V.txMut, fontSize: 13 }}>
-                {loading ? "Analizando datos del período…" : "Aún no hay insights automáticos para este período."}
-              </div>
-            )}
-            {insights.map(ins => {
-              const col = INSIGHT_COLORS[ins.variant] ?? INSIGHT_COLORS.info;
-              const Icon = ins.variant === "warn" ? TrendingDown : ins.variant === "ok" ? TrendingUp : Activity;
-              return (
-                <div key={ins.title} style={{
-                  ...card(),
-                  borderColor: col.border,
-                  background: `linear-gradient(180deg,${col.bg},transparent 60%),${V.surf1}`,
-                  padding: 16,
-                  position: "relative", overflow: "hidden",
-                }}>
-                  <div style={{ position: "absolute", top: -20, right: -20, width: 80, height: 80, borderRadius: "50%", background: col.iconBg, filter: "blur(30px)", opacity: .5 }} />
-                  <div style={{ position: "relative" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: col.iconBg, color: col.icon, display: "grid", placeItems: "center", flexShrink: 0 }}>
-                        <Icon size={15} strokeWidth={2} />
-                      </div>
-                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".14em", textTransform: "uppercase" as const, fontWeight: 700, color: col.kind }}>{ins.kind}</span>
-                    </div>
-                    <h4 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 15, color: V.txHi, marginBottom: 6, lineHeight: 1.25 }}>{ins.title}</h4>
-                    <p style={{ fontSize: 12, color: V.txMid, lineHeight: 1.5, marginBottom: 12 }}>{ins.body}</p>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button
-                        onClick={() => {
-                          const p = `Sobre este insight: "${ins.title}" (${ins.body}). Quiero ${ins.cta}. ¿Qué me sugieres hacer específicamente?`;
-                          sendChat(p);
-                          setIsChatOpen(true);
-                        }}
-                        style={{ ...btn(true), padding: "6px 10px", fontSize: 11, minHeight: 34 }}
-                      >
-                        {ins.cta}
-                      </button>
-                      <button
-                        onClick={() => setInsights(prev => prev.filter(i => i.title !== ins.title))}
-                        style={{ ...btn(false), padding: "6px 10px", fontSize: 11, minHeight: 34 }}
-                      >
-                        Ignorar
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* ── Report Card ── */}
-          <div style={{ ...card(), overflow: "hidden", marginBottom: 16 }}>
-            {/* Report head */}
-            <div style={{ padding: "18px 22px", borderBottom: `1px solid ${V.bd1}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" as const }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: V.acS, color: V.ac, padding: "3px 8px", borderRadius: 6, fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".06em" }}>
-                    <Sparkles size={11} /> DATOS EN VIVO
-                  </span>
-                  <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txDim, letterSpacing: ".1em" }}>{PERIOD_LABEL[period].toUpperCase()}</span>
-                </div>
-                <div style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 18, color: V.txHi }}>Ventas por sucursal · período {period}</div>
-                <div style={{ fontSize: 12, color: V.txMut, marginTop: 2, display: "flex", alignItems: "center", gap: 8 }}>
-                  <span>{sedes.length} {sedes.length === 1 ? "sede" : "sedes"}</span>
-                  <span style={{ color: V.txDim }}>·</span>
-                  <span>{stats ? `${(stats.orders.value ?? 0).toLocaleString("es-MX")} pedidos` : "sin pedidos"}</span>
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={handleSaveReport} style={{ ...btn(false, true), padding: "9px 10px" }} title="Guardar reporte" aria-label="Guardar reporte">
-                  <Save size={14} />
-                </button>
-                <button onClick={handleShareReport} style={{ ...btn(false, true), padding: "9px 10px" }} title="Copiar enlace al reporte" aria-label="Compartir">
-                  <Share2 size={14} />
-                </button>
-                <button onClick={handleExportPdf} style={{ ...btn(false, true), padding: "9px 10px" }} title="Descargar / imprimir como PDF" aria-label="Descargar">
-                  <Download size={14} />
-                </button>
-              </div>
-            </div>
-
-            {/* KPI strip — datos reales del período */}
-            <div className="ia-kpi" style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", borderBottom: `1px solid ${V.bd1}` }}>
-              {(() => {
-                const fmt = (raw: number | undefined | null) => {
-                  const n = Number(raw ?? 0);
-                  return n >= 1_000_000 ? `$${(n/1_000_000).toFixed(2)}` :
-                         n >= 1_000     ? `$${(n/1_000).toFixed(1)}`     :
-                                          `$${n.toLocaleString("es-MX", { maximumFractionDigits: 0 })}`;
-                };
-                const sml = (raw: number | undefined | null) => {
-                  const n = Number(raw ?? 0);
-                  return n >= 1_000_000 ? "M" : n >= 1_000 ? "k" : "";
-                };
-                const fmtPct = (raw: number | undefined | null) => {
-                  const d = Number(raw ?? 0);
-                  return `${d >= 0 ? "↑" : "↓"} ${Math.abs(d).toFixed(1)}%`;
-                };
-                const rows = [
-                  { label: "Ventas totales",  value: stats ? fmt(stats.sales.value)                      : "—", sml: stats ? sml(stats.sales.value) : "",  up: (stats?.sales.delta        ?? 0) >= 0, delta: stats ? fmtPct(stats.sales.delta)          : "",  sub: stats ? `vs ${fmt(stats.sales.prev)}`                            : "sin datos" },
-                  { label: "Pedidos",         value: stats ? (stats.orders.value ?? 0).toLocaleString("es-MX") : "—", sml: "",                            up: (stats?.orders.delta       ?? 0) >= 0, delta: stats ? fmtPct(stats.orders.delta)         : "",  sub: stats ? `vs ${(stats.orders.prev ?? 0).toLocaleString("es-MX")}` : "sin datos" },
-                  { label: "Ticket promedio", value: stats ? `$${stats.averageTicket?.value ?? 0}`       : "—", sml: "",                                 up: (stats?.averageTicket?.delta?? 0) >= 0, delta: stats ? fmtPct(stats.averageTicket?.delta) : "",  sub: stats ? `vs $${stats.averageTicket?.prev ?? 0}`                  : "sin datos" },
-                  { label: "Prep. activa",    value: stats ? `${stats.prepMinutes?.value ?? 0}`          : "—", sml: "min",                              up: true,                                  delta: "",                                              sub: stats ? `${stats.prepMinutes?.activeCount ?? 0} activos`         : "sin datos" },
-                ];
-                return rows.map((k, i) => (
-                  <div key={k.label} className="ia-kpi-cell" style={{ padding: "16px 22px", borderRight: i % 2 === 0 ? `1px solid ${V.bd1}` : "none", borderTop: i >= 2 ? `1px solid ${V.bd1}` : "none" }}>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txDim, letterSpacing: ".14em", textTransform: "uppercase" as const, marginBottom: 6 }}>{k.label}</div>
-                    <div style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 24, color: V.txHi, lineHeight: 1, letterSpacing: "-.02em" }}>
-                      {k.value}<span style={{ fontSize: 13, color: V.txMut, fontWeight: 600 }}>{k.sml}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, gap: 6 }}>
-                      {k.delta ? <span style={delta(k.up)}>{k.delta}</span> : <span />}
-                      <span style={{ fontSize: 11, color: V.txMut }}>{k.sub}</span>
-                    </div>
-                  </div>
-                ));
-              })()}
-            </div>
-
-            {/* Report body */}
-            <div style={{ padding: 22 }}>
-              {/* AI Summary — se genera bajo demanda desde el chat de Mesero */}
-              <div style={{ background: `linear-gradient(180deg,${V.acS},transparent),${V.surf2}`, border: `1px solid ${V.bd2}`, borderRadius: 14, padding: "16px 18px", marginBottom: 18 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                  <div style={{ width: 24, height: 24, borderRadius: 7, background: V.acS, color: V.ac, display: "grid", placeItems: "center" }}>
-                    <Sparkles size={13} />
-                  </div>
-                  <h5 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 13, color: V.txHi }}>Resumen ejecutivo · Mesero</h5>
-                </div>
-                <p style={{ fontSize: 13, color: V.txMid, lineHeight: 1.6 }}>
-                  {stats
-                    ? `En el período actual se registraron ${(stats.orders.value ?? 0).toLocaleString("es-MX")} pedidos y $${(stats.sales.value ?? 0).toLocaleString("es-MX",{maximumFractionDigits:0})} en ventas, con ticket promedio de $${stats.averageTicket?.value ?? 0}. Usa el chat de Mesero para generar un análisis detallado sobre este reporte.`
-                    : "Aún no hay datos suficientes para generar un resumen. Pregúntale a Mesero desde el panel derecho cuando quieras un análisis personalizado."
-                  }
-                </p>
-              </div>
-
-              {/* Chart — evolución diaria real (datos de /api/dashboard/sales-by-day) */}
-              <div style={{ marginBottom: 24 }}>
-                <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 14, color: V.txHi, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ width: 3, height: 14, background: V.ac, borderRadius: 2, display: "inline-block" }} />
-                  Evolución diaria · ventas {daily ? `(últimos ${daily.days} días)` : ""}
-                </h3>
-                <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 14, padding: 16 }}>
-                  {(() => {
-                    const series = daily?.series ?? [];
-                    const hasData = series.some(p => (p.revenue ?? 0) > 0);
-                    if (!hasData) {
-                      return (
-                        <div style={{ padding: "48px 16px", textAlign: "center", color: V.txMut, fontSize: 13 }}>
-                          {loading ? "Cargando ventas por día…" : "Sin ventas registradas en este periodo"}
-                        </div>
-                      );
-                    }
-                    const W = 900, H = 260, PL = 50, PR = 20, PT = 20, PB = 40;
-                    const innerW = W - PL - PR, innerH = H - PT - PB;
-                    const maxRev = Math.max(...series.map(p => p.revenue || 0), 1);
-                    const niceMax = (v: number) => {
-                      const exp = Math.pow(10, Math.floor(Math.log10(v)));
-                      const m = v / exp;
-                      const r = m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10;
-                      return r * exp;
-                    };
-                    const yMax = niceMax(maxRev);
-                    const ticks = [0.25, 0.5, 0.75, 1].map(f => f * yMax);
-                    const xAt = (i: number) => PL + (series.length === 1 ? innerW / 2 : (i * innerW) / (series.length - 1));
-                    const yAt = (v: number) => PT + innerH - (v / yMax) * innerH;
-                    const linePath = series.map((p, i) => `${i === 0 ? "M" : "L"} ${xAt(i).toFixed(1)},${yAt(p.revenue || 0).toFixed(1)}`).join(" ");
-                    const areaPath = `${linePath} L ${xAt(series.length - 1).toFixed(1)},${(PT + innerH).toFixed(1)} L ${xAt(0).toFixed(1)},${(PT + innerH).toFixed(1)} Z`;
-                    let peakIdx = 0;
-                    series.forEach((p, i) => { if ((p.revenue || 0) > (series[peakIdx]!.revenue || 0)) peakIdx = i; });
-                    const peak = series[peakIdx]!;
-                    const peakDate = new Date(peak.date);
-                    const peakLabel = peakDate.toLocaleDateString("es-MX", { weekday: "short", day: "2-digit", month: "short" }).toUpperCase();
-                    const weekendDots = series
-                      .map((p, i) => ({ p, i, d: new Date(p.date).getDay() }))
-                      .filter(o => (o.d === 0 || o.d === 6) && (o.p.revenue || 0) > 0);
-                    const labelStep = Math.max(1, Math.ceil(series.length / 8));
-                    const xLabels = series.filter((_, i) => i % labelStep === 0).map((p, k) => {
-                      const i = k * labelStep;
-                      const d = new Date(p.date);
-                      return { label: d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" }).replace(".", ""), xPx: xAt(i) };
-                    });
-                    const fmtAxis = (v: number) => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : v >= 1_000 ? `${Math.round(v / 1_000)}k` : `${Math.round(v)}`;
-                    const fmtMoney = (v: number) => `$${Math.round(v).toLocaleString("es-MX")}`;
-                    return (
-                      <>
-                        <div style={{ display: "flex", gap: 14, fontSize: 11, color: V.txMid, marginBottom: 8, flexWrap: "wrap" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ width: 10, height: 10, borderRadius: 2, background: "var(--brand-primary)", display: "inline-block" }} /> Ventas del día
-                          </div>
-                          {weekendDots.length > 0 && (
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ width: 10, height: 10, borderRadius: "50%", background: V.ok, display: "inline-block" }} /> Fin de semana
-                            </div>
-                          )}
-                        </div>
-                        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: 220 }}>
-                          <defs>
-                            <linearGradient id="gIA" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="var(--brand-primary)" stopOpacity=".3"/>
-                              <stop offset="100%" stopColor="var(--brand-primary)" stopOpacity="0"/>
-                            </linearGradient>
-                          </defs>
-                          <g stroke="rgba(255,255,255,.05)" strokeWidth="1">
-                            {ticks.map(t => <line key={t} x1={PL} y1={yAt(t)} x2={W - PR} y2={yAt(t)}/>)}
-                          </g>
-                          <g fontFamily="DM Mono" fontSize="10" fill="#9a8f86">
-                            {ticks.map(t => (
-                              <text key={t} x={PL - 6} y={yAt(t) + 3} textAnchor="end">{fmtAxis(t)}</text>
-                            ))}
-                          </g>
-                          <path d={areaPath} fill="url(#gIA)"/>
-                          <path d={linePath} stroke="var(--brand-primary)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-                          <g fill="var(--ok)">
-                            {weekendDots.map(o => <circle key={o.p.date} cx={xAt(o.i)} cy={yAt(o.p.revenue || 0)} r="3.5"/>)}
-                          </g>
-                          {(peak.revenue || 0) > 0 && (
-                            <g transform={`translate(${Math.min(W - 180, Math.max(PL, xAt(peakIdx) - 80))},${PT - 4})`}>
-                              <rect width="170" height="34" rx="7" fill="var(--surf-1)" stroke="var(--bd-2)"/>
-                              <text x="10" y="14" fontFamily="DM Mono" fontSize="9" fill="#9a8f86" letterSpacing=".1em">PICO · {peakLabel}</text>
-                              <text x="10" y="27" fontFamily="Syne" fontWeight="700" fontSize="11" fill="var(--tx-hi)">{fmtMoney(peak.revenue || 0)} · {peak.orders} pedidos</text>
-                            </g>
-                          )}
-                          <g fontFamily="DM Mono" fontSize="9" fill="#9a8f86" textAnchor="middle">
-                            {xLabels.map(l => <text key={l.label + l.xPx} x={l.xPx} y={H - 14}>{l.label}</text>)}
-                          </g>
-                        </svg>
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Table */}
-              <div style={{ marginBottom: 24 }}>
-                <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 14, color: V.txHi, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ width: 3, height: 14, background: V.ac, borderRadius: 2, display: "inline-block" }} />
-                  Desempeño por sede
-                </h3>
-                <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 14, overflow: "hidden", overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 640 }}>
-                    <thead>
-                      <tr>
-                        {["Sede","Ventas","vs Mes ant.","Pedidos","Ticket prom.","Margen",""].map(h => (
-                          <th key={h} style={{ textAlign: "left", fontFamily: "'DM Mono',monospace", fontSize: 10, color: V.txDim, letterSpacing: ".12em", textTransform: "uppercase", padding: "10px 12px", borderBottom: `1px solid ${V.bd1}`, fontWeight: 600 }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sedes.length === 0 && (
-                        <tr>
-                          <td colSpan={7} style={{ padding: 32, textAlign: "center", color: V.txMut, fontSize: 13 }}>
-                            {loading ? "Cargando ventas por sucursal…" : "Sin pedidos en este período"}
-                          </td>
-                        </tr>
-                      )}
-                      {(() => {
-                        const maxSales = Math.max(1, ...sedes.map(s => s.sales));
-                        return sedes.map(s => {
-                          const up    = s.delta >= 0;
-                          const alert = s.delta <= -10;
-                          const pct   = Math.min(100, Math.round((s.sales / maxSales) * 100));
-                          return (
-                            <tr key={s.id} style={{ background: alert ? V.errS : "transparent" }}>
-                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}`, color: V.txMid }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: alert ? V.warn : up ? V.ok : V.ac, flexShrink: 0 }} />
-                                  <span style={{ color: V.txHi, fontWeight: 600 }}>{s.name}</span>
-                                  {alert && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, background: V.warnS, color: V.warn, padding: "2px 6px", borderRadius: 4, letterSpacing: ".08em" }}>ATENCIÓN</span>}
-                                </div>
-                              </td>
-                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}>
-                                <span style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>
-                                  ${(s.sales ?? 0).toLocaleString("es-MX", { maximumFractionDigits: 0 })}
-                                </span>
-                              </td>
-                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}`, minWidth: 180 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                  <div style={{ flex: 1, height: 4, background: V.surf3, borderRadius: 2 }}>
-                                    <div style={{ width: `${pct}%`, height: 4, background: up ? V.ok : V.err, borderRadius: 2 }} />
-                                  </div>
-                                  <span style={delta(up)}>{up ? "↑" : "↓"} {Math.abs(Number(s.delta ?? 0)).toFixed(1)}%</span>
-                                </div>
-                              </td>
-                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}>
-                                <span style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>{(s.orders ?? 0).toLocaleString("es-MX")}</span>
-                              </td>
-                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}>
-                                <span style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>
-                                  ${(s.avgTicket ?? 0).toLocaleString("es-MX")}
-                                </span>
-                              </td>
-                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}` }}>
-                                <span style={{ fontFamily: "'DM Mono',monospace", color: V.txMut, fontWeight: 600 }}>—</span>
-                              </td>
-                              <td style={{ padding: 12, borderBottom: `1px solid ${V.bd1}`, textAlign: "right", color: V.txMut }}>→</td>
-                            </tr>
-                          );
-                        });
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Bottom 2-col */}
-              <div className="ia-bottom" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
-                {/* Top productos */}
-                <div>
-                  <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 14, color: V.txHi, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 3, height: 14, background: V.ac, borderRadius: 2, display: "inline-block" }} />
-                    Top productos del período
-                  </h3>
-                  <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 14, padding: "6px 16px" }}>
-                    {topItems.length === 0 && (
-                      <div style={{ padding: "28px 0", textAlign: "center", color: V.txMut, fontSize: 13 }}>
-                        {loading ? "Cargando top productos…" : "Sin pedidos suficientes para el ranking"}
-                      </div>
-                    )}
-                    {topItems.map((p, i) => (
-                      <div key={p.id ?? p.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: i < topItems.length - 1 ? `1px solid ${V.bd1}` : "none" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: V.ac, width: 24, fontWeight: 700 }}>
-                            {String(i + 1).padStart(2, "0")}
-                          </span>
-                          <div>
-                            <div style={{ color: V.tx, fontWeight: 600, fontSize: 13 }}>{p.name}</div>
-                            <div style={{ fontSize: 11, color: V.txMut }}>{(p.quantity ?? 0).toLocaleString("es-MX")} unidades</div>
-                          </div>
-                        </div>
-                        <div style={{ textAlign: "right" }}>
-                          <div style={{ fontFamily: "'DM Mono',monospace", color: V.txHi, fontWeight: 600 }}>
-                            ${(p.revenue ?? 0).toLocaleString("es-MX", { maximumFractionDigits: 0 })}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Acciones sugeridas */}
-                <div>
-                  <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 14, color: V.txHi, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 3, height: 14, background: V.ac, borderRadius: 2, display: "inline-block" }} />
-                    Acciones sugeridas
-                  </h3>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {actions.length === 0 && (
-                      <div style={{ background: V.surf2, border: `1px dashed ${V.bd1}`, borderRadius: 12, padding: "20px 14px", textAlign: "center", color: V.txMut, fontSize: 12 }}>
-                        {loading ? "Analizando señales del periodo…" : "Sin acciones automáticas para este periodo. Cuando haya caídas de ventas, productos top o stock bajo, aparecerán aquí."}
-                      </div>
-                    )}
-                    {actions.map(a => (
-                      <div key={a.n} style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 12, padding: "12px 14px", display: "flex", gap: 10, alignItems: "flex-start" }}>
-                        <div style={{ width: 22, height: 22, borderRadius: 6, background: V.acS, color: V.ac, display: "grid", placeItems: "center", flexShrink: 0, fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 700, fontSize: 11 }}>{a.n}</div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, color: V.tx, fontWeight: 600, marginBottom: 2 }}>{a.title}</div>
-                          <div style={{ fontSize: 11, color: V.txMut, lineHeight: 1.5 }}>{a.sub}</div>
-                          <button
-                            onClick={() => { sendChat(a.prompt); setIsChatOpen(true); }}
-                            style={{ ...btn(true), marginTop: 8, padding: "5px 10px", fontSize: 11, minHeight: 32 }}
-                          >
-                            {a.cta}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Saved reports ── */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "24px 0 12px", gap: 12, flexWrap: "wrap" as const }}>
-            <div>
-              <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 16, color: V.txHi }}>Reportes guardados</h3>
-              <div style={{ fontSize: 12, color: V.txMut, marginTop: 2 }}>Reportes recurrentes y favoritos</div>
-            </div>
-            <button onClick={handleNewSavedReport} style={btn(false, true)} title="Pedir al asistente que defina uno nuevo">
-              <Plus size={13} /> Nuevo reporte
-            </button>
-          </div>
-          <div className="ia-saved" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 10 }}>
-            {(() => {
-              const all = [...savedLocal, ...saved];
-              if (all.length === 0) {
-                return (
-                  <div style={{ gridColumn: "1 / -1", border: `1px dashed ${V.bd1}`, borderRadius: 14, padding: "28px 20px", textAlign: "center", color: V.txMut, fontSize: 13, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                    <Bookmark size={22} style={{ color: V.txDim }} />
-                    Aún no has guardado reportes. Usa el botón de guardar del reporte para guardar uno.
-                  </div>
-                );
-              }
-              return all.map(s => {
-                const isLocal = String(s.id ?? "").startsWith("local-");
-                return (
-                  <div key={s.id ?? s.title} style={{
-                    background: s.active ? `linear-gradient(90deg,${V.acS},transparent)` : V.surf1,
-                    border: `1px solid ${s.active ? V.ac : V.bd1}`,
-                    borderRadius: 14, padding: "14px 16px",
-                    position: "relative",
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, gap: 8 }}>
-                      <span style={{ fontWeight: 600, color: V.tx, fontSize: 13 }}>{s.title}</span>
-                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".1em", color: s.tagColor, background: s.tagBg, padding: "2px 6px", borderRadius: 5, fontWeight: 600 }}>{s.tag}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: V.txMut }}>{s.sub}</div>
-                    {isLocal && (
-                      <button
-                        onClick={() => handleDeleteSaved(String(s.id))}
-                        style={{ position: "absolute", top: 8, right: 8, background: "transparent", border: "none", color: V.txDim, cursor: "pointer", padding: 4, lineHeight: 1, display: "grid", placeItems: "center" }}
-                        title="Eliminar reporte guardado"
-                        aria-label="Eliminar"
-                      ><X size={14} /></button>
-                    )}
-                  </div>
-                );
-              });
-            })()}
-          </div>
-
+        {/* Filtro de período + exportar */}
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <Segmented options={PERIODS} value={period} onChange={setPeriod} className="w-full sm:w-auto" />
+          <Button variant="secondary" size="sm" icon={Download} onClick={handleExportPdf}>
+            Exportar PDF
+          </Button>
         </div>
 
-        {/* ═══ OVERLAY (Mobile only) ═════════════════════════ */}
-        <div className={`ia-overlay ${isChatOpen ? "open" : ""}`} onClick={() => setIsChatOpen(false)} />
+        <AiHero onAsk={sendChat} />
 
-        {/* ═══ CHAT PANEL ════════════════════════════════════ */}
-        <div className={`ia-chat-panel ${isChatOpen ? "open" : "closed"}`}>
-          {/* Chat header */}
-          <div style={{ padding: "16px 18px", borderBottom: `1px solid ${V.bd1}`, display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 11, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, display: "grid", placeItems: "center", color: "#fffaf4", position: "relative", flexShrink: 0 }}>
-              <Bot size={18} />
-              <div style={{ position: "absolute", bottom: -2, right: -2, width: 10, height: 10, background: V.ok, borderRadius: "50%", border: `2px solid ${V.surf3}` }} />
-            </div>
-            <div>
-              <h3 style={{ fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 800, fontSize: 14, color: V.txHi }}>Mesero</h3>
-              <div style={{ fontSize: 10, color: V.ok, fontFamily: "'DM Mono',monospace", letterSpacing: ".08em", textTransform: "uppercase", fontWeight: 600 }}>● En línea · listo</div>
-            </div>
-            <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
-              <button onClick={() => setMsgs(INIT_MSGS)} style={{ width: 32, height: 32, borderRadius: 9, background: "transparent", border: "none", color: V.txMut, cursor: "pointer", display: "grid", placeItems: "center" }} title="Limpiar chat" aria-label="Limpiar chat">
-                <Plus size={16} />
-              </button>
-              <button onClick={() => setIsChatOpen(false)} style={{ width: 32, height: 32, borderRadius: 9, background: "transparent", border: "none", color: V.txHi, cursor: "pointer", display: "grid", placeItems: "center" }} title="Ocultar chat" aria-label="Ocultar chat">
-                <X size={16} />
-              </button>
-            </div>
-          </div>
+        <InsightsGrid
+          insights={insights}
+          loading={loading}
+          period={period}
+          onAct={handleInsightAction}
+          onDismiss={(title) => setInsights((prev) => prev.filter((i) => i.title !== title))}
+          onMore={handleMoreInsights}
+        />
 
-          {/* Chat body */}
-          <div ref={chatRef} className="ia-scroll" style={{ flex: 1, overflowY: "auto", padding: 18, display: "flex", flexDirection: "column", gap: 16 }}>
-            {msgs.map((m, i) => (
-              <div key={i} style={{ display: "flex", gap: 10, justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
-                {m.role === "ai" && (
-                  <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, display: "grid", placeItems: "center", flexShrink: 0, color: "#fffaf4", fontSize: 11, fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 700 }}>M</div>
-                )}
-                <div style={{ flex: "1 1 0", minWidth: 0 }}>
-                  <div style={{
-                    maxWidth: 270, padding: "10px 14px", borderRadius: 14, fontSize: 13, lineHeight: 1.55,
-                    ...(m.role === "ai"
-                      ? { background: V.surf1, color: V.txMid, border: `1px solid ${V.bd1}`, borderTopLeftRadius: 4 }
-                      : { background: `linear-gradient(140deg,${V.ac2},${V.ac})`, color: "#fffaf4", borderTopRightRadius: 4, marginLeft: "auto" }),
-                  }}>
-                    {m.text}
-                  </div>
-                  {m.tools && m.tools.length > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
-                      {m.tools.map((t, ti) => (
-                        <div key={t} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 8, fontSize: 11, color: V.txMid, fontFamily: "'DM Mono',monospace" }}>
-                          {i < msgs.length - 1
-                            ? <span style={{ width: 10, height: 10, borderRadius: "50%", background: V.ok, display: "inline-block" }} />
-                            : (ti === m.tools!.length - 1
-                              ? <span className="ia-spin" style={{ width: 10, height: 10, border: `1.5px solid ${V.ac}`, borderRightColor: "transparent", borderRadius: "50%", display: "inline-block" }} />
-                              : <span style={{ width: 10, height: 10, borderRadius: "50%", background: V.ok, display: "inline-block" }} />)
-                          }
-                          {t}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {m.role === "user" && (
-                  <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(140deg,${V.ok},#2f7d52)`, display: "grid", placeItems: "center", flexShrink: 0, color: "#fffaf4", fontSize: 11, fontFamily: "var(--font-display),'Syne',sans-serif", fontWeight: 700 }}>D</div>
-                )}
-              </div>
-            ))}
-            {/* Typing indicator if last message is user */}
-            {msgs[msgs.length - 1]?.role === "user" && (
-              <div style={{ display: "flex", gap: 10 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, display: "grid", placeItems: "center", flexShrink: 0, color: "#fffaf4" }}>M</div>
-                <div style={{ background: V.surf1, border: `1px solid ${V.bd1}`, borderRadius: 14, borderTopLeftRadius: 4, padding: "10px 14px", display: "flex", gap: 3 }}>
-                  {[0,1,2].map(k => <span key={k} className="ia-tp" style={{ width: 6, height: 6, borderRadius: "50%", background: V.ac, display: "inline-block" }} />)}
-                </div>
-              </div>
-            )}
-          </div>
+        <ReportCard
+          period={period}
+          stats={stats}
+          sedes={sedes}
+          daily={daily}
+          topItems={topItems}
+          actions={actions}
+          loading={loading}
+          onSave={handleSaveReport}
+          onShare={handleShareReport}
+          onExport={handleExportPdf}
+          onAskAction={handleSuggestedAction}
+        />
 
-          {/* Chat input */}
-          <div style={{ padding: "14px 18px 18px", borderTop: `1px solid ${V.bd1}` }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-              {["Resumir el reporte","Enviar por email","Predecir próxima semana"].map(c => (
-                <button key={c} onClick={() => setChatMsg(c)} style={{ background: V.surf2, border: `1px solid ${V.bd1}`, padding: "5px 10px", borderRadius: 999, fontSize: 11, color: V.txMid, cursor: "pointer", fontFamily: "inherit" }}>{c}</button>
-              ))}
-            </div>
-            <div style={{ background: V.surf2, border: `1px solid ${V.bd1}`, borderRadius: 12, padding: "8px 8px 8px 14px", display: "flex", alignItems: "center", gap: 8 }}>
-              <input
-                value={chatMsg} onChange={e => setChatMsg(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && sendChat(chatMsg)}
-                placeholder="Escribe o usa /reporte, /alerta, /predicción…"
-                style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: V.tx, fontSize: 13, fontFamily: "inherit" }}
-              />
-              <button onClick={() => sendChat(chatMsg)} aria-label="Enviar" style={{ width: 36, height: 36, borderRadius: 9, background: `linear-gradient(140deg,${V.ac2},${V.ac})`, border: "none", color: "#fffaf4", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                <Send size={14} />
-              </button>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, fontSize: 10, color: V.txDim, fontFamily: "'DM Mono',monospace", letterSpacing: ".04em" }}>
-              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ width: 5, height: 5, background: V.ok, borderRadius: "50%", display: "inline-block" }} />
-                MESERO · modelo v2.1
-              </span>
-              <span>Enter para enviar</span>
-            </div>
-          </div>
-        </div>
+        <SavedReports reports={[...savedLocal, ...saved]} onNew={handleNewSavedReport} onDelete={handleDeleteSaved} />
+      </PageShell>
 
-      </div>
-
-      {/* ═══ FAB BUTTON ════════════════════════════════════ */}
-      {!isChatOpen && (
-        <button className="ia-fab" onClick={() => setIsChatOpen(true)} title="Abrir asistente IA" aria-label="Abrir asistente IA">
-          <MessageSquare size={24} />
-        </button>
-      )}
-
-      {/* ═══ TOAST (feedback de copiar/guardar) ════════════ */}
-      {toast && (
-        <div
-          role="status"
-          aria-live="polite"
-          style={{
-            position: "fixed", bottom: 96, left: "50%", transform: "translateX(-50%)",
-            background: V.surf1, border: `1px solid ${V.bd1}`, color: V.txHi,
-            padding: "10px 16px", borderRadius: 999, fontSize: 13, fontWeight: 600,
-            boxShadow: "0 10px 30px rgba(0,0,0,0.35)", zIndex: 60,
-          }}
-        >
-          {toast}
-        </div>
-      )}
+      <ChatPanel
+        open={isChatOpen}
+        onOpen={() => setIsChatOpen(true)}
+        onClose={() => setIsChatOpen(false)}
+        msgs={msgs}
+        sending={sending}
+        onSend={sendChat}
+        onClear={() => setMsgs(INIT_MSGS)}
+      />
     </>
   );
 }

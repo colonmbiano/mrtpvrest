@@ -6,9 +6,9 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import {
-  WtScreen, PageHeader, WtCard, StatTile, Pill, Segmented, PrimaryBtn,
-  EmptyState, type Tone,
-} from "@/components/warmtech";
+  PageShell, PageHeader, Card, StatTile, Pill, Segmented, Button,
+  EmptyState, useToast, type Tone,
+} from "@/components/ds";
 
 function fmt(n: number) { return `$${(n || 0).toFixed(2)}`; }
 function fmtDate(d: string) {
@@ -57,7 +57,8 @@ function exportToCSV(shifts: any[]) {
   URL.revokeObjectURL(url);
 }
 
-function exportExpensesCSV(shifts: any[]) {
+// Devuelve false si no hay gastos que exportar (el caller avisa con toast).
+function exportExpensesCSV(shifts: any[]): boolean {
   const headers = ["Turno", "Cajero", "Fecha", "Descripción", "Categoría", "Monto"];
   const rows: any[] = [];
   for (const s of shifts) {
@@ -72,7 +73,7 @@ function exportExpensesCSV(shifts: any[]) {
       ]);
     }
   }
-  if (rows.length === 0) { alert("Sin gastos para exportar"); return; }
+  if (rows.length === 0) return false;
   const csv = [headers, ...rows]
     .map((row) => row.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(","))
     .join("\n");
@@ -83,9 +84,11 @@ function exportExpensesCSV(shifts: any[]) {
   a.download = `gastos_turnos_${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+  return true;
 }
 
 export default function TurnosPage() {
+  const toast = useToast();
   const [shifts, setShifts]   = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -102,6 +105,10 @@ export default function TurnosPage() {
     if (filter === "closed") return !s.isOpen;
     return true;
   });
+
+  function handleExportExpenses() {
+    if (!exportExpensesCSV(filtered)) toast.error("Sin gastos para exportar");
+  }
 
   // Totales globales
   const totals = filtered.filter((s) => !s.isOpen).reduce((acc, s) => ({
@@ -129,27 +136,23 @@ export default function TurnosPage() {
   ] as const;
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Caja & Turnos"
         title="Turnos de Caja"
         subtitle="Historial de aperturas y cierres de caja"
         actions={
           <>
-            <PrimaryBtn ghost full={false} icon={Download} onClick={() => exportToCSV(filtered)}>
-              Turnos CSV
-            </PrimaryBtn>
-            <PrimaryBtn ghost full={false} icon={Download} onClick={() => exportExpensesCSV(filtered)}>
-              Gastos CSV
-            </PrimaryBtn>
+            <Button variant="secondary" icon={Download} onClick={() => exportToCSV(filtered)}>Turnos CSV</Button>
+            <Button variant="secondary" icon={Download} onClick={handleExportExpenses}>Gastos CSV</Button>
           </>
         }
       />
 
       {/* mobile export */}
       <div className="mb-4 grid grid-cols-2 gap-2 md:hidden">
-        <PrimaryBtn ghost icon={Download} onClick={() => exportToCSV(filtered)}>Turnos CSV</PrimaryBtn>
-        <PrimaryBtn ghost icon={Download} onClick={() => exportExpensesCSV(filtered)}>Gastos CSV</PrimaryBtn>
+        <Button variant="secondary" full icon={Download} onClick={() => exportToCSV(filtered)}>Turnos CSV</Button>
+        <Button variant="secondary" full icon={Download} onClick={handleExportExpenses}>Gastos CSV</Button>
       </div>
 
       {/* stats globales */}
@@ -169,7 +172,7 @@ export default function TurnosPage() {
         {loading ? (
           <div className="flex flex-col gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-20 animate-pulse rounded-[18px] bg-surf-2" />
+              <div key={i} className="h-20 animate-pulse rounded-ds-xl bg-surf-2" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
@@ -191,7 +194,7 @@ export default function TurnosPage() {
               ];
 
               return (
-                <WtCard
+                <Card
                   key={shift.id}
                   className="overflow-hidden"
                   style={shift.isOpen ? { borderColor: "var(--ok)" } : undefined}
@@ -236,7 +239,7 @@ export default function TurnosPage() {
                     <div className="px-4 pb-4" style={{ borderTop: "1px solid var(--bd-1)" }}>
                       <div className="mb-4 mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                         {detailRows.map((row) => (
-                          <div key={row.label} className="rounded-xl p-3 text-center" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                          <div key={row.label} className="rounded-ds-md p-3 text-center" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
                             <div className="mb-1 text-[11px] text-tx-mut">{row.label}</div>
                             <div className="font-display font-extrabold" style={{ color: `var(--${row.tone === "ac" ? "brand-primary" : row.tone})` }}>{row.value}</div>
                           </div>
@@ -245,7 +248,7 @@ export default function TurnosPage() {
 
                       {/* gastos */}
                       {(shift.expenses || []).length > 0 && (
-                        <div className="overflow-hidden rounded-xl" style={{ border: "1px solid var(--bd-1)" }}>
+                        <div className="overflow-hidden rounded-ds-md" style={{ border: "1px solid var(--bd-1)" }}>
                           <div className="flex items-center gap-2 px-4 py-2 font-mono text-[10px] uppercase tracking-[.12em] text-tx-mut" style={{ background: "var(--surf-2)" }}>
                             <TrendingDown size={12} /> Gastos del turno
                           </div>
@@ -262,18 +265,18 @@ export default function TurnosPage() {
                       )}
 
                       {shift.notes && (
-                        <div className="mt-3 flex items-start gap-2 rounded-xl p-3 text-[11px] text-tx-mut" style={{ background: "var(--surf-2)" }}>
+                        <div className="mt-3 flex items-start gap-2 rounded-ds-md p-3 text-[11px] text-tx-mut" style={{ background: "var(--surf-2)" }}>
                           <StickyNote size={13} className="mt-0.5 shrink-0" /> {shift.notes}
                         </div>
                       )}
                     </div>
                   )}
-                </WtCard>
+                </Card>
               );
             })}
           </div>
         )}
       </div>
-    </WtScreen>
+    </PageShell>
   );
 }
