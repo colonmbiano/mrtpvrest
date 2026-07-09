@@ -95,7 +95,7 @@ export function matchScore(target: string, query: string): number {
 }
 
 // Detecta intención de tamaño en el texto del cliente.
-const QUERY_KILO_RE = /\b(kilo|kilos|kg|1\s*k|medio\s*kilo|1\/2\s*kilo|half\s*kilo)\b/;
+const QUERY_KILO_RE = /\b(kilo|kilos|kg|\d+\s*k|medio\s*kilo|1\/2\s*kilo|half\s*kilo)\b/;
 
 /**
  * Sesgo de tamaño orden-vs-kilo. Regla del negocio: si el cliente NO dice
@@ -164,14 +164,23 @@ function parseLine(raw: string, products: Product[]): ParsedLine | null {
     line = line.replace(paren[0] ?? "", " ").replace(/\s+/g, " ").trim();
   }
 
-  // Cantidad: "2 x Producto", "2x Producto", "2 Producto", "Producto x2".
+  // Cantidad: "2 x Producto", "2x Producto", "2 Producto", "Producto x2", "2k alitas".
   let quantity = 1;
   let body = line;
-  const leading = line.match(/^(\d{1,3})\s*[xX]?\s+(.+)$/);
+  const leading = line.match(/^(\d{1,3})\s*(x|k|kg|kilo|kilos)?\s*(.+)$/i);
   const trailing = line.match(/^(.+?)\s*[xX]\s*(\d{1,3})$/);
+  
   if (leading) {
     quantity = Math.max(1, parseInt(leading[1] ?? "1", 10) || 1);
-    body = leading[2] ?? body;
+    const unit = (leading[2] || "").toLowerCase();
+    const rest = leading[3] || "";
+    
+    if (unit === 'x' || unit === '') {
+      body = rest;
+    } else {
+      // Normalize any weight unit to "kilo" so sizeBias detects it correctly
+      body = "kilo " + rest;
+    }
   } else if (trailing) {
     quantity = Math.max(1, parseInt(trailing[2] ?? "1", 10) || 1);
     body = trailing[1] ?? body;
