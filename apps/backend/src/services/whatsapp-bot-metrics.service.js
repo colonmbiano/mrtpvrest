@@ -6,8 +6,8 @@
 
 const { prisma } = require('@mrtpvrest/database');
 
-// Marca en notes con la que el bot crea sus órdenes (lo distingue de otros
-// WHATSAPP como la extensión wa-chrome o la captura del TPV).
+// Marca en notes con la que el bot crea sus órdenes (lo distingue de otras
+// capturas WHATSAPP, como la captura manual del TPV).
 const BOT_NOTE = 'Pedido generado por asistente de IA de WhatsApp';
 
 // Restaurante por defecto para las métricas: el primero de la allowlist de
