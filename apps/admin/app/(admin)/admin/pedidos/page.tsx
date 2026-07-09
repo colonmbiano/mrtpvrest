@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   ChevronDown, ChevronUp, Inbox, CheckCircle2, ChefHat, BellRing,
   Bike, Home, MessageCircle, X, RotateCw, LayoutGrid, List, Search,
-  Flame, Store, MapPin, StickyNote, Package,
+  Flame, Store, MapPin, StickyNote, Package, Wallet, Printer, MessagesSquare,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
@@ -65,11 +66,14 @@ function timeAgo(date: string) {
 }
 
 /* ── order card ──────────────────────────────────────────────────── */
-function OrderCard({ order, drivers, onStatusChange, onAssignDriver, onUnassignDriver }: {
+function OrderCard({ order, drivers, onStatusChange, onAssignDriver, onUnassignDriver, onCobrar, onPrint, onOpenConversation }: {
   order: Order; drivers: Driver[];
   onStatusChange: (id: string, status: string) => void;
   onAssignDriver: (orderId: string, driverId: string) => void;
   onUnassignDriver: (orderId: string) => void;
+  onCobrar: (order: Order) => void;
+  onPrint: (orderId: string) => void;
+  onOpenConversation: (order: Order) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const meta = STATUS_META[order.status];
@@ -214,12 +218,47 @@ function OrderCard({ order, drivers, onStatusChange, onAssignDriver, onUnassignD
           </button>
         )}
       </div>
+
+      {order.status !== "CANCELLED" && (
+        <div className="flex gap-2 px-3 pb-3">
+          {!paid && (
+            <button
+              type="button"
+              onClick={() => onCobrar(order)}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 font-display text-xs font-extrabold text-white transition-transform active:scale-95"
+              style={{ background: "var(--ok)" }}
+            >
+              <Wallet size={14} strokeWidth={2.2} /> Cobrar
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onPrint(order.id)}
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold text-tx-mut ${paid ? "flex-1" : "px-3"}`}
+            style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+          >
+            <Printer size={14} strokeWidth={2} /> Ticket
+          </button>
+          {order.source === "WHATSAPP" && order.customerPhone && (
+            <button
+              type="button"
+              onClick={() => onOpenConversation(order)}
+              aria-label="Ver conversación"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl"
+              style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--brand-primary)" }}
+            >
+              <MessagesSquare size={16} />
+            </button>
+          )}
+        </div>
+      )}
     </WtCard>
   );
 }
 
 /* ── page ────────────────────────────────────────────────────────── */
 export default function PedidosPage() {
+  const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
@@ -228,6 +267,13 @@ export default function PedidosPage() {
   const [filterSource, setFilterSource] = useState("all");
   const [search, setSearch] = useState("");
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [cobrarOrder, setCobrarOrder] = useState<Order | null>(null);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const showToast = useCallback((msg: string, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -298,6 +344,42 @@ export default function PedidosPage() {
       const err = e as { response?: { data?: { error?: string } } };
       alert(err?.response?.data?.error || "Error al desasignar repartidor");
     }
+  }
+
+  // Cobrar desde el kanban: marca PAID conservando el estado del pedido
+  // (keepStatus) — no lo salta a DELIVERED. El total lo recalcula el backend;
+  // aquí solo elegimos el método. El poll de 8 s reconcilia el resto.
+  async function cobrar(orderId: string, paymentMethod: string) {
+    try {
+      await api.put(`/api/orders/${orderId}/payment`, { paymentMethod, keepStatus: true });
+      setOrders((prev) => prev.map((o) =>
+        o.id === orderId
+          ? { ...o, paymentStatus: "PAID", cashCollected: paymentMethod === "CASH", paymentMethod }
+          : o));
+      setCobrarOrder(null);
+      showToast("Pedido cobrado");
+    } catch (e) {
+      const err = e as { response?: { data?: { error?: string } } };
+      alert(err?.response?.data?.error || "Error al cobrar el pedido");
+    }
+  }
+
+  async function printTicket(orderId: string) {
+    try {
+      await api.post(`/api/orders/${orderId}/print-bill`);
+      showToast("Ticket enviado a impresión");
+    } catch (e) {
+      const err = e as { response?: { data?: { error?: string } } };
+      showToast(err?.response?.data?.error || "No se pudo imprimir", false);
+    }
+  }
+
+  // Abre el hilo de WhatsApp que originó el pedido. No hay FK Order↔conversación:
+  // la llave es el teléfono. El inbox filtra por ?phone= y auto-abre el hilo.
+  function openConversation(order: Order) {
+    const digits = (order.customerPhone || "").replace(/\D/g, "");
+    if (!digits) return;
+    router.push(`/admin/inbox?phone=${digits}`);
   }
 
   const filtered = useMemo(() => orders.filter((o) => {
@@ -427,7 +509,8 @@ export default function PedidosPage() {
                   ) : (
                     colOrders.map((o) => (
                       <OrderCard key={o.id} order={o} drivers={drivers}
-                        onStatusChange={changeStatus} onAssignDriver={assignDriver} onUnassignDriver={unassignDriver} />
+                        onStatusChange={changeStatus} onAssignDriver={assignDriver} onUnassignDriver={unassignDriver}
+                        onCobrar={setCobrarOrder} onPrint={printTicket} onOpenConversation={openConversation} />
                     ))
                   )}
                 </div>
@@ -441,11 +524,101 @@ export default function PedidosPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((o) => (
               <OrderCard key={o.id} order={o} drivers={drivers}
-                onStatusChange={changeStatus} onAssignDriver={assignDriver} onUnassignDriver={unassignDriver} />
+                onStatusChange={changeStatus} onAssignDriver={assignDriver} onUnassignDriver={unassignDriver}
+                onCobrar={setCobrarOrder} onPrint={printTicket} onOpenConversation={openConversation} />
             ))}
           </div>
         )}
       </div>
+
+      {cobrarOrder && (
+        <CobrarModal
+          order={cobrarOrder}
+          onClose={() => setCobrarOrder(null)}
+          onConfirm={(method) => cobrar(cobrarOrder.id, method)}
+        />
+      )}
+
+      {toast && (
+        <div
+          className="fixed bottom-6 left-1/2 z-[70] -translate-x-1/2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-lg"
+          style={{ background: toast.ok ? "var(--ok)" : "var(--err)" }}
+        >
+          {toast.msg}
+        </div>
+      )}
     </WtScreen>
+  );
+}
+
+/* ── cobrar modal ────────────────────────────────────────────────── */
+const PAY_METHODS: { value: string; label: string }[] = [
+  { value: "CASH", label: "Efectivo" },
+  { value: "CARD", label: "Tarjeta" },
+  { value: "TRANSFER", label: "Transferencia" },
+];
+
+function CobrarModal({ order, onClose, onConfirm }: {
+  order: Order;
+  onClose: () => void;
+  onConfirm: (method: string) => Promise<void>;
+}) {
+  const [method, setMethod] = useState("CASH");
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.8)" }}
+      onClick={() => !saving && onClose()}
+    >
+      <WtCard className="w-full max-w-md p-6" >
+        <div onClick={(e) => e.stopPropagation()}>
+          <div className="mb-1 flex items-center gap-2">
+            <Wallet size={18} style={{ color: "var(--ok)" }} />
+            <span className="font-display text-base font-extrabold text-tx-hi">Cobrar pedido</span>
+          </div>
+          <div className="mb-4 text-[13px] text-tx-mut">
+            {order.orderNumber} · <span className="font-display font-extrabold text-primary">{money(order.total ?? 0)}</span>
+          </div>
+
+          <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Método de pago</div>
+          <div className="mb-5 grid grid-cols-3 gap-2">
+            {PAY_METHODS.map((m) => {
+              const active = method === m.value;
+              return (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => setMethod(m.value)}
+                  className="rounded-xl py-2.5 text-xs font-bold transition-colors"
+                  style={{
+                    background: active ? "var(--ok)" : "var(--surf-2)",
+                    color: active ? "#fff" : "var(--tx)",
+                    border: `1px solid ${active ? "var(--ok)" : "var(--bd-1)"}`,
+                  }}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex gap-3">
+            <PrimaryBtn ghost onClick={onClose}>Cancelar</PrimaryBtn>
+            <PrimaryBtn
+              icon={Wallet}
+              disabled={saving}
+              onClick={async () => {
+                setSaving(true);
+                try { await onConfirm(method); } finally { setSaving(false); }
+              }}
+            >
+              {saving ? "Cobrando…" : "Confirmar cobro"}
+            </PrimaryBtn>
+          </div>
+        </div>
+      </WtCard>
+    </div>
   );
 }

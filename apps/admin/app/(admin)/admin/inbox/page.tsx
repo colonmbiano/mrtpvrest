@@ -123,6 +123,29 @@ export default function InboxPage() {
     return () => clearInterval(id);
   }, [loadList]);
 
+  // Deep-link desde el kanban de pedidos: /admin/inbox?phone=<digits>. Sembramos
+  // el buscador con el teléfono (WhatsappConversation es único por restaurante+
+  // teléfono) y, cuando llega el hilo filtrado, lo abrimos directo. Leemos de
+  // window.location para no forzar el <Suspense> de useSearchParams en el build.
+  const pendingPhoneRef = useRef<string | null>(null);
+  useEffect(() => {
+    const phone = new URLSearchParams(window.location.search).get("phone");
+    if (phone) {
+      const digits = phone.replace(/\D/g, "");
+      if (digits) {
+        pendingPhoneRef.current = digits;
+        setQuery(digits);
+      }
+    }
+  }, []);
+  useEffect(() => {
+    const first = conversations[0];
+    if (pendingPhoneRef.current && !selectedId && first) {
+      setSelectedId(first.id);
+      pendingPhoneRef.current = null;
+    }
+  }, [conversations, selectedId]);
+
   const selected = conversations.find((c) => c.id === selectedId) || null;
 
   return (
