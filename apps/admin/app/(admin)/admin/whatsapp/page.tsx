@@ -52,7 +52,7 @@ type Tab = "asistente" | "reportes" | "contactos" | "campanas" | "juegos";
 
 // ── Bot asistente (Cajero Estrella) ──────────────────────────────────────────
 type AssistantConfig = { extraInstructions: string; ignoreNumbers: string[]; ignoreGroupName: string };
-type AssistantState = { configured: boolean; enabled: boolean; provisioned: boolean; phoneNumber: string | null; updatedAt: string | null; config: AssistantConfig };
+type AssistantState = { configured: boolean; enabled: boolean; entitled?: boolean; provisioned: boolean; phoneNumber: string | null; updatedAt: string | null; config: AssistantConfig };
 type BotMetrics = {
   bot: { total: number; last24h: number; last7d: number; revenue: number; avgTicket: number; lastOrderAt: string | null };
 } | null;
@@ -153,6 +153,9 @@ function AssistantTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
   const [ignoreGroupName, setIgnoreGroupName] = useState("");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [configured, setConfigured] = useState(false);
+  // Entitlement del add-on (plan). En rollout suave el backend devuelve true, así
+  // que la pantalla no cambia; con enforce on y sin el módulo, mostramos upsell.
+  const [entitled, setEntitled] = useState(true);
   const [provisioned, setProvisioned] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<BotMetrics>(null);
@@ -168,6 +171,7 @@ function AssistantTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
       const { data } = await api.get<AssistantState>("/api/admin/whatsapp-assistant");
       setEnabled(data.enabled);
       setConfigured(data.configured);
+      setEntitled(data.entitled !== false);
       setProvisioned(!!data.provisioned);
       setPhoneNumber(data.phoneNumber || null);
       setUpdatedAt(data.updatedAt);
@@ -255,6 +259,22 @@ function AssistantTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
   };
 
   if (loading) return <Spinner label="Cargando asistente..." />;
+
+  // El bot es un add-on: si el plan no lo incluye (y el enforce está activo),
+  // mostramos el upsell en vez de la configuración.
+  if (!entitled) {
+    return (
+      <WtCard className="flex flex-col items-center gap-3 p-8 text-center">
+        <div className="grid h-14 w-14 place-items-center rounded-2xl" style={{ background: "var(--surf-2)", color: "var(--tx-mut)" }}>
+          <Bot size={26} />
+        </div>
+        <p className="font-syne text-lg font-bold text-tx">El Cajero Estrella no está en tu plan</p>
+        <p className="max-w-md text-sm text-tx-mut">
+          El asistente de pedidos por WhatsApp es un complemento. Contáctanos para activarlo en tu cuenta y empezar a recibir pedidos por chat automáticamente.
+        </p>
+      </WtCard>
+    );
+  }
 
   const b = metrics?.bot;
   const online = status?.reachable && status?.ready === true;
