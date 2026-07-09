@@ -127,6 +127,14 @@ interface PaymentModalProps {
   /** Muestra el toggle fijo "Imprimir ticket" en el footer (solo en la
    *  pantalla de cobro principal; el cobro desde el drawer no imprime). */
   showReceiptToggle?: boolean;
+  /** Cierre del cobro tras la pantalla de confirmación (botón "Finalizar").
+   *  Aquí el padre limpia el contexto y navega a inicio. Si no se pasa, la
+   *  pantalla de confirmación no se muestra y se cae al flujo histórico
+   *  (onConfirm cierra/navega por su cuenta). */
+  onFinish?: () => void;
+  /** Imprime el recibo YA PAGADO de la orden recién cobrada (botón "Imprimir
+   *  ticket" de la pantalla de confirmación). Recibe el método usado. */
+  onPrintReceipt?: (method: string) => void | Promise<void>;
 }
 
 interface DriverLite {
@@ -177,6 +185,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   onConfirmSplit,
   showReceiptToggle = false,
   employeeAccountEnabled = false,
+  onFinish,
+  onPrintReceipt,
 }) => {
   const [tab, setTab] = useState<Tab>("TOTAL");
   const [splitMode, setSplitMode] = useState<SplitMode>("EQUAL");
@@ -404,6 +414,17 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
+  // Pantalla de confirmación post-cobro (solo pestaña "Pago total"). Cuando
+  // queda seteada mostramos el "cambio a dar" + botones Imprimir/Finalizar en
+  // lugar del formulario. null = seguimos en el formulario de cobro. Debe
+  // declararse antes del early `return null` (Rules of Hooks).
+  const [paid, setPaid] = useState<
+    | { method: string; received: number; change: number; total: number }
+    | null
+  >(null);
+  const [printingReceipt, setPrintingReceipt] = useState(false);
+  const [receiptPrinted, setReceiptPrinted] = useState(false);
+
   // Reset al abrir (render-phase, ver CategoryModal). El `finally` de
   // handleConfirm también lo limpia; esto cubre cualquier reapertura del
   // mismo componente montado (SidebarTicket no desmonta el modal).
@@ -412,6 +433,10 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     setPrevOpenSubmit(isOpen);
     if (isOpen) {
       setSubmitting(false);
+      // Reabrir para una orden nueva → volver al formulario de cobro.
+      setPaid(null);
+      setPrintingReceipt(false);
+      setReceiptPrinted(false);
     }
   }
 
@@ -487,6 +512,13 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           accountPayload,
           paymentsPayload,
         );
+        // Éxito. Con onFinish disponible pasamos a la pantalla de confirmación
+        // (cambio a dar + Imprimir/Finalizar) en vez de cerrar de inmediato; el
+        // padre limpia/navega cuando el cajero toca "Finalizar". Sin onFinish
+        // (call-site legacy) el propio onConfirm ya cerró/navegó.
+        if (onFinish) {
+          setPaid({ method, received: cashReceived, change, total: grandTotal });
+        }
         return;
       }
       // SPLIT
@@ -523,9 +555,27 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
       } else {
         await onConfirm(method, tipPayload, driverId, printReceipt);
       }
+    } catch {
+      // El cobro falló (el padre ya notificó el error). No avanzamos a la
+      // pantalla de confirmación: el finally re-habilita para reintentar.
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
+    }
+  };
+
+  // Botón "Imprimir ticket" de la pantalla de confirmación. Best-effort: no
+  // bloquea el cierre y refleja el estado (imprimiendo / impreso) en el botón.
+  const handlePrintReceipt = async () => {
+    if (!onPrintReceipt || !paid || printingReceipt) return;
+    setPrintingReceipt(true);
+    try {
+      await onPrintReceipt(paid.method);
+      setReceiptPrinted(true);
+    } catch {
+      // El padre ya notifica; permitimos reintentar dejando receiptPrinted en false.
+    } finally {
+      setPrintingReceipt(false);
     }
   };
 
@@ -543,6 +593,121 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
       setDiscountSaving(false);
     }
   };
+
+  // ── PANTALLA DE CONFIRMACIÓN (post-cobro) ─────────────────────────────────
+  // Tras un cobro exitoso en "Pago total": el cambio a dar en grande + botones
+  // Imprimir ticket / Finalizar. El cajero ve de un golpe cuánto devolver.
+  if (paid) {
+    const methodLabels: Record<string, string> = {
+      CASH: "Efectivo",
+      CARD: "Tarjeta",
+      TRANSFER: "Transferencia",
+      COURTESY: "Cortesía",
+      MIXED: "Mixto",
+      EMPLOYEE_ACCOUNT: "A cuenta de empleado",
+    };
+    const isCashPaid = paid.method === "CASH";
+    const finish = onFinish ?? onClose;
+    return (
+      <div
+        className="fixed inset-0 z-[100] flex items-center justify-center p-0 lg:p-6"
+        style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
+      >
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-md" aria-hidden />
+        <div className="relative w-full h-full max-w-none rounded-none border-0 lg:w-full lg:max-w-lg lg:h-auto lg:rounded-[2.5rem] lg:border bg-[var(--bg)] border-white/10 shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+          <div
+            aria-hidden
+            className="absolute pointer-events-none -top-40 -left-40 w-[500px] h-[500px] rounded-full opacity-30 blur-[120px]"
+            style={{ background: "radial-gradient(circle, var(--brand-glow) 0%, transparent 70%)" }}
+          />
+
+          <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-8 pt-12 pb-8 text-center">
+            <div className="w-16 h-16 rounded-3xl bg-[var(--brand-soft)] border border-[var(--brand)] text-[var(--brand)] flex items-center justify-center mb-5">
+              <CheckCircle2 size={34} strokeWidth={2.5} />
+            </div>
+            <span className="text-[10px] font-semibold tracking-[0.25em] text-white/40 uppercase">
+              Orden #{orderNumber}
+              {tableName ? ` · Mesa ${tableName}` : ""}
+            </span>
+            <h2 className="text-2xl font-black tracking-tight text-white mt-1">
+              Cobro registrado
+            </h2>
+
+            {isCashPaid ? (
+              <div className="mt-8 w-full rounded-3xl bg-white/5 border border-white/10 p-7">
+                <span className="text-[11px] font-semibold tracking-[0.25em] text-[var(--brand)] uppercase">
+                  Cambio a dar
+                </span>
+                <div className="text-6xl sm:text-7xl font-black tabular-nums text-[var(--brand)] leading-none mt-2">
+                  ${paid.change.toFixed(2)}
+                </div>
+                <div className="flex items-center justify-between gap-4 mt-6 pt-5 border-t border-white/10 text-left">
+                  <div>
+                    <div className="text-[9px] font-semibold tracking-[0.2em] text-white/40 uppercase">
+                      Total
+                    </div>
+                    <div className="text-lg font-black tabular-nums text-white">
+                      ${paid.total.toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[9px] font-semibold tracking-[0.2em] text-white/40 uppercase">
+                      Recibido
+                    </div>
+                    <div className="text-lg font-black tabular-nums text-white">
+                      ${paid.received.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-8 w-full rounded-3xl bg-white/5 border border-white/10 p-7">
+                <span className="text-[11px] font-semibold tracking-[0.25em] text-white/40 uppercase">
+                  Total cobrado
+                </span>
+                <div className="text-5xl sm:text-6xl font-black tabular-nums text-white leading-none mt-2">
+                  ${paid.total.toFixed(2)}
+                </div>
+                <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--brand)] mt-4">
+                  {methodLabels[paid.method] ?? paid.method}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="relative z-10 p-5 sm:p-7 border-t border-white/5 bg-[var(--bg)] flex flex-col gap-3 shrink-0">
+            {onPrintReceipt && (
+              <button
+                type="button"
+                onClick={handlePrintReceipt}
+                disabled={printingReceipt}
+                className={`min-h-[56px] w-full rounded-2xl border flex items-center justify-center gap-2.5 font-semibold uppercase tracking-[0.14em] text-[11px] active:scale-[0.98] transition-all disabled:opacity-50 ${
+                  receiptPrinted
+                    ? "bg-[#88d66c]/15 border-[#88d66c]/50 text-[#88d66c]"
+                    : "bg-white/5 border-white/10 text-white/70"
+                }`}
+              >
+                <Printer size={18} strokeWidth={2.5} />
+                {printingReceipt
+                  ? "Imprimiendo…"
+                  : receiptPrinted
+                    ? "Ticket impreso · imprimir de nuevo"
+                    : "Imprimir ticket"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={finish}
+              className="min-h-[64px] h-16 w-full rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] font-black uppercase tracking-[0.14em] text-[11px] flex items-center justify-center gap-3 active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)]"
+            >
+              <CheckCircle2 size={20} strokeWidth={2.5} />
+              Finalizar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

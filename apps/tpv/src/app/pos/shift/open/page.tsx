@@ -2,6 +2,8 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
+import { usePrinters } from "@/hooks/usePrinters";
+import { openCashDrawer } from "@/lib/printer-tcp";
 import api from "@/lib/api";
 import { apiOrQueue } from "@/lib/offline";
 import { UtensilsCrossed, ArrowLeft, Users } from "lucide-react";
@@ -9,6 +11,7 @@ import { UtensilsCrossed, ArrowLeft, Users } from "lucide-react";
 const ShiftOpenPage = () => {
   const router = useRouter();
   const { currentEmployee, isLocked, logout } = useTPVAuth();
+  const { printers } = usePrinters();
   const [openingFloat, setOpeningFloat] = useState("");
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -73,6 +76,9 @@ const ShiftOpenPage = () => {
 
       if (res.ok) {
         localStorage.setItem("tpv-shift-open", "true");
+        // Abrir el cajón para colocar el fondo de caja. Best-effort: se dispara
+        // antes de navegar y no bloquea la entrada al POS si no hay CASHIER.
+        void openCashDrawer(printers).catch(() => {});
         router.replace("/pos/order-type");
         return;
       }

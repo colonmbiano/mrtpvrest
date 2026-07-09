@@ -271,6 +271,24 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     return () => { cancelled = true; clearInterval(id); };
   }, [mounted, isLocked, fetchShift]);
 
+  // Abre el cajón monedero tras un cobro que MUEVE efectivo (pago en efectivo,
+  // o mixto con una parte en efectivo). Best-effort y silencioso: si no hay
+  // impresora CASHIER con IP no interrumpe el cobro (a diferencia del botón
+  // manual del dropdown, que sí reporta el error). El cajón va físicamente
+  // conectado a la impresora de mostrador; con tarjeta/transferencia no se
+  // dispara para no abrirlo sin necesidad.
+  const openDrawerForCashPayment = (
+    method: string,
+    payments?: { method: string; amount: number }[],
+  ) => {
+    const isCash = (m?: string | null) => m === "CASH" || m === "CASH_ON_DELIVERY";
+    const involvesCash =
+      isCash(method) ||
+      (method === "MIXED" && Array.isArray(payments) && payments.some((p) => isCash(p.method)));
+    if (!involvesCash) return;
+    void openCashDrawer(printers).catch(() => {});
+  };
+
   const handleConfirmDrawerPayment = async (
     method: string,
     tip?: { percent: number; amount: number },
@@ -287,7 +305,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     if (method === "EMPLOYEE_ACCOUNT") {
       if (!account?.employeeId) {
         toast.error("Selecciona un empleado");
-        return;
+        throw new Error("empleado requerido");
       }
       try {
         await api.post(`/api/orders/${payOrder.id}/charge-to-employee`, {
@@ -300,13 +318,13 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           "No se pudo cargar a cuenta: " +
             (e?.response?.data?.error || e?.message || "fallo"),
         );
-        return;
+        // Propagamos para que el PaymentModal se quede en el formulario (no
+        // pase a la pantalla de "cambio/finalizar") y permita reintentar.
+        throw e instanceof Error ? e : new Error("cargo a cuenta falló");
       }
-      setPayOrder(null);
-      useActiveOrderStore.getState().clear();
-      useTicketStore.getState().clearActiveItems();
-      fetchOpenOrders();
-      router.replace("/pos/order-type");
+      // Éxito: NO navegamos aquí. El PaymentModal muestra la pantalla de
+      // confirmación (cambio + Imprimir/Finalizar); finishPayment() limpia y
+      // vuelve a inicio cuando el cajero toca "Finalizar".
       return;
     }
 
@@ -324,19 +342,37 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     );
     if (!res.ok) {
       toast.error("Error al cobrar: " + (res.error || ""));
-      return;
+      // Propagamos para que el modal no avance a la pantalla de cambio.
+      throw new Error(res.error || "cobro falló");
     }
     toast.success(res.queued ? "Cobro en cola · se registrará al volver la red" : "Cobro procesado");
-    // La cuenta quedó cerrada (PAID + DELIVERED): no debe seguir como ticket
-    // activo. Limpiamos el contexto y volvemos a la pantalla de inicio —
-    // mismo patrón que eliminar/mover/fusionar. Sin esto el cajero quedaba
-    // parado en el editor con la cuenta recién pagada todavía "abierta", lo
-    // que se leía como "no se cobró" (sobre todo al cobrar desde inicio).
+    // Cobro en efectivo/mixto → abrir el cajón (best-effort, no bloquea). Se
+    // dispara ya, antes de la pantalla de cambio, para que el cajero pueda
+    // guardar el efectivo y sacar el cambio.
+    openDrawerForCashPayment(method, payments);
+    // Éxito: NO limpiamos ni navegamos aquí. El PaymentModal pasa a la pantalla
+    // de "cambio a dar" con los botones Imprimir ticket / Finalizar; el cierre
+    // real (limpiar contexto + volver a inicio) ocurre en finishPayment().
+  };
+
+  // Cierre del cobro tras la pantalla de confirmación (botón "Finalizar" del
+  // PaymentModal). La cuenta ya quedó cerrada (PAID + DELIVERED): la sacamos del
+  // contexto activo y volvemos a inicio — mismo patrón que eliminar/mover.
+  const finishPayment = () => {
     setPayOrder(null);
     useActiveOrderStore.getState().clear();
     useTicketStore.getState().clearActiveItems();
     fetchOpenOrders();
     router.replace("/pos/order-type");
+  };
+
+  // Imprime el recibo YA PAGADO de la orden recién cobrada, desde el botón
+  // "Imprimir ticket" de la pantalla de cambio. Reusa handleReprintOrder pero
+  // fuerza paid=true y el método elegido (el snapshot local de payOrder todavía
+  // no refleja el PAID, así el ticket no sale como "pendiente de cobro").
+  const handlePrintPaidReceipt = async (paidMethod: string) => {
+    if (!payOrder) return;
+    await handleReprintOrder(payOrder, { paid: true, paymentMethod: paidMethod });
   };
 
   // FASE 12 · COBRO + IMPRESIÓN DE CUENTA DIVIDIDA (E2E)
@@ -435,6 +471,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         toast.error(`Error en el cobro: ${payRes.error || "fallo"}`, { id: toastId });
         return;
       }
+
+      // Cobro dividido en efectivo/mixto → abrir el cajón (best-effort).
+      openDrawerForCashPayment(method);
 
       // Mensaje final compuesto según el outcome de impresión.
       const ticketsOk = printRes.tickets || 0;
@@ -683,7 +722,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // así que re-imprimir el ticket de cuenta tiene que disparar desde la
   // tablet. printCustomerReceipt() filtra por type='CASHIER' (o
   // stations:[CASHIER]) y manda solo a las impresoras de mostrador.
-  const handleReprintOrder = async (o: any) => {
+  const handleReprintOrder = async (
+    o: any,
+    opts?: { paid?: boolean; paymentMethod?: string },
+  ) => {
     try {
       const full = o.items ? o : await fetchFullOrder(o);
       const items = orderItemsToTicketItems(full.items || []);
@@ -721,9 +763,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         // Envío (DELIVERY): desglosado como renglón "Envío:" (ya viene en total).
         deliveryFee: Number(full.deliveryFee ?? 0),
         total: Number(full.total ?? subtotalCalc),
-        paymentMethod: full.paymentMethod || null,
+        paymentMethod: opts?.paymentMethod ?? full.paymentMethod ?? null,
         // Reimpresión de la cuenta: "Pendiente de cobro" si aún no está pagada.
-        paid: full.paymentStatus === "PAID",
+        // El caller puede forzar paid=true (recibo recién cobrado, cuyo snapshot
+        // local aún no trae el estado PAID).
+        paid: opts?.paid ?? full.paymentStatus === "PAID",
       });
 
       if (res.ok > 0 && res.failed.length === 0) {
@@ -1637,6 +1681,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           }))}
           onConfirm={handleConfirmDrawerPayment}
           onConfirmSplit={handleConfirmSplit}
+          onFinish={finishPayment}
+          onPrintReceipt={handlePrintPaidReceipt}
           employeeAccountEnabled={tpvConfig.employeeAccountEnabled}
         />
       )}
@@ -1763,6 +1809,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       {showShift && currentEmployee && (
         <ShiftModal
           employee={currentEmployee}
+          onShiftOpened={() => { void openCashDrawer(printers).catch(() => {}); }}
           onClose={() => {
             setShowShift(false);
             fetchShift();
