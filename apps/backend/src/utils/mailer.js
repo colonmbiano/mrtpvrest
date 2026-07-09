@@ -274,4 +274,59 @@ function welcomeEmailHtml(ownerName, tenantName, downloadsUrl) {
   `
 }
 
-module.exports = { sendEmail, parseEmailList, verificationEmailHtml, trialReminderHtml, trialExpiredHtml, welcomeEmailHtml, cashCutEmailHtml, orderPaidEmailHtml }
+// Restablecer contraseña (forgot/reset-password). Va al usuario que lo solicitó.
+function passwordResetEmailHtml(userName, resetUrl) {
+  return `
+    <div style="font-family:'DM Sans',Inter,sans-serif;max-width:560px;margin:0 auto;background:#080810;color:#f0f0f8;border-radius:16px;overflow:hidden;border:1px solid #1e1e30;">
+      <div style="background:linear-gradient(135deg,#7c3aed,#9f67ff);padding:24px 32px;">
+        <h1 style="margin:0;font-size:20px;font-weight:900;letter-spacing:-0.5px;color:#fff;">MRTPVREST</h1>
+      </div>
+      <div style="padding:32px;">
+        <p style="font-size:24px;font-weight:900;margin:0 0 8px;">Hola${userName ? ', ' + userName : ''} 👋</p>
+        <p style="color:#6b6b90;margin:0 0 8px;">
+          Recibimos una solicitud para restablecer la contraseña de tu cuenta. Haz clic en el botón para elegir una nueva.
+        </p>
+        <p style="color:#4a4a6a;font-size:13px;margin:0 0 32px;">
+          Este enlace expira en <strong style="color:#f0f0f8">1 hora</strong> y solo puede usarse una vez.
+        </p>
+        <a href="${resetUrl}"
+          style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#9f67ff);color:#fff;padding:16px 32px;border-radius:12px;font-weight:900;text-decoration:none;font-size:15px;letter-spacing:-0.3px;box-shadow:0 4px 20px rgba(124,58,237,0.4);">
+          RESTABLECER CONTRASEÑA →
+        </a>
+        <p style="color:#4a4a6a;font-size:12px;margin:32px 0 0;">
+          Si no solicitaste esto, ignora este mensaje: tu contraseña no cambiará.
+        </p>
+      </div>
+      <div style="padding:16px 32px;border-top:1px solid #1e1e30;color:#4a4a6a;font-size:12px;">
+        MRTPVREST · Sistema de punto de venta para restaurantes
+      </div>
+    </div>
+  `
+}
+
+// Alerta interna de plataforma dirigida al SUPER_ADMIN (nuevo tenant, error
+// crítico, etc.). `lines` es una lista de strings; se escapan para evitar HTML.
+function platformAlertHtml({ title, lines = [], ctaUrl = null, ctaLabel = null }) {
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const rows = (Array.isArray(lines) ? lines : [lines])
+    .filter(Boolean)
+    .map((l) => `<p style="margin:0 0 8px;color:#334155;font-size:14px;line-height:1.5;">${esc(l)}</p>`)
+    .join('')
+  return `
+    <div style="font-family:'DM Sans',Inter,Arial,sans-serif;max-width:560px;margin:0 auto;background:#ffffff;color:#0f172a;border-radius:20px;overflow:hidden;border:1px solid #e2e8f0;">
+      <div style="background:linear-gradient(135deg,#7c3aed,#9f67ff);padding:22px 32px;">
+        <h1 style="margin:0;font-size:16px;font-weight:900;letter-spacing:-0.3px;color:#fff;">${esc(title) || 'Notificación de plataforma'}</h1>
+        <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:12px;">MRTPVREST · Central SaaS</p>
+      </div>
+      <div style="padding:28px 32px;">
+        ${rows || '<p style="margin:0;color:#64748b;font-size:14px;">Sin detalles.</p>'}
+        ${ctaUrl ? `<a href="${ctaUrl}" style="display:inline-block;margin-top:18px;background:#0f172a;color:#fff;padding:12px 24px;border-radius:12px;font-weight:800;text-decoration:none;font-size:14px;">${esc(ctaLabel) || 'Abrir'} →</a>` : ''}
+      </div>
+      <div style="padding:16px 32px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:12px;">
+        MRTPVREST · Aviso automático a administración de plataforma
+      </div>
+    </div>
+  `
+}
+
+module.exports = { sendEmail, parseEmailList, verificationEmailHtml, trialReminderHtml, trialExpiredHtml, welcomeEmailHtml, cashCutEmailHtml, orderPaidEmailHtml, passwordResetEmailHtml, platformAlertHtml }

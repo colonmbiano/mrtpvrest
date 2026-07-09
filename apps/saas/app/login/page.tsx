@@ -143,6 +143,15 @@ export default function SaaSLoginPage() {
             >
               {loading ? "Verificando..." : "Ingresar a la Central →"}
             </button>
+
+            <div style={{ textAlign: "center", marginTop: 2 }}>
+              <a href="/forgot-password" style={{
+                fontSize: 12, fontWeight: 600, color: "var(--muted, #6b6b90)",
+                textDecoration: "none"
+              }}>
+                ¿Olvidaste tu contraseña?
+              </a>
+            </div>
           </form>
         </div>
 

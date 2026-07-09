@@ -496,6 +496,11 @@ model User {
   avatarUrl    String?
   isActive     Boolean @default(true)
 
+  // Recuperación de contraseña por email (forgot/reset-password). Token de un
+  // solo uso + expiry corta (1h). Mismo patrón que emailVerificationToken del Tenant.
+  passwordResetToken  String?   @unique
+  passwordResetExpiry DateTime?
+
   addresses     Address[]
   orders        Order[]
   loyalty       LoyaltyAccount[]

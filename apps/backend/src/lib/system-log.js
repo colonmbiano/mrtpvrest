@@ -61,11 +61,26 @@ async function recordSystemLog({
   }
 }
 
-// Stub de notificación a admin. Hoy: log estructurado.
-// Mañana: integración con Resend (email), Slack webhook, Telegram bot, etc.
+// Notificación a admin de plataforma ante errores CRITICAL: log estructurado
+// + email al SUPER_ADMIN (best-effort). El require es lazy para evitar cargar
+// el mailer/Prisma en tests que sólo ejercitan recordSystemLog.
 async function notifyAdmin({ message, metadata }) {
   log.error('CRITICAL_ALERT', { message, metadata });
-  // Hook future: await sendEmail({ to: process.env.ADMIN_ALERT_EMAIL, ... })
+  try {
+    const { notifyPlatformAdmin } = require('./platform-notify');
+    const lines = [
+      String(message),
+      metadata?.path ? `Ruta: ${metadata.method || ''} ${metadata.path}`.trim() : null,
+      metadata?.tenantId ? `Tenant: ${metadata.tenantId}` : null,
+    ].filter(Boolean);
+    await notifyPlatformAdmin({
+      subject: '🚨 Error crítico en MRTPVREST',
+      title: 'Error crítico del sistema',
+      lines,
+    });
+  } catch (err) {
+    log.error('notify_email_failed', { err: err.message });
+  }
   return true;
 }
 
