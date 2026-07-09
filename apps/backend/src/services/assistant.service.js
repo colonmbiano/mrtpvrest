@@ -59,7 +59,7 @@ const tools = [
             description: 'HOY = hoy, 7D = últimos 7 días, 30D = últimos 30 días, 90D = últimos 90 días, AÑO = año en curso, HIST = todo el historial.',
           },
           limit: {
-            type: 'integer',
+            type: ['integer', 'null'],
             minimum: 1,
             maximum: 20,
             description: 'Cantidad de productos a devolver (1–20, por defecto 5).',
@@ -103,11 +103,11 @@ const tools = [
         type: 'object',
         properties: {
           driverName: {
-            type: 'string',
+            type: ['string', 'null'],
             description: 'Nombre o parte del nombre del repartidor (p. ej. "Pablo"). Omitir para ver a todos los repartidores.',
           },
           date: {
-            type: 'string',
+            type: ['string', 'null'],
             description: 'Fecha en formato YYYY-MM-DD (día natural, hora de México). Omitir para usar el día de hoy.',
           },
         },
