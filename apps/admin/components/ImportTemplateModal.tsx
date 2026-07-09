@@ -28,11 +28,12 @@ const u = (x?: string) => (x ? UNIT_LABEL[x] || x : "");
 
 function Chip({ label, tone }: { label: string; tone: "new" | "ok" | "warn" }) {
   const colors = {
-    new: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-    ok: "bg-white/5 text-gray-400 border-white/10",
-    warn: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    new: { color: "var(--ok)", background: "var(--ok-soft)" },
+    ok: { color: "var(--tx-mut)", background: "var(--surf-2)" },
+    warn: { color: "var(--warn)", background: "var(--warn-soft)" },
   } as const;
-  return <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${colors[tone]}`}>{label}</span>;
+  const s = colors[tone];
+  return <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ color: s.color, background: s.background }}>{label}</span>;
 }
 
 export default function ImportTemplateModal({ mode, open, onClose, onDone }: {
@@ -94,60 +95,62 @@ export default function ImportTemplateModal({ mode, open, onClose, onDone }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={close}>
-      <div className="w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl border flex flex-col"
-        style={{ background: "var(--surf)", borderColor: "var(--border)" }} onClick={(e) => e.stopPropagation()}>
+      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-ds-xl border"
+        style={{ background: "var(--surf-1)", borderColor: "var(--bd-1)" }} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: "var(--border)" }}>
-          <h2 className="font-syne text-xl font-black" style={{ color: "var(--text)" }}>{title}</h2>
-          <button onClick={close} className="text-gray-500 hover:text-white text-xl leading-none">✕</button>
+        <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: "var(--bd-1)" }}>
+          <h2 className="font-display text-xl font-black" style={{ color: "var(--tx-hi)" }}>{title}</h2>
+          <button onClick={close} className="text-xl leading-none text-tx-mut transition-colors hover:text-tx-hi">✕</button>
         </div>
 
         {/* Body */}
-        <div className="p-5 overflow-y-auto">
+        <div className="overflow-y-auto p-5">
           {!hasPreview && !result && (
-            <div className="text-center py-8">
-              <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
+            <div className="py-8 text-center">
+              <p className="mb-4 text-sm" style={{ color: "var(--tx-mut)" }}>
                 Sube la plantilla <b>.xlsx</b> que descargaste y editaste. Te mostraremos una vista previa antes de guardar nada.
               </p>
               <button onClick={() => fileRef.current?.click()} disabled={loading}
-                className="px-5 py-3 rounded-xl text-sm font-black bg-orange-500 text-white disabled:opacity-50">
+                className="rounded-ds-md px-5 py-3 text-sm font-black text-white disabled:opacity-50"
+                style={{ background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", color: "var(--accent-contrast)" }}>
                 {loading ? "Leyendo archivo…" : "📤 Seleccionar archivo .xlsx"}
               </button>
               <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={handleFile} />
             </div>
           )}
 
-          {error && <p className="text-sm text-red-400 mb-3 text-center">{error}</p>}
+          {error && <p className="mb-3 text-center text-sm text-err">{error}</p>}
           {result && (
-            <div className="text-center py-8">
-              <p className="text-emerald-400 font-bold mb-4">✓ {result}</p>
-              <button onClick={close} className="px-5 py-2 rounded-xl text-sm font-bold bg-white text-black">Cerrar</button>
+            <div className="py-8 text-center">
+              <p className="mb-4 font-bold text-ok">✓ {result}</p>
+              <button onClick={close} className="rounded-ds-md px-5 py-2 text-sm font-bold"
+                style={{ background: "var(--surf-2)", color: "var(--tx-hi)", border: "1px solid var(--bd-2)" }}>Cerrar</button>
             </div>
           )}
 
           {/* PREVIEW INSUMOS */}
           {previewI && (
             <div>
-              <div className="flex gap-3 mb-3 text-xs">
+              <div className="mb-3 flex gap-3 text-xs">
                 <Chip label={`${previewI.summary.nuevos} nuevos`} tone="new" />
                 <Chip label={`${previewI.summary.actualizar} a actualizar`} tone="ok" />
-                <span className="text-gray-500">de {previewI.summary.total} insumos</span>
+                <span className="text-tx-mut">de {previewI.summary.total} insumos</span>
               </div>
-              <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--border)" }}>
+              <div className="overflow-hidden rounded-ds-md border" style={{ borderColor: "var(--bd-1)" }}>
                 <table className="w-full text-xs">
-                  <thead><tr style={{ background: "var(--surf2)" }}>
+                  <thead><tr style={{ background: "var(--surf-2)" }}>
                     {["Insumo", "Tipo", "Unidad", "Costo/u", "Stock", ""].map((h) => (
-                      <th key={h} className="px-3 py-2 text-left font-bold uppercase" style={{ color: "var(--muted)" }}>{h}</th>
+                      <th key={h} className="px-3 py-2 text-left font-bold uppercase" style={{ color: "var(--tx-mut)" }}>{h}</th>
                     ))}
                   </tr></thead>
                   <tbody>
                     {previewI.insumos.map((it, i) => (
-                      <tr key={i} className="border-t" style={{ borderColor: "var(--border)" }}>
-                        <td className="px-3 py-1.5" style={{ color: "var(--text)" }}>{it.name}</td>
-                        <td className="px-3 py-1.5 text-gray-500">{it.type || "—"}</td>
-                        <td className="px-3 py-1.5 text-gray-500">{u(it.baseUnit)}</td>
-                        <td className="px-3 py-1.5 text-gray-400">${(it.cost ?? 0).toFixed(3)}</td>
-                        <td className="px-3 py-1.5 text-gray-500">{it.stock ?? "—"}</td>
+                      <tr key={i} className="border-t" style={{ borderColor: "var(--bd-1)" }}>
+                        <td className="px-3 py-1.5" style={{ color: "var(--tx)" }}>{it.name}</td>
+                        <td className="px-3 py-1.5 text-tx-mut">{it.type || "—"}</td>
+                        <td className="px-3 py-1.5 text-tx-mut">{u(it.baseUnit)}</td>
+                        <td className="px-3 py-1.5 text-tx-mut">${(it.cost ?? 0).toFixed(3)}</td>
+                        <td className="px-3 py-1.5 text-tx-mut">{it.stock ?? "—"}</td>
                         <td className="px-3 py-1.5">{it.status === "new" ? <Chip label="NUEVO" tone="new" /> : <Chip label="ACTUALIZA" tone="ok" />}</td>
                       </tr>
                     ))}
@@ -160,26 +163,26 @@ export default function ImportTemplateModal({ mode, open, onClose, onDone }: {
           {/* PREVIEW RECETAS */}
           {previewR && (
             <div>
-              <div className="flex flex-wrap gap-2 mb-3 text-xs">
+              <div className="mb-3 flex flex-wrap gap-2 text-xs">
                 <Chip label={`${previewR.summary.platos} platillos`} tone="ok" />
                 {previewR.summary.platosSinMatch > 0 && <Chip label={`${previewR.summary.platosSinMatch} sin coincidencia`} tone="warn" />}
                 <Chip label={`${previewR.summary.subrecetas} subrecetas`} tone="ok" />
                 {previewR.summary.ingredientesNuevos > 0 && <Chip label={`${previewR.summary.ingredientesNuevos} insumos nuevos`} tone="new" />}
                 {previewR.summary.subrecetasNuevas > 0 && <Chip label={`${previewR.summary.subrecetasNuevas} subrecetas nuevas`} tone="new" />}
               </div>
-              <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+              <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
                 {previewR.platos.map((d, i) => (
-                  <div key={i} className="rounded-xl border p-3" style={{ borderColor: "var(--border)", background: "var(--surf2)" }}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-bold text-sm" style={{ color: "var(--text)" }}>{d.name}</span>
+                  <div key={i} className="rounded-ds-md border p-3" style={{ borderColor: "var(--bd-1)", background: "var(--surf-2)" }}>
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className="text-sm font-bold" style={{ color: "var(--tx)" }}>{d.name}</span>
                       {d.status === "no-match"
                         ? <Chip label="NO ESTÁ EN EL MENÚ — SE OMITE" tone="warn" />
                         : <Chip label="OK" tone="ok" />}
-                      {d.priceMesa != null && <span className="text-[11px] text-gray-500 ml-auto">${d.priceMesa} mesa</span>}
+                      {d.priceMesa != null && <span className="ml-auto text-[11px] text-tx-mut">${d.priceMesa} mesa</span>}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {d.items.map((it, j) => (
-                        <span key={j} className="text-[11px] px-2 py-0.5 rounded-md border" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+                        <span key={j} className="rounded-ds-sm border px-2 py-0.5 text-[11px]" style={{ borderColor: "var(--bd-1)", color: "var(--tx-mut)" }}>
                           {it.component} {it.qty}{u(it.unit)}{it.isSub ? " (sub)" : ""}
                           {it.status?.startsWith("new") ? " 🆕" : ""}
                         </span>
@@ -188,15 +191,15 @@ export default function ImportTemplateModal({ mode, open, onClose, onDone }: {
                   </div>
                 ))}
                 {previewR.subrecetas.map((s, i) => (
-                  <div key={`s${i}`} className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-bold text-sm text-amber-400">{s.name}</span>
+                  <div key={`s${i}`} className="rounded-ds-md border p-3" style={{ borderColor: "var(--bd-1)" }}>
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className="text-sm font-bold text-warn">{s.name}</span>
                       <Chip label={s.status === "new" ? "SUBRECETA NUEVA" : "ACTUALIZA"} tone={s.status === "new" ? "new" : "ok"} />
-                      {s.yieldQty != null && <span className="text-[11px] text-gray-500 ml-auto">rinde {s.yieldQty}{u(s.yieldUnit)}</span>}
+                      {s.yieldQty != null && <span className="ml-auto text-[11px] text-tx-mut">rinde {s.yieldQty}{u(s.yieldUnit)}</span>}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {s.items.map((it, j) => (
-                        <span key={j} className="text-[11px] px-2 py-0.5 rounded-md border" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+                        <span key={j} className="rounded-ds-sm border px-2 py-0.5 text-[11px]" style={{ borderColor: "var(--bd-1)", color: "var(--tx-mut)" }}>
                           {it.component} {it.qty}{u(it.unit)}{it.isSub ? " (sub)" : ""}{it.status?.startsWith("new") ? " 🆕" : ""}
                         </span>
                       ))}
@@ -210,12 +213,13 @@ export default function ImportTemplateModal({ mode, open, onClose, onDone }: {
 
         {/* Footer */}
         {hasPreview && (
-          <div className="px-5 py-4 border-t flex items-center justify-between gap-3" style={{ borderColor: "var(--border)" }}>
-            <button onClick={reset} className="px-4 py-2 rounded-xl text-sm font-bold border" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+          <div className="flex items-center justify-between gap-3 border-t px-5 py-4" style={{ borderColor: "var(--bd-1)" }}>
+            <button onClick={reset} className="rounded-ds-md border px-4 py-2 text-sm font-bold" style={{ borderColor: "var(--bd-2)", color: "var(--tx-mut)" }}>
               ← Otro archivo
             </button>
             <button onClick={confirm} disabled={confirming}
-              className="px-5 py-2 rounded-xl text-sm font-black bg-emerald-500 text-black disabled:opacity-50">
+              className="rounded-ds-md px-5 py-2 text-sm font-black text-white disabled:opacity-50"
+              style={{ background: "var(--ok)" }}>
               {confirming ? "Guardando…" : "✓ Confirmar e importar"}
             </button>
           </div>

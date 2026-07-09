@@ -1,15 +1,28 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import {
-  MapPin, Megaphone, Home, RotateCw, X, Crosshair, Navigation,
-  Bike, Route as RouteIcon, Package, Circle,
+  MapPin, Megaphone, Home, RotateCw, Crosshair, Navigation,
+  Route as RouteIcon, Package, Circle,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
-  WtScreen, PageHeader, WtCard, SectionLabel, Pill, PrimaryBtn, Avatar,
-} from "@/components/warmtech";
+  PageShell, PageHeader, Card, SectionLabel, Pill, Button, Avatar,
+  Modal, Field, Input, Select, Textarea, useToast,
+} from "@/components/ds";
+
+/* Lee un color del tema desde las CSS vars canónicas para inyectarlo en el
+   HTML de los marcadores de Leaflet (divIcon), que no acepta CSS vars.
+   Así los marcadores respetan tema/acento sin hex hardcodeado en el fuente;
+   el fallback es una palabra clave CSS (solo aplica en SSR, nunca en el
+   navegador donde Leaflet corre). */
+function markerColor(name: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
 
 export default function RastreoPage() {
+  const toast = useToast();
   const [liveData, setLiveData]       = useState<any>(null);
   const [selected, setSelected]       = useState<any>(null);
   const [routes, setRoutes]           = useState<any[]>([]);
@@ -31,7 +44,7 @@ export default function RastreoPage() {
   const [sendingNotice, setSendingNotice] = useState(false);
 
   async function sendNotice() {
-    if (!noticeBody.trim()) { alert("Escribe un mensaje"); return; }
+    if (!noticeBody.trim()) { toast.error("Escribe un mensaje"); return; }
     setSendingNotice(true);
     try {
       await api.post("/api/delivery/notices", {
@@ -40,8 +53,8 @@ export default function RastreoPage() {
         body: noticeBody.trim(),
       });
       setShowNotice(false); setNoticeTitle(""); setNoticeBody(""); setNoticeTarget("all");
-      alert("Aviso enviado");
-    } catch (err: any) { alert(err.response?.data?.error || "Error al enviar"); }
+      toast.success("Aviso enviado");
+    } catch (err: any) { toast.error(err.response?.data?.error || "Error al enviar"); }
     finally { setSendingNotice(false); }
   }
 
@@ -81,7 +94,7 @@ export default function RastreoPage() {
 
   // Capturar ubicación actual del admin (TPV principal)
   async function captureCurrentLocation() {
-    if (!navigator.geolocation) { alert("Tu navegador no soporta geolocalización"); return; }
+    if (!navigator.geolocation) { toast.error("Tu navegador no soporta geolocalización"); return; }
     setSavingOrigin(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -93,11 +106,11 @@ export default function RastreoPage() {
           setManualLat(String(lat));
           setManualLng(String(lng));
           updateOriginMarker(lat, lng);
-          alert(`Origen guardado: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-        } catch { alert("Error al guardar"); }
+          toast.success(`Origen guardado: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+        } catch { toast.error("Error al guardar"); }
         finally { setSavingOrigin(false); }
       },
-      () => { alert("No se pudo obtener la ubicación. Verifica los permisos."); setSavingOrigin(false); },
+      () => { toast.error("No se pudo obtener la ubicación. Verifica los permisos."); setSavingOrigin(false); },
       { enableHighAccuracy: true }
     );
   }
@@ -105,15 +118,15 @@ export default function RastreoPage() {
   async function saveManualOrigin() {
     const lat = parseFloat(manualLat);
     const lng = parseFloat(manualLng);
-    if (isNaN(lat) || isNaN(lng)) { alert("Coordenadas inválidas"); return; }
+    if (isNaN(lat) || isNaN(lng)) { toast.error("Coordenadas inválidas"); return; }
     setSavingOrigin(true);
     try {
       await api.put("/api/gps/origin", { lat, lng });
       setOrigin({ lat, lng });
       updateOriginMarker(lat, lng);
       if (mapRef.current) mapRef.current.setView([lat, lng], 15);
-      alert("Origen actualizado");
-    } catch { alert("Error al guardar"); }
+      toast.success("Origen actualizado");
+    } catch { toast.error("Error al guardar"); }
     finally { setSavingOrigin(false); }
   }
 
@@ -121,8 +134,9 @@ export default function RastreoPage() {
     if (!mapRef.current || !leafletRef.current) return;
     const L = leafletRef.current;
     if (originMarkRef.current) originMarkRef.current.remove();
+    const originBg = markerColor("--warn", "orange");
     const icon = L.divIcon({
-      html: `<div style="background:#f5a623;border:3px solid #000;border-radius:8px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.5);">🏠</div>`,
+      html: `<div style="background:${originBg};border:3px solid black;border-radius:8px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.5);">🏠</div>`,
       className: "", iconSize:[28,28], iconAnchor:[14,14]
     });
     originMarkRef.current = L.marker([lat, lng], { icon })
@@ -168,10 +182,14 @@ export default function RastreoPage() {
     // Origen
     if (liveData.origin) updateOriginMarker(liveData.origin.lat, liveData.origin.lng);
 
+    // Colores del tema para los marcadores (leídos de CSS vars).
+    const onlineColor = markerColor("--ok", "green");
+    const offlineColor = markerColor("--tx-mut", "gray");
+
     // Repartidores
     liveData.drivers?.forEach((d: any) => {
       if (!d.location) return;
-      const color = d.online ? "#22c55e" : "#6b7280";
+      const color = d.online ? onlineColor : offlineColor;
       const icon = L.divIcon({
         html: `<div style="background:${color};border:3px solid white;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 2px 8px rgba(0,0,0,0.4);">🛵</div>`,
         className: "", iconSize:[36,36], iconAnchor:[18,18]
@@ -189,11 +207,14 @@ export default function RastreoPage() {
     const L = leafletRef.current;
     if (polyRef.current) polyRef.current.remove();
     const latlngs = points.map(p => [p.lat, p.lng]);
-    polyRef.current = L.polyline(latlngs, { color:"#f5a623", weight:4, opacity:0.85 }).addTo(mapRef.current);
+    const lineColor = markerColor("--warn", "orange");
+    polyRef.current = L.polyline(latlngs, { color: lineColor, weight:4, opacity:0.85 }).addTo(mapRef.current);
     mapRef.current.fitBounds(polyRef.current.getBounds(), { padding:[50,50] });
     if (latlngs.length > 0) {
-      const startIcon = L.divIcon({ html:'<div style="background:#22c55e;border-radius:50%;width:14px;height:14px;border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>', className:"", iconSize:[14,14], iconAnchor:[7,7]});
-      const endIcon   = L.divIcon({ html:'<div style="background:#ef4444;border-radius:50%;width:14px;height:14px;border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>', className:"", iconSize:[14,14], iconAnchor:[7,7]});
+      const startColor = markerColor("--ok", "green");
+      const endColor = markerColor("--err", "red");
+      const startIcon = L.divIcon({ html:`<div style="background:${startColor};border-radius:50%;width:14px;height:14px;border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`, className:"", iconSize:[14,14], iconAnchor:[7,7]});
+      const endIcon   = L.divIcon({ html:`<div style="background:${endColor};border-radius:50%;width:14px;height:14px;border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`, className:"", iconSize:[14,14], iconAnchor:[7,7]});
       L.marker(latlngs[0], { icon: startIcon }).addTo(mapRef.current).bindPopup("🟢 Inicio de ruta");
       L.marker(latlngs[latlngs.length-1], { icon: endIcon }).addTo(mapRef.current).bindPopup("🔴 Fin de ruta");
     }
@@ -215,28 +236,25 @@ export default function RastreoPage() {
   const onlineCount = liveData?.drivers?.filter((d:any) => d.online).length || 0;
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Logística en vivo"
         title="Rastreo GPS"
         subtitle={`${onlineCount} en línea · actualiza cada 30s`}
         actions={
           <>
-            <PrimaryBtn full={false} ghost icon={Megaphone} onClick={() => setShowNotice(true)}>
-              Enviar aviso
-            </PrimaryBtn>
-            <PrimaryBtn
-              full={false}
-              ghost={!showOriginPanel}
+            <Button variant="secondary" icon={Megaphone} onClick={() => setShowNotice(true)}>Enviar aviso</Button>
+            <Button
+              variant={showOriginPanel ? "primary" : "secondary"}
               icon={Home}
               onClick={() => setShowOriginPanel(p => !p)}
             >
               Configurar origen
-            </PrimaryBtn>
+            </Button>
             <button
               type="button" onClick={fetchLive} aria-label="Refrescar"
-              className="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-tx-mut"
-              style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-ds-md text-tx-mut"
+              style={{ background: "var(--surf-1)", border: "1px solid var(--bd-2)" }}
             >
               <RotateCw size={17} />
             </button>
@@ -253,24 +271,24 @@ export default function RastreoPage() {
         <div className="ml-auto flex gap-2">
           <button
             type="button" onClick={() => setShowNotice(true)} aria-label="Enviar aviso"
-            className="grid h-10 w-10 place-items-center rounded-xl"
-            style={{ background: "var(--iris-soft)", color: "var(--brand-primary)" }}
+            className="grid h-10 w-10 place-items-center rounded-ds-md"
+            style={{ background: "var(--accent-soft)", color: "var(--brand-primary)" }}
           >
             <Megaphone size={17} />
           </button>
           <button
             type="button" onClick={() => setShowOriginPanel(p => !p)} aria-label="Configurar origen"
-            className="grid h-10 w-10 place-items-center rounded-xl"
+            className="grid h-10 w-10 place-items-center rounded-ds-md"
             style={{
-              background: showOriginPanel ? "var(--brand-primary)" : "var(--iris-soft)",
-              color: showOriginPanel ? "#fffaf4" : "var(--brand-primary)",
+              background: showOriginPanel ? "var(--brand-primary)" : "var(--accent-soft)",
+              color: showOriginPanel ? "var(--accent-contrast)" : "var(--brand-primary)",
             }}
           >
             <Home size={17} />
           </button>
           <button
             type="button" onClick={fetchLive} aria-label="Refrescar"
-            className="grid h-10 w-10 place-items-center rounded-xl text-tx-mut"
+            className="grid h-10 w-10 place-items-center rounded-ds-md text-tx-mut"
             style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
           >
             <RotateCw size={17} />
@@ -280,19 +298,18 @@ export default function RastreoPage() {
 
       {/* Panel configurar origen */}
       {showOriginPanel && (
-        <WtCard className="mb-4 p-4 md:p-5">
+        <Card className="mb-4 p-4 md:p-5">
           <div className="flex flex-col gap-5 md:flex-row md:flex-wrap md:items-start">
             {/* Botón capturar ubicación actual */}
             <div>
               <SectionLabel>Desde este dispositivo (TPV)</SectionLabel>
-              <PrimaryBtn
-                full={false}
+              <Button
                 icon={Crosshair}
                 onClick={captureCurrentLocation}
                 disabled={savingOrigin}
               >
                 {savingOrigin ? "Obteniendo…" : "Usar mi ubicación actual"}
-              </PrimaryBtn>
+              </Button>
               <p className="mt-2 text-[11px] text-tx-mut">
                 Abre desde el dispositivo del TPV para mayor precisión
               </p>
@@ -302,29 +319,21 @@ export default function RastreoPage() {
             <div className="flex-1" style={{ minWidth: "280px" }}>
               <SectionLabel>O ingresar coordenadas manualmente</SectionLabel>
               <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <label className="mb-1 block text-[11px] text-tx-mut">Latitud</label>
-                  <input value={manualLat} onChange={e => setManualLat(e.target.value)}
-                    placeholder="19.2826"
-                    className="min-h-11 w-full rounded-xl px-3 text-sm outline-none"
-                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
-                </div>
-                <div className="flex-1">
-                  <label className="mb-1 block text-[11px] text-tx-mut">Longitud</label>
-                  <input value={manualLng} onChange={e => setManualLng(e.target.value)}
-                    placeholder="-99.6557"
-                    className="min-h-11 w-full rounded-xl px-3 text-sm outline-none"
-                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
-                </div>
-                <PrimaryBtn full={false} ghost onClick={saveManualOrigin} disabled={savingOrigin}>
+                <Field label="Latitud" className="mb-0 flex-1">
+                  <Input value={manualLat} onChange={e => setManualLat(e.target.value)} placeholder="19.2826" />
+                </Field>
+                <Field label="Longitud" className="mb-0 flex-1">
+                  <Input value={manualLng} onChange={e => setManualLng(e.target.value)} placeholder="-99.6557" />
+                </Field>
+                <Button variant="secondary" onClick={saveManualOrigin} disabled={savingOrigin}>
                   {savingOrigin ? "…" : "Guardar"}
-                </PrimaryBtn>
+                </Button>
               </div>
             </div>
 
             {/* Origen actual */}
             {origin && (
-              <div className="rounded-xl px-4 py-3"
+              <div className="rounded-ds-md px-4 py-3"
                 style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
                 <div className="mb-1 font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Origen actual</div>
                 <div className="font-mono text-xs text-tx">{origin.lat.toFixed(6)}</div>
@@ -338,7 +347,7 @@ export default function RastreoPage() {
               </div>
             )}
           </div>
-        </WtCard>
+        </Card>
       )}
 
       {/* Layout principal: panel + mapa */}
@@ -346,7 +355,7 @@ export default function RastreoPage() {
         {/* Panel izquierdo */}
         <div className="flex flex-col gap-4">
           {/* Repartidores */}
-          <WtCard className="p-3">
+          <Card className="p-3">
             <SectionLabel>Repartidores</SectionLabel>
             {loading ? (
               <div className="py-4 text-center text-xs text-tx-mut">Cargando…</div>
@@ -365,12 +374,12 @@ export default function RastreoPage() {
                         await fetchRoutes(d.driver.id);
                         if (d.location && mapRef.current) mapRef.current.setView([d.location.lat, d.location.lng], 15);
                       }}
-                      className="flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 text-left transition-colors"
+                      className="flex min-h-14 w-full items-center gap-3 rounded-ds-lg px-3 text-left transition-colors"
                       style={{
-                        background: isSel ? "var(--iris-soft)" : "var(--surf-2)",
+                        background: isSel ? "var(--accent-soft)" : "var(--surf-2)",
                         border: `1px solid ${isSel ? "var(--brand-primary)" : "var(--bd-1)"}`,
                       }}>
-                      <Avatar initials={initials} size={36} gradient="linear-gradient(140deg,#5b9ddb,#3f6fb0)" />
+                      <Avatar initials={initials} size={36} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[13px] font-bold text-tx">{d.driver.name}</div>
                         <div className="mt-0.5">
@@ -386,24 +395,24 @@ export default function RastreoPage() {
                 })}
               </div>
             )}
-          </WtCard>
+          </Card>
 
           {/* Rutas del repartidor seleccionado */}
           {selected && (
-            <WtCard className="p-3">
+            <Card className="p-3">
               <SectionLabel>Rutas — {selected.driver.name}</SectionLabel>
               {routes.length === 0 ? (
                 <div className="py-4 text-center text-xs text-tx-mut">Sin rutas registradas</div>
               ) : (
-                <div className="flex max-h-[340px] flex-col gap-1.5 overflow-y-auto warmtech-scrollbar">
+                <div className="ds-scrollbar flex max-h-[340px] flex-col gap-1.5 overflow-y-auto">
                   {routes.map((route: any) => {
                     const isSel = selectedRoute?.id === route.id;
                     return (
                       <button key={route.id}
                         onClick={() => fetchRoutePoints(selected.driver.id, route.id)}
-                        className="w-full rounded-2xl px-3 py-2.5 text-left transition-colors"
+                        className="w-full rounded-ds-lg px-3 py-2.5 text-left transition-colors"
                         style={{
-                          background: isSel ? "var(--iris-soft)" : "var(--surf-2)",
+                          background: isSel ? "var(--accent-soft)" : "var(--surf-2)",
                           border: `1px solid ${isSel ? "var(--brand-primary)" : "var(--bd-1)"}`,
                         }}>
                         <div className="mb-1 flex items-center justify-between">
@@ -430,12 +439,12 @@ export default function RastreoPage() {
                   })}
                 </div>
               )}
-            </WtCard>
+            </Card>
           )}
         </div>
 
         {/* Mapa — NO tocar lógica Leaflet, solo el contenedor */}
-        <WtCard className="relative overflow-hidden p-0">
+        <Card className="relative overflow-hidden p-0">
           <div id="driver-map" className="h-[520px] w-full lg:h-[640px]" />
           {!mapReady && (
             <div className="absolute inset-0 grid place-items-center" style={{ background: "var(--surf-1)" }}>
@@ -446,8 +455,8 @@ export default function RastreoPage() {
             </div>
           )}
           {selectedRoute && routePoints.length > 0 && (
-            <div className="absolute right-4 top-4 z-[400] rounded-2xl p-3 text-xs"
-              style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", boxShadow: "0 8px 24px rgba(0,0,0,.25)" }}>
+            <div className="absolute right-4 top-4 z-[400] rounded-ds-lg p-3 text-xs"
+              style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", boxShadow: "var(--shadow-lg)" }}>
               <div className="mb-1 flex items-center gap-1.5 font-bold text-tx">
                 <RouteIcon size={13} className="text-primary" />
                 {selectedRoute.trigger === "ORDER_ASSIGNED" ? "Ruta de pedido" : "Ruta manual"}
@@ -469,57 +478,41 @@ export default function RastreoPage() {
               </button>
             </div>
           )}
-        </WtCard>
+        </Card>
       </div>
 
       {/* Modal — Enviar aviso a repartidores */}
-      {showNotice && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-          style={{ background: "rgba(0,0,0,0.8)" }} onClick={() => !sendingNotice && setShowNotice(false)}>
-          <WtCard className="w-full max-w-md p-6">
-            <div onClick={e => e.stopPropagation()}>
-              <div className="mb-1 flex items-center gap-2">
-                <Megaphone size={20} className="text-primary" />
-                <h3 className="font-display text-xl font-extrabold text-tx-hi">Enviar aviso</h3>
-              </div>
-              <p className="mb-4 text-xs text-tx-mut">
-                El repartidor lo recibe al instante en su app.
-              </p>
-
-              <label className="mb-1 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Destino</label>
-              <select value={noticeTarget} onChange={e => setNoticeTarget(e.target.value)}
-                className="mb-3 min-h-11 w-full rounded-xl px-3 text-sm outline-none"
-                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}>
-                <option value="all">Todos los repartidores</option>
-                {liveData?.drivers?.map((d: any) => (
-                  <option key={d.driver.id} value={d.driver.id}>{d.driver.name}</option>
-                ))}
-              </select>
-
-              <label className="mb-1 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Título (opcional)</label>
-              <input value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)}
-                placeholder="Ej. Cambio de turno"
-                className="mb-3 min-h-11 w-full rounded-xl px-3 text-sm outline-none"
-                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
-
-              <label className="mb-1 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Mensaje</label>
-              <textarea value={noticeBody} onChange={e => setNoticeBody(e.target.value)}
-                placeholder="Escribe el aviso aquí…" rows={4} maxLength={1000}
-                className="mb-4 w-full resize-none rounded-xl px-3 py-2.5 text-sm outline-none"
-                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
-
-              <div className="flex gap-3">
-                <PrimaryBtn ghost onClick={() => setShowNotice(false)} disabled={sendingNotice}>
-                  Cancelar
-                </PrimaryBtn>
-                <PrimaryBtn icon={Navigation} onClick={sendNotice} disabled={sendingNotice || !noticeBody.trim()}>
-                  {sendingNotice ? "Enviando…" : "Enviar"}
-                </PrimaryBtn>
-              </div>
-            </div>
-          </WtCard>
-        </div>
-      )}
-    </WtScreen>
+      <Modal
+        open={showNotice}
+        onClose={() => !sendingNotice && setShowNotice(false)}
+        title="Enviar aviso"
+        subtitle="El repartidor lo recibe al instante en su app."
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowNotice(false)} disabled={sendingNotice}>Cancelar</Button>
+            <Button icon={Navigation} onClick={sendNotice} disabled={sendingNotice || !noticeBody.trim()}>
+              {sendingNotice ? "Enviando…" : "Enviar"}
+            </Button>
+          </>
+        }
+      >
+        <Field label="Destino">
+          <Select value={noticeTarget} onChange={e => setNoticeTarget(e.target.value)}>
+            <option value="all">Todos los repartidores</option>
+            {liveData?.drivers?.map((d: any) => (
+              <option key={d.driver.id} value={d.driver.id}>{d.driver.name}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Título (opcional)">
+          <Input value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)} placeholder="Ej. Cambio de turno" />
+        </Field>
+        <Field label="Mensaje">
+          <Textarea value={noticeBody} onChange={e => setNoticeBody(e.target.value)}
+            placeholder="Escribe el aviso aquí…" rows={4} maxLength={1000} />
+        </Field>
+      </Modal>
+    </PageShell>
   );
 }

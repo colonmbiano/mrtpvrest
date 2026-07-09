@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 export type Theme = "dark" | "light";
 
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>("dark");
+  // Default "light": debe coincidir con el script anti-flash de app/layout.tsx.
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
-    const saved = localStorage.getItem("mb-theme") as Theme || "dark";
+    const saved = localStorage.getItem("mb-theme") as Theme || "light";
     setTheme(saved);
     document.documentElement.setAttribute("data-theme", saved);
   }, []);

@@ -12,7 +12,7 @@ import { User, Globe, Clock, Coins, Palette, Save, Mail, ShieldCheck } from "luc
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useTheme } from "@/components/ThemeProvider";
-import { WtScreen, PageHeader, WtCard, PrimaryBtn, Segmented } from "@/components/warmtech";
+import { PageShell, PageHeader, Card, Button, Segmented } from "@/components/ds";
 
 // Mismos catálogos que Ajustes de tienda (código ISO 4217 + locale; zona IANA).
 const CURRENCIES = [
@@ -112,17 +112,17 @@ export default function MiCuentaPage() {
   };
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Ajustes"
         title="Mi Cuenta"
         subtitle="Tu perfil, región y apariencia en un solo lugar"
-        actions={<PrimaryBtn icon={Save} full={false} disabled={saving || loading} onClick={save}>{saving ? "Guardando…" : "Guardar"}</PrimaryBtn>}
+        actions={<Button icon={Save} full={false} disabled={saving || loading} onClick={save}>{saving ? "Guardando…" : "Guardar"}</Button>}
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Perfil */}
-        <WtCard className="p-5">
+        <Card className="p-5">
           <div className="mb-4 flex items-center gap-3">
             <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl font-display text-lg font-extrabold text-white"
               style={{ background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))" }}>
@@ -141,10 +141,10 @@ export default function MiCuentaPage() {
               <ShieldCheck size={14} className="text-tx-mut" /> <span className="text-tx">{me?.role ? roleLabel[me.role] || me.role : "—"}</span>
             </div>
           </div>
-        </WtCard>
+        </Card>
 
         {/* Apariencia */}
-        <WtCard className="p-5">
+        <Card className="p-5">
           <div className="mb-4 flex items-center gap-2">
             <Palette size={16} className="text-primary" />
             <span className="font-display text-sm font-extrabold text-tx-hi">Apariencia</span>
@@ -156,10 +156,10 @@ export default function MiCuentaPage() {
             options={[{ value: "light", label: "☀️ Claro" }, { value: "dark", label: "🌙 Oscuro" }] as const}
           />
           <p className="ml-1 mt-2 text-[11px] text-tx-dim">Se guarda en este dispositivo (no afecta a otros usuarios ni a la tienda pública).</p>
-        </WtCard>
+        </Card>
 
         {/* Región */}
-        <WtCard className="p-5 lg:col-span-2">
+        <Card className="p-5 lg:col-span-2">
           <div className="mb-4 flex items-center gap-2">
             <Globe size={16} className="text-primary" />
             <span className="font-display text-sm font-extrabold text-tx-hi">Región</span>
@@ -202,7 +202,7 @@ export default function MiCuentaPage() {
           <p className="ml-1 mt-3 text-[11px] text-tx-dim">
             La moneda cambia cómo se muestran los precios en la tienda pública; la zona horaria afecta reportes y horarios; el país define el prefijo telefónico de WhatsApp.
           </p>
-        </WtCard>
+        </Card>
       </div>
 
       {toast && (
@@ -213,6 +213,6 @@ export default function MiCuentaPage() {
           {toast.msg}
         </div>
       )}
-    </WtScreen>
+    </PageShell>
   );
 }

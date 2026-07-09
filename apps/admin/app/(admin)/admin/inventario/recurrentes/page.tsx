@@ -1,10 +1,13 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, Plus, Repeat, Pencil, Trash2, X, Power, CalendarDays } from "lucide-react";
+import { Plus, Repeat, Pencil, Trash2, Power, CalendarDays } from "lucide-react";
 import api from "@/lib/api";
 import {
-  WtScreen, PageHeader, WtCard, PrimaryBtn, EmptyState, Pill, IconBadge, money,
-} from "@/components/warmtech";
+  PageShell, PageHeader, PageTabs, Toolbar, Card, Button, IconButton,
+  EmptyState, Skeleton, Pill, IconBadge, Modal, Field, Input, Select,
+  useToast, useConfirm,
+} from "@/components/ds";
+import { formatMoney } from "@/lib/format";
 
 // /admin/inventario/recurrentes · Plantillas de gasto recurrente (renta, luz,
 // sueldos). Generan una cuenta por pagar (PENDIENTE) cada periodo.
@@ -18,6 +21,7 @@ interface Cat { id: string; name: string }
 interface Sup { id: string; name: string }
 
 const FREQ_LABEL: Record<string, string> = { MONTHLY: "Mensual", BIWEEKLY: "Quincenal", WEEKLY: "Semanal" };
+const mny = (n: number) => formatMoney(n, false);
 const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City", day: "2-digit", month: "short", year: "numeric" });
 
 type Form = {
@@ -27,6 +31,8 @@ type Form = {
 const EMPTY: Form = { concept: "", amount: "", frequency: "MONTHLY", dayOfMonth: "1", nextDueAt: "", categoryId: "", supplierId: "", isActive: true };
 
 export default function RecurrentesPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [list, setList] = useState<Recurring[]>([]);
   const [cats, setCats] = useState<Cat[]>([]);
   const [sups, setSups] = useState<Sup[]>([]);
@@ -68,7 +74,7 @@ export default function RecurrentesPage() {
   async function save() {
     if (!form) return;
     if (!form.concept.trim() || !(Number(form.amount) > 0) || !form.nextDueAt) {
-      alert("Concepto, monto y próxima fecha son obligatorios.");
+      toast.error("Concepto, monto y próxima fecha son obligatorios.");
       return;
     }
     setSaving(true);
@@ -89,7 +95,7 @@ export default function RecurrentesPage() {
       await load();
     } catch (e) {
       const err = e as { response?: { data?: { error?: string } } };
-      alert(err.response?.data?.error || "No se pudo guardar.");
+      toast.error(err.response?.data?.error || "No se pudo guardar.");
     } finally {
       setSaving(false);
     }
@@ -100,38 +106,34 @@ export default function RecurrentesPage() {
     load();
   }
   async function remove(r: Recurring) {
-    if (!confirm(`¿Eliminar la plantilla "${r.concept}"?`)) return;
+    if (!(await confirm({ title: `¿Eliminar la plantilla "${r.concept}"?`, body: "Se eliminará la plantilla de gasto recurrente.", danger: true, confirmLabel: "Eliminar" }))) return;
     await api.delete(`/api/payables/recurring/${r.id}`).catch(() => {});
     load();
   }
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
-        eyebrow="Finanzas · Inventario"
+        eyebrow="Finanzas · Recurrentes"
         title="Gastos recurrentes"
         subtitle="Plantillas que generan cuentas por pagar cada periodo"
-        actions={<PrimaryBtn full={false} icon={Plus} onClick={openNew}>Nuevo recurrente</PrimaryBtn>}
       />
-      <div className="mb-4 md:hidden flex items-center justify-between">
-        <a href="/admin/inventario/por-pagar" className="inline-flex min-h-9 items-center gap-1 text-xs font-bold text-tx-mut">
-          <ChevronLeft size={15} /> Cuentas por pagar
-        </a>
-        <PrimaryBtn full={false} icon={Plus} onClick={openNew}>Nuevo</PrimaryBtn>
-      </div>
+      <PageTabs set="finanzas" />
+
+      <Toolbar actions={<Button icon={Plus} onClick={openNew}>Nuevo recurrente</Button>} />
 
       {loading ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-24 animate-pulse rounded-[18px] bg-surf-2" />)}
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-ds-lg" />)}
         </div>
       ) : list.length === 0 ? (
         <EmptyState icon={Repeat} title="Sin gastos recurrentes"
           hint="Crea plantillas para renta, luz, sueldos… y se generarán solas como cuentas por pagar."
-          action={<PrimaryBtn full={false} icon={Plus} onClick={openNew}>Nuevo recurrente</PrimaryBtn>} />
+          action={<Button icon={Plus} onClick={openNew}>Nuevo recurrente</Button>} />
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {list.map((r) => (
-            <WtCard key={r.id} className="p-4" style={r.isActive ? undefined : { opacity: 0.6 }}>
+            <Card key={r.id} className="p-4" style={r.isActive ? undefined : { opacity: 0.6 }}>
               <div className="flex items-start gap-3">
                 <IconBadge icon={CalendarDays} tone={r.isActive ? "ac" : "neutral"} size={38} />
                 <div className="min-w-0 flex-1">
@@ -143,83 +145,73 @@ export default function RecurrentesPage() {
                     {FREQ_LABEL[r.frequency] || r.frequency} · próxima {fmtDay(r.nextDueAt)}
                   </div>
                 </div>
-                <span className="shrink-0 font-mono text-base font-extrabold tabular-nums text-tx-hi">{money(r.amount)}</span>
+                <span className="shrink-0 font-mono text-base font-extrabold tabular-nums text-tx-hi">{mny(r.amount)}</span>
               </div>
               <div className="mt-3 flex gap-2">
-                <button type="button" onClick={() => toggle(r)} className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl text-xs font-bold text-tx-mid" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
-                  <Power size={14} /> {r.isActive ? "Pausar" : "Activar"}
-                </button>
-                <button type="button" onClick={() => openEdit(r)} aria-label="Editar" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-tx-mid" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
-                  <Pencil size={15} />
-                </button>
-                <button type="button" onClick={() => remove(r)} aria-label="Eliminar" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl" style={{ background: "var(--err-soft)", color: "var(--err)" }}>
-                  <Trash2 size={15} />
-                </button>
+                <Button variant="secondary" size="sm" icon={Power} full onClick={() => toggle(r)}>
+                  {r.isActive ? "Pausar" : "Activar"}
+                </Button>
+                <IconButton icon={Pencil} label="Editar" size={40} onClick={() => openEdit(r)} />
+                <IconButton icon={Trash2} label="Eliminar" size={40} danger onClick={() => remove(r)} />
               </div>
-            </WtCard>
+            </Card>
           ))}
         </div>
       )}
 
       {/* ── Modal crear/editar ───────────────────────────────────────────── */}
       {form && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,.78)" }}>
-          <WtCard className="my-4 w-full max-w-md p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-display text-xl font-extrabold text-tx-hi">{form.id ? "Editar" : "Nuevo"} recurrente</h2>
-              <button onClick={() => setForm(null)} aria-label="Cerrar" className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut" style={{ background: "var(--surf-2)" }}><X size={16} /></button>
-            </div>
-            <div className="space-y-3">
-              <F label="Concepto">
-                <input value={form.concept} onChange={(e) => setForm({ ...form, concept: e.target.value })} placeholder="Renta del local"
-                  className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp} />
-              </F>
-              <div className="grid grid-cols-2 gap-3">
-                <F label="Monto"><input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp} /></F>
-                <F label="Frecuencia">
-                  <select value={form.frequency} onChange={(e) => setForm({ ...form, frequency: e.target.value })} className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp}>
-                    <option value="MONTHLY">Mensual</option><option value="BIWEEKLY">Quincenal</option><option value="WEEKLY">Semanal</option>
-                  </select>
-                </F>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <F label="Próxima fecha"><input type="date" value={form.nextDueAt} onChange={(e) => setForm({ ...form, nextDueAt: e.target.value })} className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp} /></F>
-                {form.frequency === "MONTHLY" && (
-                  <F label="Día del mes (1-28)"><input type="number" min="1" max="28" value={form.dayOfMonth} onChange={(e) => setForm({ ...form, dayOfMonth: e.target.value })} className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp} /></F>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <F label="Categoría">
-                  <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp}>
-                    <option value="">— sin categoría —</option>
-                    {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </F>
-                <F label="Proveedor">
-                  <select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })} className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={inp}>
-                    <option value="">— sin proveedor —</option>
-                    {sups.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </F>
-              </div>
-            </div>
-            <div className="mt-5 flex gap-3">
-              <PrimaryBtn ghost onClick={() => setForm(null)}>Cancelar</PrimaryBtn>
-              <PrimaryBtn type="button" disabled={saving} onClick={save}>{saving ? "Guardando…" : "Guardar"}</PrimaryBtn>
-            </div>
-          </WtCard>
-        </div>
+        <Modal
+          open
+          onClose={() => setForm(null)}
+          size="sm"
+          title={`${form.id ? "Editar" : "Nuevo"} recurrente`}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setForm(null)}>Cancelar</Button>
+              <Button type="button" loading={saving} onClick={save}>{saving ? "Guardando…" : "Guardar"}</Button>
+            </>
+          }
+        >
+          <Field label="Concepto">
+            <Input value={form.concept} onChange={(e) => setForm({ ...form, concept: e.target.value })} placeholder="Renta del local" />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Monto">
+              <Input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+            </Field>
+            <Field label="Frecuencia">
+              <Select value={form.frequency} onChange={(e) => setForm({ ...form, frequency: e.target.value })}>
+                <option value="MONTHLY">Mensual</option><option value="BIWEEKLY">Quincenal</option><option value="WEEKLY">Semanal</option>
+              </Select>
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Próxima fecha">
+              <Input type="date" value={form.nextDueAt} onChange={(e) => setForm({ ...form, nextDueAt: e.target.value })} />
+            </Field>
+            {form.frequency === "MONTHLY" && (
+              <Field label="Día del mes (1-28)">
+                <Input type="number" min="1" max="28" value={form.dayOfMonth} onChange={(e) => setForm({ ...form, dayOfMonth: e.target.value })} />
+              </Field>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Categoría">
+              <Select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
+                <option value="">— sin categoría —</option>
+                {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Proveedor">
+              <Select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}>
+                <option value="">— sin proveedor —</option>
+                {sups.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+            </Field>
+          </div>
+        </Modal>
       )}
-    </WtScreen>
-  );
-}
-
-const inp: React.CSSProperties = { background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" };
-function F({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="mb-1.5 ml-1 block font-mono text-[9.5px] font-bold uppercase tracking-[.12em] text-tx-mut">{label}</label>
-      {children}
-    </div>
+    </PageShell>
   );
 }

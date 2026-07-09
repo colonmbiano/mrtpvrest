@@ -2,15 +2,17 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
-  ImagePlus, Images, Check, X, Search, UtensilsCrossed, Loader2,
+  ImagePlus, Images, Check, Search, UtensilsCrossed, Loader2,
   UploadCloud, Trash2, Crop, Maximize2, AlertTriangle, Sparkles, ChevronLeft,
 } from "lucide-react";
 import api from "@/lib/api";
 import { uploadMenuImage } from "@/lib/supabaseUpload";
 import { extractErrorMessage } from "@/lib/errors";
 import {
-  WtScreen, PageHeader, WtCard, PrimaryBtn, EmptyState, Pill, ProgressBar,
-} from "@/components/warmtech";
+  PageShell, PageHeader, PageTabs, Card, Button, EmptyState, Pill, ProgressBar,
+  useToast, useConfirm,
+} from "@/components/ds";
+import { BulkMatchModal, type BulkRow } from "./_components/BulkMatchModal";
 
 // ── Tipos laxos (igual que la pantalla de Menú) ──────────────────────────
 type Item = {
@@ -33,7 +35,7 @@ function normalize(s: string): string {
   return (s || "")
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
@@ -74,9 +76,10 @@ async function runPool<T>(arr: T[], limit: number, worker: (item: T) => Promise<
   await Promise.all(runners);
 }
 
-type BulkRow = { file: File; url: string; targetId: string; score: number };
-
 export default function MenuPhotosPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
+
   const [items, setItems] = useState<Item[]>([]);
   const [cats, setCats] = useState<Cat[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,7 +130,7 @@ export default function MenuPhotosPage() {
       setStatus(p => ({ ...p, [id]: "saved" }));
     } catch (err) {
       setStatus(p => ({ ...p, [id]: "error" }));
-      alert(extractErrorMessage(err, "No se pudo subir la imagen"));
+      toast.error(extractErrorMessage(err, "No se pudo subir la imagen"));
     }
   }
 
@@ -137,7 +140,7 @@ export default function MenuPhotosPage() {
   }
 
   async function removeImage(id: string) {
-    if (!confirm("¿Quitar la foto de este producto?")) return;
+    if (!(await confirm({ title: "¿Quitar la foto de este producto?", danger: true, confirmLabel: "Quitar" }))) return;
     setItems(prev => prev.map(it => (it.id === id ? { ...it, imageUrl: "" } : it)));
     setStatus(p => ({ ...p, [id]: "idle" }));
     try { await api.put(`/api/menu/items/${id}`, { imageUrl: "" }); } catch { /* visual */ }
@@ -190,7 +193,7 @@ export default function MenuPhotosPage() {
   async function applyBulk() {
     if (!bulkRows) return;
     const assigned = bulkRows.filter(r => r.targetId);
-    if (assigned.length === 0) { alert("Asigna al menos una foto a un producto."); return; }
+    if (assigned.length === 0) { toast.error("Asigna al menos una foto a un producto."); return; }
     setBulkBusy(true);
     setBulkProgress({ done: 0, total: assigned.length });
     let done = 0;
@@ -211,7 +214,7 @@ export default function MenuPhotosPage() {
     bulkRows.forEach(r => URL.revokeObjectURL(r.url));
     setBulkRows(null);
     if (failed.length > 0) {
-      alert(`No se pudieron subir ${failed.length} imagen(es):\n${failed.join("\n")}`);
+      toast.error(`No se pudieron subir ${failed.length} imagen(es): ${failed.join(", ")}`);
     }
   }
 
@@ -233,7 +236,7 @@ export default function MenuPhotosPage() {
   const catName = (id: string | null) => cats.find(c => c.id === id)?.name || "Sin categoría";
 
   return (
-    <WtScreen>
+    <PageShell width="wide">
       <PageHeader
         eyebrow="Catálogo"
         title="Fotos de productos"
@@ -243,17 +246,18 @@ export default function MenuPhotosPage() {
             <button
               type="button"
               onClick={() => bulkInputRef.current?.click()}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[13px] px-4 text-[13px] font-bold text-white transition-transform active:scale-[.98]"
-              style={{ background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", boxShadow: "0 6px 18px var(--iris-glow)" }}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-ds-md px-4 text-[13px] font-bold transition-transform active:scale-[.98]"
+              style={{ background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", color: "var(--accent-contrast)", boxShadow: "0 6px 18px var(--accent-glow)" }}
             >
               <Images size={16} strokeWidth={2} /> Subir varias fotos
             </button>
-            <PrimaryBtn full={false} ghost icon={ChevronLeft} href="/admin/menu">
-              Menú
-            </PrimaryBtn>
+            <Button variant="secondary" icon={ChevronLeft} href="/admin/menu">Menú</Button>
           </>
         }
       />
+
+      <PageTabs set="menu" />
+
       <input
         ref={bulkInputRef}
         type="file"
@@ -268,27 +272,27 @@ export default function MenuPhotosPage() {
         <button
           type="button"
           onClick={() => bulkInputRef.current?.click()}
-          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-[13px] px-3 text-sm font-bold text-white transition-transform active:scale-[.98]"
-          style={{ background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", boxShadow: "0 6px 18px var(--iris-glow)" }}
+          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-ds-md px-3 text-sm font-bold transition-transform active:scale-[.98]"
+          style={{ background: "linear-gradient(140deg,var(--brand-secondary),var(--brand-primary))", color: "var(--accent-contrast)", boxShadow: "0 6px 18px var(--accent-glow)" }}
         >
           <Images size={16} strokeWidth={2} /> Subir varias fotos
         </button>
       </div>
 
       {/* Zona de arrastrar varias + progreso */}
-      <WtCard
+      <Card
         className="mb-4 p-4"
-        style={bulkDragOver ? { borderColor: "var(--brand-primary)", background: "var(--iris-soft)" } : undefined}
+        style={bulkDragOver ? { borderColor: "var(--brand-primary)", background: "var(--accent-soft)" } : undefined}
       >
         <div
           onDragOver={e => { e.preventDefault(); setBulkDragOver(true); }}
           onDragLeave={() => setBulkDragOver(false)}
           onDrop={e => { e.preventDefault(); setBulkDragOver(false); if (e.dataTransfer.files?.length) startBulk(e.dataTransfer.files); }}
           onClick={() => bulkInputRef.current?.click()}
-          className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed px-4 py-6 text-center transition-all"
+          className="flex cursor-pointer flex-col items-center gap-2 rounded-ds-md border border-dashed px-4 py-6 text-center transition-all"
           style={{ borderColor: bulkDragOver ? "var(--brand-primary)" : "var(--bd-2)" }}
         >
-          <span className="grid h-12 w-12 place-items-center rounded-2xl text-primary" style={{ background: "var(--iris-soft)" }}>
+          <span className="grid h-12 w-12 place-items-center rounded-ds-lg text-primary" style={{ background: "var(--accent-soft)" }}>
             <UploadCloud size={24} strokeWidth={1.8} />
           </span>
           <div className="font-display text-sm font-extrabold text-tx-hi">
@@ -314,30 +318,30 @@ export default function MenuPhotosPage() {
             <Pill tone="warn">{missingCount} sin foto</Pill>
           )}
         </div>
-      </WtCard>
+      </Card>
 
       {/* Filtros */}
-      <WtCard className="mb-4 flex flex-wrap items-center gap-2 p-3">
+      <Card className="mb-4 flex flex-wrap items-center gap-2 p-3">
         <div className="relative min-w-[160px] flex-1">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-tx-mut" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar producto…"
-            className="min-h-11 w-full rounded-xl pl-9 pr-3 text-sm text-tx outline-none"
+            className="min-h-11 w-full rounded-ds-md pl-9 pr-3 text-sm text-tx outline-none"
             style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
           />
         </div>
         <select
           value={catFilter}
           onChange={e => setCatFilter(e.target.value)}
-          className="min-h-11 rounded-xl px-3 text-sm font-bold text-tx outline-none"
+          className="min-h-11 rounded-ds-md px-3 text-sm font-bold text-tx outline-none"
           style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
         >
           <option value="all">Todas las categorías</option>
           {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <div className="flex overflow-hidden rounded-xl" style={{ border: "1px solid var(--bd-1)" }}>
+        <div className="flex overflow-hidden rounded-ds-md" style={{ border: "1px solid var(--bd-1)" }}>
           {([
             ["missing", "Sin foto"],
             ["has", "Con foto"],
@@ -352,7 +356,7 @@ export default function MenuPhotosPage() {
                 className="min-h-11 px-3 text-xs font-bold transition-all"
                 style={{
                   background: active ? "var(--brand-primary)" : "transparent",
-                  color: active ? "#fffaf4" : "var(--tx-mut)",
+                  color: active ? "var(--accent-contrast)" : "var(--tx-mut)",
                 }}
               >
                 {label}
@@ -361,13 +365,13 @@ export default function MenuPhotosPage() {
           })}
         </div>
         <span className="px-1 text-xs font-bold text-tx-mut">{filtered.length} productos</span>
-      </WtCard>
+      </Card>
 
       {/* Grid de productos */}
       {loading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} className="h-56 animate-pulse rounded-[18px] bg-surf-2" />
+            <div key={i} className="h-56 animate-pulse rounded-ds-xl bg-surf-2" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
@@ -388,7 +392,7 @@ export default function MenuPhotosPage() {
             const isDrag = dragId === it.id;
             const fit = it.imageFit === "contain" ? "contain" : "cover";
             return (
-              <WtCard
+              <Card
                 key={it.id}
                 className="flex flex-col overflow-hidden p-0"
                 style={isDrag ? { borderColor: "var(--brand-primary)", boxShadow: "0 0 0 2px var(--brand-primary)" } : undefined}
@@ -435,17 +439,17 @@ export default function MenuPhotosPage() {
 
                     {/* Estado de subida / guardado */}
                     {uploading && (
-                      <span className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
-                        <Loader2 size={26} className="animate-spin text-white" />
+                      <span className="absolute inset-0 flex items-center justify-center" style={{ background: "var(--accent-glow)" }}>
+                        <Loader2 size={26} className="animate-spin text-primary" />
                       </span>
                     )}
                     {st === "saved" && !uploading && (
-                      <span className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full text-white shadow" style={{ background: "var(--ok)" }}>
+                      <span className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full shadow" style={{ background: "var(--ok)", color: "var(--accent-contrast)" }}>
                         <Check size={15} strokeWidth={3} />
                       </span>
                     )}
                     {st === "error" && !uploading && (
-                      <span className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full text-white shadow" style={{ background: "var(--err)" }}>
+                      <span className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full shadow" style={{ background: "var(--err)", color: "var(--accent-contrast)" }}>
                         <AlertTriangle size={14} strokeWidth={2.4} />
                       </span>
                     )}
@@ -468,10 +472,10 @@ export default function MenuPhotosPage() {
                         type="button"
                         onClick={() => setFit(it.id, "cover")}
                         title="Rellenar (recorta para llenar)"
-                        className="flex min-h-8 flex-1 items-center justify-center gap-1 rounded-lg text-[11px] font-bold transition-all"
+                        className="flex min-h-8 flex-1 items-center justify-center gap-1 rounded-ds-sm text-[11px] font-bold transition-all"
                         style={{
                           background: fit === "cover" ? "var(--brand-primary)" : "transparent",
-                          color: fit === "cover" ? "#fffaf4" : "var(--tx-mut)",
+                          color: fit === "cover" ? "var(--accent-contrast)" : "var(--tx-mut)",
                           border: `1px solid ${fit === "cover" ? "var(--brand-primary)" : "var(--bd-1)"}`,
                         }}
                       >
@@ -481,10 +485,10 @@ export default function MenuPhotosPage() {
                         type="button"
                         onClick={() => setFit(it.id, "contain")}
                         title="Ajustar (muestra la foto completa)"
-                        className="flex min-h-8 flex-1 items-center justify-center gap-1 rounded-lg text-[11px] font-bold transition-all"
+                        className="flex min-h-8 flex-1 items-center justify-center gap-1 rounded-ds-sm text-[11px] font-bold transition-all"
                         style={{
                           background: fit === "contain" ? "var(--brand-primary)" : "transparent",
-                          color: fit === "contain" ? "#fffaf4" : "var(--tx-mut)",
+                          color: fit === "contain" ? "var(--accent-contrast)" : "var(--tx-mut)",
                           border: `1px solid ${fit === "contain" ? "var(--brand-primary)" : "var(--bd-1)"}`,
                         }}
                       >
@@ -494,7 +498,7 @@ export default function MenuPhotosPage() {
                         type="button"
                         onClick={() => removeImage(it.id)}
                         aria-label="Quitar foto"
-                        className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg"
+                        className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-ds-sm"
                         style={{ background: "var(--err-soft)", color: "var(--err)" }}
                       >
                         <Trash2 size={13} />
@@ -502,7 +506,7 @@ export default function MenuPhotosPage() {
                     </div>
                   )}
                 </div>
-              </WtCard>
+              </Card>
             );
           })}
         </div>
@@ -514,104 +518,19 @@ export default function MenuPhotosPage() {
         Tip: pasa el cursor sobre un producto y pega una imagen con <span className="font-bold text-tx">Ctrl + V</span>.
       </p>
 
-      {/* ── Modal: carga en lote (auto-emparejado) ─────────────────────── */}
+      {/* Modal: carga en lote (auto-emparejado) */}
       {bulkRows && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,0.8)" }}>
-          <WtCard className="my-4 w-full max-w-2xl p-0">
-            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid var(--bd-1)" }}>
-              <div>
-                <h2 className="font-display text-xl font-extrabold text-tx-hi">Revisar emparejado</h2>
-                <p className="text-xs text-tx-mut">{bulkRows.length} foto(s). Confirma a qué producto va cada una.</p>
-              </div>
-              <button onClick={closeBulk} disabled={bulkBusy} aria-label="Cerrar" className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut disabled:opacity-40" style={{ background: "var(--surf-2)" }}>
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="flex max-h-[55vh] flex-col gap-2 overflow-y-auto p-4">
-              {bulkRows.map((row, idx) => {
-                const target = items.find(i => i.id === row.targetId);
-                const willOverwrite = target?.imageUrl;
-                return (
-                  <div key={idx} className="flex items-center gap-3 rounded-xl p-2" style={{ background: "var(--surf-2)" }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={row.url} alt={row.file.name} className="h-14 w-14 flex-shrink-0 rounded-lg object-cover" />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[11px] text-tx-mut" title={row.file.name}>{row.file.name}</div>
-                      <select
-                        value={row.targetId}
-                        onChange={e => {
-                          const v = e.target.value;
-                          setBulkRows(rows => rows ? rows.map((r, i) => (i === idx ? { ...r, targetId: v } : r)) : rows);
-                        }}
-                        disabled={bulkBusy}
-                        className="mt-1 min-h-9 w-full rounded-lg px-2 text-sm font-bold text-tx outline-none"
-                        style={{ background: "var(--surf-1)", border: `1.5px solid ${row.targetId ? "var(--brand-primary)" : "var(--bd-1)"}` }}
-                      >
-                        <option value="">— Sin asignar (omitir) —</option>
-                        {cats.map(c => (
-                          <optgroup key={c.id} label={c.name}>
-                            {items.filter(i => i.categoryId === c.id).map(i => (
-                              <option key={i.id} value={i.id}>{i.name}{i.imageUrl ? " · (ya tiene)" : ""}</option>
-                            ))}
-                          </optgroup>
-                        ))}
-                        {/* Productos sin categoría (o categoría desconocida): que sigan siendo asignables */}
-                        {(() => {
-                          const known = new Set(cats.map(c => c.id));
-                          const others = items.filter(i => !i.categoryId || !known.has(i.categoryId));
-                          if (others.length === 0) return null;
-                          return (
-                            <optgroup label="Otros">
-                              {others.map(i => (
-                                <option key={i.id} value={i.id}>{i.name}{i.imageUrl ? " · (ya tiene)" : ""}</option>
-                              ))}
-                            </optgroup>
-                          );
-                        })()}
-                      </select>
-                    </div>
-                    <div className="flex w-16 flex-shrink-0 justify-end">
-                      {!row.targetId ? (
-                        <Pill tone="neutral">omitir</Pill>
-                      ) : willOverwrite ? (
-                        <Pill tone="warn">reemplaza</Pill>
-                      ) : (
-                        <Pill tone="ok">nueva</Pill>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex flex-col gap-3 px-6 py-4" style={{ borderTop: "1px solid var(--bd-1)" }}>
-              {bulkBusy && (
-                <div>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="font-bold text-tx">Subiendo…</span>
-                    <span className="font-mono text-tx-mut">{bulkProgress.done}/{bulkProgress.total}</span>
-                  </div>
-                  <ProgressBar pct={bulkProgress.total ? (bulkProgress.done / bulkProgress.total) * 100 : 0} />
-                </div>
-              )}
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-tx-mut">
-                  {bulkRows.filter(r => r.targetId).length} asignada(s) · {bulkRows.filter(r => !r.targetId).length} omitida(s)
-                </span>
-                <div className="flex gap-2">
-                  <button onClick={closeBulk} disabled={bulkBusy} className="min-h-11 rounded-xl px-4 text-sm font-bold text-tx-mut disabled:opacity-40" style={{ border: "1px solid var(--bd-1)" }}>
-                    Cancelar
-                  </button>
-                  <PrimaryBtn full={false} icon={Check} onClick={applyBulk} disabled={bulkBusy}>
-                    {bulkBusy ? "Subiendo…" : `Aplicar ${bulkRows.filter(r => r.targetId).length} foto(s)`}
-                  </PrimaryBtn>
-                </div>
-              </div>
-            </div>
-          </WtCard>
-        </div>
+        <BulkMatchModal
+          rows={bulkRows}
+          items={items}
+          cats={cats}
+          busy={bulkBusy}
+          progress={bulkProgress}
+          onClose={closeBulk}
+          onChangeTarget={(idx, targetId) => setBulkRows(rows => rows ? rows.map((r, i) => (i === idx ? { ...r, targetId } : r)) : rows)}
+          onApply={applyBulk}
+        />
       )}
-    </WtScreen>
+    </PageShell>
   );
 }

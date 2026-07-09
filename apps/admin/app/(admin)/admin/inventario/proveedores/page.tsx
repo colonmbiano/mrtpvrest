@@ -1,15 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
 import {
-  Plus, X, Pencil, Trash2, Phone, Mail, MapPin, StickyNote,
-  Factory, ChevronLeft, MessageCircle,
+  Plus, Pencil, Trash2, Phone, Mail, MapPin, StickyNote,
+  Factory, MessageCircle,
 } from "lucide-react";
 import api from "@/lib/api";
-import Link from "next/link";
 import {
-  WtScreen, PageHeader, WtCard, PrimaryBtn, Pill, EmptyState, Avatar,
-  LoadingCards,
-} from "@/components/warmtech";
+  PageShell, PageHeader, PageTabs, Button, IconButton, Modal, Field, Input,
+  Toggle, Pill, EmptyState, LoadingCards, Avatar, Card, SettingRow,
+  useToast, useConfirm,
+} from "@/components/ds";
 
 interface Supplier {
   id: string; name: string; contact?: string; phone?: string;
@@ -28,6 +28,8 @@ function initials(name: string) {
 }
 
 export default function ProveedoresPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading]     = useState(true);
   const [showForm, setShowForm]   = useState(false);
@@ -73,19 +75,19 @@ export default function ProveedoresPage() {
       fetchSuppliers();
     } catch (error) {
       const err = error as { response?: { data?: { error?: string } } };
-      alert(err.response?.data?.error || "Error");
+      toast.error(err.response?.data?.error || "Error");
     }
     finally { setSaving(false); }
   }
 
   async function deleteSupplier(id: string) {
-    if (!confirm("¿Eliminar proveedor?")) return;
+    if (!(await confirm({ title: "¿Eliminar proveedor?", danger: true, confirmLabel: "Eliminar" }))) return;
     try {
       await api.delete("/api/inventory/suppliers/" + id);
       fetchSuppliers();
     } catch (error) {
       const err = error as { response?: { data?: { error?: string } } };
-      alert(err.response?.data?.error || "No se pudo eliminar el proveedor");
+      toast.error(err.response?.data?.error || "No se pudo eliminar el proveedor");
     }
   }
 
@@ -99,91 +101,65 @@ export default function ProveedoresPage() {
   ];
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Inventario"
         title="Proveedores"
         subtitle={`${suppliers.length} proveedor${suppliers.length !== 1 ? "es" : ""} registrado${suppliers.length !== 1 ? "s" : ""}`}
-        actions={
-          <>
-            <PrimaryBtn full={false} ghost icon={ChevronLeft} href="/admin/inventario">Inventario</PrimaryBtn>
-            <PrimaryBtn full={false} icon={Plus} onClick={() => openForm()}>Proveedor</PrimaryBtn>
-          </>
-        }
+        actions={<Button icon={Plus} onClick={() => openForm()}>Nuevo proveedor</Button>}
       />
+      <PageTabs set="inventario" />
 
-      {/* mobile back + add */}
-      <div className="mb-4 flex items-center gap-2 md:hidden">
-        <Link href="/admin/inventario"
-          className="inline-flex min-h-11 items-center gap-1 rounded-xl px-3 text-[13px] font-bold text-tx-mid"
-          style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>
-          <ChevronLeft size={16} /> Inventario
-        </Link>
-        <div className="flex-1" />
-        <PrimaryBtn full={false} icon={Plus} onClick={() => openForm()}>Nuevo</PrimaryBtn>
+      {/* Acción en mobile (PageHeader es hidden en <md) */}
+      <div className="mb-4 md:hidden">
+        <Button full icon={Plus} onClick={() => openForm()}>Nuevo proveedor</Button>
       </div>
 
       {/* Form modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,.85)" }}>
-          <WtCard className="my-4 w-full max-w-md overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid var(--bd-1)" }}>
-              <h2 className="font-display text-xl font-extrabold text-tx-hi">{editItem ? "Editar" : "Nuevo"} proveedor</h2>
-              <button onClick={() => setShowForm(false)} aria-label="Cerrar"
-                className="grid h-9 w-9 place-items-center rounded-xl text-tx-mut" style={{ background: "var(--surf-2)" }}>
-                <X size={16} />
-              </button>
-            </div>
-            <form onSubmit={save} className="flex flex-col gap-4 p-6">
-              {fields.map(f => (
-                <div key={f.field}>
-                  <label className="mb-1.5 ml-1 block font-mono text-[9.5px] font-bold uppercase tracking-[.12em] text-tx-mut">{f.label}</label>
-                  <input value={form[f.field]} onChange={e => setForm(p=>({...p,[f.field]:e.target.value}))}
-                    placeholder={f.placeholder} required={f.required}
-                    className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
-                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
-                </div>
-              ))}
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title={`${editItem ? "Editar" : "Nuevo"} proveedor`}
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowForm(false)}>Cancelar</Button>
+            <Button type="submit" loading={saving} onClick={() => save({ preventDefault() {} } as React.FormEvent)}>
+              Guardar
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={save} className="flex flex-col">
+          {fields.map(f => (
+            <Field key={f.field} label={f.label} required={f.required}>
+              <Input value={form[f.field]} onChange={e => setForm(p=>({...p,[f.field]:e.target.value}))}
+                placeholder={f.placeholder} required={f.required} />
+            </Field>
+          ))}
 
-              {/* Parámetros para sugerencias de orden de compra */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1.5 ml-1 block font-mono text-[9.5px] font-bold uppercase tracking-[.12em] text-tx-mut">Lead time (días)</label>
-                  <input type="number" min={0} inputMode="numeric"
-                    value={form.leadTimeDays} onChange={e => setForm(p=>({...p,leadTimeDays:e.target.value}))}
-                    placeholder="3"
-                    className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
-                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
-                </div>
-                <div>
-                  <label className="mb-1.5 ml-1 block font-mono text-[9.5px] font-bold uppercase tracking-[.12em] text-tx-mut">Compra mínima (MXN)</label>
-                  <input type="number" min={0} step="0.01" inputMode="decimal"
-                    value={form.minOrderAmount} onChange={e => setForm(p=>({...p,minOrderAmount:e.target.value}))}
-                    placeholder="0"
-                    className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
-                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }} />
-                </div>
-              </div>
+          {/* Parámetros para sugerencias de orden de compra */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Lead time (días)">
+              <Input type="number" min={0} inputMode="numeric"
+                value={form.leadTimeDays} onChange={e => setForm(p=>({...p,leadTimeDays:e.target.value}))}
+                placeholder="3" />
+            </Field>
+            <Field label="Compra mínima (MXN)">
+              <Input type="number" min={0} step="0.01" inputMode="decimal"
+                value={form.minOrderAmount} onChange={e => setForm(p=>({...p,minOrderAmount:e.target.value}))}
+                placeholder="0" />
+            </Field>
+          </div>
 
-              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl px-4 py-3"
-                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
-                <span className="flex flex-col">
-                  <span className="text-sm font-bold text-tx-hi">Proveedor activo</span>
-                  <span className="text-[11px] text-tx-mut">Los inactivos se excluyen de las sugerencias de compra.</span>
-                </span>
-                <input type="checkbox" checked={form.isActive}
-                  onChange={e => setForm(p=>({...p,isActive:e.target.checked}))}
-                  className="h-5 w-5 shrink-0 accent-[var(--brand-primary)]" />
-              </label>
-
-              <div className="flex gap-3 pt-1">
-                <PrimaryBtn ghost onClick={() => setShowForm(false)}>Cancelar</PrimaryBtn>
-                <PrimaryBtn type="submit" disabled={saving}>{saving ? "…" : "Guardar"}</PrimaryBtn>
-              </div>
-            </form>
-          </WtCard>
-        </div>
-      )}
+          <SettingRow
+            label="Proveedor activo"
+            sub="Los inactivos se excluyen de las sugerencias de compra."
+            right={<Toggle checked={form.isActive} onChange={(n) => setForm(p => ({ ...p, isActive: n }))} label="Proveedor activo" />}
+            last
+          />
+        </form>
+      </Modal>
 
       {/* List */}
       {loading ? (
@@ -191,13 +167,13 @@ export default function ProveedoresPage() {
       ) : suppliers.length === 0 ? (
         <EmptyState icon={Factory} title="Sin proveedores"
           hint="Registra tus proveedores para vincularlos a insumos y generar listas de compra."
-          action={<PrimaryBtn full={false} icon={Plus} onClick={() => openForm()}>Nuevo proveedor</PrimaryBtn>} />
+          action={<Button icon={Plus} onClick={() => openForm()}>Nuevo proveedor</Button>} />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {suppliers.map(s => {
             const phone = s.phone?.replace(/\D/g, "");
             return (
-              <WtCard key={s.id} className="flex flex-col p-4">
+              <Card key={s.id} className="flex flex-col p-4">
                 <div className="flex items-start gap-3">
                   <Avatar initials={initials(s.name)} size={42} />
                   <div className="min-w-0 flex-1">
@@ -229,7 +205,7 @@ export default function ProveedoresPage() {
                 </div>
 
                 {s.notes && (
-                  <div className="mt-2 flex items-start gap-2 rounded-xl p-2.5 text-[11.5px] text-tx-mut"
+                  <div className="mt-2 flex items-start gap-2 rounded-ds-md p-2.5 text-[11.5px] text-tx-mut"
                     style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
                     <StickyNote size={13} className="mt-0.5 shrink-0" /> <span>{s.notes}</span>
                   </div>
@@ -241,29 +217,20 @@ export default function ProveedoresPage() {
                       href={`https://wa.me/${phone}`}
                       target="_blank" rel="noopener noreferrer"
                       aria-label="WhatsApp"
-                      className="grid h-10 w-10 shrink-0 place-items-center rounded-xl"
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px]"
                       style={{ background: "var(--ok-soft)", color: "var(--ok)" }}
                     >
                       <MessageCircle size={16} />
                     </a>
                   )}
-                  <button onClick={() => openForm(s)}
-                    className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl text-xs font-bold text-tx-mid"
-                    style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
-                    <Pencil size={14} /> Editar
-                  </button>
-                  <button onClick={() => deleteSupplier(s.id)}
-                    aria-label="Eliminar"
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-xl"
-                    style={{ background: "var(--err-soft)", color: "var(--err)" }}>
-                    <Trash2 size={15} />
-                  </button>
+                  <Button variant="secondary" size="sm" icon={Pencil} full onClick={() => openForm(s)}>Editar</Button>
+                  <IconButton icon={Trash2} label="Eliminar" danger size={36} onClick={() => deleteSupplier(s.id)} />
                 </div>
-              </WtCard>
+              </Card>
             );
           })}
         </div>
       )}
-    </WtScreen>
+    </PageShell>
   );
 }

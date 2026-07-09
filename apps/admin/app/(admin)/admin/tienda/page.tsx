@@ -1,409 +1,97 @@
 "use client";
 import { useEffect, useState } from "react";
-import {
-  Store, Globe, Power, Clock, Phone, MessageCircle, MapPin, Palette,
-  Truck, Star, Link2, Copy, Check, ExternalLink, Crosshair, AlertTriangle,
-  Flower2, Wallet, Trophy, Upload, ImagePlus, X, Mail, Ticket,
-} from "lucide-react";
+import { Store, Star, Ticket } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import api from "@/lib/api";
 import { getStoreUrl } from "@/lib/config";
-import {
-  WtScreen, PageHeader, WtCard, SectionHead, Toggle, PrimaryBtn,
-  StatTile,
-} from "@/components/warmtech";
-import { MapLocationPicker } from "@/components/MapLocationPicker";
+import { PageShell, PageHeader, Button, Field, Input, Skeleton, useToast } from "@/components/ds";
+import { SectionCard } from "./_components/ui";
+import { StoreLinkCard } from "./_components/StoreLinkCard";
+import { StoreStatusCards } from "./_components/StoreStatusCards";
+import { ScheduleCard } from "./_components/ScheduleCard";
+import { ContactThemeCard } from "./_components/ContactThemeCard";
+import { DeliveryCard } from "./_components/DeliveryCard";
+import { RewardsSection } from "./_components/RewardsSection";
+import { CouponsSection } from "./_components/CouponsSection";
+import type { BusinessHour, TiendaConfig } from "./_components/types";
 
-type BusinessHour = { day: number; enabled: boolean; open: string; close: string };
+// QR por mesa: el comensal escanea → abre el menú en DINE_IN con su mesa fija.
+// El enlace codifica el número de mesa (extraído del nombre) + la sucursal, que
+// el storefront lee de ?mesa=&l= (ver apps/client/src/app/[slug]/page.tsx).
+function MesasQrCard({ storeUrl }: { storeUrl: string }) {
+  const [tables, setTables] = useState<Array<{ id: string; name: string; locationId: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api.get("/api/tables")
+      .then((r) => setTables(Array.isArray(r.data) ? r.data : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
-// 0=Domingo … 6=Sábado (coincide con Date.getDay() y el backend).
-const WEEK_DAYS = [
-  { value: 0, label: "Domingo" },
-  { value: 1, label: "Lunes" },
-  { value: 2, label: "Martes" },
-  { value: 3, label: "Miércoles" },
-  { value: 4, label: "Jueves" },
-  { value: 5, label: "Viernes" },
-  { value: 6, label: "Sábado" },
-];
-
-const TIMEZONES = [
-  { value: "America/Mexico_City", label: "Ciudad de México (Centro)" },
-  { value: "America/Cancun", label: "Cancún / Quintana Roo (Este)" },
-  { value: "America/Monterrey", label: "Monterrey" },
-  { value: "America/Chihuahua", label: "Chihuahua (Pacífico)" },
-  { value: "America/Hermosillo", label: "Hermosillo (Sonora)" },
-  { value: "America/Tijuana", label: "Tijuana (Noroeste)" },
-  { value: "America/Bogota", label: "Bogotá / Lima" },
-  { value: "America/Argentina/Buenos_Aires", label: "Buenos Aires" },
-  { value: "America/Santiago", label: "Santiago" },
-  { value: "America/New_York", label: "Nueva York (Este EE.UU.)" },
-  { value: "Europe/Madrid", label: "Madrid" },
-];
-
-// País del restaurante (ISO 3166-1 alpha-2). Determina la lada que se antepone a
-// los teléfonos en los enlaces/notificaciones de WhatsApp. Debe mantenerse en
-// sintonía con el mapeo de packages/config/phone.js.
-const COUNTRIES = [
-  { code: "MX", name: "México (+52)" },
-  { code: "US", name: "Estados Unidos (+1)" },
-  { code: "CO", name: "Colombia (+57)" },
-  { code: "AR", name: "Argentina (+54)" },
-  { code: "CL", name: "Chile (+56)" },
-  { code: "PE", name: "Perú (+51)" },
-  { code: "EC", name: "Ecuador (+593)" },
-  { code: "GT", name: "Guatemala (+502)" },
-  { code: "SV", name: "El Salvador (+503)" },
-  { code: "HN", name: "Honduras (+504)" },
-  { code: "CR", name: "Costa Rica (+506)" },
-  { code: "PA", name: "Panamá (+507)" },
-  { code: "DO", name: "República Dominicana (+1)" },
-  { code: "BO", name: "Bolivia (+591)" },
-  { code: "PY", name: "Paraguay (+595)" },
-  { code: "UY", name: "Uruguay (+598)" },
-  { code: "VE", name: "Venezuela (+58)" },
-  { code: "BR", name: "Brasil (+55)" },
-  { code: "CA", name: "Canadá (+1)" },
-  { code: "ES", name: "España (+34)" },
-];
-
-const DEFAULT_HOUR: Omit<BusinessHour, "day"> = { enabled: false, open: "09:00", close: "22:00" };
-
-/* ── styled controls ─────────────────────────────────────────────── */
-const INPUT_CLS = "min-h-12 w-full rounded-xl px-4 text-sm font-medium outline-none transition-colors focus:border-[var(--brand-primary)]";
-const INPUT_STYLE = { background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" } as const;
-
-// Monedas soportadas (código ISO 4217 + locale de formato). El precio se guarda
-// igual; esto solo cambia cómo se muestra en la tienda pública.
-const CURRENCIES = [
-  { code: "MXN", locale: "es-MX", label: "Peso mexicano (MXN)" },
-  { code: "USD", locale: "en-US", label: "Dólar estadounidense (USD)" },
-  { code: "EUR", locale: "es-ES", label: "Euro (EUR)" },
-  { code: "COP", locale: "es-CO", label: "Peso colombiano (COP)" },
-  { code: "ARS", locale: "es-AR", label: "Peso argentino (ARS)" },
-  { code: "CLP", locale: "es-CL", label: "Peso chileno (CLP)" },
-  { code: "PEN", locale: "es-PE", label: "Sol peruano (PEN)" },
-  { code: "GTQ", locale: "es-GT", label: "Quetzal (GTQ)" },
-  { code: "BRL", locale: "pt-BR", label: "Real brasileño (BRL)" },
-];
-
-function formatPreview(currency: string, locale: string): string {
-  try {
-    return new Intl.NumberFormat(locale, { style: "currency", currency, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(199);
-  } catch {
-    return "$199";
-  }
-}
-
-// ── Recompensas por puntos (lealtad Fase 3) ─────────────────────────────────
-// CRUD contra /api/loyalty/rewards. Una recompensa da un producto gratis o un
-// descuento fijo en $; el cliente la canjea en el checkout de la tienda online.
-type Reward = {
-  id: string;
-  name: string;
-  description?: string | null;
-  pointsCost: number;
-  menuItemId?: string | null;
-  menuItem?: { id: string; name: string } | null;
-  discountAmount?: string | number | null;
-  isActive: boolean;
-};
-
-function RewardsManager() {
-  const [rewards, setRewards] = useState<Reward[]>([]);
-  const [menuItems, setMenuItems] = useState<Array<{ id: string; name: string }>>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  // Form de alta
-  const [name, setName] = useState("");
-  const [pointsCost, setPointsCost] = useState(100);
-  const [kind, setKind] = useState<"PRODUCT" | "DISCOUNT">("PRODUCT");
-  const [menuItemId, setMenuItemId] = useState("");
-  const [discountAmount, setDiscountAmount] = useState(50);
-
-  const load = () => {
-    Promise.all([api.get("/api/loyalty/rewards"), api.get("/api/menu/items?admin=true")])
-      .then(([rw, mi]) => {
-        setRewards(Array.isArray(rw.data) ? rw.data : []);
-        const items = Array.isArray(mi.data) ? mi.data : (mi.data?.items || []);
-        setMenuItems(items.map((i: any) => ({ id: i.id, name: i.name })));
-      })
-      .catch(() => setMsg("No se pudieron cargar las recompensas"))
-      .finally(() => setLoaded(true));
+  const mesaNum = (name: string) => (String(name).match(/\d+/) || [])[0] || "";
+  const linkFor = (t: { name: string; locationId: string }) => {
+    const num = mesaNum(t.name);
+    if (!num || !storeUrl) return "";
+    const sep = storeUrl.includes("?") ? "&" : "?";
+    return `${storeUrl}${sep}mesa=${encodeURIComponent(num)}&l=${encodeURIComponent(t.locationId)}`;
   };
-  useEffect(load, []);
-
-  const create = async () => {
-    setMsg("");
-    if (!name.trim()) { setMsg("Ponle nombre a la recompensa"); return; }
-    if (kind === "PRODUCT" && !menuItemId) { setMsg("Elige el producto que regala"); return; }
-    setSaving(true);
-    try {
-      await api.post("/api/loyalty/rewards", {
-        name: name.trim(),
-        pointsCost,
-        menuItemId: kind === "PRODUCT" ? menuItemId : undefined,
-        discountAmount: kind === "DISCOUNT" ? discountAmount : undefined,
-      });
-      setName(""); setMenuItemId("");
-      load();
-    } catch (e: any) {
-      setMsg(e?.response?.data?.error || "No se pudo crear la recompensa");
-    } finally { setSaving(false); }
-  };
-
-  const toggle = async (r: Reward) => {
-    try {
-      await api.put(`/api/loyalty/rewards/${r.id}`, {
-        name: r.name,
-        description: r.description || undefined,
-        pointsCost: r.pointsCost,
-        menuItemId: r.menuItemId || undefined,
-        discountAmount: r.menuItemId ? undefined : Number(r.discountAmount || 0),
-        isActive: !r.isActive,
-      });
-      load();
-    } catch (e: any) { setMsg(e?.response?.data?.error || "No se pudo actualizar"); }
-  };
-
-  const remove = async (r: Reward) => {
-    if (!confirm(`¿Eliminar la recompensa "${r.name}"?`)) return;
-    try { await api.delete(`/api/loyalty/rewards/${r.id}`); load(); }
-    catch (e: any) { setMsg(e?.response?.data?.error || "No se pudo eliminar"); }
-  };
+  const usable = tables.filter((t) => linkFor(t));
 
   return (
-    <div className="mt-6 border-t pt-5" style={{ borderColor: "var(--bd-1)" }}>
+    <div className="mt-3 rounded-2xl px-4 py-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
       <div className="mb-3 flex items-center gap-2">
-        <Trophy size={14} className="shrink-0 text-tx-mid" />
-        <p className="text-[13px] font-extrabold text-tx-hi">Recompensas canjeables</p>
-      </div>
-
-      {loaded && rewards.length > 0 && (
-        <div className="mb-4 space-y-2">
-          {rewards.map((r) => (
-            <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl px-4 py-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-tx-hi">
-                  {r.name}
-                  {!r.isActive && <span className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold text-tx-mut" style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>Pausada</span>}
-                </p>
-                <p className="truncate text-[12px] text-tx-mut">
-                  {r.menuItem ? `${r.menuItem.name} gratis` : `−$${Number(r.discountAmount || 0)} de descuento`} · {r.pointsCost} pts
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <button type="button" onClick={() => toggle(r)} className="rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-tx-mid" style={{ border: "1px solid var(--bd-1)" }}>
-                  {r.isActive ? "Pausar" : "Activar"}
-                </button>
-                <button type="button" onClick={() => remove(r)} className="rounded-lg p-1.5 text-tx-mut" title="Eliminar" style={{ border: "1px solid var(--bd-1)" }}>
-                  <X size={13} />
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-extrabold text-tx-hi">QR de mesas (autoservicio)</p>
+          <p className="mt-0.5 text-[11.5px] leading-relaxed text-tx-mut">
+            Pega un QR en cada mesa. El comensal escanea, ve el menú y su pedido entra al TPV con la mesa ya puesta.
+          </p>
         </div>
-      )}
-      {loaded && rewards.length === 0 && (
-        <p className="mb-4 text-[12px] text-tx-mut">Sin recompensas todavía. Crea la primera: tus clientes las canjean con sus puntos en la tienda online.</p>
-      )}
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <FieldLabel>Nombre</FieldLabel>
-          <input type="text" value={name} placeholder="Ej. Hamburguesa de regalo" onChange={(e) => setName(e.target.value)} className={INPUT_CLS} style={INPUT_STYLE} />
-        </div>
-        <div>
-          <FieldLabel>Cuesta (puntos)</FieldLabel>
-          <input type="number" min="1" value={pointsCost} onChange={(e) => setPointsCost(Math.max(1, parseInt(e.target.value) || 1))} className={INPUT_CLS} style={INPUT_STYLE} />
-        </div>
-        <div>
-          <FieldLabel>Qué otorga</FieldLabel>
-          <select value={kind} onChange={(e) => setKind(e.target.value as "PRODUCT" | "DISCOUNT")} className={INPUT_CLS} style={INPUT_STYLE}>
-            <option value="PRODUCT">Producto gratis</option>
-            <option value="DISCOUNT">Descuento fijo ($)</option>
-          </select>
-        </div>
-        {kind === "PRODUCT" ? (
-          <div>
-            <FieldLabel>Producto</FieldLabel>
-            <select value={menuItemId} onChange={(e) => setMenuItemId(e.target.value)} className={INPUT_CLS} style={INPUT_STYLE}>
-              <option value="">Elegir…</option>
-              {menuItems.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-          </div>
-        ) : (
-          <div>
-            <FieldLabel>Descuento ($)</FieldLabel>
-            <input type="number" min="1" step="any" value={discountAmount} onChange={(e) => setDiscountAmount(Math.max(1, Number(e.target.value) || 1))} className={INPUT_CLS} style={INPUT_STYLE} />
-          </div>
+        {usable.length > 0 && (
+          <button type="button" onClick={() => window.print()} className="shrink-0 rounded-xl px-3 py-2 text-[12px] font-extrabold text-white" style={{ background: "var(--brand-primary)" }}>
+            Imprimir
+          </button>
         )}
       </div>
-      {msg && <p className="mt-2 text-[12px] font-bold text-amber-600">{msg}</p>}
-      <button type="button" onClick={create} disabled={saving} className="mt-3 rounded-xl px-4 py-2.5 text-[12px] font-extrabold text-white disabled:opacity-50" style={{ background: "var(--brand-primary)" }}>
-        {saving ? "Creando…" : "Agregar recompensa"}
-      </button>
-    </div>
-  );
-}
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <div className="mb-1.5 font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">{children}</div>;
-}
-
-// ── Cupones de descuento (código) ───────────────────────────────────────────
-// CRUD contra /api/loyalty/coupons. El cliente escribe el código en el checkout
-// de la tienda online y obtiene el descuento. Es exclusivo de la tienda: el bot
-// de WhatsApp no canjea cupones, así que un cupón aquí empuja a pedir por la web.
-type Coupon = {
-  id: string;
-  code: string;
-  description: string;
-  discountType: "PERCENTAGE" | "FIXED";
-  discountValue: string | number;
-  minOrderAmount: string | number;
-  maxUses?: number | null;
-  usedCount: number;
-  expiresAt?: string | null;
-  isActive: boolean;
-};
-
-function CouponsManager() {
-  const [coupons, setCoupons] = useState<Coupon[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  // Form de alta
-  const [code, setCode] = useState("");
-  const [discountType, setDiscountType] = useState<"PERCENTAGE" | "FIXED">("PERCENTAGE");
-  const [discountValue, setDiscountValue] = useState(10);
-  const [minOrderAmount, setMinOrderAmount] = useState(150);
-  const [maxUses, setMaxUses] = useState("");
-  const [expiresAt, setExpiresAt] = useState("");
-
-  const load = () => {
-    api.get("/api/loyalty/coupons")
-      .then((r) => setCoupons(Array.isArray(r.data) ? r.data : []))
-      .catch(() => setMsg("No se pudieron cargar los cupones"))
-      .finally(() => setLoaded(true));
-  };
-  useEffect(load, []);
-
-  const create = async () => {
-    setMsg("");
-    if (!code.trim()) { setMsg("Ponle un código al cupón"); return; }
-    setSaving(true);
-    try {
-      await api.post("/api/loyalty/coupons", {
-        code: code.trim(),
-        discountType,
-        discountValue,
-        minOrderAmount,
-        maxUses: maxUses.trim() === "" ? null : Number(maxUses),
-        expiresAt: expiresAt || null,
-      });
-      setCode(""); setMaxUses(""); setExpiresAt("");
-      load();
-    } catch (e: any) {
-      setMsg(e?.response?.data?.error || "No se pudo crear el cupón");
-    } finally { setSaving(false); }
-  };
-
-  const toggle = async (c: Coupon) => {
-    try {
-      await api.put(`/api/loyalty/coupons/${c.id}`, { isActive: !c.isActive });
-      load();
-    } catch (e: any) { setMsg(e?.response?.data?.error || "No se pudo actualizar"); }
-  };
-
-  const remove = async (c: Coupon) => {
-    if (!confirm(`¿Eliminar el cupón "${c.code}"?`)) return;
-    try { await api.delete(`/api/loyalty/coupons/${c.id}`); load(); }
-    catch (e: any) { setMsg(e?.response?.data?.error || "No se pudo eliminar"); }
-  };
-
-  const summarize = (c: Coupon) => {
-    const val = c.discountType === "PERCENTAGE" ? `${Number(c.discountValue)}%` : `$${Number(c.discountValue)}`;
-    const min = Number(c.minOrderAmount) > 0 ? ` · mín $${Number(c.minOrderAmount)}` : "";
-    const uses = c.maxUses ? ` · ${c.usedCount}/${c.maxUses} usos` : ` · ${c.usedCount} usos`;
-    const exp = c.expiresAt ? ` · vence ${new Date(c.expiresAt).toLocaleDateString()}` : "";
-    return `${val} de descuento${min}${uses}${exp}`;
-  };
-
-  return (
-    <div className="mt-2">
-      {loaded && coupons.length > 0 && (
-        <div className="mb-4 space-y-2">
-          {coupons.map((c) => (
-            <div key={c.id} className="flex items-center justify-between gap-3 rounded-xl px-4 py-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-tx-hi">
-                  <span className="font-mono">{c.code}</span>
-                  {!c.isActive && <span className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold text-tx-mut" style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>Pausado</span>}
-                </p>
-                <p className="truncate text-[12px] text-tx-mut">{summarize(c)}</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <button type="button" onClick={() => toggle(c)} className="rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-tx-mid" style={{ border: "1px solid var(--bd-1)" }}>
-                  {c.isActive ? "Pausar" : "Activar"}
-                </button>
-                <button type="button" onClick={() => remove(c)} className="rounded-lg p-1.5 text-tx-mut" title="Eliminar" style={{ border: "1px solid var(--bd-1)" }}>
-                  <X size={13} />
+      {loading ? (
+        <p className="text-[12px] text-tx-mut">Cargando mesas…</p>
+      ) : usable.length === 0 ? (
+        <p className="text-[12px] text-tx-mut">
+          No hay mesas con número en esta sucursal. Crea mesas (con un número en el nombre, ej. «Mesa 1») desde el mapa del TPV.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          {usable.map((t) => {
+            const link = linkFor(t);
+            return (
+              <div key={t.id} className="flex flex-col items-center gap-2 rounded-2xl p-3" style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>
+                <div className="rounded-xl bg-white p-2">
+                  <QRCodeSVG value={link} size={112} marginSize={1} />
+                </div>
+                <p className="text-[12px] font-extrabold text-tx-hi">{t.name}</p>
+                <button
+                  type="button"
+                  onClick={() => { navigator.clipboard?.writeText(link).catch(() => {}); }}
+                  className="text-[11px] font-bold text-tx-mut hover:text-tx-hi"
+                >
+                  Copiar enlace
                 </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
-      {loaded && coupons.length === 0 && (
-        <p className="mb-4 text-[12px] text-tx-mut">Sin cupones todavía. Crea uno exclusivo de la tienda (ej. <span className="font-mono">TIENDA10</span>) y anima a tus clientes a pedir por la web.</p>
-      )}
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <FieldLabel>Código</FieldLabel>
-          <input type="text" value={code} placeholder="Ej. TIENDA10" onChange={(e) => setCode(e.target.value.toUpperCase())} className={INPUT_CLS} style={INPUT_STYLE} />
-        </div>
-        <div>
-          <FieldLabel>Tipo de descuento</FieldLabel>
-          <select value={discountType} onChange={(e) => setDiscountType(e.target.value as "PERCENTAGE" | "FIXED")} className={INPUT_CLS} style={INPUT_STYLE}>
-            <option value="PERCENTAGE">Porcentaje (%)</option>
-            <option value="FIXED">Monto fijo ($)</option>
-          </select>
-        </div>
-        <div>
-          <FieldLabel>{discountType === "PERCENTAGE" ? "Descuento (%)" : "Descuento ($)"}</FieldLabel>
-          <input type="number" min="1" step="any" value={discountValue} onChange={(e) => setDiscountValue(Math.max(1, Number(e.target.value) || 1))} className={INPUT_CLS} style={INPUT_STYLE} />
-        </div>
-        <div>
-          <FieldLabel>Compra mínima ($)</FieldLabel>
-          <input type="number" min="0" step="any" value={minOrderAmount} onChange={(e) => setMinOrderAmount(Math.max(0, Number(e.target.value) || 0))} className={INPUT_CLS} style={INPUT_STYLE} />
-        </div>
-        <div>
-          <FieldLabel>Usos máx. (vacío = ilimitado)</FieldLabel>
-          <input type="number" min="1" value={maxUses} placeholder="Ilimitado" onChange={(e) => setMaxUses(e.target.value)} className={INPUT_CLS} style={INPUT_STYLE} />
-        </div>
-        <div>
-          <FieldLabel>Vence (opcional)</FieldLabel>
-          <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className={INPUT_CLS} style={INPUT_STYLE} />
-        </div>
-      </div>
-      {msg && <p className="mt-2 text-[12px] font-bold text-amber-600">{msg}</p>}
-      <button type="button" onClick={create} disabled={saving} className="mt-3 rounded-xl px-4 py-2.5 text-[12px] font-extrabold text-white disabled:opacity-50" style={{ background: "var(--brand-primary)" }}>
-        {saving ? "Creando…" : "Agregar cupón"}
-      </button>
     </div>
   );
 }
 
 export default function TiendaConfigPage() {
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [geoStatus, setGeoStatus] = useState<"" | "loading" | "ok" | "error">("");
-  const [config, setConfig] = useState({
+  const [config, setConfig] = useState<TiendaConfig>({
     slug: "",
     phone: "",
     address: "",
@@ -414,9 +102,13 @@ export default function TiendaConfigPage() {
     freeDeliveryFrom: 0,
     estimatedDelivery: 40,
     storefrontTheme: "KAWAII",
-    currency: "MXN",
-    currencyLocale: "es-MX",
     storefrontHeroUrl: "",
+    // Módulo OlaClick
+    whatsappOrderingEnabled: false,
+    hasWhatsappOrdersModule: false,
+    // Aviso al dueño por WhatsApp cuando entra un pedido web.
+    orderAlertEnabled: false,
+    orderAlertWhatsapp: "",
     // Estado de la tienda
     isOpen: true,
     closedMessage: "",
@@ -435,13 +127,13 @@ export default function TiendaConfigPage() {
     timezone: "America/Mexico_City",
     businessHours: [] as BusinessHour[],
     // Envío por distancia
-    deliveryMode: "FLAT" as "FLAT" | "DISTANCE" | "ZONES",
-    originLat: null as number | null,
-    originLng: null as number | null,
+    deliveryMode: "FLAT",
+    originLat: null,
+    originLng: null,
     deliveryBaseFee: 0,
     deliveryPerKm: 0,
-    deliveryFreeRadiusKm: null as number | null,
-    deliveryMaxKm: null as number | null,
+    deliveryFreeRadiusKm: null,
+    deliveryMaxKm: null,
     // Programa de puntos
     pointsPerTen: 1,
     pointsValuePesos: 0.1,
@@ -461,9 +153,9 @@ export default function TiendaConfigPage() {
       const { data } = await api.post("/api/upload/image?mode=hero", fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      if (data?.url) setConfig(p => ({ ...p, storefrontHeroUrl: data.url }));
+      if (data?.url) setConfig((p) => ({ ...p, storefrontHeroUrl: data.url }));
     } catch (err: any) {
-      alert("No se pudo subir la imagen: " + (err?.response?.data?.error || err?.message || ""));
+      toast.error("No se pudo subir la imagen: " + (err?.response?.data?.error || err?.message || ""));
     } finally {
       setHeroUploading(false);
       e.target.value = "";
@@ -475,28 +167,12 @@ export default function TiendaConfigPage() {
     setGeoStatus("loading");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setConfig(p => ({ ...p, originLat: pos.coords.latitude, originLng: pos.coords.longitude }));
+        setConfig((p) => ({ ...p, originLat: pos.coords.latitude, originLng: pos.coords.longitude }));
         setGeoStatus("ok");
       },
       () => setGeoStatus("error"),
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  };
-
-  // Devuelve la franja configurada para un día, o el default si no existe.
-  const getDayHour = (day: number): BusinessHour =>
-    config.businessHours.find(h => h.day === day) || { day, ...DEFAULT_HOUR };
-
-  // Aplica un cambio parcial a la franja de un día, manteniendo el array ordenado.
-  const setDayHour = (day: number, patch: Partial<BusinessHour>) => {
-    setConfig(p => {
-      const current = p.businessHours.find(h => h.day === day) || { day, ...DEFAULT_HOUR };
-      const others = p.businessHours.filter(h => h.day !== day);
-      return {
-        ...p,
-        businessHours: [...others, { ...current, ...patch }].sort((a, b) => a.day - b.day),
-      };
-    });
   };
 
   const storeUrl = config.slug ? getStoreUrl(config.slug) : "";
@@ -507,14 +183,14 @@ export default function TiendaConfigPage() {
       await navigator.clipboard.writeText(storeUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch { alert("No se pudo copiar el enlace"); }
+    } catch { toast.error("No se pudo copiar el enlace"); }
   };
 
   useEffect(() => {
     api.get("/api/admin/config")
-      .then(res => {
+      .then((res) => {
         const d = res.data || {};
-        setConfig(prev => ({
+        setConfig((prev) => ({
           ...prev,
           ...d,
           freeDeliveryFrom: d.freeDeliveryFrom ?? 0,
@@ -522,6 +198,10 @@ export default function TiendaConfigPage() {
           maxOpenOrders: d.maxOpenOrders ?? 0,
           saturatedMessage: d.saturatedMessage ?? "",
           deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : d.deliveryMode === "ZONES" ? "ZONES" : "FLAT",
+          whatsappOrderingEnabled: d.whatsappOrderingEnabled ?? false,
+          hasWhatsappOrdersModule: d.hasWhatsappOrdersModule ?? false,
+          orderAlertEnabled: d.orderAlertEnabled ?? false,
+          orderAlertWhatsapp: d.orderAlertWhatsapp ?? "",
           isOpen: d.isOpen ?? true,
           adminCanViewExpectedCash: d.adminCanViewExpectedCash ?? true,
           cashCutEmailEnabled: d.cashCutEmailEnabled ?? false,
@@ -529,8 +209,6 @@ export default function TiendaConfigPage() {
           scheduleEnabled: d.scheduleEnabled ?? false,
           countryCode: d.countryCode || "MX",
           timezone: d.timezone || "America/Mexico_City",
-          currency: d.currency || "MXN",
-          currencyLocale: d.currencyLocale || "es-MX",
           businessHours: (() => {
             try {
               const parsed = JSON.parse(d.businessHours || "[]");
@@ -546,7 +224,7 @@ export default function TiendaConfigPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      const { slug: _slug, ...rest } = config;
+      const { slug: _slug, hasWhatsappOrdersModule: _hwom, ...rest } = config;
       await api.put("/api/admin/config", {
         ...rest,
         freeDeliveryFrom: config.freeDeliveryFrom > 0 ? config.freeDeliveryFrom : null,
@@ -557,547 +235,86 @@ export default function TiendaConfigPage() {
     } catch (err: any) {
       const status = err?.response?.status;
       const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message || "Error desconocido";
-      alert(`Error al guardar (${status ?? "sin respuesta"}): ${msg}`);
+      toast.error(`Error al guardar (${status ?? "sin respuesta"}): ${msg}`);
       setSaving(false);
     }
   }
 
   if (loading) {
     return (
-      <WtScreen>
+      <PageShell>
         <PageHeader eyebrow="Tienda online" title="Tienda" subtitle="Configura tu tienda online y reglas de pedido" />
         <div className="space-y-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-28 animate-pulse rounded-[18px] bg-surf-2" />
+            <Skeleton key={i} className="h-28 rounded-ds-lg" />
           ))}
         </div>
-      </WtScreen>
+      </PageShell>
     );
   }
 
-  const THEMES = [
-    { id: "KAWAII", name: "Kawaii", icon: Flower2, desc: "Pastel lavanda · bubble-tea · cute 🧋" },
-    { id: "MUNDIALISTA", name: "Mundialista", icon: Trophy, desc: "Estadio oscuro · Dorado · Mundial ⚽" },
-  ];
-
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Tienda online"
         title="Tienda"
         subtitle="Configura tu tienda online y reglas de pedido"
-        actions={<PrimaryBtn icon={Store} full={false} onClick={handleSave} disabled={saving}>{saving ? "Guardando…" : "Guardar tienda"}</PrimaryBtn>}
+        actions={
+          <Button icon={Store} onClick={handleSave} disabled={saving} loading={saving}>
+            {saving ? "Guardando…" : "Guardar tienda"}
+          </Button>
+        }
       />
 
       {/* Card destacada de la tienda online: URL + estado */}
       {storeUrl && (
-        <WtCard className="mb-4 p-5 md:p-6">
-          <SectionHead title="Tu tienda online" />
-          <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(storeUrl)}`}
-              alt="QR de la tienda"
-              width={130}
-              height={130}
-              className="shrink-0 rounded-2xl bg-white p-2"
-            />
-            <div className="w-full min-w-0 flex-1">
-              <div className="mb-3 flex items-center justify-between gap-3 rounded-xl px-3 py-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
-                <Link2 size={15} className="shrink-0 text-tx-mut" />
-                <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-primary">{storeUrl}</span>
-              </div>
-              {/* 2 stats: estado y tiempo estimado */}
-              <div className="mb-3 grid grid-cols-2 gap-3">
-                <StatTile
-                  icon={Power}
-                  value={<span style={{ color: config.isOpen ? "var(--ok)" : "var(--err)" }}>{config.isOpen ? "Abierta" : "Cerrada"}</span>}
-                  label={config.isOpen ? "Recibiendo pedidos" : "Pedidos bloqueados"}
-                />
-                <StatTile icon={Clock} value={`${config.estimatedDelivery} min`} label="Entrega estimada" />
-              </div>
-              <div className="flex gap-2">
-                <PrimaryBtn ghost icon={copied ? Check : Copy} onClick={copyStoreUrl}>{copied ? "¡Copiado!" : "Copiar enlace"}</PrimaryBtn>
-                <PrimaryBtn icon={ExternalLink} href={storeUrl}>Ver tienda</PrimaryBtn>
-              </div>
-            </div>
-          </div>
-        </WtCard>
+        <StoreLinkCard
+          storeUrl={storeUrl}
+          isOpen={config.isOpen}
+          estimatedDelivery={config.estimatedDelivery}
+          copied={copied}
+          onCopy={copyStoreUrl}
+        />
       )}
 
       <div className="space-y-4">
-        {/* Estado de la tienda */}
-        <WtCard className="p-5 md:p-6">
-          <div className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <Power size={16} className="shrink-0 text-tx-mid" />
-                <p className="font-display text-base font-extrabold text-tx-hi">Estado de la tienda</p>
-              </div>
-              <p className="mt-1 text-[12px] text-tx-mut">
-                {config.isOpen ? "Abierta — recibiendo pedidos" : "Cerrada — pedidos bloqueados"}
-              </p>
-            </div>
-            <Toggle checked={config.isOpen} onChange={(v) => setConfig(p => ({ ...p, isOpen: v }))} label="Estado de la tienda" />
-          </div>
-          {!config.isOpen && (
-            <div className="mt-4">
-              <FieldLabel>Mensaje al cliente (tienda cerrada)</FieldLabel>
-              <input type="text" value={config.closedMessage} placeholder="Ej. Volvemos mañana a las 9:00 am" onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, closedMessage: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-            </div>
-          )}
-        </WtCard>
+        <StoreStatusCards config={config} setConfig={setConfig} />
 
-        {/* Freno de saturación — tope de pedidos remotos cuando la cocina va al tope */}
-        <WtCard className="p-5 md:p-6">
-          <div className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <AlertTriangle size={16} className="shrink-0 text-tx-mid" />
-                <p className="font-display text-base font-extrabold text-tx-hi">Freno de saturación</p>
-              </div>
-              <p className="mt-1 text-[12px] text-tx-mut">
-                {config.maxOpenOrders > 0
-                  ? `Al llegar a ${config.maxOpenOrders} pedidos abiertos en cocina, la tienda online y el bot de WhatsApp dejan de aceptar pedidos. El TPV nunca se bloquea.`
-                  : "Apagado — la tienda online y el bot aceptan pedidos sin límite aunque la cocina vaya al tope."}
-              </p>
-            </div>
-            <Toggle checked={config.maxOpenOrders > 0} onChange={(v) => setConfig(p => ({ ...p, maxOpenOrders: v ? 25 : 0 }))} label="Freno de saturación" />
-          </div>
-          {config.maxOpenOrders > 0 && (
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div>
-                <FieldLabel>Tope de pedidos abiertos</FieldLabel>
-                <input type="number" min="1" value={config.maxOpenOrders} onChange={(e) => { const v = Math.max(1, parseInt(e.target.value) || 1); setConfig(p => ({ ...p, maxOpenOrders: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-                <p className="mt-1 text-[11px] text-tx-mut">Se cuentan los pedidos pendientes, confirmados y en preparación de las últimas 2 horas (de todos los canales).</p>
-              </div>
-              <div>
-                <FieldLabel>Mensaje al cliente (saturados)</FieldLabel>
-                <input type="text" value={config.saturatedMessage} placeholder="Ej. Cocina al tope 🔥 inténtalo en 30 min" onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, saturatedMessage: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-              </div>
-            </div>
-          )}
-        </WtCard>
+        <ScheduleCard config={config} setConfig={setConfig} />
 
-        {/* Corte de caja — visibilidad del efectivo esperado */}
-        <WtCard className="p-5 md:p-6">
-          <div className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <Wallet size={16} className="shrink-0 text-tx-mid" />
-                <p className="font-display text-base font-extrabold text-tx-hi">Corte de caja</p>
-              </div>
-              <p className="mt-1 text-[12px] text-tx-mut">
-                {config.adminCanViewExpectedCash
-                  ? "Admins y gerentes ven el efectivo esperado al hacer el corte."
-                  : "Corte ciego estricto: ni los admins ven el esperado (solo empleados con permiso explícito)."}
-              </p>
-            </div>
-            <Toggle checked={config.adminCanViewExpectedCash} onChange={(v) => setConfig(p => ({ ...p, adminCanViewExpectedCash: v }))} label="Admins ven el efectivo esperado" />
-          </div>
-        </WtCard>
+        <ContactThemeCard config={config} setConfig={setConfig} heroUploading={heroUploading} uploadHero={uploadHero} />
 
-        {/* Corte de caja — envío automático por correo al cierre */}
-        <WtCard className="p-5 md:p-6">
-          <div className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <Mail size={16} className="shrink-0 text-tx-mid" />
-                <p className="font-display text-base font-extrabold text-tx-hi">Corte por correo</p>
-              </div>
-              <p className="mt-1 text-[12px] text-tx-mut">
-                {config.cashCutEmailEnabled
-                  ? "Al cerrar la caja (restaurante y tienda) se envía el resumen del corte por correo."
-                  : "Recibe el corte de caja en tu correo cada vez que se cierra la caja, tanto del restaurante como de la tienda."}
-              </p>
-            </div>
-            <Toggle checked={config.cashCutEmailEnabled} onChange={(v) => setConfig(p => ({ ...p, cashCutEmailEnabled: v }))} label="Enviar el corte por correo" />
-          </div>
-          {config.cashCutEmailEnabled && (
-            <div className="mt-4">
-              <FieldLabel>Correo(s) destino</FieldLabel>
-              <input
-                type="text"
-                value={config.cashCutEmails}
-                placeholder="dueño@correo.com, contador@correo.com"
-                onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, cashCutEmails: v })); }}
-                className={INPUT_CLS}
-                style={INPUT_STYLE}
-              />
-              <p className="mt-1.5 text-[11px] text-tx-mut">
-                Separa varios correos con coma. Si lo dejas vacío, se envía a los administradores del restaurante.
-              </p>
-            </div>
-          )}
-        </WtCard>
+        <DeliveryCard config={config} setConfig={setConfig} geoStatus={geoStatus} useMyLocation={useMyLocation} />
 
-        {/* País / WhatsApp */}
-        <WtCard className="p-5 md:p-6">
-          <div className="mb-3 flex items-center gap-2">
-            <Globe size={16} className="shrink-0 text-tx-mid" />
-            <div className="min-w-0">
-              <p className="font-display text-base font-extrabold text-tx-hi">País</p>
-              <p className="mt-0.5 text-[12px] text-tx-mut">Define la lada que se antepone a los teléfonos en los enlaces de WhatsApp</p>
-            </div>
-          </div>
-          <select
-            value={config.countryCode}
-            onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, countryCode: v })); }}
-            className={INPUT_CLS} style={INPUT_STYLE}
-          >
-            {COUNTRIES.map(c => (
-              <option key={c.code} value={c.code}>{c.name}</option>
-            ))}
-          </select>
-        </WtCard>
-
-        {/* Horario de atención automático */}
-        <WtCard className="p-5 md:p-6">
-          <div className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <Clock size={16} className="shrink-0 text-tx-mid" />
-                <p className="font-display text-base font-extrabold text-tx-hi">Horario automático</p>
-              </div>
-              <p className="mt-1 text-[12px] text-tx-mut">
-                {config.scheduleEnabled ? "La tienda abre y cierra sola según el horario" : "Desactivado — controlas la apertura manualmente"}
-              </p>
-            </div>
-            <Toggle checked={config.scheduleEnabled} onChange={(v) => setConfig(p => ({ ...p, scheduleEnabled: v }))} label="Horario automático" />
-          </div>
-
-          {config.scheduleEnabled && (
-            <div className="mt-4 space-y-4">
-              {!config.isOpen && (
-                <p className="flex items-start gap-2 rounded-2xl px-4 py-3 text-[11.5px] font-semibold" style={{ background: "var(--warn-soft)", color: "var(--warn)" }}>
-                  <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-                  El interruptor «Estado de la tienda» está en cerrado y manda sobre el horario: la tienda seguirá cerrada hasta que lo vuelvas a abrir.
-                </p>
-              )}
-
-              <div>
-                <FieldLabel>Zona horaria</FieldLabel>
-                <select
-                  value={config.timezone}
-                  onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, timezone: v })); }}
-                  className={INPUT_CLS} style={INPUT_STYLE}
-                >
-                  {TIMEZONES.map(tz => (
-                    <option key={tz.value} value={tz.value}>{tz.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                {WEEK_DAYS.map(d => {
-                  const h = getDayHour(d.value);
-                  return (
-                    <div key={d.value} className="flex items-center gap-3 rounded-2xl px-3 py-2.5" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
-                      <Toggle checked={h.enabled} onChange={(v) => setDayHour(d.value, { enabled: v })} label={`${d.label} abierto`} />
-                      <span className="w-20 shrink-0 text-[12.5px] font-bold text-tx">{d.label}</span>
-                      {h.enabled ? (
-                        <div className="ml-auto flex items-center gap-2">
-                          <input
-                            type="time"
-                            value={h.open}
-                            onChange={(e) => { const v = e.target.value; setDayHour(d.value, { open: v }); }}
-                            className="min-h-10 rounded-xl px-2 text-sm font-bold outline-none focus:border-[var(--brand-primary)]"
-                            style={INPUT_STYLE}
-                          />
-                          <span className="text-xs font-bold text-tx-dim">a</span>
-                          <input
-                            type="time"
-                            value={h.close}
-                            onChange={(e) => { const v = e.target.value; setDayHour(d.value, { close: v }); }}
-                            className="min-h-10 rounded-xl px-2 text-sm font-bold outline-none focus:border-[var(--brand-primary)]"
-                            style={INPUT_STYLE}
-                          />
-                        </div>
-                      ) : (
-                        <span className="ml-auto font-mono text-[10px] uppercase tracking-[.12em] text-tx-dim">Cerrado</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="text-[11px] leading-relaxed text-tx-mut">
-                Tip: para un turno nocturno que cruza medianoche (ej. 18:00 → 02:00), pon la hora de cierre menor a la de apertura.
-              </p>
-            </div>
-          )}
-        </WtCard>
-
-        {/* Contacto y tema */}
-        <WtCard className="p-5 md:p-6">
-          <div className="mb-4">
-            <p className="font-display text-base font-extrabold text-tx-hi">Contacto público</p>
-            <p className="mt-0.5 text-[12px] text-tx-mut">Datos que verá el cliente en tu tienda</p>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <FieldLabel><Phone size={11} className="mr-1 inline" /> Teléfono</FieldLabel>
-              <input type="text" value={config.phone} onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, phone: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-            </div>
-            <div>
-              <FieldLabel><MessageCircle size={11} className="mr-1 inline" /> Mensajería</FieldLabel>
-              <input type="text" value={config.whatsappNumber} onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, whatsappNumber: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <FieldLabel><MapPin size={11} className="mr-1 inline" /> Dirección principal</FieldLabel>
-            <input type="text" value={config.address} onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, address: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-          </div>
-
-          <div className="mt-4">
-            <FieldLabel>Moneda de la tienda</FieldLabel>
-            <select
-              value={config.currency}
-              onChange={(e) => {
-                const c = CURRENCIES.find(x => x.code === e.target.value) ?? { code: "MXN", locale: "es-MX" };
-                setConfig(p => ({ ...p, currency: c.code, currencyLocale: c.locale }));
-              }}
-              className={INPUT_CLS} style={INPUT_STYLE}
-            >
-              {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
-            </select>
-            <p className="ml-1 mt-1 text-[10px] text-tx-dim">Cómo se muestran los precios en la tienda. Vista previa: {formatPreview(config.currency, config.currencyLocale)}</p>
-          </div>
-
-          <div className="mt-5">
-            <FieldLabel><Palette size={11} className="mr-1 inline" /> Estilo de tienda online</FieldLabel>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {THEMES.map(t => {
-                const active = config.storefrontTheme === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setConfig(p => ({ ...p, storefrontTheme: t.id }))}
-                    className="flex min-h-[60px] items-start gap-3 rounded-2xl p-4 text-left transition-colors"
-                    style={{
-                      border: `2px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`,
-                      background: active ? "var(--iris-soft)" : "var(--surf-2)",
-                    }}
-                  >
-                    <t.icon size={20} className="mt-0.5 shrink-0" style={{ color: active ? "var(--brand-primary)" : "var(--tx-mut)" }} />
-                    <div className="min-w-0">
-                      <p className="font-display text-sm font-extrabold text-tx-hi">{t.name}</p>
-                      <p className="mt-0.5 text-[11px] text-tx-mut">{t.desc}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Imagen de portada (hero) — la usa el tema Mundialista a todo lo ancho */}
-          <div className="mt-5">
-            <FieldLabel><ImagePlus size={11} className="mr-1 inline" /> Imagen de portada (hero)</FieldLabel>
-            <p className="mb-2 text-[11px] text-tx-mut">Se muestra a todo lo ancho arriba (tema Mundialista). Recomendado panorámico ~1600×520. Se sube sin recorte.</p>
-            {config.storefrontHeroUrl ? (
-              <div className="relative overflow-hidden rounded-xl" style={{ border: "1px solid var(--bd-1)" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={config.storefrontHeroUrl} alt="Portada" className="w-full object-cover" style={{ maxHeight: 180 }} />
-                <button
-                  type="button"
-                  onClick={() => setConfig(p => ({ ...p, storefrontHeroUrl: "" }))}
-                  className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full"
-                  style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}
-                  aria-label="Quitar imagen"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            ) : (
-              <label
-                className="flex cursor-pointer items-center justify-center gap-2 rounded-xl py-6 text-sm font-semibold"
-                style={{ border: "1.5px dashed var(--bd-1)", background: "var(--surf-2)", color: "var(--tx-mid)" }}
-              >
-                <Upload size={16} /> {heroUploading ? "Subiendo…" : "Subir imagen de portada"}
-                <input type="file" accept="image/*" className="hidden" onChange={uploadHero} disabled={heroUploading} />
-              </label>
-            )}
-            <input
-              type="text"
-              value={config.storefrontHeroUrl || ""}
-              placeholder="…o pega una URL de imagen"
-              onChange={(e) => { const v = e.target.value; setConfig(p => ({ ...p, storefrontHeroUrl: v })); }}
-              className={INPUT_CLS}
-              style={{ ...INPUT_STYLE, marginTop: 8 }}
-            />
-          </div>
-        </WtCard>
-
-        {/* Envíos y reglas de la tienda online */}
-        <WtCard className="p-5 md:p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <Truck size={16} className="shrink-0 text-tx-mid" />
-            <div className="min-w-0">
-              <p className="font-display text-base font-extrabold text-tx-hi">Envíos y reglas de pedido</p>
-              <p className="mt-0.5 text-[12px] text-tx-mut">Reglas que verá el cliente al pedir</p>
-            </div>
-          </div>
-
-          {/* Modo de cobro de envío */}
-          <FieldLabel>Modo de cobro de envío</FieldLabel>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {[
-              { id: "FLAT", name: "Tarifa fija", desc: "Un costo único para todos" },
-              { id: "DISTANCE", name: "Por distancia", desc: "Base + costo por km" },
-              { id: "ZONES", name: "Por zonas", desc: "Polígonos en el mapa con su tarifa" },
-            ].map(m => {
-              const active = config.deliveryMode === m.id;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setConfig(p => ({ ...p, deliveryMode: m.id as "FLAT" | "DISTANCE" | "ZONES" }))}
-                  className="rounded-2xl p-4 text-left transition-colors"
-                  style={{
-                    border: `2px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`,
-                    background: active ? "var(--iris-soft)" : "var(--surf-2)",
-                  }}
-                >
-                  <p className="font-display text-sm font-extrabold text-tx-hi">{m.name}</p>
-                  <p className="mt-0.5 text-[11px] text-tx-mut">{m.desc}</p>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Campos comunes */}
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {config.deliveryMode === "FLAT" && (
-              <div>
-                <FieldLabel>Costo de envío ($)</FieldLabel>
-                <input type="number" min="0" value={config.deliveryFee} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({ ...p, deliveryFee: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-              </div>
-            )}
-            <div>
-              <FieldLabel>Compra mínima ($)</FieldLabel>
-              <input type="number" min="0" value={config.minOrderAmount} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({ ...p, minOrderAmount: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-            </div>
-            <div>
-              <FieldLabel>Envío gratis desde ($)</FieldLabel>
-              <input type="number" min="0" value={config.freeDeliveryFrom} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({ ...p, freeDeliveryFrom: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-              <p className="ml-1 mt-1 text-[10px] text-tx-dim">0 = sin envío gratis por monto</p>
-            </div>
-            <div>
-              <FieldLabel>Tiempo estimado (min)</FieldLabel>
-              <input type="number" min="0" value={config.estimatedDelivery} onChange={(e) => { const v = parseInt(e.target.value) || 0; setConfig(p => ({ ...p, estimatedDelivery: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-            </div>
-          </div>
-
-          {/* Configuración por distancia */}
-          {config.deliveryMode === "DISTANCE" && (
-            <div className="mt-4 space-y-5 rounded-3xl p-5" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-mono text-[10px] uppercase tracking-[.12em] text-primary">Origen de la tienda</p>
-                  <p className="mt-0.5 text-[11px] text-tx-mut">
-                    {config.originLat != null && config.originLng != null
-                      ? `${config.originLat.toFixed(5)}, ${config.originLng.toFixed(5)}`
-                      : "Sin ubicación — define el punto de salida"}
-                  </p>
-                </div>
-                <PrimaryBtn ghost icon={Crosshair} full={false} onClick={useMyLocation}>
-                  {geoStatus === "loading" ? "Obteniendo…" : "Usar mi ubicación"}
-                </PrimaryBtn>
-              </div>
-              {geoStatus === "error" && <p className="text-[11px] font-bold text-err">No se pudo obtener la ubicación. Permite el acceso al GPS o ingrésala manualmente.</p>}
-              <MapLocationPicker
-                value={config.originLat != null && config.originLng != null ? { lat: config.originLat, lng: config.originLng } : null}
-                onChange={({ lat, lng }) => setConfig(p => ({ ...p, originLat: lat, originLng: lng }))}
-              />
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <FieldLabel>Latitud</FieldLabel>
-                  <input type="number" step="any" value={config.originLat ?? ""} onChange={(e) => { const v = e.target.value === "" ? null : parseFloat(e.target.value); setConfig(p => ({ ...p, originLat: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-                </div>
-                <div>
-                  <FieldLabel>Longitud</FieldLabel>
-                  <input type="number" step="any" value={config.originLng ?? ""} onChange={(e) => { const v = e.target.value === "" ? null : parseFloat(e.target.value); setConfig(p => ({ ...p, originLng: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-                </div>
-                <div>
-                  <FieldLabel>Tarifa base ($)</FieldLabel>
-                  <input type="number" min="0" value={config.deliveryBaseFee} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({ ...p, deliveryBaseFee: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-                </div>
-                <div>
-                  <FieldLabel>Costo por km ($)</FieldLabel>
-                  <input type="number" min="0" value={config.deliveryPerKm} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({ ...p, deliveryPerKm: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-                </div>
-                <div>
-                  <FieldLabel>Radio gratis (km)</FieldLabel>
-                  <input type="number" min="0" step="any" value={config.deliveryFreeRadiusKm ?? ""} placeholder="opcional" onChange={(e) => { const v = e.target.value === "" ? null : parseFloat(e.target.value); setConfig(p => ({ ...p, deliveryFreeRadiusKm: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-                  <p className="ml-1 mt-1 text-[10px] text-tx-dim">Dentro de este radio el envío es gratis</p>
-                </div>
-                <div>
-                  <FieldLabel>Distancia máxima (km)</FieldLabel>
-                  <input type="number" min="0" step="any" value={config.deliveryMaxKm ?? ""} placeholder="opcional" onChange={(e) => { const v = e.target.value === "" ? null : parseFloat(e.target.value); setConfig(p => ({ ...p, deliveryMaxKm: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-                  <p className="ml-1 mt-1 text-[10px] text-tx-dim">Fuera de este radio no hay cobertura</p>
-                </div>
-              </div>
-              <p className="text-[11px] leading-relaxed text-tx-mut">
-                Fórmula: <span className="text-primary">tarifa base + (costo por km × distancia)</span>. La distancia se mide en línea recta desde el origen hasta la ubicación GPS del cliente en el checkout.
-              </p>
-            </div>
-          )}
-
-          {/* Configuración por zonas */}
-          {config.deliveryMode === "ZONES" && (
-            <div className="mt-4 space-y-4 rounded-3xl p-5" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[.12em] text-primary">Zonas de entrega</p>
-                <p className="mt-1 text-[11px] leading-relaxed text-tx-mut">
-                  Dibuja polígonos en el mapa y asigna una tarifa a cada uno. La ubicación GPS del cliente en el checkout decide la zona y su costo; si cae fuera de todas, el pedido queda <span className="text-primary">fuera de cobertura</span>.
-                </p>
-              </div>
-              <PrimaryBtn href="/admin/zonas" icon={MapPin} full={false}>
-                Administrar zonas en el mapa
-              </PrimaryBtn>
-            </div>
-          )}
-        </WtCard>
+        {/* QR por mesa (autoservicio dine-in) — el comensal escanea y su pedido entra al TPV con la mesa puesta */}
+        {storeUrl && (
+          <SectionCard icon={Store} title="QR de mesas" subtitle="Autoservicio en mesa para tus comensales">
+            <MesasQrCard storeUrl={storeUrl} />
+          </SectionCard>
+        )}
 
         {/* Programa de puntos */}
-        <WtCard className="p-5 md:p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <Star size={16} className="shrink-0 text-tx-mid" />
-            <div className="min-w-0">
-              <p className="font-display text-base font-extrabold text-tx-hi">Programa de puntos</p>
-              <p className="mt-0.5 text-[12px] text-tx-mut">Lealtad de tus clientes</p>
-            </div>
-          </div>
+        <SectionCard icon={Star} title="Programa de puntos" subtitle="Lealtad de tus clientes">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <FieldLabel>Puntos por cada $10</FieldLabel>
-              <input type="number" min="0" value={config.pointsPerTen} onChange={(e) => { const v = parseInt(e.target.value) || 0; setConfig(p => ({ ...p, pointsPerTen: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-            </div>
-            <div>
-              <FieldLabel>Valor del punto ($)</FieldLabel>
-              <input type="number" min="0" step="any" value={config.pointsValuePesos} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig(p => ({ ...p, pointsValuePesos: v })); }} className={INPUT_CLS} style={INPUT_STYLE} />
-            </div>
+            <Field label="Puntos por cada $10">
+              <Input type="number" min="0" value={config.pointsPerTen} onChange={(e) => { const v = parseInt(e.target.value) || 0; setConfig((p) => ({ ...p, pointsPerTen: v })); }} />
+            </Field>
+            <Field label="Valor del punto ($)">
+              <Input type="number" min="0" step="any" value={config.pointsValuePesos} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig((p) => ({ ...p, pointsValuePesos: v })); }} />
+            </Field>
           </div>
-          <RewardsManager />
-        </WtCard>
+          <RewardsSection />
+        </SectionCard>
 
         {/* Cupones de descuento (exclusivos de la tienda online) */}
-        <WtCard className="p-5 md:p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <Ticket size={16} className="shrink-0 text-tx-mid" />
-            <div className="min-w-0">
-              <p className="font-display text-base font-extrabold text-tx-hi">Cupones de descuento</p>
-              <p className="mt-0.5 text-[12px] text-tx-mut">Códigos que el cliente escribe al pagar en la tienda online</p>
-            </div>
-          </div>
-          <CouponsManager />
-        </WtCard>
+        <SectionCard icon={Ticket} title="Cupones de descuento" subtitle="Códigos que el cliente escribe al pagar en la tienda online">
+          <CouponsSection />
+        </SectionCard>
 
-        <PrimaryBtn icon={Store} onClick={handleSave} disabled={saving}>
+        <Button icon={Store} full onClick={handleSave} disabled={saving} loading={saving}>
           {saving ? "Guardando…" : "Guardar tienda"}
-        </PrimaryBtn>
+        </Button>
       </div>
-    </WtScreen>
+    </PageShell>
   );
 }

@@ -1,18 +1,18 @@
 "use client";
 import {
-  ArrowLeft, ChevronRight, CheckCircle2, Layers, Flame, CupSoda,
+  ArrowLeft, CheckCircle2, Layers, Flame, CupSoda,
   UtensilsCrossed, ArrowRight, Sparkles,
 } from "lucide-react";
 import {
-  WtScreen, PageHeader, WtCard, SectionHead,
-} from "@/components/warmtech";
+  PageShell, PageHeader, Card, SectionHead,
+} from "@/components/ds";
 import Link from "next/link";
 
 // Colores de estación (ejemplo ilustrativo — cada negocio define las suyas en
-// Ajustes → Impresoras). Semánticos, no el acento del tenant.
-const ST_PARRILLA = "#cf4429";
-const ST_FREIDORA = "#c07d00";
-const ST_BARRA = "#0d7490";
+// Ajustes → Impresoras). Semánticos vía tokens, no el acento del tenant.
+const ST_PARRILLA = "var(--err)";
+const ST_FREIDORA = "var(--warn)";
+const ST_BARRA = "var(--info)";
 
 // Anatomía: cada componente (slot) del combo y sus opciones (productos reales).
 const componentes = [
@@ -89,11 +89,11 @@ const checklist = [
   "Se hizo una venta de prueba en el TPV y el ticket salió correcto.",
 ];
 
-const IRIS_GRADIENT = "linear-gradient(140deg, var(--iris-soft), var(--surf-2))";
+const ACCENT_GRADIENT = "linear-gradient(140deg, var(--accent-soft), var(--surf-2))";
 
 export default function GuiaCombosPage() {
   return (
-    <WtScreen>
+    <PageShell>
       <Link
         href="/admin/guias"
         className="mb-4 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[.12em] text-tx-mut transition-colors hover:text-tx-hi"
@@ -108,36 +108,36 @@ export default function GuiaCombosPage() {
       />
 
       {/* Hero: la idea */}
-      <WtCard
+      <Card
         className="p-5 md:p-7"
-        style={{ background: "linear-gradient(135deg, var(--iris-soft), transparent), var(--surf-1)" }}
+        style={{ background: "linear-gradient(135deg, var(--accent-soft), transparent), var(--surf-1)" }}
       >
         <div className="grid gap-6 md:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="mb-3 inline-flex rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-[.14em] text-primary" style={{ background: "var(--iris-soft)" }}>
+            <div className="mb-3 inline-flex rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-[.14em] text-primary" style={{ background: "var(--accent-soft)" }}>
               La idea en una frase
             </div>
             <h2 className="font-display text-2xl font-extrabold tracking-[-.03em] text-tx-hi md:text-3xl">
               Un combo es un producto que contiene otros productos reales
             </h2>
-            <p className="mt-3 max-w-2xl text-sm text-tx-mut" style={{ lineHeight: 1.7 }}>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-tx-mut">
               No escribes «hamburguesa + papas + refresco» como texto: eliges productos que ya existen en tu menú.
               Por eso el sistema sabe el precio, descuenta el inventario de cada uno y —lo importante— conoce a qué
               estación de cocina va cada parte.
             </p>
           </div>
           <div className="grid content-end gap-3">
-            <div className="rounded-2xl p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+            <div className="rounded-ds-lg p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
               <div className="font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">En caja</div>
               <div className="mt-1.5 font-display text-base font-extrabold text-tx-hi">Una línea, un precio</div>
             </div>
-            <div className="rounded-2xl p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+            <div className="rounded-ds-lg p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
               <div className="font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">En cocina</div>
               <div className="mt-1.5 font-display text-base font-extrabold text-tx-hi">Cada parte en su estación</div>
             </div>
           </div>
         </div>
-      </WtCard>
+      </Card>
 
       {/* Ruteo por estación */}
       <SectionHead title="Cómo llega cada parte a su estación" />
@@ -145,10 +145,10 @@ export default function GuiaCombosPage() {
         La estación la decide la <b>categoría</b> de cada producto (se configura en Ajustes → Impresoras).
         Como las opciones del combo son productos reales, cada una hereda su estación. No configuras nada extra en el combo.
       </p>
-      <WtCard className="p-5 md:p-6">
+      <Card className="p-5 md:p-6">
         <div className="grid items-center gap-4 md:grid-cols-[1fr_auto_1.4fr]">
           {/* Ticket de caja */}
-          <div className="rounded-2xl p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+          <div className="rounded-ds-lg p-4" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
             <div className="font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Caja · 1 línea</div>
             <div className="mt-2 font-display text-base font-extrabold text-tx-hi">Combo de la Casa</div>
             <div className="mt-1 font-mono text-sm text-primary">$149.00</div>
@@ -164,10 +164,10 @@ export default function GuiaCombosPage() {
             {ruteo.map((r) => (
               <div
                 key={r.item}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+                className="flex items-center gap-3 rounded-ds-md px-3 py-2.5"
                 style={{ background: "var(--surf-2)", borderLeft: `3px solid ${r.color}` }}
               >
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-white" style={{ background: r.color }}>
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-ds-sm text-white" style={{ background: r.color }}>
                   <r.icon size={15} />
                 </span>
                 <span className="flex-1 text-sm font-bold text-tx">{r.item}</span>
@@ -181,15 +181,15 @@ export default function GuiaCombosPage() {
         <p className="mt-4 text-[12.5px] text-tx-mut">
           Un solo combo tocó tres estaciones — sin que configuraras ninguna ruta en él. Todo vino de la categoría de cada producto.
         </p>
-      </WtCard>
+      </Card>
 
       {/* Anatomía */}
       <SectionHead title="Anatomía de un combo" />
       <div className="grid gap-4 md:grid-cols-3">
         {componentes.map((c, i) => (
-          <WtCard key={c.slot} className="p-5">
+          <Card key={c.slot} className="p-5">
             <div className="mb-3 flex items-center justify-between">
-              <span className="grid h-9 w-9 place-items-center rounded-[12px] text-white" style={{ background: "var(--brand-primary)" }}>
+              <span className="grid h-9 w-9 place-items-center rounded-ds-md text-white" style={{ background: "var(--brand-primary)" }}>
                 <Layers size={18} strokeWidth={1.9} />
               </span>
               <span className="rounded-full px-2.5 py-1 font-mono text-[9px] uppercase tracking-[.12em] text-tx-mut" style={{ background: "var(--surf-2)" }}>
@@ -197,11 +197,11 @@ export default function GuiaCombosPage() {
               </span>
             </div>
             <h3 className="font-display text-lg font-extrabold text-tx-hi">{c.slot}</h3>
-            <div className="mt-2 rounded-xl px-3 py-2 text-sm font-semibold text-tx" style={{ background: "var(--surf-2)" }}>
+            <div className="mt-2 rounded-ds-md px-3 py-2 text-sm font-semibold text-tx" style={{ background: "var(--surf-2)" }}>
               {c.opciones}
             </div>
-            <p className="mt-2 text-[12.5px] text-tx-mut" style={{ lineHeight: 1.55 }}>{c.nota}</p>
-          </WtCard>
+            <p className="mt-2 text-[12.5px] leading-snug text-tx-mut">{c.nota}</p>
+          </Card>
         ))}
       </div>
 
@@ -212,7 +212,7 @@ export default function GuiaCombosPage() {
       </p>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {pasos.map((step, index) => (
-          <WtCard key={step.title} className="p-5">
+          <Card key={step.title} className="p-5">
             <div className="mb-4 flex items-center justify-between">
               <span className="grid h-9 w-9 place-items-center rounded-full font-display text-sm font-extrabold text-white" style={{ background: "var(--brand-primary)" }}>
                 {index + 1}
@@ -222,8 +222,8 @@ export default function GuiaCombosPage() {
               </span>
             </div>
             <h3 className="font-display text-base font-extrabold text-tx-hi">{step.title}</h3>
-            <p className="mt-2 text-sm text-tx-mut" style={{ lineHeight: 1.6 }}>{step.text}</p>
-          </WtCard>
+            <p className="mt-2 text-sm leading-relaxed text-tx-mut">{step.text}</p>
+          </Card>
         ))}
       </div>
 
@@ -231,7 +231,7 @@ export default function GuiaCombosPage() {
       <SectionHead title="Reglas de oro" />
       <div className="grid gap-3 md:grid-cols-2">
         {reglas.map((r) => (
-          <WtCard key={r.text} className="flex items-start gap-3 p-4">
+          <Card key={r.text} className="flex items-start gap-3 p-4">
             <span
               className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full font-display text-sm font-black"
               style={r.ok
@@ -240,20 +240,20 @@ export default function GuiaCombosPage() {
             >
               {r.ok ? "✓" : "!"}
             </span>
-            <span className="text-sm font-semibold text-tx" style={{ lineHeight: 1.5 }}>{r.text}</span>
-          </WtCard>
+            <span className="text-sm font-semibold leading-normal text-tx">{r.text}</span>
+          </Card>
         ))}
       </div>
 
       {/* Ejemplo cerrado */}
       <SectionHead title="Ejemplo completo" />
-      <WtCard className="p-6" style={{ background: IRIS_GRADIENT }}>
+      <Card className="p-6" style={{ background: ACCENT_GRADIENT }}>
         <div className="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.14em] text-primary">
           <Sparkles size={14} /> Combo de la Casa · $149
         </div>
         <div className="grid gap-2.5 md:grid-cols-3">
           {ruteo.map((r) => (
-            <div key={r.item} className="rounded-xl bg-surf-1 px-4 py-3" style={{ border: "1px solid var(--bd-1)" }}>
+            <div key={r.item} className="rounded-ds-md bg-surf-1 px-4 py-3" style={{ border: "1px solid var(--bd-1)" }}>
               <div className="text-sm font-extrabold text-tx-hi">{r.item}</div>
               <div className="mt-1 font-mono text-[11px] font-bold uppercase tracking-[.06em]" style={{ color: r.color }}>
                 → {r.estacion}
@@ -261,21 +261,21 @@ export default function GuiaCombosPage() {
             </div>
           ))}
         </div>
-      </WtCard>
+      </Card>
 
       {/* Checklist */}
       <SectionHead title="Checklist final" />
       <p className="-mt-2 mb-3 text-sm text-tx-mut">Antes de vender el combo, valida estos puntos.</p>
       <div className="grid gap-3 md:grid-cols-2">
         {checklist.map((item) => (
-          <WtCard key={item} className="flex items-center gap-3 p-4">
+          <Card key={item} className="flex items-center gap-3 p-4">
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full" style={{ background: "var(--ok-soft)", color: "var(--ok)" }}>
               <CheckCircle2 size={16} />
             </span>
             <span className="text-sm font-semibold text-tx">{item}</span>
-          </WtCard>
+          </Card>
         ))}
       </div>
-    </WtScreen>
+    </PageShell>
   );
 }

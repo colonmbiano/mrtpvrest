@@ -40,6 +40,7 @@ const MODULE_CATALOG = [
   { key: 'cash_shift',          kind: 'key', requiresPlan: true, legacyFlag: null, aliases: [], planFlag: null },
   { key: 'employee_management', kind: 'key', requiresPlan: true, legacyFlag: null, aliases: [], planFlag: null },
   { key: 'payroll',             kind: 'key', requiresPlan: true, legacyFlag: null, aliases: [], planFlag: null },
+  { key: 'whatsapp_bot',        kind: 'key', requiresPlan: true, legacyFlag: null, aliases: ['chatbot'], planFlag: null },
 ]
 
 const CANONICAL_KEYS = MODULE_CATALOG.map((m) => m.key)

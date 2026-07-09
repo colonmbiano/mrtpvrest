@@ -61,15 +61,20 @@ router.get('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       prisma.restaurantConfig.findUnique({ where: { restaurantId } }),
       prisma.restaurant.findUnique({
         where: { id: restaurantId },
-        select: { name: true, logoUrl: true, slug: true }
+        select: { name: true, logoUrl: true, slug: true, tenant: { select: { activeModules: true } } }
       })
     ]);
+    let activeModules = [];
+    try { activeModules = (typeof restaurant?.tenant?.activeModules === 'string' ? JSON.parse(restaurant.tenant.activeModules) : restaurant?.tenant?.activeModules) || []; } catch(e){}
+    if (!Array.isArray(activeModules)) activeModules = [];
+
     res.set('Cache-Control', 'no-store');
     res.json({
       ...(config || {}),
       name: restaurant?.name || 'Nuevo Restaurante',
       logoUrl: restaurant?.logoUrl || null,
-      slug: restaurant?.slug || null
+      slug: restaurant?.slug || null,
+      hasWhatsappOrdersModule: activeModules.includes('WHATSAPP_ORDERS')
     });
   } catch (e) { res.status(500).json({ error: 'Error al obtener configuracion' }) }
 })
@@ -111,6 +116,9 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       // Envío por distancia
       'deliveryMode','originLat','originLng','deliveryBaseFee','deliveryPerKm',
       'deliveryFreeRadiusKm','deliveryMaxKm',
+      'whatsappOrderingEnabled',
+      // Aviso al dueño por WhatsApp de nuevos pedidos web
+      'orderAlertEnabled','orderAlertWhatsapp',
     ];
     // Numéricos que SÍ admiten null (campos opcionales en el schema).
     const NULLABLE_NUMERIC = new Set([
@@ -135,9 +143,11 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
         // Freno de saturación: entero positivo; vacío/0 → null (sin freno).
         const n = Math.floor(Number(v));
         data[k] = Number.isFinite(n) && n > 0 ? n : null;
-      } else if (k === 'cashCutEmails' || k === 'saturatedMessage') {
+      } else if (k === 'cashCutEmails' || k === 'saturatedMessage' || k === 'orderAlertWhatsapp') {
         // String opcional: un vacío se guarda como null (cae al default).
         data[k] = (typeof v === 'string' && v.trim()) ? v.trim() : null;
+      } else if (k === 'orderAlertEnabled') {
+        data[k] = Boolean(v);
       } else if (k === 'promoStartTime' || k === 'promoEndTime') {
         // Ventana horaria de promos: "HH:mm" válido o null (sin límite).
         const s = typeof v === 'string' ? v.trim() : '';
@@ -146,6 +156,21 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
           return res.status(400).json({ error: 'Horario de promos inválido: usa formato HH:mm (ej. 21:00)' });
         }
         data[k] = s;
+      } else if (k === 'whatsappOrderingEnabled') {
+        data[k] = Boolean(v);
+        // Verificar si tiene el módulo
+        if (data[k]) {
+          const r = await prisma.restaurant.findUnique({
+            where: { id: restaurantId },
+            include: { tenant: { select: { activeModules: true } } }
+          });
+          let activeModules = [];
+          try { activeModules = (typeof r?.tenant?.activeModules === 'string' ? JSON.parse(r.tenant.activeModules) : r?.tenant?.activeModules) || []; } catch(e){}
+          if (!Array.isArray(activeModules)) activeModules = [];
+          if (!activeModules.includes('WHATSAPP_ORDERS')) {
+            data[k] = false; // Ignorar y forzar false si no tiene el módulo
+          }
+        }
       } else {
         data[k] = v;
       }
@@ -200,12 +225,20 @@ router.get('/whatsapp-assistant', authenticate, requireTenantAccess, requireAdmi
       where: { restaurantId_type: { restaurantId, type: WA_ASSISTANT_TYPE } },
     });
     const cfg = rawAssistantConfig(row);
+    // Entitlement del add-on facturable: el backend conoce ENFORCE_BOT_MODULE,
+    // así que la UI no necesita el env. En rollout suave devuelve siempre true
+    // (no oculta un bot que sigue corriendo); con enforce on, false si el plan
+    // no incluye el módulo whatsapp_bot.
+    const { botModuleAllowed } = require('../lib/modules');
+    const entitled = await botModuleAllowed(restaurantId);
     res.set('Cache-Control', 'no-store');
     // Sin fila configurada aún → el bot opera con sus env vars: reflejamos
     // enabled:true para que el toggle muestre el estado real (encendido).
     res.json({
       configured: !!row,
       enabled: row ? row.enabled : true,
+      // ¿el plan del tenant incluye el bot? (respeta el rollout suave)
+      entitled,
       // ¿ya tiene una instancia de bot asignada? (statusUrl propia o env piloto)
       provisioned: !!assistantStatusUrl(row),
       phoneNumber: cfg.phoneNumber || null,

@@ -12,7 +12,7 @@ import {
   CheckCircle2, FileText, Plus, RefreshCw, Save, Trash2, XCircle,
 } from "lucide-react";
 import api from "@/lib/api";
-import { WtScreen, PageHeader, WtCard, Pill, PrimaryBtn, EmptyState } from "@/components/warmtech";
+import { PageShell, PageHeader, Card, Pill, Button, EmptyState } from "@/components/ds";
 
 type Template = {
   id: string;
@@ -135,7 +135,7 @@ export default function PlantillasPage() {
   }
 
   return (
-    <WtScreen>
+    <PageShell>
       {toast && (
         <div
           className="fixed right-4 top-4 z-50 flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold shadow-2xl md:right-6 md:top-6"
@@ -166,15 +166,15 @@ export default function PlantillasPage() {
           icon={FileText}
           title="Disponible con la API oficial de Meta"
           hint={`${notMeta} Ve a Integraciones → Mensajería (Chatbot), elige el proveedor "WhatsApp Cloud API (Meta)" y llena el token y el WABA ID.`}
-          action={<PrimaryBtn href="/admin/integraciones" full={false}>Ir a Integraciones</PrimaryBtn>}
+          action={<Button href="/admin/integraciones" full={false}>Ir a Integraciones</Button>}
         />
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex gap-2">
             {!showForm && (
-              <PrimaryBtn onClick={() => setShowForm(true)} icon={Plus} full={false}>
+              <Button onClick={() => setShowForm(true)} icon={Plus} full={false}>
                 Nueva plantilla
-              </PrimaryBtn>
+              </Button>
             )}
             <button
               type="button"
@@ -189,7 +189,7 @@ export default function PlantillasPage() {
 
           {showForm && (
             <div className="grid gap-4 md:grid-cols-2 md:items-start">
-              <WtCard className="flex flex-col gap-4 p-4">
+              <Card className="flex flex-col gap-4 p-4">
                 <div className="font-display text-base font-extrabold text-tx-hi">Nueva plantilla</div>
 
                 <div>
@@ -250,17 +250,17 @@ export default function PlantillasPage() {
                 </div>
 
                 <div className="flex gap-3">
-                  <PrimaryBtn ghost onClick={() => setShowForm(false)}>Cancelar</PrimaryBtn>
-                  <PrimaryBtn onClick={save} disabled={saving} icon={Save}>
+                  <Button variant="ghost" onClick={() => setShowForm(false)}>Cancelar</Button>
+                  <Button onClick={save} disabled={saving} icon={Save}>
                     {saving ? "Enviando a Meta…" : "Enviar a revisión"}
-                  </PrimaryBtn>
+                  </Button>
                 </div>
-              </WtCard>
+              </Card>
 
-              <WtCard className="p-4">
+              <Card className="p-4">
                 <div className="mb-3 font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Vista previa en vivo</div>
                 <PreviewBubble body={bodyText} footer={footerText} />
-              </WtCard>
+              </Card>
             </div>
           )}
 
@@ -272,7 +272,7 @@ export default function PlantillasPage() {
             />
           ) : (
             templates.map((template) => (
-              <WtCard key={template.id} className="p-4">
+              <Card key={template.id} className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -294,11 +294,11 @@ export default function PlantillasPage() {
                     <Trash2 size={14} />
                   </button>
                 </div>
-              </WtCard>
+              </Card>
             ))
           )}
         </div>
       )}
-    </WtScreen>
+    </PageShell>
   );
 }
