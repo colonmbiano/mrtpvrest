@@ -70,9 +70,6 @@ importers:
       react-dom:
         specifier: 19.2.7
         version: 19.2.7(react@19.2.7)
-      socket.io-client:
-        specifier: ^4.8.3
-        version: 4.8.3
     devDependencies:
       '@mrtpvrest/config':
         specifier: workspace:*
