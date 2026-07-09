@@ -13,7 +13,8 @@ import BannerCarousel, { collectBanners } from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
 import StoreCheckout from '../StoreCheckout';
 import { ReactionButton } from '../ReactionButton';
-import { StoreLocaleProvider, useMoney } from '../StoreLocaleContext';
+import { StoreLocaleProvider, useMoney, useLang } from '../StoreLocaleContext';
+import { LanguageSwitcher } from '../LanguageSwitcher';
 import type { DeliveryConfig } from '../../lib/delivery';
 import {
   getAuth, clearAuth, loginCustomer, registerCustomer, type AuthState,
@@ -344,6 +345,7 @@ function Decor() {
 // ══════════════════════════════════════════════════════════════════════════════
 function Header({ info, accent, waNumber, quantity, total, query, setQuery, orderMode, setOrderMode, auth, onLogin, onSignOut, onCart, onWhatsApp }: any) {
   const fmt = useMoney();
+  const { t } = useLang();
   return (
     <header className="sticky top-0 z-40 backdrop-blur-xl" style={{ background: 'rgba(255,253,248,0.82)', borderBottom: `1px solid ${CARD_BD}` }}>
       <div className="max-w-7xl mx-auto px-4">
@@ -368,13 +370,15 @@ function Header({ info, accent, waNumber, quantity, total, query, setQuery, orde
           {/* Buscador (desktop) */}
           <div className="hidden md:flex items-center gap-2 px-4 h-11 rounded-full flex-1 max-w-md ml-2" style={{ background: '#fff', border: `1.5px solid ${CARD_BD}` }}>
             <Search className="w-4 h-4 shrink-0" style={{ color: FAINT }} />
-            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar…" className="flex-1 bg-transparent outline-none text-sm" style={{ color: INK }} />
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('search')} className="flex-1 bg-transparent outline-none text-sm" style={{ color: INK }} />
             {query && <button onClick={() => setQuery('')} aria-label="Limpiar"><X className="w-4 h-4" style={{ color: FAINT }} /></button>}
           </div>
 
           <div className="flex-1 md:flex-none" />
 
           <DeliveryToggle orderMode={orderMode} setOrderMode={setOrderMode} accent={accent} className="hidden lg:flex" />
+
+          <div className="hidden sm:block shrink-0" style={{ color: INK }}><LanguageSwitcher accent={accent} /></div>
 
           {waNumber && (
             <button onClick={onWhatsApp} className="hidden md:flex items-center gap-2 px-4 h-11 rounded-full font-bold text-sm text-white active:scale-95 transition shrink-0" style={{ background: WA }}>
@@ -400,7 +404,7 @@ function Header({ info, accent, waNumber, quantity, total, query, setQuery, orde
           <DeliveryToggle orderMode={orderMode} setOrderMode={setOrderMode} accent={accent} />
           <div className="flex items-center gap-2 px-3.5 h-10 rounded-full flex-1" style={{ background: '#fff', border: `1.5px solid ${CARD_BD}` }}>
             <Search className="w-4 h-4 shrink-0" style={{ color: FAINT }} />
-            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar…" className="flex-1 bg-transparent outline-none text-sm" style={{ color: INK }} />
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('search')} className="flex-1 bg-transparent outline-none text-sm" style={{ color: INK }} />
             {query && <button onClick={() => setQuery('')} aria-label="Limpiar"><X className="w-4 h-4" style={{ color: FAINT }} /></button>}
           </div>
         </div>
@@ -410,9 +414,10 @@ function Header({ info, accent, waNumber, quantity, total, query, setQuery, orde
 }
 
 function DeliveryToggle({ orderMode, setOrderMode, accent, className = '' }: { orderMode: OrderMode; setOrderMode: (m: OrderMode) => void; accent: string; className?: string }) {
+  const { t } = useLang();
   return (
     <div className={`flex p-1 rounded-full shrink-0 ${className}`} style={{ background: LAV_SOFT, border: `1.5px solid ${CARD_BD}` }}>
-      {([['DELIVERY', 'Entrega'], ['TAKEOUT', 'Recoger']] as [OrderMode, string][]).map(([m, label]) => (
+      {([['DELIVERY', t('delivery')], ['TAKEOUT', t('pickup')]] as [OrderMode, string][]).map(([m, label]) => (
         <button key={m} onClick={() => setOrderMode(m)} className="px-4 py-1.5 rounded-full text-[12.5px] font-bold transition-all"
           style={orderMode === m ? { background: accent, color: '#fff' } : { color: INK2 }}>{label}</button>
       ))}
@@ -672,6 +677,7 @@ function Row({ label, value, muted }: { label: string; value: string; muted?: bo
 
 function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhatsApp, waNumber, suggestions, onAddSuggestion }: any) {
   const fmt = useMoney();
+  const { t } = useLang();
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
@@ -713,16 +719,16 @@ function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhats
           )}
 
           <div className="mt-3.5 pt-3 space-y-1.5" style={{ borderTop: `1px solid ${CARD_BD}` }}>
-            <Row label="Subtotal" value={fmt(total)} />
-            <Row label="Envío" value="Se calcula al pagar" muted />
+            <Row label={t('subtotal')} value={fmt(total)} />
+            <Row label={t('delivery_fee')} value="Se calcula al pagar" muted />
             <div className="flex items-center justify-between pt-1.5">
-              <span className="font-extrabold" style={{ color: INK }}>Total</span>
+              <span className="font-extrabold" style={{ color: INK }}>{t('total')}</span>
               <span className="text-2xl font-extrabold" style={{ color: PINK, fontFamily: DISP }}>{fmt(total)}</span>
             </div>
           </div>
           {belowMin && <p className="text-[11px] font-bold text-center mt-2" style={{ color: PINK }}>Pedido mínimo: {fmt(minOrder)}.</p>}
-          <button onClick={onCheckout} disabled={belowMin} className="w-full mt-3 py-3.5 rounded-[16px] font-extrabold text-white flex items-center justify-center gap-2 active:scale-95 transition disabled:opacity-50" style={{ background: PINK, boxShadow: `0 12px 26px ${PINK}55`, fontFamily: DISP }}>Ir a pagar <ChevronRight className="w-5 h-5" /></button>
-          {waNumber && <button onClick={onWhatsApp} className="w-full mt-2 py-2.5 rounded-[16px] font-bold text-white text-[13px] flex items-center justify-center gap-2 active:scale-95 transition" style={{ background: WA }}><MessageCircle className="w-4 h-4" /> Pedir por WhatsApp</button>}
+          <button onClick={onCheckout} disabled={belowMin} className="w-full mt-3 py-3.5 rounded-[16px] font-extrabold text-white flex items-center justify-center gap-2 active:scale-95 transition disabled:opacity-50" style={{ background: PINK, boxShadow: `0 12px 26px ${PINK}55`, fontFamily: DISP }}>{t('checkout')} <ChevronRight className="w-5 h-5" /></button>
+          {waNumber && <button onClick={onWhatsApp} className="w-full mt-2 py-2.5 rounded-[16px] font-bold text-white text-[13px] flex items-center justify-center gap-2 active:scale-95 transition" style={{ background: WA }}><MessageCircle className="w-4 h-4" /> {t('send_whatsapp')}</button>}
         </div>
       )}
     </div>
@@ -731,6 +737,7 @@ function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhats
 
 function MobileCart({ accent, onClose, onCheckout, onWhatsApp, waNumber, allItems, minOrder }: any) {
   const fmt = useMoney();
+  const { t } = useLang();
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
@@ -756,12 +763,12 @@ function MobileCart({ accent, onClose, onCheckout, onWhatsApp, waNumber, allItem
         {lines.length > 0 && (
           <div className="px-5 pt-4 pb-5 shrink-0 space-y-3" style={{ borderTop: `1px solid ${CARD_BD}`, background: CREAM }}>
             <div className="flex items-center justify-between">
-              <div><p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: FAINT }}>Subtotal</p><p className="text-[10px]" style={{ color: FAINT }}>Envío y descuentos se calculan al pagar</p></div>
+              <div><p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: FAINT }}>{t('subtotal')}</p><p className="text-[10px]" style={{ color: FAINT }}>Envío y descuentos se calculan al pagar</p></div>
               <span className="text-2xl font-extrabold" style={{ color: PINK, fontFamily: DISP }}>{fmt(total)}</span>
             </div>
             {belowMin && <p className="text-xs font-bold text-center" style={{ color: PINK }}>Pedido mínimo: {fmt(minOrder)}.</p>}
-            <button onClick={onCheckout} disabled={belowMin} className="w-full py-4 rounded-[18px] font-extrabold text-white active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: PINK, fontFamily: DISP }}>Ir a pagar <ChevronRight className="w-5 h-5" /></button>
-            {waNumber && <button onClick={onWhatsApp} className="w-full py-3.5 rounded-[18px] font-extrabold text-white active:scale-95 transition flex items-center justify-center gap-2" style={{ background: WA }}><MessageCircle className="w-5 h-5" /> Pedir por WhatsApp</button>}
+            <button onClick={onCheckout} disabled={belowMin} className="w-full py-4 rounded-[18px] font-extrabold text-white active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: PINK, fontFamily: DISP }}>{t('checkout')} <ChevronRight className="w-5 h-5" /></button>
+            {waNumber && <button onClick={onWhatsApp} className="w-full py-3.5 rounded-[18px] font-extrabold text-white active:scale-95 transition flex items-center justify-center gap-2" style={{ background: WA }}><MessageCircle className="w-5 h-5" /> {t('send_whatsapp')}</button>}
           </div>
         )}
       </div>

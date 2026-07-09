@@ -13,7 +13,8 @@ import { productEmoji } from '../../lib/productEmoji';
 import BannerCarousel, { collectBanners } from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
 import { ReactionButton } from '../ReactionButton';
-import { StoreLocaleProvider, useMoney } from '../StoreLocaleContext';
+import { StoreLocaleProvider, useMoney, useLang } from '../StoreLocaleContext';
+import { LanguageSwitcher } from '../LanguageSwitcher';
 import StoreCheckout from '../StoreCheckout';
 import type { DeliveryConfig } from '../../lib/delivery';
 import {
@@ -109,6 +110,7 @@ type OrderMode = 'DELIVERY' | 'TAKEOUT';
 export function MundialistaTheme({ data }: MundialistaThemeProps) {
   const { info, menu, locations } = data;
   const fmt = useMoney();
+  const { t } = useLang();
   // Ocultamos "Envíos" del grilla (es un recargo, no un platillo) y categorías vacías.
   const categories: any[] = (menu.categories || [])
     .filter((c: any) => (c.items || []).length > 0 && !isShippingCat(c.name));
@@ -309,7 +311,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
               <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: SURF2 }}><ShoppingBag className="w-5 h-5" style={{ color: GOLD }} /></span>
               <span className="text-left leading-tight"><span className="block text-[11px]" style={{ color: MUTED }}>{quantity} {quantity === 1 ? 'producto' : 'productos'}</span><span className="block">{fmt(total)}</span></span>
             </span>
-            <span className="flex items-center gap-1.5 px-4 py-2.5 rounded-[12px] text-[14px]" style={{ background: GOLD, color: '#1A1206' }}>Ir a pagar <ChevronRight className="w-4 h-4" /></span>
+            <span className="flex items-center gap-1.5 px-4 py-2.5 rounded-[12px] text-[14px]" style={{ background: GOLD, color: '#1A1206' }}>{t('checkout')} <ChevronRight className="w-4 h-4" /></span>
           </button>
         </div>
       )}
@@ -342,6 +344,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
 // ══════════════════════════════════════════════════════════════════════════════
 function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, orderMode, setOrderMode, auth, onLogin, onSignOut, onCart, onWhatsApp }: any) {
   const fmt = useMoney();
+  const { t } = useLang();
   return (
     <header className="sticky top-0 z-40 backdrop-blur-xl" style={{ background: `${BG}e6`, borderBottom: `1px solid ${BORDER}` }}>
       <div className="max-w-7xl mx-auto px-4">
@@ -376,7 +379,7 @@ function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, o
           {/* Buscador (desktop) */}
           <div className="hidden md:flex items-center gap-2 px-3.5 h-10 rounded-full flex-1 max-w-md" style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
             <Search className="w-4 h-4 shrink-0" style={{ color: MUTED }} />
-            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar productos…" className="flex-1 bg-transparent outline-none text-sm placeholder:text-[#7A7A82]" />
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('search')} className="flex-1 bg-transparent outline-none text-sm placeholder:text-[#7A7A82]" />
             {query && <button onClick={() => setQuery('')} aria-label="Limpiar"><X className="w-4 h-4" style={{ color: MUTED }} /></button>}
           </div>
 
@@ -384,6 +387,8 @@ function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, o
 
           {/* Toggle Entrega / Recoger (desktop) */}
           <DeliveryToggle orderMode={orderMode} setOrderMode={setOrderMode} className="hidden lg:flex" />
+
+          <div className="hidden sm:block shrink-0" style={{ color: TEXT }}><LanguageSwitcher accent={GOLD} /></div>
 
           {waNumber && (
             <button onClick={onWhatsApp} className="hidden md:flex items-center gap-2 px-4 h-10 rounded-full font-bold text-sm text-white active:scale-95 transition shrink-0" style={{ background: '#25D366' }}>
@@ -417,7 +422,7 @@ function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, o
           </div>
           <div className="flex items-center gap-2 px-3.5 h-10 rounded-full" style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
             <Search className="w-4 h-4 shrink-0" style={{ color: MUTED }} />
-            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar productos…" className="flex-1 bg-transparent outline-none text-sm placeholder:text-[#7A7A82]" />
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('search')} className="flex-1 bg-transparent outline-none text-sm placeholder:text-[#7A7A82]" />
             {query && <button onClick={() => setQuery('')} aria-label="Limpiar"><X className="w-4 h-4" style={{ color: MUTED }} /></button>}
           </div>
         </div>
@@ -427,9 +432,10 @@ function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, o
 }
 
 function DeliveryToggle({ orderMode, setOrderMode, className = '' }: { orderMode: OrderMode; setOrderMode: (m: OrderMode) => void; className?: string }) {
+  const { t } = useLang();
   return (
     <div className={`flex p-1 rounded-full shrink-0 ${className}`} style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
-      {([['DELIVERY', 'Entrega'], ['TAKEOUT', 'Recoger']] as [OrderMode, string][]).map(([m, label]) => (
+      {([['DELIVERY', t('delivery')], ['TAKEOUT', t('pickup')]] as [OrderMode, string][]).map(([m, label]) => (
         <button key={m} onClick={() => setOrderMode(m)} className="px-3.5 py-1.5 rounded-full text-[12px] font-bold transition-all"
           style={orderMode === m ? { background: GOLD, color: '#1A1206' } : { color: MUTED }}>{label}</button>
       ))}
@@ -761,6 +767,7 @@ function CartLines({ allItems, accent }: { allItems: any[]; accent: string }) {
 
 function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhatsApp, waNumber, suggestions, onAddSuggestion }: any) {
   const fmt = useMoney();
+  const { t } = useLang();
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
@@ -802,16 +809,16 @@ function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhats
           )}
 
           <div className="mt-3.5 pt-3 space-y-1.5" style={{ borderTop: `1px solid ${BORDER}` }}>
-            <Row label="Subtotal" value={fmt(total)} />
+            <Row label={t('subtotal')} value={fmt(total)} />
             <Row label="Costo de envío" value="Se calcula al pagar" muted />
             <div className="flex items-center justify-between pt-1.5">
-              <span className="font-bold">Total</span>
+              <span className="font-bold">{t('total')}</span>
               <span className="text-2xl font-extrabold" style={{ color: accent }}>{fmt(total)}</span>
             </div>
           </div>
           {belowMin && <p className="text-[11px] font-bold text-center mt-2" style={{ color: accent }}>Pedido mínimo: {fmt(minOrder)}.</p>}
-          <button onClick={onCheckout} disabled={belowMin} className="w-full mt-3 py-3.5 rounded-[12px] font-extrabold flex items-center justify-center gap-2 active:scale-95 transition disabled:opacity-50" style={{ background: accent, color: '#1A1206' }}>Ir a pagar <ChevronRight className="w-5 h-5" /></button>
-          {waNumber && <button onClick={onWhatsApp} className="w-full mt-2 py-2.5 rounded-[12px] font-bold text-white text-[13px] flex items-center justify-center gap-2 active:scale-95 transition" style={{ background: '#25D366' }}><MessageCircle className="w-4 h-4" /> Pedir por WhatsApp</button>}
+          <button onClick={onCheckout} disabled={belowMin} className="w-full mt-3 py-3.5 rounded-[12px] font-extrabold flex items-center justify-center gap-2 active:scale-95 transition disabled:opacity-50" style={{ background: accent, color: '#1A1206' }}>{t('checkout')} <ChevronRight className="w-5 h-5" /></button>
+          {waNumber && <button onClick={onWhatsApp} className="w-full mt-2 py-2.5 rounded-[12px] font-bold text-white text-[13px] flex items-center justify-center gap-2 active:scale-95 transition" style={{ background: '#25D366' }}><MessageCircle className="w-4 h-4" /> {t('send_whatsapp')}</button>}
         </div>
       )}
     </div>
@@ -820,6 +827,7 @@ function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhats
 
 function MobileCart({ onClose, onCheckout, onWhatsApp, waNumber, allItems, minOrder, accent }: any) {
   const fmt = useMoney();
+  const { t } = useLang();
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
   const quantity = useCart(s => s.quantity());
@@ -845,12 +853,12 @@ function MobileCart({ onClose, onCheckout, onWhatsApp, waNumber, allItems, minOr
         {lines.length > 0 && (
           <div className="px-5 pt-4 pb-5 shrink-0 space-y-3" style={{ borderTop: `1px solid ${BORDER}`, background: '#06060C' }}>
             <div className="flex items-center justify-between">
-              <div><p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: MUTED }}>Subtotal</p><p className="text-[10px]" style={{ color: FAINT }}>Envío y descuentos se calculan al pagar</p></div>
+              <div><p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: MUTED }}>{t('subtotal')}</p><p className="text-[10px]" style={{ color: FAINT }}>Envío y descuentos se calculan al pagar</p></div>
               <span className="text-2xl font-extrabold" style={{ color: accent }}>{fmt(total)}</span>
             </div>
             {belowMin && <p className="text-xs font-bold text-center" style={{ color: accent }}>Pedido mínimo: {fmt(minOrder)}.</p>}
-            <button onClick={onCheckout} disabled={belowMin} className="w-full py-4 rounded-[14px] font-extrabold active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: accent, color: '#1A1206' }}>Ir a pagar <ChevronRight className="w-5 h-5" /></button>
-            {waNumber && <button onClick={onWhatsApp} className="w-full py-3.5 rounded-[14px] font-extrabold text-white active:scale-95 transition flex items-center justify-center gap-2" style={{ background: '#25D366' }}><MessageCircle className="w-5 h-5" /> Pedir por WhatsApp</button>}
+            <button onClick={onCheckout} disabled={belowMin} className="w-full py-4 rounded-[14px] font-extrabold active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: accent, color: '#1A1206' }}>{t('checkout')} <ChevronRight className="w-5 h-5" /></button>
+            {waNumber && <button onClick={onWhatsApp} className="w-full py-3.5 rounded-[14px] font-extrabold text-white active:scale-95 transition flex items-center justify-center gap-2" style={{ background: '#25D366' }}><MessageCircle className="w-5 h-5" /> {t('send_whatsapp')}</button>}
           </div>
         )}
       </div>
