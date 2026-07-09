@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import {
   Monitor, Bike, ShoppingCart, Star, Tv, BarChart3, Wrench,
-  CheckCircle2, XCircle, Receipt, Wallet, Utensils, Coins, Users,
+  Receipt, Wallet, Utensils, Coins, Users,
   type LucideIcon,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
-  WtScreen, PageHeader, WtCard, SectionLabel, SettingRow, Toggle, Pill,
-} from "@/components/warmtech";
+  PageShell, PageHeader, Card, SectionLabel, SettingRow, Toggle, Pill,
+  LoadingState, useToast,
+} from "@/components/ds";
 
 type ModuleInfo = {
   key: string;
@@ -44,10 +45,11 @@ export default function ModulosPage() {
   const [plan, setPlan] = useState<PlanInfo>(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     loadModules();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadModules() {
@@ -57,15 +59,10 @@ export default function ModulosPage() {
       setModules(data.modules ?? []);
       setPlan(data.plan ?? null);
     } catch {
-      showToast("Error al cargar los módulos", false);
+      toast.error("Error al cargar los módulos");
     } finally {
       setLoading(false);
     }
-  }
-
-  function showToast(msg: string, ok = true) {
-    setToast({ msg, ok });
-    setTimeout(() => setToast(null), 3000);
   }
 
   async function toggleModule(key: string, currentEnabled: boolean) {
@@ -74,17 +71,17 @@ export default function ModulosPage() {
     try {
       await api.patch(`/api/modules/${key}`, { enabled: !currentEnabled });
       await loadModules();
-      showToast(`Módulo ${key} ${!currentEnabled ? "activado" : "desactivado"} correctamente`);
+      toast.success(`Módulo ${key} ${!currentEnabled ? "activado" : "desactivado"} correctamente`);
     } catch (err) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Error al cambiar el módulo";
-      showToast(msg, false);
+      toast.error(msg);
     } finally {
       setToggling(null);
     }
   }
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Funcionalidades"
         title="Módulos opcionales"
@@ -102,12 +99,9 @@ export default function ModulosPage() {
       <SectionLabel>Disponibles en tu cuenta</SectionLabel>
 
       {loading ? (
-        <WtCard className="flex items-center justify-center gap-3 py-16 text-sm text-tx-mut">
-          <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          Cargando módulos…
-        </WtCard>
+        <LoadingState label="Cargando módulos…" />
       ) : (
-        <WtCard className="overflow-hidden">
+        <Card className="overflow-hidden">
           {modules.map((mod, idx) => {
             const meta = MODULE_META[mod.key] ?? { label: mod.key, description: "", icon: Wrench };
             const isToggling = toggling === mod.key;
@@ -142,23 +136,8 @@ export default function ModulosPage() {
               />
             );
           })}
-        </WtCard>
+        </Card>
       )}
-
-      {toast && (
-        <div
-          className="fixed bottom-24 right-5 z-50 flex items-center gap-2 rounded-xl px-4 py-3 text-[13px] font-bold md:bottom-7 md:right-7"
-          style={{
-            background: toast.ok ? "var(--ok-soft)" : "var(--err-soft)",
-            border: `1px solid ${toast.ok ? "var(--ok)" : "var(--err)"}`,
-            color: toast.ok ? "var(--ok)" : "var(--err)",
-            boxShadow: "0 4px 24px rgba(0,0,0,.4)",
-          }}
-        >
-          {toast.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-          {toast.msg}
-        </div>
-      )}
-    </WtScreen>
+    </PageShell>
   );
 }

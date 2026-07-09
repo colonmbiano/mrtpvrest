@@ -13,7 +13,7 @@ import {
   MessageSquare, RefreshCw, Search, Send, ShoppingBag, User, Wallet, XCircle,
 } from "lucide-react";
 import api from "@/lib/api";
-import { WtScreen, PageHeader, WtCard, Pill, Segmented, EmptyState } from "@/components/warmtech";
+import { PageShell, PageHeader, Card, Pill, Segmented, EmptyState } from "@/components/ds";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 type ContactInfo = {
@@ -149,7 +149,7 @@ export default function InboxPage() {
   const selected = conversations.find((c) => c.id === selectedId) || null;
 
   return (
-    <WtScreen>
+    <PageShell>
       {toast && (
         <div
           className="fixed right-4 top-4 z-50 flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold shadow-2xl md:right-6 md:top-6"
@@ -205,7 +205,7 @@ export default function InboxPage() {
               hint="Cuando un cliente le escriba a tu WhatsApp, su conversación aparecerá aquí automáticamente."
             />
           ) : (
-            <WtCard className="overflow-hidden">
+            <Card className="overflow-hidden">
               {conversations.map((c, index) => (
                 <button
                   key={c.id}
@@ -250,7 +250,7 @@ export default function InboxPage() {
                   </span>
                 </button>
               ))}
-            </WtCard>
+            </Card>
           )}
         </div>
 
@@ -273,17 +273,17 @@ export default function InboxPage() {
           )}
         </div>
       </div>
-    </WtScreen>
+    </PageShell>
   );
 }
 
 function MiniStat({ label, value, tone }: { label: string; value: number; tone: "ok" | "err" | "neutral" }) {
   const color = tone === "ok" ? "var(--ok)" : tone === "err" ? "var(--err)" : "var(--tx-mut)";
   return (
-    <WtCard className="px-3 py-2.5">
+    <Card className="px-3 py-2.5">
       <div className="font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">{label}</div>
       <div className="mt-0.5 font-display text-xl font-extrabold" style={{ color }}>{value}</div>
-    </WtCard>
+    </Card>
   );
 }
 
@@ -365,9 +365,9 @@ function ThreadPanel({
 
   if (loading || !conversation) {
     return (
-      <WtCard className="flex min-h-[40vh] items-center justify-center">
+      <Card className="flex min-h-[40vh] items-center justify-center">
         <div className="h-10 w-10 animate-spin rounded-full border-t-2" style={{ borderColor: "var(--brand-primary)" }} />
-      </WtCard>
+      </Card>
     );
   }
 
@@ -375,7 +375,7 @@ function ThreadPanel({
   const canReply = conversation.windowOpen;
 
   return (
-    <WtCard className="flex flex-col overflow-hidden">
+    <Card className="flex flex-col overflow-hidden">
       {/* Encabezado del hilo */}
       <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: "1px solid var(--bd-1)" }}>
         <button
@@ -522,6 +522,6 @@ function ThreadPanel({
           </p>
         )}
       </div>
-    </WtCard>
+    </Card>
   );
 }

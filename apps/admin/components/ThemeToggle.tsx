@@ -9,9 +9,9 @@ export function ThemeToggle() {
       aria-label="Cambiar tema"
       style={{
         width: 34, height: 34, borderRadius: 8,
-        background: "var(--surf2)", border: "1px solid var(--border2)",
+        background: "var(--sb-surf)", border: "1px solid var(--sb-bd)",
         display: "flex", alignItems: "center", justifyContent: "center",
-        cursor: "pointer", color: "var(--muted)", transition: "all .15s",
+        cursor: "pointer", color: "var(--sb-mut)", transition: "all .15s",
         fontSize: 15,
       }}
     >

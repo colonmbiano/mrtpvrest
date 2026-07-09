@@ -2,14 +2,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Wallet, TrendingUp, ShoppingCart, Receipt, Percent, ArrowDownUp,
-  AlertTriangle, Lock, Trophy, Flame, Package, CalendarRange,
+  AlertTriangle, Lock, Trophy, Flame, Package,
 } from "lucide-react";
-import Link from "next/link";
 import api from "@/lib/api";
 import {
-  WtScreen, PageHeader, WtCard, StatTile, SectionHead, Segmented,
-  EmptyState, LoadingCards, Pill, money,
-} from "@/components/warmtech";
+  PageShell, PageHeader, PageTabs, Toolbar, Card, DataCard, StatTile,
+  Segmented, EmptyState, LoadingCards, Pill, TONE_FG, TONE_BG, type Tone,
+} from "@/components/ds";
+import { formatMoney } from "@/lib/format";
 
 // /admin/finanzas · Food cost real (COGS vs ventas) + compras vs consumo.
 // Consume /api/finance/summary, /cost-vs-purchases y /dishes (módulo FINANCE).
@@ -38,12 +38,11 @@ function rangeFromPreset(p: PresetKey): { from: string; to: string } {
 }
 
 // Tono del food cost: menor es mejor. Verde ≤ target, ámbar hasta +5, rojo arriba.
-function fcTone(pct: number): "ok" | "warn" | "err" {
+function fcTone(pct: number): Tone {
   if (pct <= FOOD_COST_TARGET) return "ok";
   if (pct <= FOOD_COST_TARGET + 5) return "warn";
   return "err";
 }
-const TONE_VAR: Record<string, string> = { ok: "var(--ok)", warn: "var(--warn)", err: "var(--err)" };
 
 interface Summary {
   today: { revenue: number; foodCost: number; foodCostPct: number; margin: number; marginPct: number; ordersCount: number; avgTicket: number };
@@ -69,6 +68,7 @@ interface Dish {
 }
 
 const pct = (n: number) => `${(n || 0).toFixed(1)}%`;
+const mny = (n: number) => formatMoney(n, false);
 
 export default function FinanzasPage() {
   const [preset, setPreset] = useState<PresetKey>("month");
@@ -112,14 +112,15 @@ export default function FinanzasPage() {
 
   if (moduleOff) {
     return (
-      <WtScreen>
-        <PageHeader eyebrow="Finanzas" title="Centro financiero" subtitle="Food cost, margen y consumo" />
+      <PageShell>
+        <PageHeader eyebrow="Finanzas · Costeo" title="Centro financiero" subtitle="Food cost, margen y consumo" />
+        <PageTabs set="finanzas" />
         <EmptyState
           icon={Lock}
           title="Módulo de Finanzas no activado"
           hint="Actívalo en el plan del tenant (módulo FINANCE) para ver food cost real, márgenes y el análisis de compras vs consumo."
         />
-      </WtScreen>
+      </PageShell>
     );
   }
 
@@ -128,23 +129,15 @@ export default function FinanzasPage() {
   const maxBar = Math.max(1, cvp?.purchases ?? 0, cvp?.cogs ?? 0);
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Finanzas · Costeo"
         title="Centro financiero"
         subtitle="Food cost real, margen y compras vs consumo"
-        actions={
-          <div className="flex items-center gap-2">
-            <Link href="/admin/finanzas/flujo" className="inline-flex min-h-12 items-center gap-2 rounded-[13px] px-4 text-[13px] font-bold text-tx-mid" style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>
-              <CalendarRange size={15} /> Flujo de caja
-            </Link>
-            <Segmented value={preset} onChange={setPreset} options={PRESETS} className="md:max-w-[360px]" />
-          </div>
-        }
       />
-      <div className="mb-4 md:hidden">
-        <Segmented value={preset} onChange={setPreset} options={PRESETS} />
-      </div>
+      <PageTabs set="finanzas" />
+
+      <Toolbar filters={<Segmented value={preset} onChange={setPreset} options={PRESETS} />} />
 
       {loading || !cvp ? (
         <LoadingCards count={4} />
@@ -152,40 +145,36 @@ export default function FinanzasPage() {
         <div className="space-y-5">
           {/* KPIs del periodo */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div
-              className="rounded-2xl p-4"
-              style={{ background: "var(--surf-1)", border: `1px solid ${TONE_VAR[tone]}40` }}
-            >
+            <Card className="p-4">
               <div className="mb-1 flex items-center gap-2">
-                <span className="grid h-7 w-7 place-items-center rounded-lg" style={{ background: "var(--surf-2)", color: TONE_VAR[tone] }}>
+                <span className="grid h-7 w-7 place-items-center rounded-lg" style={{ background: TONE_BG[tone], color: TONE_FG[tone] }}>
                   <Percent size={15} />
                 </span>
                 <span className="text-[11px] font-bold uppercase tracking-wider text-tx-mut">Food cost</span>
               </div>
-              <p className="font-display text-2xl font-extrabold tabular-nums" style={{ color: TONE_VAR[tone] }}>{pct(fcPeriod)}</p>
+              <p className="font-display text-2xl font-extrabold tabular-nums" style={{ color: TONE_FG[tone] }}>{pct(fcPeriod)}</p>
               {cvp.itemsWithoutCost > 0 ? (
-                <p className="text-[10px] font-semibold text-[color:var(--warn)]">piso · {cvp.itemsWithoutCost}/{cvp.itemsTotal} líneas sin receta</p>
+                <p className="text-[10px] font-semibold" style={{ color: "var(--warn)" }}>piso · {cvp.itemsWithoutCost}/{cvp.itemsTotal} líneas sin receta</p>
               ) : (
                 <p className="text-[10px] text-tx-dim">objetivo {FOOD_COST_TARGET}% · {tone === "ok" ? "en meta" : tone === "warn" ? "arriba" : "alto"}</p>
               )}
-            </div>
+            </Card>
             <StatTile icon={TrendingUp} value={pct(cvp.marginPct)} label="Margen bruto" />
-            <StatTile icon={Wallet} value={money(cvp.revenue)} label={`Ventas · ${cvp.ordersCount} órd.`} />
+            <StatTile icon={Wallet} value={mny(cvp.revenue)} label={`Ventas · ${cvp.ordersCount} órd.`} />
             <StatTile icon={ShoppingCart} value={pct(cvp.purchasesPct)} label="Compras / ventas" />
           </div>
 
           {/* Compras vs consumo */}
-          <WtCard className="p-4 md:p-5">
-            <SectionHead title="Compras vs consumo (food cost real)" />
+          <DataCard title="Compras vs consumo (food cost real)">
             <div className="space-y-3">
               <BarRow label="Consumo real (COGS)" value={cvp.cogs} max={maxBar} color="var(--brand-primary)" />
               <BarRow label="Compras (insumos)" value={cvp.purchases} max={maxBar} color="var(--info)" />
             </div>
             <p className="mt-2 text-[10.5px] text-tx-dim">
-              Compras = órdenes {money(cvp.purchasesBreakdown.purchaseOrders)} · repartidor {money(cvp.purchasesBreakdown.driverCompras)} · gastos {money(cvp.purchasesBreakdown.operatingCompras)}
+              Compras = órdenes {mny(cvp.purchasesBreakdown.purchaseOrders)} · repartidor {mny(cvp.purchasesBreakdown.driverCompras)} · gastos {mny(cvp.purchasesBreakdown.operatingCompras)}
             </p>
             <div
-              className="mt-4 flex items-center justify-between gap-3 rounded-xl p-3"
+              className="mt-4 flex items-center justify-between gap-3 rounded-ds-md p-3"
               style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
             >
               <div className="flex items-center gap-2">
@@ -193,7 +182,7 @@ export default function FinanzasPage() {
                 <span className="text-[12px] font-semibold text-tx">Diferencia (compras − consumo)</span>
               </div>
               <span className="font-mono text-base font-extrabold tabular-nums" style={{ color: cvp.gap > 0 ? "var(--warn)" : "var(--ok)" }}>
-                {cvp.gap >= 0 ? "+" : "−"}{money(Math.abs(cvp.gap))}
+                {cvp.gap >= 0 ? "+" : "−"}{mny(Math.abs(cvp.gap))}
               </span>
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-tx-mut">
@@ -201,53 +190,49 @@ export default function FinanzasPage() {
                 ? "Compraste más de lo que consumiste: o subió tu inventario, o hay merma/robo. Cruza con un conteo físico para distinguir."
                 : "Consumiste de inventario previo (compraste menos de lo vendido). Normal si surtiste fuerte la semana pasada."}
             </p>
-          </WtCard>
+          </DataCard>
 
           {/* Hoy + alertas */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <WtCard className="p-4 md:p-5">
-              <SectionHead title="Hoy" />
+            <DataCard title="Hoy">
               {summary ? (
                 <div className="grid grid-cols-3 gap-3">
-                  <MiniKpi label="Food cost" value={pct(summary.today.foodCostPct)} color={TONE_VAR[fcTone(summary.today.foodCostPct)]} />
-                  <MiniKpi label="Ventas" value={money(summary.today.revenue)} />
-                  <MiniKpi label="Ticket prom." value={money(summary.today.avgTicket)} />
+                  <MiniKpi label="Food cost" value={pct(summary.today.foodCostPct)} color={TONE_FG[fcTone(summary.today.foodCostPct)]} />
+                  <MiniKpi label="Ventas" value={mny(summary.today.revenue)} />
+                  <MiniKpi label="Ticket prom." value={mny(summary.today.avgTicket)} />
                 </div>
               ) : <EmptyState icon={Receipt} title="Sin datos de hoy" />}
-            </WtCard>
+            </DataCard>
 
-            <WtCard className="p-4 md:p-5">
-              <SectionHead title="Alertas" />
+            <DataCard title="Alertas">
               {summary && summary.alerts.length > 0 ? (
                 <div className="space-y-2">
                   {summary.alerts.map((a, i) => (
-                    <div key={i} className="flex items-start gap-2 rounded-xl p-2.5" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                    <div key={i} className="flex items-start gap-2 rounded-ds-md p-2.5" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
                       <AlertTriangle size={14} className="mt-0.5 shrink-0" style={{ color: a.severity === "err" ? "var(--err)" : a.severity === "warn" ? "var(--warn)" : "var(--info)" }} />
                       <span className="text-[12px] text-tx">{a.message}</span>
                     </div>
                   ))}
                 </div>
               ) : <EmptyState icon={TrendingUp} title="Todo en orden" hint="Sin alertas de costo." />}
-            </WtCard>
+            </DataCard>
           </div>
 
           {/* Top platillos */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <WtCard className="p-4 md:p-5">
-              <SectionHead title="Más rentables (margen total)" />
+            <DataCard title="Más rentables (margen total)">
               {topMargin.length === 0 ? (
                 <EmptyState icon={Trophy} title="Sin ventas en el rango" />
               ) : (
                 <div className="space-y-2">
                   {topMargin.map((d) => (
-                    <DishRow key={d.id} name={d.name} sub={`${d.unitsSold} vend. · ${pct(d.marginPct)} margen`} amount={money(d.totalMargin)} />
+                    <DishRow key={d.id} name={d.name} sub={`${d.unitsSold} vend. · ${pct(d.marginPct)} margen`} amount={mny(d.totalMargin)} />
                   ))}
                 </div>
               )}
-            </WtCard>
+            </DataCard>
 
-            <WtCard className="p-4 md:p-5">
-              <SectionHead title="Food cost más alto" />
+            <DataCard title="Food cost más alto">
               {worstFc.length === 0 ? (
                 <EmptyState icon={Flame} title="Sin recetas con ventas" hint="Carga recetas para ver food cost por platillo." />
               ) : (
@@ -256,20 +241,19 @@ export default function FinanzasPage() {
                     <DishRow
                       key={d.id}
                       name={d.name}
-                      sub={`${money(d.foodCost)} costo · ${d.unitsSold} vend.`}
+                      sub={`${mny(d.foodCost)} costo · ${d.unitsSold} vend.`}
                       amount={pct(d.foodCostPct)}
-                      amountColor={TONE_VAR[fcTone(d.foodCostPct)]}
+                      amountColor={TONE_FG[fcTone(d.foodCostPct)]}
                     />
                   ))}
                 </div>
               )}
-            </WtCard>
+            </DataCard>
           </div>
 
           {/* Costos al alza + mermas (30d) */}
           {summary && (summary.last30d.risingCosts.length > 0 || summary.last30d.wasteCost > 0) && (
-            <WtCard className="p-4 md:p-5">
-              <SectionHead title="Insumos a vigilar (30 días)" />
+            <DataCard title="Insumos a vigilar (30 días)">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-tx-mut">Costos al alza</p>
@@ -286,21 +270,21 @@ export default function FinanzasPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-3 rounded-xl p-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
-                  <span className="grid h-10 w-10 place-items-center rounded-xl" style={{ background: "var(--surf-3)", color: "var(--err)" }}>
+                <div className="flex items-center gap-3 rounded-ds-md p-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                  <span className="grid h-10 w-10 place-items-center rounded-ds-md" style={{ background: "var(--surf-3)", color: "var(--err)" }}>
                     <Package size={18} />
                   </span>
                   <div>
-                    <p className="font-display text-xl font-extrabold tabular-nums text-tx-hi">{money(summary.last30d.wasteCost)}</p>
+                    <p className="font-display text-xl font-extrabold tabular-nums text-tx-hi">{mny(summary.last30d.wasteCost)}</p>
                     <p className="text-[11px] text-tx-mut">Mermas del mes · {summary.last30d.wasteCount} registros</p>
                   </div>
                 </div>
               </div>
-            </WtCard>
+            </DataCard>
           )}
         </div>
       )}
-    </WtScreen>
+    </PageShell>
   );
 }
 
@@ -310,7 +294,7 @@ function BarRow({ label, value, max, color }: { label: string; value: number; ma
     <div>
       <div className="mb-1 flex items-baseline justify-between text-[12px]">
         <span className="font-semibold text-tx">{label}</span>
-        <span className="font-mono font-bold tabular-nums text-tx-hi">{money(value)}</span>
+        <span className="font-mono font-bold tabular-nums text-tx-hi">{mny(value)}</span>
       </div>
       <div className="h-3 overflow-hidden rounded-full" style={{ background: "var(--surf-2)" }}>
         <div className="h-full rounded-full" style={{ width: `${w}%`, background: color }} />
@@ -321,7 +305,7 @@ function BarRow({ label, value, max, color }: { label: string; value: number; ma
 
 function MiniKpi({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="rounded-xl p-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+    <div className="rounded-ds-md p-3" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
       <p className="text-[10px] font-bold uppercase tracking-wider text-tx-mut">{label}</p>
       <p className="mt-0.5 font-display text-lg font-extrabold tabular-nums" style={{ color: color || "var(--tx-hi)" }}>{value}</p>
     </div>
@@ -330,7 +314,7 @@ function MiniKpi({ label, value, color }: { label: string; value: string; color?
 
 function DishRow({ name, sub, amount, amountColor }: { name: string; sub: string; amount: string; amountColor?: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+    <div className="flex items-center justify-between gap-3 rounded-ds-md px-3 py-2" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
       <div className="min-w-0">
         <p className="truncate text-[13px] font-bold text-tx">{name}</p>
         <p className="truncate text-[11px] text-tx-mut">{sub}</p>

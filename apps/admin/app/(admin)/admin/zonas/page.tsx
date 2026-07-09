@@ -10,7 +10,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { MapPin, Plus, Trash2, Save, Undo2, Eraser, Truck } from "lucide-react";
 import api from "@/lib/api";
-import { WtScreen, PageHeader, WtCard, PrimaryBtn, Pill, Toggle, EmptyState, money } from "@/components/warmtech";
+import { PageShell, PageHeader, Card, Button, Pill, Toggle, EmptyState } from "@/components/ds";
+import { formatMoney } from "@/lib/format";
 import { DeliveryZoneMap } from "@/components/DeliveryZoneMap";
 
 type LatLng = { lat: number; lng: number };
@@ -116,18 +117,18 @@ export default function ZonasPage() {
     .map((z) => ({ polygon: z.polygon, color: z.color }));
 
   return (
-    <WtScreen>
+    <PageShell>
       <PageHeader
         eyebrow="Envíos"
         title="Zonas de entrega"
         subtitle="Dibuja polígonos con su tarifa; el GPS del cliente decide la zona"
-        actions={<PrimaryBtn icon={Plus} full={false} onClick={startNew}>Nueva zona</PrimaryBtn>}
+        actions={<Button icon={Plus} full={false} onClick={startNew}>Nueva zona</Button>}
       />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         {/* Columna izquierda: formulario + lista */}
         <div className="flex flex-col gap-4">
-          <WtCard className="p-5">
+          <Card className="p-5">
             <div className="mb-4 flex items-center gap-2">
               <MapPin size={16} className="text-primary" />
               <span className="font-display text-sm font-extrabold text-tx-hi">
@@ -197,15 +198,15 @@ export default function ZonasPage() {
             </div>
 
             <div className="mt-5 flex gap-3">
-              {editingId && <PrimaryBtn ghost onClick={startNew}>Cancelar</PrimaryBtn>}
-              <PrimaryBtn icon={Save} disabled={saving} onClick={save}>
+              {editingId && <Button variant="ghost" onClick={startNew}>Cancelar</Button>}
+              <Button icon={Save} disabled={saving} onClick={save}>
                 {saving ? "Guardando…" : editingId ? "Guardar cambios" : "Crear zona"}
-              </PrimaryBtn>
+              </Button>
             </div>
-          </WtCard>
+          </Card>
 
           {/* Lista de zonas */}
-          <WtCard className="p-5">
+          <Card className="p-5">
             <div className="mb-3 flex items-center gap-2">
               <Truck size={15} className="text-tx-mid" />
               <span className="font-display text-sm font-extrabold text-tx-hi">Zonas configuradas</span>
@@ -234,7 +235,7 @@ export default function ZonasPage() {
                         <span className="truncate font-display text-sm font-bold text-tx-hi">{z.name}</span>
                         {!z.active && <Pill tone="neutral">Inactiva</Pill>}
                       </div>
-                      <span className="text-[11px] text-tx-mut">{money(z.fee)} · {z.polygon?.length || 0} puntos</span>
+                      <span className="text-[11px] text-tx-mut">{formatMoney(z.fee)} · {z.polygon?.length || 0} puntos</span>
                     </div>
                     <button
                       type="button" onClick={() => editZone(z)}
@@ -254,11 +255,11 @@ export default function ZonasPage() {
                 ))}
               </div>
             )}
-          </WtCard>
+          </Card>
         </div>
 
         {/* Columna derecha: mapa */}
-        <WtCard className="p-4">
+        <Card className="p-4">
           <DeliveryZoneMap
             value={draft}
             onChange={setDraft}
@@ -291,7 +292,7 @@ export default function ZonasPage() {
               </button>
             </div>
           </div>
-        </WtCard>
+        </Card>
       </div>
 
       {toast && (
@@ -302,6 +303,6 @@ export default function ZonasPage() {
           {toast.msg}
         </div>
       )}
-    </WtScreen>
+    </PageShell>
   );
 }

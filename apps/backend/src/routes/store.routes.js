@@ -22,6 +22,7 @@ const {
   getProviderForRestaurant,
   instantiateFromIntegration,
 } = require('../lib/payment-providers');
+const { toWhatsappNumber } = require('@mrtpvrest/config/phone');
 // Cálculo de envío: fuente única compartida con el chatbot de WhatsApp.
 const { resolveComboSelection } = require('../lib/money');
 const { isPromoWindowOpen } = require('../lib/promo-window');
@@ -231,6 +232,10 @@ router.get('/info', async (req, res) => {
     location: location ? { id: location.id, name: location.name, address: location.address } : null,
     hasWebStore:    tenantConfig.hasWebStore,
     whatsappNumber: config?.whatsappNumber || tenantConfig.whatsappNumber,
+    whatsappOrder: {
+      enabled: Boolean(config?.whatsappOrderingEnabled && (config?.whatsappNumber || tenantConfig.whatsappNumber)),
+      number: (config?.whatsappNumber || tenantConfig.whatsappNumber) ? toWhatsappNumber((config?.whatsappNumber || tenantConfig.whatsappNumber), config?.countryCode) : null
+    },
     storefrontTheme: (() => { const t = config?.storefrontTheme; const map = { MOCHI: "KAWAII", BENTO: "HALO", POCKET: "BRUTALIST", WAGBA: "ANTOJO" }; return map[t] || t || "KAWAII"; })(),
     primaryColor:    restaurant.accentColor || "#ff5c35",
     heroImageUrl:    config?.storefrontHeroUrl || null,
@@ -1196,6 +1201,35 @@ router.post('/orders', async (req, res) => {
         }
       }
     }
+    // Mesa (DINE_IN): resolver el número a una mesa real del mapa de piso para
+    // que la orden caiga en su mesa en el TPV. Si la sucursal tiene mapa
+    // configurado y el número no corresponde a ninguna mesa activa, rechazamos
+    // (evita mesas inexistentes desde el QR/kiosko). Sin mapa configurado no
+    // bloqueamos: el negocio sin planímetro sigue usando el número plano.
+    let resolvedTableId = null;
+    if (resolvedOrderType === 'DINE_IN' && tableNumber != null && resolvedLocationId) {
+      const tablesAtLocation = await prisma.table.findMany({
+        where: { locationId: resolvedLocationId, isActive: true },
+        select: { id: true, name: true },
+      });
+      if (tablesAtLocation.length > 0) {
+        const matches = tablesAtLocation.filter((t) => {
+          const n = (String(t.name).match(/\d+/) || [])[0];
+          return n && parseInt(n, 10) === tableNumber;
+        });
+        if (matches.length === 1) {
+          resolvedTableId = matches[0].id;
+        } else if (matches.length === 0) {
+          return res.status(400).json({
+            error: `La mesa ${tableNumber} no existe en esta sucursal.`,
+            code: 'INVALID_TABLE',
+          });
+        }
+        // Empate (mismo número en dos mesas): no enlazamos tableId pero tampoco
+        // bloqueamos — el número es válido; la desambiguación queda en el TPV.
+      }
+    }
+
     // Crear la orden CON el consumo de cupón y puntos en la misma transacción:
     // si algo falla, no queda orden con descuento aplicado pero cupón/puntos
     // sin consumir (ni al revés). Los consumos son condicionales en el WHERE
@@ -1268,6 +1302,8 @@ router.post('/orders', async (req, res) => {
           status:          'PENDING',
           orderType:       resolvedOrderType,
           tableNumber,
+          // Enlace a la mesa real del mapa (si se resolvió) → el TPV la ubica.
+          tableId:         resolvedTableId,
           paymentMethod,
           paymentStatus:   'PENDING',
           subtotal,
@@ -1357,6 +1393,32 @@ router.post('/orders', async (req, res) => {
     if (order.orderType === 'DELIVERY') {
       // Push best-effort a los celulares de los repartidores (app cerrada incluida).
       require('../services/notifications.service').notifyDriversNewDeliveryOrder(order).catch(() => {});
+    }
+
+    // Aviso al DUEÑO por WhatsApp del nuevo pedido web (además del push al TPV).
+    // Opt-in por tenant. Número normalizado con lada aquí porque el envío por
+    // integración no antepone la lada. Best-effort: la orden ya existe.
+    const alertNumber = config?.orderAlertEnabled
+      ? toWhatsappNumber(config.orderAlertWhatsapp || config.phone, config.countryCode)
+      : '';
+    if (alertNumber) {
+      const typeLabel = order.orderType === 'DELIVERY'
+        ? '🛵 Domicilio'
+        : order.orderType === 'DINE_IN'
+          ? `🍽 Mesa ${order.tableNumber ?? ''}`.trim()
+          : '🥡 Para llevar';
+      const itemsTxt = (order.items || [])
+        .map((it) => `• ${it.quantity}× ${it.menuItem?.name || 'Producto'}`)
+        .join('\n');
+      const addr = order.orderType === 'DELIVERY' && order.deliveryAddress ? `\n📍 ${order.deliveryAddress}` : '';
+      const totalTxt = `$${Number(order.total || 0).toLocaleString('es-MX')}`;
+      const alertMsg =
+        `🔔 *Nuevo pedido web #${order.orderNumber}*\n${typeLabel}\n\n${itemsTxt}\n\n` +
+        `*Total: ${totalTxt}*${addr}\n` +
+        `Cliente: ${order.customerName || 's/n'}${order.customerPhone ? ` · ${order.customerPhone}` : ''}`;
+      require('../services/notifications.service')
+        .sendOrderWhatsApp(restaurant.id, alertNumber, alertMsg)
+        .catch((e) => console.error('[store] aviso al dueño:', e.message));
     }
 
     // CRM de WhatsApp: registrar/actualizar el contacto (pestaña Clientes del

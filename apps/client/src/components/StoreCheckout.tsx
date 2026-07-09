@@ -6,6 +6,7 @@ import { getApiUrl } from '../lib/config';
 import { computeDeliveryPreview, type DeliveryConfig } from '../lib/delivery';
 import { MapLocationPicker } from './MapLocationPicker';
 import { useMoney } from './StoreLocaleContext';
+import { generateWhatsAppOrderMessage } from '../lib/waOrderMessage';
 
 const API = getApiUrl();
 // fmt viene de useMoney() (moneda/locale del tenant).
@@ -24,6 +25,11 @@ type StoreCheckoutProps = {
   // Tipo de pedido preseleccionado (ej. el toggle Entrega/Recoger del tema).
   // Si la sucursal no lo permite, el efecto de `allowed` lo corrige a uno válido.
   initialOrderType?: OrderType;
+  whatsappOrder?: { enabled: boolean; number: string | null };
+  // Menú QR en mesa: cuando llega de un QR (?mesa=&l=), el pedido queda fijo en
+  // DINE_IN con esa mesa y sucursal (sin selector de tipo, mesa bloqueada).
+  lockedTable?: string | null;
+  lockedLocationId?: string | null;
 };
 
 const STATUS_LABEL: Record<string, { t: string; c: string }> = {
@@ -38,7 +44,8 @@ const STATUS_LABEL: Record<string, { t: string; c: string }> = {
 
 export default function StoreCheckout({
   open, onClose, slug, primary, locations = [], delivery, minOrderAmount = 0, onlinePayment = false,
-  initialOrderType = 'DELIVERY',
+  initialOrderType = 'DELIVERY', whatsappOrder,
+  lockedTable = null, lockedLocationId = null,
 }: StoreCheckoutProps) {
   const fmt = useMoney();
   const lines = useCart(s => s.lines);
@@ -56,9 +63,9 @@ export default function StoreCheckout({
   const [geoStatus, setGeoStatus] = useState<'' | 'loading' | 'ok' | 'error'>('');
 
   // Tipo de pedido + sucursal
-  const [orderType, setOrderType] = useState<OrderType>(initialOrderType);
-  const [tableNumber, setTableNumber] = useState('');
-  const [locationId, setLocationId] = useState<string>(locations[0]?.id || '');
+  const [orderType, setOrderType] = useState<OrderType>(lockedTable ? 'DINE_IN' : initialOrderType);
+  const [tableNumber, setTableNumber] = useState(lockedTable || '');
+  const [locationId, setLocationId] = useState<string>(lockedLocationId || locations[0]?.id || '');
   const selectedLocation = locations.find(l => l.id === locationId) || locations[0] || null;
 
   // Pago
@@ -151,7 +158,8 @@ export default function StoreCheckout({
     return a.length ? a : ['DELIVERY'];
   }, [selectedLocation]);
 
-  useEffect(() => { if (!allowed.includes(orderType)) setOrderType(allowed[0]); }, [allowed]); // eslint-disable-line
+  // Con mesa fija (QR) el tipo no se corrige: el pedido es DINE_IN sí o sí.
+  useEffect(() => { if (!lockedTable && !allowed.includes(orderType)) setOrderType(allowed[0]); }, [allowed]); // eslint-disable-line
 
   const isDelivery = orderType === 'DELIVERY';
   const preview = useMemo(() => computeDeliveryPreview(delivery, total, coords), [delivery, total, coords]);
@@ -302,6 +310,9 @@ export default function StoreCheckout({
   // ── Pantalla de éxito + seguimiento ──────────────────────────────────────
   if (success) {
     const st = STATUS_LABEL[liveStatus] || STATUS_LABEL.PENDING;
+    const isWa = whatsappOrder?.enabled && !!whatsappOrder?.number;
+    const waUrl = isWa ? `https://wa.me/${whatsappOrder.number}?text=${generateWhatsAppOrderMessage(success, '')}` : '';
+
     return (
       <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
         <div className="bg-white p-8 rounded-[32px] shadow-2xl max-w-sm w-full text-center">
@@ -315,9 +326,17 @@ export default function StoreCheckout({
             </p>
           </div>
           <p className="text-xs text-gray-400 mb-5">El estado se actualiza automáticamente.</p>
+
+          {isWa && (
+            <a href={waUrl} target="_blank" rel="noopener noreferrer" className="block w-full py-4 text-white rounded-2xl font-black uppercase tracking-widest mb-3 bg-[#25D366] shadow-lg hover:brightness-105 active:scale-95 transition-all flex justify-center items-center gap-2">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.711.927 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.391.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm.029 18.88c-1.161 0-2.305-.292-3.318-.844l-3.677.964 1.003-3.582c-.605-1.054-.925-2.269-.926-3.504.001-3.882 3.161-7.042 7.046-7.044 3.881 0 7.041 3.162 7.043 7.046.002 3.884-3.159 7.044-7.043 7.044z"/></svg>
+              Enviar por WhatsApp
+            </a>
+          )}
+
           <button onClick={() => { setSuccess(null); onClose(); }}
-            className="w-full py-4 text-white rounded-2xl font-black uppercase tracking-widest" style={{ background: primary }}>
-            Listo
+            className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest ${isWa ? 'bg-gray-100 text-gray-600' : 'text-white'}`} style={!isWa ? { background: primary } : {}}>
+            {isWa ? 'Cerrar' : 'Listo'}
           </button>
         </div>
       </div>
@@ -361,24 +380,31 @@ export default function StoreCheckout({
               </div>
             </div>
 
-            {/* Tipo de pedido */}
-            <div>
-              <p className={sectionTitle}>Tipo de pedido</p>
-              <div className="grid grid-cols-3 gap-2">
-                {([['DELIVERY', '🛵 Domicilio'], ['TAKEOUT', '🥡 Para llevar'], ['DINE_IN', '🍽 En mesa']] as [OrderType, string][])
-                  .filter(([t]) => allowed.includes(t))
-                  .map(([t, label]) => (
-                    <button key={t} type="button" onClick={() => setOrderType(t)}
-                      className="py-3 rounded-2xl text-xs font-bold border-2 transition-all"
-                      style={{ borderColor: orderType === t ? primary : '#e5e7eb', background: orderType === t ? `${primary}14` : 'transparent', color: orderType === t ? primary : '#6b7280' }}>
-                      {label}
-                    </button>
-                  ))}
+            {/* Tipo de pedido — oculto cuando el pedido viene de un QR de mesa */}
+            {lockedTable ? (
+              <div className="flex items-center gap-2 rounded-2xl px-4 py-3" style={{ background: `${primary}14` }}>
+                <span className="text-lg">🍽</span>
+                <span className="text-sm font-bold" style={{ color: primary }}>Pedido para la Mesa {lockedTable}</span>
               </div>
-            </div>
+            ) : (
+              <div>
+                <p className={sectionTitle}>Tipo de pedido</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {([['DELIVERY', '🛵 Domicilio'], ['TAKEOUT', '🥡 Para llevar'], ['DINE_IN', '🍽 En mesa']] as [OrderType, string][])
+                    .filter(([t]) => allowed.includes(t))
+                    .map(([t, label]) => (
+                      <button key={t} type="button" onClick={() => setOrderType(t)}
+                        className="py-3 rounded-2xl text-xs font-bold border-2 transition-all"
+                        style={{ borderColor: orderType === t ? primary : '#e5e7eb', background: orderType === t ? `${primary}14` : 'transparent', color: orderType === t ? primary : '#6b7280' }}>
+                        {label}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
 
-            {/* Sucursal (si hay más de una) */}
-            {locations.length > 1 && (
+            {/* Sucursal (si hay más de una) — fija cuando el QR trae sucursal */}
+            {locations.length > 1 && !lockedLocationId && (
               <div>
                 <p className={sectionTitle}>Sucursal</p>
                 <select value={locationId} onChange={e => setLocationId(e.target.value)} className={field}>
@@ -419,7 +445,10 @@ export default function StoreCheckout({
                 </>
               )}
               {orderType === 'DINE_IN' && (
-                <input required placeholder="Número de mesa" type="number" min="1" className={field} value={tableNumber} onChange={e => setTableNumber(e.target.value)} />
+                <input required placeholder="Número de mesa" type="number" min="1" className={field}
+                  value={tableNumber} onChange={e => setTableNumber(e.target.value)}
+                  disabled={!!lockedTable} readOnly={!!lockedTable}
+                  style={lockedTable ? { opacity: 0.7 } : undefined} />
               )}
 
               {/* Registro rápido: guardar datos para próximos pedidos */}
@@ -561,7 +590,7 @@ export default function StoreCheckout({
             <button disabled={isSubmitting || belowMin || (isDelivery && preview.outOfRange)} type="submit"
               className="w-full py-5 text-white font-black rounded-2xl shadow-xl transition-all active:scale-95 disabled:opacity-50"
               style={{ background: primary }}>
-              {isSubmitting ? 'PROCESANDO...' : `${paymentMethod === 'ONLINE' ? 'PAGAR' : 'CONFIRMAR'} · ${fmt(grandTotal)}`}
+              {isSubmitting ? 'PROCESANDO...' : `${paymentMethod === 'ONLINE' ? 'PAGAR' : (whatsappOrder?.enabled && !!whatsappOrder?.number ? 'CONFIRMAR Y ENVIAR POR WA' : 'CONFIRMAR')} · ${fmt(grandTotal)}`}
             </button>
           </form>
         )}
