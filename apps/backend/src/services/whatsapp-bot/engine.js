@@ -246,7 +246,8 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
       const addr = text.trim();
       if (!addr) return result(m.askAddress, STATES.ADDRESS);
       data.deliveryAddress = addr.slice(0, 300);
-      if ((config?.deliveryMode || 'FLAT') === 'DISTANCE') {
+      const dmode = config?.deliveryMode || 'FLAT';
+      if (dmode === 'DISTANCE' || dmode === 'ZONES') {
         return result(m.askLocationPin, STATES.LOCATION_PIN);
       }
       return result(m.askPayment(data.orderType, onlinePayment), STATES.PAYMENT);

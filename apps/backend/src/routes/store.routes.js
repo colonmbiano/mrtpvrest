@@ -534,6 +534,15 @@ router.post('/orders', async (req, res) => {
   // inexistente) → el envío siempre cobraba $0.
   const config = await prisma.restaurantConfig.findUnique({ where: { restaurantId: restaurant.id } });
 
+  // Modo ZONES: adjuntamos las zonas activas para que computeDeliveryFee ubique
+  // la coordenada del cliente en su polígono (fuente de verdad server-side).
+  if (config && config.deliveryMode === 'ZONES') {
+    config.deliveryZones = await prisma.deliveryZone.findMany({
+      where: { restaurantId: restaurant.id, active: true },
+      orderBy: { priority: 'asc' },
+    });
+  }
+
   // Captura del TPV por un cajero autenticado: exenta de horario y mínimo
   // (procesa pedidos reales a cualquier hora). Ver isAuthedStaff arriba.
   const isStaff = isAuthedStaff(req, restaurant.id);

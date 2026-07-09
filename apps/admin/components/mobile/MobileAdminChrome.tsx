@@ -19,7 +19,7 @@ const tabs = [
 ] as const;
 
 const moreGroups = [
-  { label: "Negocio", items: [["/admin/mi-marca", "Mi Marca"], ["/admin/tienda", "Tienda online"], ["/admin/pantalla-cliente", "Pantalla cliente"]] },
+  { label: "Negocio", items: [["/admin/mi-marca", "Mi Marca"], ["/admin/tienda", "Tienda online"], ["/admin/zonas", "Zonas de entrega"], ["/admin/pantalla-cliente", "Pantalla cliente"]] },
   { label: "Operación", items: [["/admin/inventario", "Inventario"], ["/admin/inventario/compras", "Compras & Bodega"], ["/admin/rastreo", "Logística & Flota"], ["/admin/caja-repartidores", "Caja repartidores"], ["/admin/nomina", "Nómina"], ["/admin/reportes/cortes", "Cortes"]] },
   { label: "Crecimiento", items: [["/admin/reportes/ia", "Reportes IA"], ["/admin/promociones", "Promociones IA"], ["/admin/inbox", "Bandeja de entrada"], ["/admin/whatsapp", "WhatsApp Bot"], ["/admin/plantillas", "Plantillas WA"], ["/admin/banners", "Banners"]] },
   { label: "Cuenta", items: [["/admin/modulos", "Módulos"], ["/admin/integraciones", "Integraciones"], ["/admin/billing", "Facturación"], ["/admin/descargas", "Apps & Descargas"]] },
@@ -47,6 +47,7 @@ const routeTitles: Array<[string, string, string]> = [
   ["/admin/descargas", "Apps & Descargas", "Herramientas del equipo"],
   ["/admin/mi-marca", "Mi Marca", "Identidad del restaurante"],
   ["/admin/tienda", "Tienda online", "Canal de venta digital"],
+  ["/admin/zonas", "Zonas de entrega", "Polígonos de reparto con tarifa"],
   ["/admin/pantalla-cliente", "Pantalla cliente", "Display de pedidos"],
 ];
 

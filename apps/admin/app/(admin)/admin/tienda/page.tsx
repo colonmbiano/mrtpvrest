@@ -411,7 +411,7 @@ export default function TiendaConfigPage() {
     timezone: "America/Mexico_City",
     businessHours: [] as BusinessHour[],
     // Envío por distancia
-    deliveryMode: "FLAT" as "FLAT" | "DISTANCE",
+    deliveryMode: "FLAT" as "FLAT" | "DISTANCE" | "ZONES",
     originLat: null as number | null,
     originLng: null as number | null,
     deliveryBaseFee: 0,
@@ -497,7 +497,7 @@ export default function TiendaConfigPage() {
           closedMessage: d.closedMessage ?? "",
           maxOpenOrders: d.maxOpenOrders ?? 0,
           saturatedMessage: d.saturatedMessage ?? "",
-          deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : "FLAT",
+          deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : d.deliveryMode === "ZONES" ? "ZONES" : "FLAT",
           isOpen: d.isOpen ?? true,
           adminCanViewExpectedCash: d.adminCanViewExpectedCash ?? true,
           cashCutEmailEnabled: d.cashCutEmailEnabled ?? false,
@@ -900,17 +900,18 @@ export default function TiendaConfigPage() {
 
           {/* Modo de cobro de envío */}
           <FieldLabel>Modo de cobro de envío</FieldLabel>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {[
               { id: "FLAT", name: "Tarifa fija", desc: "Un costo único para todos" },
               { id: "DISTANCE", name: "Por distancia", desc: "Base + costo por km" },
+              { id: "ZONES", name: "Por zonas", desc: "Polígonos en el mapa con su tarifa" },
             ].map(m => {
               const active = config.deliveryMode === m.id;
               return (
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => setConfig(p => ({ ...p, deliveryMode: m.id as "FLAT" | "DISTANCE" }))}
+                  onClick={() => setConfig(p => ({ ...p, deliveryMode: m.id as "FLAT" | "DISTANCE" | "ZONES" }))}
                   className="rounded-2xl p-4 text-left transition-colors"
                   style={{
                     border: `2px solid ${active ? "var(--brand-primary)" : "var(--bd-1)"}`,
@@ -999,6 +1000,21 @@ export default function TiendaConfigPage() {
               <p className="text-[11px] leading-relaxed text-tx-mut">
                 Fórmula: <span className="text-primary">tarifa base + (costo por km × distancia)</span>. La distancia se mide en línea recta desde el origen hasta la ubicación GPS del cliente en el checkout.
               </p>
+            </div>
+          )}
+
+          {/* Configuración por zonas */}
+          {config.deliveryMode === "ZONES" && (
+            <div className="mt-4 space-y-4 rounded-3xl p-5" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[.12em] text-primary">Zonas de entrega</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-tx-mut">
+                  Dibuja polígonos en el mapa y asigna una tarifa a cada uno. La ubicación GPS del cliente en el checkout decide la zona y su costo; si cae fuera de todas, el pedido queda <span className="text-primary">fuera de cobertura</span>.
+                </p>
+              </div>
+              <PrimaryBtn href="/admin/zonas" icon={MapPin} full={false}>
+                Administrar zonas en el mapa
+              </PrimaryBtn>
             </div>
           )}
         </WtCard>
