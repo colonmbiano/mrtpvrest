@@ -94,11 +94,19 @@ const TOOLS = [
   {
     name: "wa_inbox",
     description:
-      "Bandeja de trabajo: conversaciones de ventas con mensajes SIN responder (último mensaje del cliente o no leídos). Úsalo para saber a quién contestar. Devuelve chatId, nombre, teléfono y vista previa.",
+      "Bandeja de trabajo: conversaciones con no-leídos, o cuyo último mensaje es entrante y reciente (24h por defecto). Cada fila trae `isLead` y `stage`. ATENCIÓN: este número puede tener chats que NO son prospectos del SaaS (proveedores, conocidos). NUNCA respondas a un chat con isLead=false sin confirmarlo antes con el usuario.",
     inputSchema: {
       type: "object",
       properties: {
         limit: { type: "number", description: "Máx conversaciones (def 20)." },
+        unreadOnly: {
+          type: "boolean",
+          description: "Solo chats con mensajes sin leer (lo más conservador).",
+        },
+        hours: {
+          type: "number",
+          description: "Ventana de recencia en horas (def 24).",
+        },
       },
     },
   },
@@ -118,7 +126,7 @@ const TOOLS = [
   {
     name: "wa_send",
     description:
-      "Envía TU respuesta (la que tú, Claude, redactaste) a una conversación. Modo solo-responder: no hagas envíos masivos ni en frío. El worker bloquea duplicados recientes.",
+      "Envía TU respuesta (la que tú, Claude, redactaste) a una conversación. Modo solo-responder: no hagas envíos masivos ni en frío. Este número tiene chats que NO son prospectos: si el chat no está en el pipeline (isLead=false en wa_inbox), confirma con el usuario ANTES de enviar. El worker bloquea duplicados recientes.",
     inputSchema: {
       type: "object",
       properties: {
@@ -284,8 +292,32 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         return ok(await worker("/status"));
 
       case "wa_inbox": {
-        const q = args.limit ? `?limit=${Number(args.limit)}` : "";
-        return ok(await worker(`/queue${q}`));
+        const params = new URLSearchParams();
+        if (args.limit) params.set("limit", String(Number(args.limit)));
+        if (args.unreadOnly) params.set("unreadOnly", "1");
+        if (args.hours) params.set("hours", String(Number(args.hours)));
+        const qs = params.toString();
+        const data = await worker(`/queue${qs ? `?${qs}` : ""}`);
+        // Anotar cada conversación con su estado en el pipeline: este número
+        // tiene chats que no son prospectos y no se les debe contestar.
+        const conversations = (data.conversations || []).map((c) => {
+          const lead = getLead(c.chatId);
+          return {
+            ...c,
+            isLead: !!lead,
+            stage: lead?.stage || null,
+            business: lead?.business || null,
+          };
+        });
+        const ajenos = conversations.filter((c) => !c.isLead).length;
+        return ok({
+          ...data,
+          conversations,
+          aviso:
+            ajenos > 0
+              ? `${ajenos} de estas conversaciones NO están en el pipeline (isLead=false). No les respondas sin confirmar con el usuario.`
+              : undefined,
+        });
       }
 
       case "wa_read": {

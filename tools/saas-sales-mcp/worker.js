@@ -21,6 +21,7 @@ import {
   PUPPETEER_EXECUTABLE_PATH,
   IGNORE_NUMBERS,
   DUP_SEND_WINDOW_MS,
+  QUEUE_RECENT_HOURS,
 } from "./config.js";
 
 const { Client, LocalAuth } = wweb;
@@ -136,9 +137,18 @@ app.get("/qr", (_req, res) => {
   res.json({ ready, qr: latestQr });
 });
 
+// Bandeja de trabajo. Un chat entra SOLO si:
+//   - tiene mensajes sin leer, o
+//   - su último mensaje es entrante Y llegó dentro de QUEUE_RECENT_HOURS.
+// Sin el corte de recencia, todo chat viejo cuyo último mensaje fue del cliente
+// queda marcado como "pendiente" de por vida y la bandeja se vuelve ruido.
+// ?unreadOnly=1 -> solo no-leídos.  ?hours=N -> ventana de recencia a medida.
 app.get("/queue", async (req, res) => {
   if (!ready) return res.status(503).json({ error: "WhatsApp no está listo aún." });
   const limit = Math.min(Number(req.query.limit) || 20, 50);
+  const unreadOnly = req.query.unreadOnly === "1";
+  const hours = Number(req.query.hours) || QUEUE_RECENT_HOURS;
+  const cutoff = Date.now() - hours * 3600_000;
   try {
     const chats = await client.getChats();
     const rows = [];
@@ -146,20 +156,28 @@ app.get("/queue", async (req, res) => {
       const id = chat.id?._serialized || "";
       if (isBlockedChat(id) || isIgnored(id)) continue;
       const last = chat.lastMessage;
-      const needsReply = chat.unreadCount > 0 || (last && !last.fromMe);
+      const lastTs = last?.timestamp ? last.timestamp * 1000 : null;
+      const unread = chat.unreadCount || 0;
+      const inboundReciente = !!last && !last.fromMe && !!lastTs && lastTs >= cutoff;
+      const needsReply = unreadOnly ? unread > 0 : unread > 0 || inboundReciente;
       if (!needsReply) continue;
       rows.push({
         chatId: id,
         name: chat.name || phoneFromId(id) || id,
         phone: phoneFromId(id),
-        unread: chat.unreadCount || 0,
+        unread,
+        reason: unread > 0 ? "no-leidos" : "entrante-reciente",
         lastFromMe: last ? !!last.fromMe : null,
         lastPreview: trunc(last?.body, 140),
-        lastTs: last?.timestamp ? last.timestamp * 1000 : null,
+        lastTs,
       });
     }
     rows.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
-    res.json({ conversations: rows.slice(0, limit) });
+    res.json({
+      ventanaHoras: hours,
+      total: rows.length,
+      conversations: rows.slice(0, limit),
+    });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
   }
