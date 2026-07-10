@@ -68,6 +68,8 @@ const SCOPED_MODELS = new Set([
   'Supplier',
   'User',
   'VariantTemplate',
+  'Vault',
+  'VaultMovement',
   'WhatsappSession',
   'WhatsappContact',
   'WhatsappConversation',

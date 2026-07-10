@@ -4,15 +4,19 @@
 // efectivo, etc.) — distintos de compras de inventario que viven en
 // /api/purchases. Capturados desde el TPV con foto del ticket o manual.
 //
-// Regla clave:
-//   - paymentMethod=CASH_DRAWER  → DEBE existir un CashShift abierto en la
-//                                  location y se crea ShiftExpense vinculado
-//                                  para que el corte de caja cuadre.
-//   - CORPORATE_CARD / TRANSFER → solo registro contable; no toca caja.
+// Regla clave — solo el efectivo de caja toca el corte del cajero:
+//   - CASH_DRAWER    → DEBE existir un CashShift abierto en la location y se
+//                      crea ShiftExpense vinculado para que el corte cuadre.
+//   - CASH_VAULT     → sale de la bolsa de EFECTIVO de la bóveda.
+//   - CORPORATE_CARD → sale de la bolsa DIGITAL de la bóveda.
+//   - TRANSFER       → sale de la bolsa DIGITAL de la bóveda.
+// Los tres últimos no crean ShiftExpense ni exigen turno abierto: el corte
+// del cajero no se mueve. Ver src/lib/vault.js.
 
 const express = require('express');
 const { prisma, runWithBypass } = require('@mrtpvrest/database');
 const { round2 } = require('../lib/money');
+const { applyVaultMovement, vaultDenied, channelForMethod } = require('../lib/vault');
 const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware');
 const { requireFeatureFlag } = require('../lib/modules');
 const router = express.Router();
@@ -29,7 +33,7 @@ const CASHIER_LIMIT_PER_EXPENSE = 500; // MXN
 // Roles permitidos. CASHIER tiene tope; admins/managers no.
 const ALLOWED_ROLES = ['CASHIER', 'WAITER', 'KITCHEN', 'ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'];
 
-const VALID_PAYMENT_METHODS = ['CASH_DRAWER', 'CORPORATE_CARD', 'TRANSFER'];
+const VALID_PAYMENT_METHODS = ['CASH_DRAWER', 'CASH_VAULT', 'CORPORATE_CARD', 'TRANSFER'];
 const VALID_SETTLEMENT = ['PAID', 'PENDING'];
 
 // ── GET /api/expenses ────────────────────────────────────────────────────
@@ -160,6 +164,16 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // Canal de bóveda del método (null si es CASH_DRAWER). Un gasto PENDING no
+    // la toca todavía: el dinero sale al liquidar, no al registrar la deuda.
+    const vaultChannel = isPending ? null : channelForMethod(paymentMethod);
+    // Sacar EFECTIVO de la bóveda exige rol de mando o PIN admin. El canal
+    // digital no lleva candado (ver lib/vault.js).
+    if (vaultChannel === 'CASH') {
+      const denied = vaultDenied(req, userRole);
+      if (denied) return res.status(402).json(denied);
+    }
+
     // Si es CASH_DRAWER y NO es deuda pendiente, debe haber turno abierto.
     // Un gasto PENDING no toca caja todavía (no exige turno).
     let cashShiftId = null;
@@ -244,6 +258,25 @@ router.post('/', async (req, res) => {
         });
       }
 
+      // Sale de la bóveda (efectivo acumulado o banco), NO de la gaveta. Sin
+      // ShiftExpense y sin tocar CashShift.totalExpenses — el corte del
+      // cajero queda intacto, que es justamente el punto.
+      if (vaultChannel) {
+        await applyVaultMovement(tx, {
+          restaurantId,
+          locationId,
+          type: 'WITHDRAWAL',
+          channel: vaultChannel,
+          source: 'EXPENSE',
+          amount: amt,
+          description: expense.concept,
+          operatingExpenseId: expense.id,
+          createdById: userId,
+          createdByName: req.user?.name || null,
+          occurredAt: expense.occurredAt,
+        });
+      }
+
       return expense;
     });
 
@@ -305,6 +338,20 @@ router.post('/:id/settle', async (req, res) => {
       });
     }
 
+    // Abonar desde la bóveda tiene los mismos candados que crear un gasto con ella.
+    const vaultChannel = channelForMethod(paymentMethod);
+    if (vaultChannel) {
+      if (vaultChannel === 'CASH') {
+        const denied = vaultDenied(req, userRole);
+        if (denied) return res.status(402).json(denied);
+      }
+      // La bóveda es por sucursal; un gasto legacy sin locationId no tiene de
+      // dónde salir. Mejor 400 explícito que un 500 por violación de FK.
+      if (!expense.locationId) {
+        return res.status(400).json({ error: 'El gasto no tiene sucursal; no se puede pagar desde la bóveda.' });
+      }
+    }
+
     // Si el abono es en efectivo, debe haber turno abierto en su location.
     let cashShiftId = null;
     if (paymentMethod === 'CASH_DRAWER') {
@@ -362,6 +409,25 @@ router.post('/:id/settle', async (req, res) => {
         await tx.cashShift.update({
           where: { id: cashShiftId },
           data: { totalExpenses: { increment: pay } },
+        });
+      }
+
+      // Abono pagado desde la bóveda. El updateMany condicional de arriba ya
+      // nos protege del doble-tap, así que aquí no hace falta otra guarda de
+      // idempotencia.
+      if (vaultChannel) {
+        await applyVaultMovement(tx, {
+          restaurantId,
+          locationId: expense.locationId,
+          type: 'WITHDRAWAL',
+          channel: vaultChannel,
+          source: 'SETTLEMENT',
+          amount: pay,
+          description: fully ? expense.concept : `${expense.concept} (abono)`,
+          operatingExpenseId: expense.id,
+          createdById: req.user?.id || null,
+          createdByName: req.user?.name || null,
+          occurredAt: settledAt,
         });
       }
       return true;

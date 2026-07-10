@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Sparkles, FileDown, FileUp, ShoppingCart, ClipboardList, Factory,
-  Plus, Package, TrendingUp, AlertTriangle, Boxes, CheckCircle2, Wallet, X, Trash2,
+  Plus, Package, TrendingUp, AlertTriangle, Boxes, CheckCircle2, Wallet, X, Trash2, Vault,
 } from "lucide-react";
 import api from "@/lib/api";
 import Link from "next/link";
@@ -335,6 +335,7 @@ export default function InventarioPage() {
         <ShortcutLink href="/admin/inventario/extras" icon={Plus} label="Extras / Modificadores" />
         <ShortcutLink href="/admin/inventario/proveedores" icon={Factory} label="Proveedores" />
         <ShortcutLink href="/admin/inventario/por-pagar" icon={Wallet} label="Cuentas por pagar" />
+        <ShortcutLink href="/admin/inventario/boveda" icon={Vault} label="Bóveda" />
         <button
           type="button"
           onClick={() => downloadTemplate("insumos")}

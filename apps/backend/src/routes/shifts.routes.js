@@ -8,8 +8,44 @@ const { validateBody } = require('../lib/validate');
 const { openShiftSchema, closeShiftSchema } = require('../schemas/shifts.schema');
 const { summarizePayments, cashCutSummary, round2, PAYMENT_METHOD_MAP } = require('../lib/money');
 const { sendCashCutEmail } = require('../lib/cash-cut-mailer');
+const { applyShiftVaultMovement } = require('../lib/vault');
 const audit = require('../lib/audit-logger');
 const router = express.Router();
+
+// ── Espejo del ciclo de caja en la bóveda ────────────────────────────────
+// Al abrir, el fondo SALE de la bolsa de efectivo hacia la gaveta. Al cerrar,
+// el efectivo contado ENTRA a la bolsa de efectivo y lo cobrado con tarjeta y
+// transferencia ENTRA a la bolsa digital (ese dinero va al banco, no al
+// cajón). De esas bolsas salen después las compras que se hacen en tiendas.
+//
+// Corre en su propia transacción, FUERA del cierre/apertura, a propósito: un
+// fallo al espejar el saldo no debe impedir que el cajero abra o cierre su
+// caja. El UNIQUE (shiftId, source, channel) hace el reintento seguro y el
+// saldo siempre es reconstruible sumando los movimientos.
+async function mirrorShiftToVault(req, { shiftId, type, source, channel, amount, description }) {
+  const amt = round2(Number(amount || 0));
+  if (amt <= 0) return null;
+  const restaurantId = req.restaurantId || req.user?.restaurantId;
+  if (!restaurantId || !req.locationId) return null;
+  try {
+    await prisma.$transaction((tx) => applyShiftVaultMovement(tx, {
+      restaurantId,
+      locationId: req.locationId,
+      type,
+      source,
+      channel,
+      amount: amt,
+      description,
+      shiftId,
+      createdById: req.user?.id || null,
+      createdByName: req.user?.name || null,
+    }));
+    return null;
+  } catch (e) {
+    console.error('[vault-mirror]', source, channel, e?.message || e);
+    return 'No se pudo actualizar el saldo de la bóveda. Revísalo en el panel.';
+  }
+}
 
 // Gate: módulo "cash_shift" en plan.allowedModules. Si el plan no lo
 // incluye, el cajero no puede abrir/cerrar turnos (todo el flujo de
@@ -172,6 +208,16 @@ router.post('/open', requireLocation, requireCanManageShifts, validateBody(openS
       },
       include: { expenses: true, cashIns: true }
     });
+    // El fondo de caja sale de la bolsa de efectivo hacia la gaveta del cajero.
+    const vaultWarning = await mirrorShiftToVault(req, {
+      shiftId: shift.id,
+      type: 'WITHDRAWAL',
+      source: 'SHIFT_OPEN',
+      channel: 'CASH',
+      amount: shift.openingFloat,
+      description: `Fondo de caja · ${shift.employeeName || 'Cajero'}`,
+    });
+
     // Auditoría best-effort: nunca bloquea ni rompe la apertura del turno.
     audit.record(req, audit.AUDIT_EVENTS.SHIFT_OPEN, {
       resource: `cashShift:${shift.id}`,
@@ -182,7 +228,7 @@ router.post('/open', requireLocation, requireCanManageShifts, validateBody(openS
         locationId: shift.locationId,
       },
     }).catch(() => {});
-    res.json(shift);
+    res.json({ ...shift, vaultWarning });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -456,6 +502,34 @@ async function performShiftClose(req, res, shift) {
       },
     }).catch(() => {});
 
+    // El efectivo contado sale de la gaveta y se guarda: entra a la bolsa de
+    // efectivo. Lo cobrado con tarjeta y transferencia nunca pisó el cajón —
+    // está en el banco — así que entra a la bolsa digital. Las propinas se
+    // pagan al staff, no se acumulan: quedan fuera a propósito.
+    //
+    // Los dos depósitos van EN SERIE, no con Promise.all: la primera vez que
+    // se cierra caja en una sucursal la bóveda todavía no existe, y dos
+    // upserts concurrentes sobre el mismo `locationId` UNIQUE chocan.
+    const closedBy = closed.employeeName || 'Cajero';
+    const digitalIn = round2(Number(closed.totalCard || 0) + Number(closed.totalTransfer || 0));
+    const cashWarning = await mirrorShiftToVault(req, {
+      shiftId: closed.id,
+      type: 'DEPOSIT',
+      source: 'SHIFT_CLOSE',
+      channel: 'CASH',
+      amount: closed.closingFloat,
+      description: `Cierre de caja · ${closedBy}`,
+    });
+    const digitalWarning = await mirrorShiftToVault(req, {
+      shiftId: closed.id,
+      type: 'DEPOSIT',
+      source: 'SHIFT_CLOSE',
+      channel: 'DIGITAL',
+      amount: digitalIn,
+      description: `Cobros digitales · ${closedBy}`,
+    });
+    const vaultWarning = cashWarning || digitalWarning;
+
     // Correo del corte al dueño (best-effort, no se await-ea). El cierre ya está
     // confirmado en la BD; el correo es secundario y nunca debe bloquear la
     // respuesta al cajero ni revertir nada. Sale solo si el restaurante lo activó.
@@ -468,9 +542,9 @@ async function performShiftClose(req, res, shift) {
     // transferOrders NO es sensible al corte ciego (igual que totalTransfer,
     // que siempre se muestra): solo se ocultan efectivo esperado y desfase.
     if (closed.blindClose) {
-      res.json({ ...closed, expectedCash: null, transferOrders, staffClockedOut, driversCut });
+      res.json({ ...closed, expectedCash: null, transferOrders, staffClockedOut, driversCut, vaultWarning });
     } else {
-      res.json({ ...closed, transferOrders, staffClockedOut, driversCut });
+      res.json({ ...closed, transferOrders, staffClockedOut, driversCut, vaultWarning });
     }
 }
 

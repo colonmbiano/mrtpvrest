@@ -307,6 +307,7 @@ app.use('/api/tasks',        require('./routes/tasks.routes'));
 app.use('/api/admin/logs',   require('./routes/logs.routes'));
 app.use('/api/expenses',     require('./routes/expenses.routes'));
 app.use('/api/purchases',    require('./routes/purchases.routes'));
+app.use('/api/vault',        require('./routes/vault.routes'));
 app.use('/api/payables',     require('./routes/payables.routes'));
 app.use('/api/transfers',    require('./routes/transfers.routes'));
 app.use('/api/recipes',      require('./routes/recipes.routes'));

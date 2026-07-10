@@ -66,4 +66,23 @@ function localDayRange(dateStr, timeZone = DEFAULT_TZ) {
   return { from, to };
 }
 
-module.exports = { localDayRange, startOfLocalDay, DEFAULT_TZ };
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Día de la semana (0=domingo … 6=sábado) tal como se ve en `timeZone`.
+function localWeekday(date, timeZone = DEFAULT_TZ) {
+  const short = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' }).format(date);
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(short);
+}
+
+// Instante UTC de la medianoche del LUNES de la semana que contiene `ref`.
+// La semana corre lunes→domingo (convención de los cortes semanales).
+// Anclamos el salto al mediodía para no tropezar con el horario de verano.
+function startOfLocalWeek(ref, timeZone = DEFAULT_TZ) {
+  const daysSinceMonday = (localWeekday(ref, timeZone) + 6) % 7;
+  const monday = new Date(
+    startOfLocalDay(ref, timeZone).getTime() - daysSinceMonday * DAY_MS + 12 * 60 * 60 * 1000
+  );
+  return startOfLocalDay(monday, timeZone);
+}
+
+module.exports = { localDayRange, startOfLocalDay, startOfLocalWeek, localWeekday, DEFAULT_TZ };
