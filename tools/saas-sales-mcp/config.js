@@ -3,8 +3,14 @@
 // rutas/puerto sin tocar código.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Cargar el .env de ESTA carpeta por ruta absoluta. Claude lanza el MCP con el
+// cwd en la raíz del repo, así que `dotenv/config` (que resuelve contra cwd)
+// leería el .env equivocado o ninguno.
+dotenv.config({ path: path.join(__dirname, ".env") });
 
 export const WORKER_PORT = Number(process.env.SALES_WA_PORT || 8790);
 
@@ -37,6 +43,13 @@ export const IGNORE_NUMBERS = (process.env.SALES_WA_IGNORE_NUMBERS || "")
 // / anti-baneo). Milisegundos.
 export const DUP_SEND_WINDOW_MS = Number(
   process.env.SALES_WA_DUP_WINDOW_MS || 60_000
+);
+
+// Un chat entra a la bandeja de trabajo solo si tiene no-leídos, o si su último
+// mensaje es entrante Y es reciente. Sin este corte, CUALQUIER chat viejo cuyo
+// último mensaje fue del cliente se reporta como "pendiente" para siempre.
+export const QUEUE_RECENT_HOURS = Number(
+  process.env.SALES_WA_QUEUE_RECENT_HOURS || 24
 );
 
 // --- Backend MRTPV (tools v2: alta de tenant / menú / promo) ---------------
