@@ -12,6 +12,7 @@ const { notifyPlatformAdmin } = require('../lib/platform-notify')
 const { verifyTurnstile } = require('../lib/turnstile')
 const { isDisposableEmail } = require('../lib/email-domains')
 const { resolveTrialDays } = require('../lib/promo')
+const { toCanonicalKey, legacyFieldsFromKeys, syncTenantModuleRows } = require('../lib/tenantModules')
 const log = require('../lib/logger')('auth')
 
 const router = express.Router()
@@ -212,8 +213,18 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
     trialEndsAt.setDate(trialEndsAt.getDate() + trialDays)
     const passwordHash = await bcrypt.hash(password, 12)
 
+    // Módulos a sembrar en el alta: TODOS los que el plan permite (canónicos).
+    // Con FULL_ACCESS el tenant nace con los 13 activos; con planes más chicos,
+    // nace con exactamente lo que su plan incluye (sin arriesgar 403 de gate).
+    // Plan-driven vía el catálogo canónico (lib/tenantModules) — misma lógica que
+    // el toggle del panel SaaS, para que no queden desfasados.
+    const seededKeys = new Set(
+      (plan.allowedModules ?? []).map(toCanonicalKey).filter(Boolean)
+    )
+    const seededLegacy = legacyFieldsFromKeys(seededKeys)
+
     const { tenant, restaurant, user, location } = await prisma.$transaction(async (tx) => {
-      // 1. Tenant
+      // 1. Tenant — con los módulos del plan ya sembrados (dual-write legacy).
       const t = await tx.tenant.create({
         data: {
           name:          restaurantName,
@@ -221,8 +232,15 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
           ownerEmail:    email.toLowerCase(),
           onboardingStep: 0,
           onboardingDone: false,
+          enabledModules: seededLegacy.enabledModules,
+          hasInventory:   seededLegacy.hasInventory,
+          hasDelivery:    seededLegacy.hasDelivery,
+          hasWebStore:    seededLegacy.hasWebStore,
         }
       })
+
+      // 1b. Sincroniza la tabla canónica TenantModule (fuente de verdad nueva).
+      await syncTenantModuleRows(tx, t.id, seededKeys)
 
       // 2. Subscription ligada al Tenant
       await tx.subscription.create({
