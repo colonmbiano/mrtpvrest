@@ -512,12 +512,15 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           accountPayload,
           paymentsPayload,
         );
-        // Éxito. Con onFinish disponible pasamos a la pantalla de confirmación
-        // (cambio a dar + Imprimir/Finalizar) en vez de cerrar de inmediato; el
-        // padre limpia/navega cuando el cajero toca "Finalizar". Sin onFinish
-        // (call-site legacy) el propio onConfirm ya cerró/navegó.
-        if (onFinish) {
+        // Éxito. SOLO el efectivo muestra la pantalla de confirmación (cambio a
+        // dar + Imprimir/Finalizar), que es donde importa el cambio. Tarjeta,
+        // transferencia, mixto, cortesía y cuenta de empleado cierran directo
+        // (comportamiento histórico) para no meter un tap extra. El cierre real
+        // —limpiar contexto + volver a inicio— lo hace onFinish (finishPayment).
+        if (onFinish && method === "CASH") {
           setPaid({ method, received: cashReceived, change, total: grandTotal });
+        } else {
+          onFinish?.();
         }
         return;
       }
