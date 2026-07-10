@@ -58,6 +58,9 @@ model Tenant {
   promos       Promo[]
   tenantModules TenantModule[]
 
+  adminOnboardingTasks AdminOnboardingTask[]
+  adminClientNotes     AdminClientNote[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -4188,4 +4191,71 @@ model RecurringExpense {
 
   @@index([restaurantId, isActive])
   @@map("recurring_expenses")
+}
+
+// ---------------------------------------------------------------------------
+// Panel interno de clientes SaaS (tablas `admin_*`)
+//
+// Creadas el 2026-07-09 directamente contra Supabase (migraciones
+// `admin_panel_clientes` y `admin_daily_reports` en supabase_migrations), sin
+// pasar por Prisma. Se adoptan aquí para que `migrate diff` deje de proponer
+// su DROP. Son de la plataforma, no de un restaurante: se scopean por tenantId,
+// NO por restaurantId, así que quedan fuera de SCOPED_MODELS del tenant-guard.
+//
+// Usan `timestamptz` porque así se crearon (el resto del schema usa
+// `timestamp(3)`); respetarlo mantiene el diff contra producción vacío.
+// ---------------------------------------------------------------------------
+
+/// Checklist de onboarding por tenant. `id` es determinístico: "<tenantId>_<stepKey>".
+model AdminOnboardingTask {
+  id        String    @id
+  tenantId  String    @map("tenant_id")
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  category  String // marca | menu | config | lanzamiento
+  stepKey   String    @map("step_key")
+  label     String
+  sortOrder Int       @default(0) @map("sort_order")
+  done      Boolean   @default(false)
+  doneAt    DateTime? @map("done_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, stepKey])
+  @@index([tenantId], map: "idx_aot_tenant")
+  @@map("admin_onboarding_tasks")
+}
+
+/// Plantillas de mensajes que el equipo manda a los clientes durante el onboarding.
+model AdminMessageTemplate {
+  id        String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  title     String
+  category  String?
+  body      String
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("admin_message_templates")
+}
+
+/// Notas libres del equipo sobre un cliente.
+model AdminClientNote {
+  id        String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  note      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tenantId], map: "idx_acn_tenant")
+  @@map("admin_client_notes")
+}
+
+/// Resumen diario de la plataforma (altas de las últimas 24h + texto).
+model AdminDailyReport {
+  id         String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  reportDate DateTime @default(dbgenerated("CURRENT_DATE")) @map("report_date") @db.Date
+  new24h     Int      @default(0) @map("new_24h")
+  summary    String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt(sort: Desc)], map: "idx_adr_date")
+  @@map("admin_daily_reports")
 }
