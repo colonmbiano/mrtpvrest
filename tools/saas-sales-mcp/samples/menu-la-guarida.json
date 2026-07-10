@@ -1,0 +1,34 @@
+[
+  {
+    "name": "Antojitos",
+    "sortOrder": 0,
+    "items": [
+      { "name": "Quesadilla", "price": 32, "description": "Tortilla de maíz con queso. Elige tu guiso." },
+      { "name": "Sope", "price": 30, "description": "Frijol, lechuga, crema, queso y salsa." },
+      { "name": "Huarache", "price": 58, "description": "Masa alargada con frijol, carne y salsa." },
+      { "name": "Tlacoyo", "price": 28, "description": "Relleno de frijol o haba, con nopales." },
+      { "name": "Gordita", "price": 30, "description": "Gordita de maíz rellena de guiso." },
+      { "name": "Pambazo", "price": 48, "description": "Pan bañado en guajillo con papa y chorizo." }
+    ]
+  },
+  {
+    "name": "Tacos",
+    "sortOrder": 1,
+    "items": [
+      { "name": "Taco de Suadero", "price": 22 },
+      { "name": "Taco de Pastor", "price": 22 },
+      { "name": "Taco de Chorizo", "price": 22 },
+      { "name": "Taco de Canasta", "price": 16 }
+    ]
+  },
+  {
+    "name": "Bebidas",
+    "sortOrder": 2,
+    "items": [
+      { "name": "Agua de Horchata", "price": 28, "description": "Jarra 1L disponible." },
+      { "name": "Agua de Jamaica", "price": 28 },
+      { "name": "Refresco 600ml", "price": 30 },
+      { "name": "Café de Olla", "price": 25 }
+    ]
+  }
+]
