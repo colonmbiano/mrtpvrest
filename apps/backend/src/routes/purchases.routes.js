@@ -12,10 +12,15 @@
 //      - PurchaseOrder.cashShiftId = turno abierto
 //      - ShiftExpense vinculado al PurchaseOrder (description="Compra: ...")
 //      - CashShift.totalExpenses += totalAmount
+//   5'. Si el pago NO es CASH_DRAWER (compra en tienda pagada con el dinero
+//      acumulado del negocio): sale de la bóveda, de su bolsa de efectivo
+//      (CASH_VAULT) o digital (CORPORATE_CARD / TRANSFER). El stock sube
+//      igual, pero el corte del cajero no se mueve. Ver lib/vault.js.
 
 const express = require('express');
 const { prisma, runWithBypass } = require('@mrtpvrest/database');
 const { round2 } = require('../lib/money');
+const { applyVaultMovement, vaultDenied, channelForMethod } = require('../lib/vault');
 const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware');
 const { requireFeatureFlag } = require('../lib/modules');
 const router = express.Router();
@@ -25,7 +30,7 @@ router.use(authenticate, requireTenantAccess, requireFeatureFlag('hasInventory',
 
 const CASHIER_LIMIT_PER_PURCHASE = 1000; // MXN
 const ALLOWED_ROLES = ['CASHIER', 'WAITER', 'KITCHEN', 'ADMIN', 'MANAGER', 'OWNER', 'SUPER_ADMIN'];
-const VALID_PAYMENT_METHODS = ['CASH_DRAWER', 'CORPORATE_CARD', 'TRANSFER'];
+const VALID_PAYMENT_METHODS = ['CASH_DRAWER', 'CASH_VAULT', 'CORPORATE_CARD', 'TRANSFER'];
 const VALID_SETTLEMENT = ['PAID', 'PENDING'];
 
 // Genera un PO number único por location: PO-YYYYMMDD-XXXX.
@@ -115,6 +120,15 @@ router.post('/', async (req, res) => {
           limit: CASHIER_LIMIT_PER_PURCHASE,
         });
       }
+    }
+
+    // Compra pagada desde la bóveda: no exige turno abierto (ese es el punto —
+    // se compró en la tienda un martes con dinero del viernes). Sacar efectivo
+    // sí exige permiso; el canal digital no (ver lib/vault.js).
+    const vaultChannel = isPending ? null : channelForMethod(paymentMethod);
+    if (vaultChannel === 'CASH') {
+      const denied = vaultDenied(req, userRole);
+      if (denied) return res.status(402).json(denied);
     }
 
     // Si CASH_DRAWER y NO es deuda pendiente, validar turno abierto.
@@ -245,6 +259,23 @@ router.post('/', async (req, res) => {
         });
       }
 
+      // 5'. Bóveda: la compra sale del dinero acumulado. Sin ShiftExpense.
+      if (vaultChannel) {
+        await applyVaultMovement(tx, {
+          restaurantId,
+          locationId,
+          type: 'WITHDRAWAL',
+          channel: vaultChannel,
+          source: 'PURCHASE',
+          amount: totalAmount,
+          description: `Compra: ${supplier.name} (${poNumber})`,
+          purchaseOrderId: po.id,
+          createdById: userId,
+          createdByName: req.user?.name || null,
+          occurredAt: po.receivedAt,
+        });
+      }
+
       return po;
     });
 
@@ -302,6 +333,12 @@ router.post('/:id/settle', async (req, res) => {
       });
     }
 
+    const vaultChannel = channelForMethod(paymentMethod);
+    if (vaultChannel === 'CASH') {
+      const denied = vaultDenied(req, userRole);
+      if (denied) return res.status(402).json(denied);
+    }
+
     let cashShiftId = null;
     if (paymentMethod === 'CASH_DRAWER') {
       const openShift = await prisma.cashShift.findFirst({
@@ -348,6 +385,23 @@ router.post('/:id/settle', async (req, res) => {
         await tx.cashShift.update({
           where: { id: cashShiftId },
           data: { totalExpenses: { increment: pay } },
+        });
+      }
+
+      // Abono pagado desde la bóveda (efectivo acumulado o banco).
+      if (vaultChannel) {
+        await applyVaultMovement(tx, {
+          restaurantId,
+          locationId: po.locationId,
+          type: 'WITHDRAWAL',
+          channel: vaultChannel,
+          source: 'SETTLEMENT',
+          amount: pay,
+          description: `Compra: ${po.supplier?.name || ''} (${po.poNumber})${fully ? '' : ' (abono)'}`,
+          purchaseOrderId: po.id,
+          createdById: req.user?.id || null,
+          createdByName: req.user?.name || null,
+          occurredAt: settledAt,
         });
       }
       return true;

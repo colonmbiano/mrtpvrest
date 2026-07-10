@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Wallet, Receipt, ShoppingCart, Bike,
-  Banknote, CreditCard, ArrowLeftRight, BarChart3, Tag,
+  Banknote, CreditCard, ArrowLeftRight, BarChart3, Tag, Vault,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
@@ -23,7 +23,7 @@ interface Summary {
   driverExpenses: { total: number; previousTotal: number; delta: number; deltaPct: number | null; count: number };
   grandTotal: number;
   previousGrandTotal: number;
-  byPaymentMethod: { CASH_DRAWER: number; CORPORATE_CARD: number; TRANSFER: number };
+  byPaymentMethod: { CASH_DRAWER: number; CASH_VAULT: number; CORPORATE_CARD: number; TRANSFER: number };
   topCategories: Array<{ categoryId?: string | null; name: string; icon: string; color: string | null; total: number; count: number }>;
 }
 
@@ -165,8 +165,9 @@ export default function GastosReportPage() {
 
           {/* Por método de pago */}
           <DataCard title="Por método de pago">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <MethodCell icon={Banknote} label="Efectivo de caja" amount={summary.byPaymentMethod.CASH_DRAWER} color="var(--warn)" />
+              <MethodCell icon={Vault} label="Efectivo acumulado" amount={summary.byPaymentMethod.CASH_VAULT ?? 0} color="var(--ok)" />
               <MethodCell icon={CreditCard} label="Tarjeta corporativa" amount={summary.byPaymentMethod.CORPORATE_CARD} color="var(--info)" />
               <MethodCell icon={ArrowLeftRight} label="Transferencia" amount={summary.byPaymentMethod.TRANSFER} color="var(--brand-primary)" />
             </div>

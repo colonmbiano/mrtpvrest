@@ -34,6 +34,9 @@ export type TabKey = "compra" | "historial" | "bodega" | "reparto";
 
 export const PAYMENT_METHODS = [
   { value: "CASH_DRAWER", label: "Efectivo de caja" },
+  // Efectivo acumulado (bóveda): la compra sube stock pero no toca el corte
+  // del turno. Es el caso de comprar insumos en una tienda cualquier día.
+  { value: "CASH_VAULT", label: "Efectivo acumulado" },
   { value: "CORPORATE_CARD", label: "Tarjeta corporativa" },
   { value: "TRANSFER", label: "Transferencia" },
 ];

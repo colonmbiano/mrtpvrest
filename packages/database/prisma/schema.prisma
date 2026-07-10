@@ -340,6 +340,10 @@ model Restaurant {
   operatingExpenseCategories OperatingExpenseCategory[]
   operatingExpenses          OperatingExpense[]
 
+  // FASE BÓVEDA · dinero acumulado fuera de la gaveta del turno
+  vaults         Vault[]
+  vaultMovements VaultMovement[]
+
   // FASE COMPRAS · repartos de Bodega Central a sucursales
   stockTransfers StockTransfer[]
 
@@ -450,6 +454,10 @@ model Location {
 
   // FASE COMPRAS/GASTOS · gastos operativos registrados desde el TPV
   operatingExpenses OperatingExpense[]
+
+  // FASE BÓVEDA · una bóveda de dinero acumulado por sucursal
+  vault          Vault?
+  vaultMovements VaultMovement[]
 
   // FASE NÓMINA · corridas de raya por sucursal
   payrollPeriods PayrollPeriod[]
@@ -2260,6 +2268,9 @@ model CashShift {
   orders                       Order[]
   operatingExpensePayments     OperatingExpense[] @relation("OperatingExpenseCashShift")
   purchaseOrderPayments        PurchaseOrder[]    @relation("PurchaseOrderCashShift")
+  // Espejo en la bóveda del ciclo de este turno: el fondo que salió al abrir,
+  // el efectivo contado y los cobros digitales que entraron al cerrar.
+  vaultMovements               VaultMovement[]
 
   @@map("cash_shifts")
 }
@@ -2307,6 +2318,127 @@ model ShiftExpense {
   @@index([operatingExpenseId])
   @@index([purchaseOrderId])
   @@map("shift_expenses")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BÓVEDA · el dinero del negocio que ya NO está en la gaveta del turno.
+//
+// El problema real: el dueño compra insumos en tiendas (Walmart, Sam's) con
+// dinero que YA salió de la caja en días anteriores. Registrar esa compra
+// como CASH_DRAWER descuadra el corte del cajero (baja el efectivo esperado
+// sin que salga dinero de su gaveta). La bóveda es el tercer bolsillo, junto
+// a la caja del turno y la caja del repartidor.
+//
+// Tiene DOS bolsas independientes (VaultChannel):
+//   · CASH    → billetes: entra lo contado al cerrar caja, sale el fondo al abrir.
+//   · DIGITAL → banco: entra lo cobrado con tarjeta/transferencia, sale lo que
+//               se paga con tarjeta corporativa o transferencia.
+// Nunca se mezclan: no puedes comprar con billetes que están en el banco.
+//
+// Invariantes:
+//   · Un movimiento de bóveda NUNCA crea ShiftExpense ni toca CashShift.
+//     El corte del cajero es independiente de los saldos de la bóveda.
+//   · Vault.balanceCash/balanceDigital son cache; la verdad es la suma de
+//     movimientos. Ambos se escriben en la MISMA $transaction (ver lib/vault.js).
+//   · balanceAfter congela el saldo DE SU CANAL tras cada movimiento (auditoría).
+//
+// Ciclo del dinero:
+//   abrir turno   → WITHDRAWAL(SHIFT_OPEN, CASH)     openingFloat (el fondo sale)
+//   cerrar turno  → DEPOSIT(SHIFT_CLOSE, CASH)       closingFloat (lo contado entra)
+//                 → DEPOSIT(SHIFT_CLOSE, DIGITAL)    totalCard + totalTransfer
+//   compra/gasto  → WITHDRAWAL(EXPENSE|PURCHASE|SETTLEMENT) en su canal
+//   ajustes       → DEPOSIT|WITHDRAWAL(MANUAL) en el canal elegido
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Vault {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  // Una bóveda por sucursal. El dinero acumulado no se mezcla entre locales.
+  locationId   String     @unique
+  location     Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  balanceCash    Decimal @default(0) @db.Decimal(12, 2) // billetes fuera de la caja
+  balanceDigital Decimal @default(0) @db.Decimal(12, 2) // saldo en banco/tarjeta
+
+  movements VaultMovement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId])
+  @@map("vaults")
+}
+
+enum VaultMovementType {
+  DEPOSIT    // entra dinero a la bóveda
+  WITHDRAWAL // sale dinero de la bóveda
+}
+
+// En qué bolsa cae el movimiento. Un gasto pagado con tarjeta no puede salir
+// de los billetes guardados, y viceversa.
+enum VaultChannel {
+  CASH    // efectivo acumulado
+  DIGITAL // banco: tarjeta corporativa y transferencias
+}
+
+// De dónde vino el movimiento. SHIFT_OPEN/SHIFT_CLOSE son automáticos y
+// idempotentes por turno y canal (@@unique([shiftId, source, channel])).
+enum VaultSource {
+  SHIFT_CLOSE // cierre de caja → entra (efectivo contado y/o cobros digitales)
+  SHIFT_OPEN  // fondo de caja del turno nuevo → sale
+  MANUAL      // depósito/retiro capturado a mano
+  EXPENSE     // gasto operativo pagado desde la bóveda
+  PURCHASE    // compra de insumos pagada desde la bóveda
+  SETTLEMENT  // liquidación/abono de una cuenta por pagar
+}
+
+model VaultMovement {
+  id           String     @id @default(cuid())
+  vaultId      String
+  vault        Vault      @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  locationId   String
+  location     Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  type    VaultMovementType
+  source  VaultSource
+  channel VaultChannel
+
+  amount       Decimal @db.Decimal(12, 2) // siempre positivo; el signo lo da `type`
+  balanceAfter Decimal @db.Decimal(12, 2) // saldo del canal tras este movimiento
+
+  description String
+  notes       String?
+
+  // Trazabilidad al documento que originó el movimiento. Como máximo uno.
+  shiftId            String?
+  shift              CashShift?        @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  operatingExpenseId String?
+  operatingExpense   OperatingExpense? @relation(fields: [operatingExpenseId], references: [id], onDelete: SetNull)
+  purchaseOrderId    String?
+  purchaseOrder      PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+
+  // Quién lo hizo. SIN FK a propósito: el TPV se autentica como Employee y el
+  // admin como User — una FK a `users` devolvería 500 en cada captura de caja
+  // (mismo bug que ya se corrigió en OperatingExpense.createdById).
+  createdById   String?
+  createdByName String?
+
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  // Idempotencia del ciclo de turno: un turno deposita al cerrar y retira al
+  // abrir EXACTAMENTE una vez POR CANAL (el cierre genera hasta dos depósitos:
+  // efectivo y digital). Un replay del outbox offline no duplica saldo.
+  // (Postgres permite múltiples NULL, así que no restringe los demás sources.)
+  @@unique([shiftId, source, channel])
+  @@index([vaultId, occurredAt])
+  @@index([restaurantId, occurredAt])
+  @@index([operatingExpenseId])
+  @@index([purchaseOrderId])
+  @@map("vault_movements")
 }
 
 model IntegrationConfig {
@@ -3520,6 +3652,7 @@ model PurchaseOrder {
 
   items       PurchaseOrderItem[]
   shiftExpenses ShiftExpense[]   // 1:N (en teoría siempre 1 cuando es CASH_DRAWER)
+  vaultMovements VaultMovement[]  // 1:N (cuando se paga desde la bóveda)
   createdById String?
   createdBy   User?               @relation(fields: [createdById], references: [id])
   createdAt   DateTime            @default(now())
@@ -4049,8 +4182,10 @@ model RetailCashMovement {
 //   · paymentMethod=CASH_DRAWER → AUTOMÁTICAMENTE se crea un ShiftExpense
 //     vinculado al cashShiftId activo para que el corte de caja del cajero
 //     cuadre perfecto. Se valida que exista turno abierto antes de aceptar.
-//   · paymentMethod=CORPORATE_CARD | TRANSFER → solo registro contable;
-//     no afecta caja del turno.
+//   · paymentMethod=CASH_VAULT → sale de la bolsa de efectivo de la bóveda.
+//   · paymentMethod=CORPORATE_CARD | TRANSFER → sale de la bolsa digital de
+//     la bóveda (el dinero estaba en el banco). Ninguno de los tres afecta la
+//     caja del turno ni exige turno abierto. Ver `model Vault`.
 //   · Compras de inventario van en PurchaseOrder + StockMovement(PURCHASE).
 //     Gastos generales (luz, agua, sueldos, propinas pagadas) van en Expense.
 //   · Para compras pagadas con efectivo de caja, PurchaseOrder.cashShiftId
@@ -4058,10 +4193,14 @@ model RetailCashMovement {
 //     description="Compra: <supplier>").
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Cómo se pagó. Solo CASH_DRAWER toca el corte del cajero; los otros tres
+// salen de la bóveda (ver model Vault): CASH_VAULT de la bolsa de efectivo,
+// CORPORATE_CARD y TRANSFER de la bolsa digital.
 enum ExpensePaymentMethod {
   CASH_DRAWER       // efectivo de caja (rebaja CashShift via ShiftExpense)
-  CORPORATE_CARD    // tarjeta corporativa (solo contable)
-  TRANSFER          // transferencia bancaria (solo contable)
+  CASH_VAULT        // efectivo acumulado del negocio (rebaja Vault.balanceCash)
+  CORPORATE_CARD    // tarjeta corporativa (rebaja Vault.balanceDigital)
+  TRANSFER          // transferencia bancaria (rebaja Vault.balanceDigital)
 }
 
 // Estado de liquidación de un gasto/compra (cuentas por pagar).
@@ -4143,6 +4282,7 @@ model OperatingExpense {
   cashShiftId String?
   cashShift   CashShift? @relation("OperatingExpenseCashShift", fields: [cashShiftId], references: [id])
   shiftExpenses ShiftExpense[]   // 1:N (siempre 1 cuando es CASH_DRAWER)
+  vaultMovements VaultMovement[]  // 1:N (cuando se paga desde la bóveda)
 
   // Adjuntos / metadata
   photoUrl    String?               // foto del ticket/recibo

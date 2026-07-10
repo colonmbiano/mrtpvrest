@@ -108,9 +108,13 @@ router.get('/expenses-summary', requireAdmin, async (req, res) => {
 
     // Breakdown por payment method (gastos + compras + repartidor). El gasto
     // del repartidor se paga del efectivo que trae → cuenta como CASH_DRAWER.
-    const byMethod = { CASH_DRAWER: 0, CORPORATE_CARD: 0, TRANSFER: 0 };
-    for (const e of opExpenses) byMethod[e.paymentMethod] += Number(e.amount || 0);
-    for (const p of purchases) byMethod[p.paymentMethod] += Number(p.totalAmount || 0);
+    // CASH_VAULT (efectivo acumulado que ya salió de la caja) es gasto real y
+    // suma al grandTotal, pero no golpea el corte de ningún turno.
+    // El `?? 0` evita un NaN silencioso si se agrega otro método al enum.
+    const byMethod = { CASH_DRAWER: 0, CASH_VAULT: 0, CORPORATE_CARD: 0, TRANSFER: 0 };
+    const addMethod = (m, amt) => { byMethod[m] = (byMethod[m] ?? 0) + amt; };
+    for (const e of opExpenses) addMethod(e.paymentMethod, Number(e.amount || 0));
+    for (const p of purchases) addMethod(p.paymentMethod, Number(p.totalAmount || 0));
     byMethod.CASH_DRAWER += sumDrv;
 
     // Top categorías UNIFICADAS por nombre — junta los 3 orígenes:

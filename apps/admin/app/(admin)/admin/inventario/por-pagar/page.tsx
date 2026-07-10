@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Wallet, Receipt, ShoppingCart, CalendarClock,
-  AlertTriangle, Banknote, CreditCard, ArrowLeftRight, CheckCircle2, Factory, Repeat,
+  AlertTriangle, Banknote, CreditCard, ArrowLeftRight, CheckCircle2, Factory, Repeat, Vault,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
@@ -31,9 +31,11 @@ interface Payable {
 }
 interface PayablesResp { items: Payable[]; total: number; count: number }
 
-type Method = "CASH_DRAWER" | "CORPORATE_CARD" | "TRANSFER";
+type Method = "CASH_DRAWER" | "CASH_VAULT" | "CORPORATE_CARD" | "TRANSFER";
 const METHODS: { value: Method; label: string; icon: typeof Banknote; color: string }[] = [
   { value: "CASH_DRAWER", label: "Efectivo de caja", icon: Banknote, color: "var(--warn)" },
+  // Efectivo acumulado: baja la bóveda, no el corte del turno.
+  { value: "CASH_VAULT", label: "Efectivo acumulado", icon: Vault, color: "var(--ok)" },
   { value: "TRANSFER", label: "Transferencia", icon: ArrowLeftRight, color: "var(--brand-primary)" },
   { value: "CORPORATE_CARD", label: "Tarjeta corporativa", icon: CreditCard, color: "var(--info)" },
 ];

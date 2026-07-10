@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { X, Wallet, ShoppingBag, Plus, Trash2, Camera, Loader2, AlertTriangle, CheckCircle2, Sparkles, FileWarning, History, RefreshCw, HandCoins, ChevronLeft, Users } from "lucide-react";
+import { X, Wallet, ShoppingBag, Plus, Trash2, Camera, Loader2, AlertTriangle, CheckCircle2, Sparkles, FileWarning, History, RefreshCw, HandCoins, ChevronLeft, Users, Vault, Banknote, CreditCard } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
@@ -57,7 +57,7 @@ function findBestIngredient(
 // valida y devuelve 409 NO_OPEN_SHIFT. El UI muestra el mensaje.
 
 type Tab = "expense" | "purchase" | "salary" | "history";
-type PaymentMethod = "CASH_DRAWER" | "CORPORATE_CARD" | "TRANSFER";
+type PaymentMethod = "CASH_DRAWER" | "CASH_VAULT" | "CORPORATE_CARD" | "TRANSFER";
 
 interface PayrollEmployee {
   id: string;
@@ -82,8 +82,47 @@ interface HistoryItem {
 
 const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   CASH_DRAWER: "Efectivo de caja",
+  CASH_VAULT: "Efectivo acumulado",
   CORPORATE_CARD: "Tarjeta corporativa",
   TRANSFER: "Transferencia",
+};
+
+// Etiqueta corta para el historial y los resúmenes, donde no cabe la larga.
+const PAYMENT_SHORT: Record<PaymentMethod, string> = {
+  CASH_DRAWER: "Efectivo",
+  CASH_VAULT: "Acumulado",
+  CORPORATE_CARD: "Tarjeta",
+  TRANSFER: "Transfer",
+};
+
+const PAYMENT_TEXT_COLOR: Record<PaymentMethod, string> = {
+  CASH_DRAWER: "text-amber-400",
+  CASH_VAULT: "text-emerald-400",
+  CORPORATE_CARD: "text-violet-400",
+  TRANSFER: "text-cyan-400",
+};
+
+// El método se elige en dos pasos: primero de qué tipo de dinero salió
+// (billetes o banco) y después de qué bolsa exactamente. Cuatro botones en
+// fila obligaban al cajero a leerlos todos; así son dos decisiones cortas.
+type Channel = "CASH" | "DIGITAL";
+
+const CHANNEL_OF: Record<PaymentMethod, Channel> = {
+  CASH_DRAWER: "CASH",
+  CASH_VAULT: "CASH",
+  CORPORATE_CARD: "DIGITAL",
+  TRANSFER: "DIGITAL",
+};
+
+const METHODS_BY_CHANNEL: Record<Channel, PaymentMethod[]> = {
+  CASH: ["CASH_DRAWER", "CASH_VAULT"],
+  DIGITAL: ["CORPORATE_CARD", "TRANSFER"],
+};
+
+// Al cambiar de canal caemos siempre en la opción más común de ese canal.
+const DEFAULT_METHOD: Record<Channel, PaymentMethod> = {
+  CASH: "CASH_DRAWER",
+  DIGITAL: "TRANSFER",
 };
 
 interface ExpenseCategory {
@@ -158,6 +197,10 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
   const [report, setReport] = useState<any | null>(null);
   const [loadingReport, setLoadingReport] = useState(false);
 
+  // BÓVEDA · saldos de las dos bolsas de dinero que ya salió de la caja.
+  // null = todavía no cargó o el rol no puede verlo.
+  const [vault, setVault] = useState<{ cash: number; digital: number } | null>(null);
+
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -174,6 +217,9 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
     api.get<Supplier[]>("/api/purchases/lookup/suppliers").then((r) => setSuppliers(r.data || [])).catch(() => setSuppliers([]));
     api.get<Ingredient[]>("/api/purchases/lookup/ingredients").then((r) => setIngredients(r.data || [])).catch(() => setIngredients([]));
     api.get<PayrollEmployee[]>("/api/expenses/payroll-employees").then((r) => setEmployees(r.data || [])).catch(() => setEmployees([]));
+    api.get<{ balanceCash: number; balanceDigital: number }>("/api/vault")
+      .then((r) => setVault({ cash: Number(r.data?.balanceCash ?? 0), digital: Number(r.data?.balanceDigital ?? 0) }))
+      .catch(() => setVault(null));
   }, [isOpen]);
 
   // Cargar los sueldos pagados hoy al entrar al tab "salary".
@@ -494,7 +540,9 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
       if (code === "NO_OPEN_SHIFT") {
         toast.error("No hay turno de caja abierto. Abre uno antes de pagar en efectivo.");
       } else if (code === "ADMIN_AUTH_REQUIRED") {
-        toast.error("Gasto excede tu límite. Pide PIN de admin.");
+        // Puede ser por tope de cajero o por mover la bóveda: el backend ya
+        // manda el motivo exacto, no lo adivinemos aquí.
+        toast.error(err?.response?.data?.error || "Requiere PIN de admin.");
       } else {
         toast.error("Error: " + (err?.response?.data?.error || err?.message));
       }
@@ -539,7 +587,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
       if (code === "NO_OPEN_SHIFT") {
         toast.error("No hay turno de caja abierto.");
       } else if (code === "ADMIN_AUTH_REQUIRED") {
-        toast.error("Compra excede tu límite. Pide PIN de admin.");
+        toast.error(err?.response?.data?.error || "Requiere PIN de admin.");
       } else {
         toast.error("Error: " + (err?.response?.data?.error || err?.message));
       }
@@ -654,6 +702,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
               setSalaryAmount={setSalaryAmount}
               salaryMethod={salaryMethod}
               setSalaryMethod={setSalaryMethod}
+              vault={vault}
               onPay={submitSalary}
               submitting={submitting}
               paidToday={paidToday}
@@ -748,34 +797,12 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
 
           {/* Método de pago — solo cuando se paga ahora (no en pendiente) */}
           {(tab === "expense" || tab === "purchase") && settlement === "PAID" && (
-          <div className="mt-6">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 mb-2">Método de pago</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {(Object.keys(PAYMENT_LABELS) as PaymentMethod[]).map((pm) => {
-                const isActive = paymentMethod === pm;
-                return (
-                  <button
-                    key={pm}
-                    type="button"
-                    onClick={() => setPaymentMethod(pm)}
-                    className={`h-12 rounded-2xl border text-[11px] font-semibold uppercase tracking-[0.1em] transition-all ${
-                      isActive
-                        ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]"
-                        : "bg-white/5 border-white/10 text-white/60"
-                    }`}
-                  >
-                    {PAYMENT_LABELS[pm]}
-                  </button>
-                );
-              })}
-            </div>
-            {paymentMethod === "CASH_DRAWER" && (
-              <p className="mt-2 text-[10px] text-[var(--warning)] flex items-center gap-1.5">
-                <AlertTriangle size={12} />
-                Se descontará del turno de caja abierto. Requiere turno activo.
-              </p>
-            )}
-          </div>
+            <PaymentMethodPicker
+              className="mt-6"
+              value={paymentMethod}
+              onChange={setPaymentMethod}
+              vault={vault}
+            />
           )}
         </div>
 
@@ -1072,14 +1099,15 @@ function HistoryTab({
   onRefresh: () => void;
 }) {
   // Totales: agrupados por método de pago para que el cajero vea el
-  // impacto del día en caja (CASH_DRAWER es lo que sale de su gaveta).
+  // impacto del día en caja (CASH_DRAWER es lo que sale de su gaveta;
+  // CASH_VAULT salió del efectivo acumulado y no toca su corte).
   const totals = useMemo(() => {
     const byMethod: Record<PaymentMethod, number> = {
-      CASH_DRAWER: 0, CORPORATE_CARD: 0, TRANSFER: 0,
+      CASH_DRAWER: 0, CASH_VAULT: 0, CORPORATE_CARD: 0, TRANSFER: 0,
     };
     let totalAll = 0;
     for (const i of items) {
-      byMethod[i.paymentMethod] += i.amount;
+      byMethod[i.paymentMethod] = (byMethod[i.paymentMethod] ?? 0) + i.amount;
       totalAll += i.amount;
     }
     return { byMethod, totalAll };
@@ -1096,9 +1124,10 @@ function HistoryTab({
   return (
     <div className="space-y-4">
       {/* Resumen */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <SummaryCard label="Total" amount={totals.totalAll} color="white" />
         <SummaryCard label="Efectivo" amount={totals.byMethod.CASH_DRAWER} color="amber" />
+        <SummaryCard label="Acumulado" amount={totals.byMethod.CASH_VAULT} color="emerald" />
         <SummaryCard label="Tarjeta" amount={totals.byMethod.CORPORATE_CARD} color="violet" />
         <SummaryCard label="Transfer" amount={totals.byMethod.TRANSFER} color="cyan" />
       </div>
@@ -1158,25 +1187,113 @@ function HistoryTab({
                 <p className="text-base font-black tabular-nums text-white">
                   ${item.amount.toFixed(2)}
                 </p>
-                <p
-                  className={`text-[9px] font-semibold uppercase tracking-wider ${
-                    item.paymentMethod === "CASH_DRAWER"
-                      ? "text-amber-400"
-                      : item.paymentMethod === "CORPORATE_CARD"
-                      ? "text-violet-400"
-                      : "text-cyan-400"
-                  }`}
-                >
-                  {item.paymentMethod === "CASH_DRAWER"
-                    ? "Efectivo"
-                    : item.paymentMethod === "CORPORATE_CARD"
-                    ? "Tarjeta"
-                    : "Transfer"}
+                <p className={`text-[9px] font-semibold uppercase tracking-wider ${PAYMENT_TEXT_COLOR[item.paymentMethod]}`}>
+                  {PAYMENT_SHORT[item.paymentMethod]}
                 </p>
               </div>
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── PaymentMethodPicker · ¿de qué dinero salió? ──────────────────────────
+// Dos pasos: primero el tipo de dinero (billetes o banco), luego la bolsa.
+// El aviso de abajo dice siempre qué le pasa a la caja, que es lo único que
+// el cajero necesita saber para no descuadrar su corte.
+function PaymentMethodPicker({
+  value,
+  onChange,
+  vault,
+  className = "",
+  allowed,
+}: {
+  value: PaymentMethod;
+  onChange: (m: PaymentMethod) => void;
+  vault: { cash: number; digital: number } | null;
+  className?: string;
+  // Restringe las opciones dentro de cada canal (los sueldos no se pagan con
+  // tarjeta corporativa). Si se omite, se muestran todas.
+  allowed?: PaymentMethod[];
+}) {
+  const channel = CHANNEL_OF[value];
+  const methods = METHODS_BY_CHANNEL[channel].filter((m) => !allowed || allowed.includes(m));
+
+  function pickChannel(next: Channel) {
+    if (next === channel) return;
+    const options = METHODS_BY_CHANNEL[next].filter((m) => !allowed || allowed.includes(m));
+    onChange(options.includes(DEFAULT_METHOD[next]) ? DEFAULT_METHOD[next] : options[0]!);
+  }
+
+  return (
+    <div className={className}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 mb-2">¿Con qué se pagó?</p>
+
+      {/* Paso 1 · efectivo o dinero digital */}
+      <div className="grid grid-cols-2 gap-2">
+        {(["CASH", "DIGITAL"] as Channel[]).map((c) => {
+          const active = channel === c;
+          const Icon = c === "CASH" ? Banknote : CreditCard;
+          return (
+            <button
+              key={c}
+              type="button"
+              onClick={() => pickChannel(c)}
+              className={`h-14 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all ${
+                active
+                  ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]"
+                  : "bg-white/5 border-white/10 text-white/60"
+              }`}
+            >
+              <Icon size={16} />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.1em]">
+                {c === "CASH" ? "Efectivo" : "Digital"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Paso 2 · de qué bolsa exactamente */}
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        {methods.map((pm) => {
+          const active = value === pm;
+          return (
+            <button
+              key={pm}
+              type="button"
+              onClick={() => onChange(pm)}
+              className={`h-11 rounded-xl border text-[10.5px] font-semibold uppercase tracking-[0.08em] transition-all ${
+                active
+                  ? "bg-white/10 border-white/30 text-white"
+                  : "bg-transparent border-white/10 text-white/45"
+              }`}
+            >
+              {PAYMENT_LABELS[pm]}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Qué le pasa a la caja */}
+      {value === "CASH_DRAWER" ? (
+        <p className="mt-2 text-[10px] text-[var(--warning)] flex items-center gap-1.5">
+          <AlertTriangle size={12} />
+          Se descontará del turno de caja abierto. Requiere turno activo.
+        </p>
+      ) : (
+        <p className="mt-2 text-[10px] text-emerald-400 flex items-center gap-1.5 flex-wrap">
+          <Vault size={12} />
+          {value === "CASH_VAULT" ? "Sale del efectivo acumulado." : "Sale del saldo digital (banco)."}
+          {" "}No afecta el corte de caja.
+          {vault && (
+            <span className="text-white/50">
+              · Saldo ${(value === "CASH_VAULT" ? vault.cash : vault.digital).toFixed(2)}
+            </span>
+          )}
+        </p>
       )}
     </div>
   );
@@ -1189,11 +1306,12 @@ function SummaryCard({
 }: {
   label: string;
   amount: number;
-  color: "white" | "amber" | "violet" | "cyan";
+  color: "white" | "amber" | "emerald" | "violet" | "cyan";
 }) {
   const tone = {
     white: "border-white/10 text-white",
     amber: "border-amber-500/30 text-amber-400 bg-amber-500/5",
+    emerald: "border-emerald-500/30 text-emerald-400 bg-emerald-500/5",
     violet: "border-violet-500/30 text-violet-400 bg-violet-500/5",
     cyan: "border-cyan-500/30 text-cyan-400 bg-cyan-500/5",
   }[color];
@@ -1222,6 +1340,7 @@ function SalaryTab(props: {
   setSalaryAmount: (v: string) => void;
   salaryMethod: PaymentMethod;
   setSalaryMethod: (m: PaymentMethod) => void;
+  vault: { cash: number; digital: number } | null;
   onPay: () => void;
   submitting: boolean;
   paidToday: any[];
@@ -1350,31 +1469,13 @@ function SalaryTab(props: {
         </p>
       )}
 
-      <div>
-        <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 mb-2">Método de pago</p>
-        <div className="grid grid-cols-2 gap-2">
-          {(([["CASH_DRAWER", "Efectivo de caja"], ["TRANSFER", "Transferencia"]]) as [PaymentMethod, string][]).map(([m, label]) => {
-            const active = props.salaryMethod === m;
-            return (
-              <button
-                key={m}
-                type="button"
-                onClick={() => props.setSalaryMethod(m)}
-                className={`h-12 rounded-2xl border text-[11px] font-semibold uppercase tracking-[0.1em] transition-all ${
-                  active ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]" : "bg-white/5 border-white/10 text-white/60"
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        {props.salaryMethod === "CASH_DRAWER" && (
-          <p className="mt-2 text-[10px] text-[var(--warning)] flex items-center gap-1.5">
-            <AlertTriangle size={12} /> Se descuenta del turno de caja abierto. Requiere turno activo.
-          </p>
-        )}
-      </div>
+      {/* Un sueldo no se paga con la tarjeta corporativa del negocio. */}
+      <PaymentMethodPicker
+        value={props.salaryMethod}
+        onChange={props.setSalaryMethod}
+        vault={props.vault}
+        allowed={["CASH_DRAWER", "CASH_VAULT", "TRANSFER"]}
+      />
 
       <button
         type="button"
