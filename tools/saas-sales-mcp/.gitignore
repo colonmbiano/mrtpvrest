@@ -1,0 +1,12 @@
+# CRÍTICO: la sesión de WhatsApp = credenciales del número. Commitearla en un
+# repo público = takeover del WhatsApp de ventas. NUNCA versionar.
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Datos locales (leads + QR renderizados)
+data/
+*.db
+
+# Deps y entorno
+node_modules/
+.env
