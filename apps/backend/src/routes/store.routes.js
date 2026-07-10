@@ -529,11 +529,28 @@ router.get('/locations', async (req, res) => {
   }
 });
 
-// Similitud de carritos por multiconjunto de menuItemId (con cantidades):
-// unidades compartidas / unidades del carrito mayor. 1.0 = idénticos, 0 = nada
-// en común. La usa el dedupe por chat de WhatsApp: en el duplicado real
-// #1230/#1244 (2026-07-05) el segundo pedido repetía 7 de 9 unidades → 0.78.
-function orderItemSimilarity(newItems, existingItems) {
+// Compara dos carritos por multiconjunto de menuItemId (con cantidades). El
+// dedupe por chat de WhatsApp necesita DOS medidas porque hay dos formas de
+// reenvío y una sola métrica no atrapa ambas:
+//
+//  · `similarity` (simétrica): unidades compartidas / unidades del carrito
+//    mayor. 1.0 = idénticos, 0 = nada en común. Atrapa el reenvío con cambios:
+//    en el duplicado #1230/#1244 (2026-07-05) el segundo pedido repetía 7 de 9
+//    unidades → 0.78.
+//
+//  · `coverage` (asimétrica): unidades de la orden EXISTENTE presentes en el
+//    carrito nuevo. 1.0 = el carrito nuevo contiene todo lo ya pedido. Atrapa el
+//    reenvío que AGREGA productos, que la simétrica castiga justo al revés: en
+//    #1407/#1410 (2026-07-09) el cliente pidió 1x papas y 23 min después reenvió
+//    1x papas + 1x hamburguesa → similarity 0.5 (bajo el umbral de 0.6) pero
+//    coverage 1.0. Se creó un segundo ticket y se cobró el pedido dos veces.
+//    Mientras más chico el pedido original, más castiga la simétrica: agregar 1
+//    unidad a un pedido de 1 da SIEMPRE 0.5, así que ese caso se duplicaba
+//    siempre.
+//
+// `addedItems` es el delta (lo que trae el carrito nuevo de más), para que la
+// nota del ticket le diga al cajero exactamente qué agregar.
+function compareOrderItems(newItems, existingItems) {
   const tally = (list) => {
     const m = new Map();
     for (const it of list || []) {
@@ -549,7 +566,20 @@ function orderItemSimilarity(newItems, existingItems) {
   for (const v of b.values()) totalB += v;
   for (const [id, qty] of a) shared += Math.min(qty, b.get(id) || 0);
   const denom = Math.max(totalA, totalB);
-  return denom > 0 ? shared / denom : 0;
+  const addedItems = [];
+  for (const [id, qty] of a) {
+    const extra = qty - (b.get(id) || 0);
+    if (extra > 0) addedItems.push({ menuItemId: id, quantity: extra });
+  }
+  return {
+    similarity: denom > 0 ? shared / denom : 0,
+    // Un carrito existente vacío no "está contenido" en nada: coverage 0 evita
+    // que una orden sin items dedupee cualquier pedido posterior del chat.
+    coverage: totalB > 0 ? shared / totalB : 0,
+    newUnits: totalA,
+    existingUnits: totalB,
+    addedItems,
+  };
 }
 
 // Respuesta de replay para un pedido que YA existe (mismo shape que el 201 de
@@ -685,18 +715,32 @@ router.post('/orders', async (req, res) => {
     const newItems = Array.isArray(items) ? items : [];
     let dupChat = null;
     let dupSimilarity = 0;
+    let dupAddedItems = [];
+    let dupIsAddition = false;
     for (const cand of chatCandidates) {
       if (cand.clientOrderId === botClientOrderId) { dupChat = cand; dupSimilarity = 1; break; }
-      const sim = orderItemSimilarity(newItems, cand.items);
-      if (sim >= minSimilarity) { dupChat = cand; dupSimilarity = sim; break; }
+      const cmp = compareOrderItems(newItems, cand.items);
+      // El carrito nuevo contiene TODO lo ya pedido y algo más → el cliente
+      // agregó productos a su pedido, no está haciendo uno nuevo. La similitud
+      // simétrica no lo ve (ver compareOrderItems).
+      const isAddition = cmp.coverage >= 0.999 && cmp.newUnits > cmp.existingUnits;
+      if (cmp.similarity >= minSimilarity || isAddition) {
+        dupChat = cand;
+        dupSimilarity = cmp.similarity;
+        dupAddedItems = cmp.addedItems;
+        dupIsAddition = isAddition;
+        break;
+      }
     }
     if (dupChat) {
-      // Carrito PARECIDO pero NO idéntico → probable CORRECCIÓN del cliente
-      // (caso real #1230/#1244: pidió "papas gajo con arrachera", el bot metió
-      // "Orden Arrachera 250gr" y al reenviar el pedido corregido se creaba un
-      // segundo ticket). Además de no duplicar: se marca el ticket original con
-      // nota ⚠️ y se avisa a la caja por socket para que un humano compare y
-      // ajuste. Best-effort: un fallo aquí nunca rompe la respuesta de dedupe.
+      // Carrito PARECIDO pero NO idéntico → probable CORRECCIÓN del cliente.
+      // Dos casos reales: #1230/#1244 (pidió "papas gajo con arrachera", el bot
+      // metió "Orden Arrachera 250gr" y al reenviar el pedido corregido se creaba
+      // un segundo ticket) y #1407/#1410 (agregó una hamburguesa 23 min después y
+      // el bot reenvió el carrito completo). Además de no duplicar: se marca el
+      // ticket original con nota ⚠️ y se avisa a la caja por socket para que un
+      // humano ajuste — NUNCA se cancela ni se cobra solo. Best-effort: un fallo
+      // aquí nunca rompe la respuesta de dedupe.
       let correctionFlagged = false;
       if (dupSimilarity < 0.999 && dupChat.clientOrderId !== botClientOrderId) {
         try {
@@ -706,20 +750,24 @@ router.post('/orders', async (req, res) => {
             select: { id: true, name: true },
           });
           const nameOf = new Map(named.map((m) => [m.id, m.name]));
-          const resumen = newItems
+          const listar = (list) => list
             .filter((it) => it?.menuItemId)
             .map((it) => `${Math.max(1, Number(it.quantity) || 1)}x ${nameOf.get(it.menuItemId) || it.menuItemId}`)
             .join(', ');
           const horaMx = new Intl.DateTimeFormat('es-MX', {
             timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit',
           }).format(new Date());
-          const nota = `⚠️ POSIBLE CORRECCIÓN (WhatsApp ${horaMx}): el cliente reenvió el pedido con cambios. Carrito reenviado: ${resumen}. Comparar con el ticket y ajustar.`;
+          // Si fue una adición pura, el cajero solo necesita saber QUÉ agregar;
+          // decirle "compara los carritos" lo obliga a hacer el diff a mano.
+          const nota = dupIsAddition
+            ? `⚠️ POSIBLE CORRECCIÓN (WhatsApp ${horaMx}): el cliente AGREGÓ productos a este pedido. Agregar: ${listar(dupAddedItems)}. Confirmar con el cliente antes de cobrar.`
+            : `⚠️ POSIBLE CORRECCIÓN (WhatsApp ${horaMx}): el cliente reenvió el pedido con cambios. Carrito reenviado: ${listar(newItems)}. Comparar con el ticket y ajustar.`;
           const updated = await prisma.order.update({
             where: { id: dupChat.id },
             data: { notes: [dupChat.notes, nota].filter(Boolean).join('\n') },
           });
           correctionFlagged = true;
-          console.warn(`[store] Posible corrección vía WhatsApp sobre pedido ${dupChat.orderNumber} (similitud ${dupSimilarity.toFixed(2)}).`);
+          console.warn(`[store] Posible corrección vía WhatsApp sobre pedido ${dupChat.orderNumber} (${dupIsAddition ? 'productos agregados' : 'carrito cambiado'}, similitud ${dupSimilarity.toFixed(2)}).`);
           const io = req.app.get('io');
           if (io) {
             // Mismo evento que ya escucha el TPV para refrescar el ticket.
@@ -749,6 +797,14 @@ router.post('/orders', async (req, res) => {
         deduped: true,
         dedupReason: 'CHAT_WINDOW',
         correctionFlagged,
+        // Para que el bot le hable claro al cliente. OJO: `total` es el de la
+        // orden EXISTENTE — los productos agregados los mete el cajero a mano,
+        // así que el bot no debe prometer que ya quedaron ni cotizar el nuevo
+        // total. Lo correcto es confirmar que el pedido sigue abierto y que la
+        // caja va a agregarlos.
+        correctionType: correctionFlagged
+          ? (dupIsAddition ? 'ITEMS_ADDED' : 'CART_CHANGED')
+          : null,
       });
     }
   }

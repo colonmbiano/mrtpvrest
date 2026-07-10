@@ -154,6 +154,62 @@ describe('POST /api/store/orders — dedupe por chat de WhatsApp (clientOrderId 
     expect(upd.data.notes).toContain('2x Burger, 1x Alitas');
   });
 
+  it('carrito con productos AGREGADOS (superconjunto) → dedupea y le dice al cajero qué agregar', async () => {
+    // Caso #1407/#1410 (2026-07-09): 1x papas → 1x papas + 1x hamburguesa.
+    // similarity = 1/2 = 0.5 (BAJO el umbral de 0.6) pero coverage = 1/1 = 1.0.
+    // Antes se creaba un segundo ticket y el pedido se cobraba dos veces.
+    prisma.order.findMany.mockResolvedValueOnce([{
+      ...CHAT_SIBLING,
+      items: [{ menuItemId: 'm1', quantity: 2 }],
+    }]);
+    prisma.menuItem.findMany.mockResolvedValue([
+      { id: 'm1', name: 'Burger' }, { id: 'm2', name: 'Alitas' },
+    ]);
+    prisma.order.update.mockResolvedValue({ ...CHAT_SIBLING, locationId: 'loc1' });
+
+    const res = await request(buildApp())
+      .post('/api/store/orders')
+      .set('x-restaurant-id', 'r1')
+      .send(BASE_PAYLOAD);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      id: 'prev1', orderNumber: 1230, deduped: true, dedupReason: 'CHAT_WINDOW',
+      correctionFlagged: true, correctionType: 'ITEMS_ADDED',
+      // El total es el de la orden EXISTENTE: el cajero mete lo agregado.
+      total: 250,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    // La nota lista SOLO el delta (1x Alitas), no el carrito completo.
+    const upd = prisma.order.update.mock.calls[0][0];
+    expect(upd.data.notes).toContain('AGREGÓ productos');
+    expect(upd.data.notes).toContain('Agregar: 1x Alitas');
+    expect(upd.data.notes).not.toContain('2x Burger');
+  });
+
+  it('orden existente SIN items → coverage 0, no dedupea por cobertura vacía', async () => {
+    // Guarda: `shared/totalB` con totalB = 0 debe dar 0, no 1. Si no, cualquier
+    // orden vacía del chat se tragaría todos los pedidos siguientes.
+    prisma.order.findMany
+      .mockResolvedValueOnce([{ ...CHAT_SIBLING, items: [] }])
+      .mockResolvedValueOnce([]);
+    nextOrderNumber.mockResolvedValue(1248);
+    const createSpy = mockTxWithCreateSpy({
+      id: 'new3', orderNumber: 1248, status: 'PENDING',
+      total: 210, discount: 0, pointsUsed: 0, tip: 0, estimatedMinutes: 30, items: [],
+    });
+
+    const res = await request(buildApp())
+      .post('/api/store/orders')
+      .set('x-restaurant-id', 'r1')
+      .send(BASE_PAYLOAD);
+
+    expect(res.status).toBe(201);
+    expect(res.body.orderNumber).toBe(1248);
+    expect(res.body.deduped).toBeUndefined();
+    expect(createSpy).toHaveBeenCalled();
+  });
+
   it('mismo chat pero carrito claramente distinto → NO dedupea y persiste clientOrderId', async () => {
     // Chat: candidato sin items en común (similitud 0). Firma: sin candidatos.
     prisma.order.findMany
