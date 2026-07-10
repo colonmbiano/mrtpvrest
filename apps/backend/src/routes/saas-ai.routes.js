@@ -21,7 +21,7 @@ router.post('/agent', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error en SaaS AI Agent Route:', error.message);
-    res.status(500).json({ error: error.message || 'Error interno al procesar la solicitud de IA' });
+    res.status(error.status || 500).json({ error: error.message || 'Error interno al procesar la solicitud de IA' });
   }
 });
 

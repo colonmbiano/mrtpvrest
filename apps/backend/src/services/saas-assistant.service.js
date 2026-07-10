@@ -7,6 +7,7 @@
 const OpenAI = require('openai');
 const { prisma } = require('@mrtpvrest/database');
 const { sendEmail } = require('../utils/mailer');
+const { wrapGroqError } = require('./groq-error');
 
 const MAX_ITERATIONS = 6;
 const GROQ_MODEL = 'llama-3.3-70b-versatile'; 
@@ -249,8 +250,18 @@ async function execTool(name, args) {
 }
 
 async function runSaaSAgent({ messages }) {
-  const apiKey = process.env.GROQ_API_KEY || process.env.GOOGLE_AI_API_KEY; 
-  if (!apiKey) throw new Error('AI API Key no configurada en el servidor');
+  // El asistente SaaS es Groq-only (OpenAI SDK). NO hacer fallback a
+  // GOOGLE_AI_API_KEY: no hay path que traduzca estas tools al formato de
+  // Gemini, y mandar la key de Google al endpoint de Groq produce un 401
+  // opaco. Si falta la key de Groq, degradar a un 503 claro.
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    console.error('GROQ_API_KEY no está configurada en el servidor (SaaS AI Agent)');
+    const err = new Error('El servicio de IA del panel SaaS no está disponible en este momento (falta GROQ_API_KEY en el servidor).');
+    err.status = 503;
+    err.code = 'GROQ_KEY_MISSING';
+    throw err;
+  }
 
   const groq = new OpenAI({ apiKey, baseURL: GROQ_BASE_URL });
   
@@ -263,12 +274,17 @@ async function runSaaSAgent({ messages }) {
   ];
 
   for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-    const response = await groq.chat.completions.create({
-      model: GROQ_MODEL,
-      messages: chatMessages,
-      tools,
-      tool_choice: 'auto',
-    });
+    let response;
+    try {
+      response = await groq.chat.completions.create({
+        model: GROQ_MODEL,
+        messages: chatMessages,
+        tools,
+        tool_choice: 'auto',
+      });
+    } catch (err) {
+      throw wrapGroqError(err);
+    }
 
     const msg = response.choices[0].message;
     
