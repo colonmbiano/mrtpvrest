@@ -3,8 +3,14 @@
 // rutas/puerto sin tocar código.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Cargar el .env de ESTA carpeta por ruta absoluta. Claude lanza el MCP con el
+// cwd en la raíz del repo, así que `dotenv/config` (que resuelve contra cwd)
+// leería el .env equivocado o ninguno.
+dotenv.config({ path: path.join(__dirname, ".env") });
 
 export const WORKER_PORT = Number(process.env.SALES_WA_PORT || 8790);
 
