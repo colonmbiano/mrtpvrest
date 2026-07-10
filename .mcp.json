@@ -3,6 +3,11 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=lhkzogxrqcrrwoprydhg"
+    },
+    "saas-sales": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["tools/saas-sales-mcp/mcp.js"]
     }
   }
 }
