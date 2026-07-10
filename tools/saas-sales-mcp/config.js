@@ -39,6 +39,13 @@ export const DUP_SEND_WINDOW_MS = Number(
   process.env.SALES_WA_DUP_WINDOW_MS || 60_000
 );
 
+// Un chat entra a la bandeja de trabajo solo si tiene no-leídos, o si su último
+// mensaje es entrante Y es reciente. Sin este corte, CUALQUIER chat viejo cuyo
+// último mensaje fue del cliente se reporta como "pendiente" para siempre.
+export const QUEUE_RECENT_HOURS = Number(
+  process.env.SALES_WA_QUEUE_RECENT_HOURS || 24
+);
+
 // --- Backend MRTPV (tools v2: alta de tenant / menú / promo) ---------------
 // Base del API del backend y token de plataforma para /api/sales-bot/*.
 // Si no se configuran, los tools saas_* devuelven un error claro (no rompen la
