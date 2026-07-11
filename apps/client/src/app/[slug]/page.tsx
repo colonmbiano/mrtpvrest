@@ -56,6 +56,9 @@ type StoreInfo = {
   storefrontTheme?: string | null;
   primaryColor?: string | null;
   heroImageUrl?: string | null;
+  instagramUrl?: string | null;
+  facebookUrl?: string | null;
+  tiktokUrl?: string | null;
   currency?: string | null;
   currencyLocale?: string | null;
   // Retrocompat: algunas respuestas antiguas anidaban el tema aquí.

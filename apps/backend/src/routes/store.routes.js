@@ -239,6 +239,10 @@ router.get('/info', async (req, res) => {
     storefrontTheme: (() => { const t = config?.storefrontTheme; const map = { MOCHI: "KAWAII", BENTO: "HALO", POCKET: "BRUTALIST", WAGBA: "ANTOJO" }; return map[t] || t || "KAWAII"; })(),
     primaryColor:    restaurant.accentColor || "#ff5c35",
     heroImageUrl:    config?.storefrontHeroUrl || null,
+    // Redes sociales (enlaces del footer). null si no están configuradas.
+    instagramUrl:    config?.instagramUrl || null,
+    facebookUrl:     config?.facebookUrl || null,
+    tiktokUrl:       config?.tiktokUrl || null,
     currency:        config?.currency || "MXN",
     currencyLocale:  config?.currencyLocale || "es-MX",
 

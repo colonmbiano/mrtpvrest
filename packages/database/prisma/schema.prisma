@@ -1417,6 +1417,13 @@ model RestaurantConfig {
   // a todo lo ancho. Se sube sin recorte (mode=hero). null → hero por defecto.
   storefrontHeroUrl String?
 
+  // Redes sociales del negocio (URLs completas). Las muestra el footer del
+  // storefront como enlaces reales; si un campo es null/vacío, ese ícono no se
+  // renderiza (no dejamos íconos "muertos"). Solo enlaces salientes, opcionales.
+  instagramUrl String?
+  facebookUrl  String?
+  tiktokUrl    String?
+
   // FASE COMPRAS · interruptor maestro del modelo "Bodega Central".
   // false (default) → cada compra entra directo a la bodega de la sucursal
   // (flujo simple, sin cambios para clientes de una sola sucursal).

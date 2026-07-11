@@ -93,6 +93,7 @@ type Info = {
   dineIn?: { table: string; locationId: string | null } | null;
   isOpen?: boolean;
   onlinePayment?: boolean; delivery?: DeliveryConfig; heroImageUrl?: string | null;
+  instagramUrl?: string | null; facebookUrl?: string | null; tiktokUrl?: string | null;
   currency?: string | null; currencyLocale?: string | null;
   themeConfig: { theme?: string; primaryColor?: string } | null;
 };
@@ -819,9 +820,9 @@ function Footer({ info, accent, primaryLocation, waNumber, minOrder, onWhatsApp,
           <p className="text-[13px] leading-relaxed font-medium" style={{ color: INK2 }}>Hecho fresco, con amor. Pide en línea y recíbelo en tu puerta. 💜✨</p>
           <div className="flex items-center gap-2 mt-4">
             {waNumber && <a href={`https://wa.me/${waNumber}`} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: LAV_SOFT }} aria-label="WhatsApp"><MessageCircle className="w-4 h-4" style={{ color: WA }} /></a>}
-            <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: LAV_SOFT, color: FAINT }} aria-hidden><Instagram className="w-4 h-4" /></span>
-            <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: LAV_SOFT, color: FAINT }} aria-hidden><Facebook className="w-4 h-4" /></span>
-            <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: LAV_SOFT, color: FAINT }} aria-hidden><Music2 className="w-4 h-4" /></span>
+            {info.instagramUrl && <a href={info.instagramUrl} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80" style={{ background: LAV_SOFT, color: accent }} aria-label="Instagram"><Instagram className="w-4 h-4" /></a>}
+            {info.facebookUrl && <a href={info.facebookUrl} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80" style={{ background: LAV_SOFT, color: accent }} aria-label="Facebook"><Facebook className="w-4 h-4" /></a>}
+            {info.tiktokUrl && <a href={info.tiktokUrl} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80" style={{ background: LAV_SOFT, color: accent }} aria-label="TikTok"><Music2 className="w-4 h-4" /></a>}
           </div>
         </div>
 

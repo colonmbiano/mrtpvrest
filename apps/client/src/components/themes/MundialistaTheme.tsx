@@ -5,7 +5,7 @@ import {
   Search, ShoppingBag, Plus, Minus, Trash2, X, MessageCircle, MapPin, Phone,
   Trophy, ChevronRight, ChevronDown, Star, Banknote, CreditCard, Building2,
   Truck, Leaf, Clock, Headphones, User, Instagram, Facebook,
-  Youtube, Music2, Mail, Lock, Navigation,
+  Music2, Mail, Lock, Navigation,
 } from 'lucide-react';
 import { useCart } from '../../lib/cartStore';
 import { cldImage } from '@/lib/cloudinary';
@@ -99,6 +99,7 @@ type Info = {
   whatsappOrder?: { enabled: boolean; number: string | null };
   dineIn?: { table: string; locationId: string | null } | null;
   onlinePayment?: boolean; delivery?: DeliveryConfig; heroImageUrl?: string | null;
+  instagramUrl?: string | null; facebookUrl?: string | null; tiktokUrl?: string | null;
   currency?: string | null; currencyLocale?: string | null;
   themeConfig: { theme?: string; primaryColor?: string } | null;
 };
@@ -916,10 +917,9 @@ function Footer({ info, primaryLocation, waNumber, minOrder, onWhatsApp, onNav, 
           <p className="text-[13px] leading-relaxed" style={{ color: MUTED }}>El sabor que nos une. Hamburguesas, alitas, tacos y más, con el mejor sabor y actitud mundialista. ⚽🏆</p>
           <div className="flex items-center gap-2 mt-4">
             {waNumber && <a href={`https://wa.me/${waNumber}`} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: SURF2 }} aria-label="WhatsApp"><MessageCircle className="w-4 h-4" style={{ color: '#25D366' }} /></a>}
-            <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: SURF2, color: MUTED }} aria-hidden><Instagram className="w-4 h-4" /></span>
-            <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: SURF2, color: MUTED }} aria-hidden><Facebook className="w-4 h-4" /></span>
-            <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: SURF2, color: MUTED }} aria-hidden><Music2 className="w-4 h-4" /></span>
-            <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: SURF2, color: MUTED }} aria-hidden><Youtube className="w-4 h-4" /></span>
+            {info.instagramUrl && <a href={info.instagramUrl} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80" style={{ background: SURF2, color: GOLD }} aria-label="Instagram"><Instagram className="w-4 h-4" /></a>}
+            {info.facebookUrl && <a href={info.facebookUrl} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80" style={{ background: SURF2, color: GOLD }} aria-label="Facebook"><Facebook className="w-4 h-4" /></a>}
+            {info.tiktokUrl && <a href={info.tiktokUrl} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80" style={{ background: SURF2, color: GOLD }} aria-label="TikTok"><Music2 className="w-4 h-4" /></a>}
           </div>
         </div>
 

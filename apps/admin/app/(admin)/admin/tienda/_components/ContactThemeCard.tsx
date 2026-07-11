@@ -1,6 +1,6 @@
 "use client";
 import type { Dispatch, SetStateAction } from "react";
-import { Upload, ImagePlus, X } from "lucide-react";
+import { Upload, ImagePlus, X, Instagram } from "lucide-react";
 import { Card, Field, Input, Select, IconButton, Toggle, useToast } from "@/components/ds";
 import { FieldLabel } from "./ui";
 import { CURRENCIES, formatPreview, THEMES, type TiendaConfig } from "./types";
@@ -169,6 +169,29 @@ export function ContactThemeCard({ config, setConfig, heroUploading, uploadHero 
             placeholder="…o pega una URL de imagen"
             onChange={(e) => { const v = e.target.value; setConfig((p) => ({ ...p, storefrontHeroUrl: v })); }}
           />
+        </div>
+      </div>
+
+      {/* Redes sociales — enlaces del footer de la tienda. Vacío = el ícono no
+          se muestra (no dejamos íconos muertos). */}
+      <div className="mt-5">
+        <FieldLabel>
+          <Instagram size={11} className="mr-1 inline" /> Redes sociales
+        </FieldLabel>
+        <p className="mb-2 text-[11px] text-tx-mut">Pega el enlace completo de cada perfil. Solo aparecen en la tienda las que llenes.</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Field label="Instagram">
+            <Input type="url" inputMode="url" placeholder="https://instagram.com/tu_negocio"
+              value={config.instagramUrl} onChange={(e) => { const v = e.target.value; setConfig((p) => ({ ...p, instagramUrl: v })); }} />
+          </Field>
+          <Field label="Facebook">
+            <Input type="url" inputMode="url" placeholder="https://facebook.com/tu_negocio"
+              value={config.facebookUrl} onChange={(e) => { const v = e.target.value; setConfig((p) => ({ ...p, facebookUrl: v })); }} />
+          </Field>
+          <Field label="TikTok">
+            <Input type="url" inputMode="url" placeholder="https://tiktok.com/@tu_negocio"
+              value={config.tiktokUrl} onChange={(e) => { const v = e.target.value; setConfig((p) => ({ ...p, tiktokUrl: v })); }} />
+          </Field>
         </div>
       </div>
     </Card>

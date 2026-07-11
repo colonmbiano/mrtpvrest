@@ -102,6 +102,10 @@ export type TiendaConfig = {
   estimatedDelivery: number;
   storefrontTheme: string;
   storefrontHeroUrl: string;
+  // Redes sociales del footer del storefront (URLs completas, opcionales).
+  instagramUrl: string;
+  facebookUrl: string;
+  tiktokUrl: string;
   currency: string;
   currencyLocale: string;
   // Módulo OlaClick: pedir por WhatsApp desde el menú digital (gateado por plan).

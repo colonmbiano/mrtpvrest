@@ -103,6 +103,9 @@ export default function TiendaConfigPage() {
     estimatedDelivery: 40,
     storefrontTheme: "KAWAII",
     storefrontHeroUrl: "",
+    instagramUrl: "",
+    facebookUrl: "",
+    tiktokUrl: "",
     currency: "MXN",
     currencyLocale: "es-MX",
     // Módulo OlaClick
@@ -213,6 +216,9 @@ export default function TiendaConfigPage() {
           timezone: d.timezone || "America/Mexico_City",
           currency: d.currency || "MXN",
           currencyLocale: d.currencyLocale || "es-MX",
+          instagramUrl: d.instagramUrl ?? "",
+          facebookUrl: d.facebookUrl ?? "",
+          tiktokUrl: d.tiktokUrl ?? "",
           businessHours: (() => {
             try {
               const parsed = JSON.parse(d.businessHours || "[]");
