@@ -1,6 +1,6 @@
 # Demo — La Guarida (antojitos) · mañana 8:00 PM
 
-Prospecto: **La Guarida**, venta de antojitos. Contacto `+52 55 2863 0883`.
+Prospecto: **La Guarida**, venta de antojitos. Contacto `+52 55 XXXX XXXX`.
 Dolor **en sus palabras**: *"Recibir pedidos en WhatsApp"*. Pidió una propuesta y él
 mismo eligió el horario: *"Mañana / En la noche / A las 8 pm"*.
 
