@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { MapPin, Phone, MessageCircle } from 'lucide-react';
 import { MochiTheme } from '@/components/themes/MochiTheme';
 import { MundialistaTheme } from '@/components/themes/MundialistaTheme';
+import { AntojitosTheme } from '@/components/themes/AntojitosTheme';
 import { getApiUrl } from '@/lib/config';
 import { cldImage } from '@/lib/cloudinary';
 import StorefrontClient from './StorefrontClient';
@@ -64,13 +65,15 @@ type StoreInfo = {
   } | null;
 };
 
-// Temas activos: KAWAII (pastel bubble-tea, alias MOCHI) y MUNDIALISTA. Cualquier
-// otro valor (incluidos los temas retirados HALO/BRUTALIST/ANTOJO) cae a DEFAULT,
-// que renderiza el cliente legacy como red de seguridad.
-function normalizeTheme(raw?: string | null): 'MOCHI' | 'MUNDIALISTA' | 'DEFAULT' {
-  const map: Record<string, 'MOCHI' | 'MUNDIALISTA' | 'DEFAULT'> = {
+// Temas activos: KAWAII (pastel bubble-tea, alias MOCHI), MUNDIALISTA y ANTOJITOS
+// (fonda mexicana artesanal). Cualquier otro valor (incluidos los temas retirados
+// HALO/BRUTALIST/ANTOJO) cae a DEFAULT, que renderiza el cliente legacy como red
+// de seguridad.
+function normalizeTheme(raw?: string | null): 'MOCHI' | 'MUNDIALISTA' | 'ANTOJITOS' | 'DEFAULT' {
+  const map: Record<string, 'MOCHI' | 'MUNDIALISTA' | 'ANTOJITOS' | 'DEFAULT'> = {
     MOCHI: 'MOCHI', KAWAII: 'MOCHI',
     MUNDIALISTA: 'MUNDIALISTA', MUNDIAL: 'MUNDIALISTA',
+    ANTOJITOS: 'ANTOJITOS', ANTOJITO: 'ANTOJITOS', FONDA: 'ANTOJITOS',
     DEFAULT: 'DEFAULT',
   };
   return map[(raw || '').toUpperCase()] || 'DEFAULT';
@@ -308,6 +311,7 @@ export default async function StorefrontPage({
     >
       {theme === 'MOCHI' && <MochiTheme data={data} />}
       {theme === 'MUNDIALISTA' && <MundialistaTheme data={data} />}
+      {theme === 'ANTOJITOS' && <AntojitosTheme data={data} />}
 
       {/* Fallback to legacy client if no modern theme is selected or during transition */}
       {theme === 'DEFAULT' && (
