@@ -1,4 +1,4 @@
-import { Flower2, Trophy, type LucideIcon } from "lucide-react";
+import { Flower2, Trophy, UtensilsCrossed, type LucideIcon } from "lucide-react";
 
 export type BusinessHour = { day: number; enabled: boolean; open: string; close: string };
 
@@ -80,6 +80,7 @@ export function formatPreview(currency: string, locale: string): string {
 export const THEMES: { id: string; name: string; icon: LucideIcon; desc: string }[] = [
   { id: "KAWAII", name: "Kawaii", icon: Flower2, desc: "Pastel lavanda · bubble-tea · cute 🧋" },
   { id: "MUNDIALISTA", name: "Mundialista", icon: Trophy, desc: "Estadio oscuro · Dorado · Mundial ⚽" },
+  { id: "ANTOJITOS", name: "Antojitos", icon: UtensilsCrossed, desc: "Fonda mexicana · Crema masa · Terracota 🌮" },
 ];
 
 export const DELIVERY_MODES: { id: "FLAT" | "DISTANCE" | "ZONES"; name: string; desc: string }[] = [
