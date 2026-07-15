@@ -272,7 +272,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
                 {/* SECCIONES POR CATEGORÍA */}
                 <div id="mb-menu">
                   {gridCats.map((category: any) => (
-                    <section key={category.id} id={`mb-cat-${category.id}`} data-cat={category.id} className="mb-12 scroll-mt-[160px]">
+                    <section key={category.id} id={`mb-cat-${category.id}`} data-cat={category.id} className="mb-12 scroll-mt-[228px] md:scroll-mt-[160px]">
                       <div className="flex items-center justify-between mb-5">
                         <SectionHead title={`Nuestras ${category.name}`} icon={categoryIcon(category.name)} inline />
                         <button onClick={() => scrollToCat(category.id)} className="text-[12px] font-bold" style={{ color: GOLD }}>Ver todas</button>
@@ -545,7 +545,7 @@ function Confetti() {
 function CategoryNav({ categories, activeCat, onPick }: { categories: any[]; activeCat: string; onPick: (id: string) => void }) {
   if (categories.length <= 1) return null;
   return (
-    <nav className="sticky top-[60px] z-30 backdrop-blur-xl mt-6" style={{ background: `${BG}e6`, borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}>
+    <nav className="sticky top-[158px] md:top-[60px] z-30 backdrop-blur-xl mt-6" style={{ background: `${BG}e6`, borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}>
       <div className="max-w-7xl mx-auto px-4 py-3 flex gap-2.5 overflow-x-auto no-scrollbar">
         {categories.map((c: any) => {
           const on = activeCat === c.id;
@@ -655,7 +655,7 @@ function ProductCard({ p, onOpen, slug }: { p: any; onOpen: () => void; slug: st
 function CombosSection({ id, dataCat, category, onOpen }: { id: string; dataCat: string; category: any; onOpen: (p: any) => void }) {
   const items: any[] = category.items || [];
   return (
-    <section id={id} data-cat={dataCat} className="mb-12 scroll-mt-[160px]">
+    <section id={id} data-cat={dataCat} className="mb-12 scroll-mt-[228px] md:scroll-mt-[160px]">
       <div className="relative overflow-hidden rounded-[20px] p-5 sm:p-6" style={{ background: `linear-gradient(135deg, ${GREEN}26, #0B1A0E 55%), repeating-linear-gradient(90deg, #ffffff05 0 2px, transparent 2px 60px)`, border: `1px solid ${GREEN}44` }}>
         <div className="flex flex-wrap items-end justify-between gap-2 mb-5">
           <div>
