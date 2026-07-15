@@ -167,7 +167,7 @@ export function PeakHoursHeatmap() {
             <div className="mt-1 flex items-center gap-1">
               <span className="w-8 shrink-0" />
               {Array.from({ length: 24 }, (_, hour) => (
-                <span key={hour} className="flex-1 text-center font-mono text-[8px] text-tx-dim">
+                <span key={hour} className="flex-1 text-center font-mono text-[9px] text-tx-dim">
                   {hour % 6 === 0 ? `${hour}h` : ""}
                 </span>
               ))}

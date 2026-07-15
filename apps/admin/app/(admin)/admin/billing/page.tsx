@@ -202,7 +202,7 @@ function BillingInner() {
                     </Pill>
                   )}
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+                <div className="mt-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 md:grid-cols-4">
                   <div>
                     <div className="font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-dim">Precio</div>
                     <div className="mt-1 font-semibold text-tx">

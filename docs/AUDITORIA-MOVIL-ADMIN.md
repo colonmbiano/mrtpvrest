@@ -57,6 +57,9 @@ Se reemplazaron los `gridTemplateColumns` en píxeles por un patrón responsive:
 - `reportes/ia/_components/SedesTable.tsx` · `reportes/repartidores/page.tsx` — columnas secundarias marcadas `hideBelowMd` para reducir el scroll horizontal en móvil (SedesTable deja Sede+Ventas; el reporte de repartidores oculta Teléfono/Envío/Hora).
 - `tienda/_components/ScheduleCard.tsx` · `promociones/page.tsx` — filas de horario con `flex-wrap` (los `input[type=time]` ya no se recortan).
 - `ds/form.tsx` · `Toggle` — área táctil ampliada con hit-slop (`before:-inset-2`) sin cambiar el tamaño visual.
+- `billing/page.tsx` — KPIs de suscripción a 1 columna en móvil (`grid-cols-1 sm:grid-cols-2 md:grid-cols-4`); el rango de fechas del período ya no se amontona.
+- `MobileAdminChrome.tsx` · `AdminTopbar.tsx` — se quitó el punto rojo de notificaciones (estaba hardcodeado siempre encendido = alerta falsa permanente). Si se quiere un indicador real, conectarlo a estado de pedidos.
+- `components/dashboard/widgets.tsx` — etiquetas horarias del heatmap `text-[8px]` → `text-[9px]` (el rediseño compacto móvil sigue pendiente).
 
 ---
 
@@ -69,9 +72,9 @@ Requieren decisión de producto o QA visual; ninguno bloquea el uso:
 | `components/dashboard/widgets.tsx:145` | Heatmap de horas pico `min-w-[560px]` + labels `text-[8px]` (scroll obligatorio, ilegible). Rediseñar a vista compacta móvil. | P1 |
 | `zonas/page.tsx` · `DeliveryZoneMap.tsx` | Editor de polígonos: mapa de altura fija + flujo dibujar-abajo/guardar-arriba. Reordenar en móvil. | P1 |
 | `ds/button.tsx` · `IconButton` | Subir de 40 → 44 px para cumplir HIG/Material del todo (evaluar impacto en filas densas). | P2 |
-| `billing/page.tsx:205` · `ventas/importar/page.tsx:206` | Rejillas de KPIs `grid-cols-2/3` apretadas + labels `text-[9.5px]`. | P2 |
-| `MobileAdminChrome.tsx:72` · `AdminTopbar.tsx:200` | Punto rojo de notificaciones hardcodeado (alerta falsa permanente). Conectar a estado real o quitar. | P2 |
+| `ventas/importar/page.tsx:206` | Grid de stats `grid-cols-3` algo apretado en móvil (funcional). | P2 |
 | `AdminTopbar.tsx:136` | El buscador ⌘K de secciones es desktop-only; en móvil no hay búsqueda entre ~45 secciones. | P2 |
+| `PageHeader` (`ds/page.tsx:41`) | Refactor estructural: auto-render de `actions` en móvil para retirar los ~14 bloques `md:hidden`. Mayor apalancamiento pero toca muchas pantallas → hacer con QA visual (PR propio). | — |
 
 **Refactor estructural recomendado (mayor apalancamiento):** hacer que `PageHeader` renderice `actions` en un contenedor visible en móvil, y retirar los ~14 bloques `md:hidden` duplicados por pantalla. Elimina de raíz la clase "acción perdida", pero toca muchas pantallas con tratamientos móviles heterogéneos → hacerlo con QA viser. En esta pasada se optó por los fixes por pantalla (menor riesgo).
 
