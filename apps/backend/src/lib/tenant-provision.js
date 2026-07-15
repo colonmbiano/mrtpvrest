@@ -56,6 +56,9 @@ const DEFAULT_EXPENSE_CATEGORIES = [
  * @param {string} opts.password        Texto plano; se hashea aquí (bcrypt 12).
  * @param {string} [opts.requestedPlanId]
  * @param {boolean} [opts.enableWebStore] Enciende la tienda online del tenant.
+ * @param {boolean} [opts.isDemo]        Marca el tenant como cuenta DEMO (panel SaaS).
+ * @param {string}  [opts.businessType]  RESTAURANT | GROCERY | BUTCHER | POULTRY | OTHER.
+ * @param {number}  [opts.trialDaysOverride] Fuerza los días de trial (demos: trial corto).
  * @returns {Promise<{tenant,restaurant,user,location,plan,trialDays,trialEndsAt}>}
  * @throws {ProvisionError} EMAIL_TAKEN | SLUG_TAKEN | NO_PLAN | MISSING_FIELDS | WEAK_PASSWORD
  */
@@ -67,6 +70,9 @@ async function provisionTenant(opts = {}) {
     password,
     requestedPlanId,
     enableWebStore = false,
+    isDemo = false,
+    businessType = null,
+    trialDaysOverride = null,
   } = opts;
 
   if (!restaurantName || !ownerName || !email || !password)
@@ -95,7 +101,10 @@ async function provisionTenant(opts = {}) {
   if (!plan) throw new ProvisionError('NO_PLAN', 'No hay planes activos configurados', 500);
 
   const now = new Date();
-  const trialDays = await resolveTrialDays(prisma, plan);
+  // Las demos usan un trial corto explícito; el alta normal resuelve la promo.
+  const trialDays = Number.isFinite(trialDaysOverride) && trialDaysOverride > 0
+    ? Math.floor(trialDaysOverride)
+    : await resolveTrialDays(prisma, plan);
   const trialEndsAt = new Date(now);
   trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
   const passwordHash = await bcrypt.hash(password, 12);
@@ -109,7 +118,9 @@ async function provisionTenant(opts = {}) {
         ownerEmail: emailLower,
         onboardingStep: 0,
         onboardingDone: false,
+        ...(businessType ? { businessType } : {}),
         ...(enableWebStore ? { hasWebStore: true } : {}),
+        ...(isDemo ? { isDemo: true, demoExpiresAt: trialEndsAt } : {}),
       },
     });
 
@@ -245,4 +256,66 @@ async function seedSampleMenu(restaurantId, categories) {
   return counters;
 }
 
-module.exports = { provisionTenant, seedSampleMenu, slugify, ProvisionError };
+/**
+ * Convierte la salida de `scanMenuFromImages` (IA de visión) al formato que
+ * consume `seedSampleMenu`: [{ name, sortOrder, items: [{ name, price, description }] }].
+ *
+ * El scan devuelve { categories: [nombres], items: [{ name, category, description,
+ * base_options: [{ name, price }], ... }], global_modifiers }. Para la demo
+ * aplanamos:
+ *   · base_options con >1 opción → un platillo por opción ("Hamburguesa 150GR").
+ *   · base_options con 1 opción → ese precio.
+ *   · sin base_options → item.price (o 0).
+ * Los modificadores globales no se siembran (la demo enseña el catálogo base).
+ *
+ * @param {object} scan  salida cruda de scanMenuFromImages
+ * @returns {Array<{name:string, sortOrder:number, items:Array<{name:string,price:number,description:string}>}>}
+ */
+function mapScannedMenuToSeed(scan) {
+  const categories = Array.isArray(scan?.categories) ? scan.categories : [];
+  const items = Array.isArray(scan?.items) ? scan.items : [];
+
+  const UNCAT = 'General';
+  const byCat = new Map();
+  categories.forEach((name, i) => {
+    const key = String(name || '').trim();
+    if (key) byCat.set(key, { name: key, sortOrder: i, items: [] });
+  });
+
+  const toNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  for (const it of items) {
+    if (!it || !it.name) continue;
+
+    let bucket = null;
+    const catKey = it.category ? String(it.category).trim() : '';
+    if (catKey && byCat.has(catKey)) {
+      bucket = byCat.get(catKey);
+    } else {
+      if (!byCat.has(UNCAT)) byCat.set(UNCAT, { name: UNCAT, sortOrder: byCat.size, items: [] });
+      bucket = byCat.get(UNCAT);
+    }
+
+    const description = it.description ? String(it.description) : '';
+    const opts = Array.isArray(it.base_options)
+      ? it.base_options.filter((o) => o && toNum(o.price) != null)
+      : [];
+
+    if (opts.length > 1) {
+      for (const o of opts) {
+        const label = o.name ? `${it.name} ${o.name}`.trim() : String(it.name);
+        bucket.items.push({ name: label, price: toNum(o.price) ?? 0, description });
+      }
+    } else {
+      const price = opts.length === 1 ? toNum(opts[0].price) : toNum(it.price);
+      bucket.items.push({ name: String(it.name), price: price ?? 0, description });
+    }
+  }
+
+  return Array.from(byCat.values()).filter((c) => c.items.length > 0);
+}
+
+module.exports = { provisionTenant, seedSampleMenu, mapScannedMenuToSeed, slugify, ProvisionError };
