@@ -246,7 +246,7 @@ export function AntojitosTheme({ data }: AntojitosThemeProps) {
                 {/* SECCIONES POR CATEGORÍA */}
                 <div id="an-menu">
                   {categories.map((category: any) => (
-                    <section key={category.id} id={`an-cat-${category.id}`} data-cat={category.id} className="mb-12 scroll-mt-[150px]">
+                    <section key={category.id} id={`an-cat-${category.id}`} data-cat={category.id} className="mb-12 scroll-mt-[188px] md:scroll-mt-[150px]">
                       <SectionHead title={category.name} icon={category.imageUrl ? undefined : categoryIcon(category.name)} image={category.imageUrl} />
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-5">
                         {(category.items || []).map((p: any) => <ProductCard key={p.id} p={p} accent={ACCENT} slug={slug} onOpen={() => pick(p)} />)}
@@ -505,7 +505,7 @@ function HeroChip({ emoji, title, sub }: { emoji: string; title: string; sub: st
 function CategoryNav({ categories, activeCat, accent, onPick }: { categories: any[]; activeCat: string; accent: string; onPick: (id: string) => void }) {
   if (categories.length <= 1) return null;
   return (
-    <nav className="sticky top-[64px] z-30 backdrop-blur-xl mt-6" style={{ background: 'rgba(251,243,228,0.88)', borderTop: `1px solid ${CARD_BD}`, borderBottom: `1px solid ${CARD_BD}` }}>
+    <nav className="sticky top-[116px] md:top-[64px] z-30 backdrop-blur-xl mt-6" style={{ background: 'rgba(251,243,228,0.88)', borderTop: `1px solid ${CARD_BD}`, borderBottom: `1px solid ${CARD_BD}` }}>
       <div className="max-w-7xl mx-auto px-4 py-3 flex gap-2.5 overflow-x-auto no-scrollbar">
         {categories.map((c: any) => {
           const on = activeCat === c.id;
