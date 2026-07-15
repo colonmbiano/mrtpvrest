@@ -600,11 +600,11 @@ function ProductCard({ p, accent, onOpen, slug }: { p: any; accent: string; onOp
         </div>
         {line && !needsModal(p) ? (
           <div className="flex items-center gap-1 rounded-full px-1 py-1 shrink-0" style={{ background: LAV_SOFT, border: `1px solid ${CARD_BD}` }}>
-            <button onClick={() => remove(p.id)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: '#fff', color: INK2 }} aria-label="Quitar">
+            <button onClick={() => remove(p.id)} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: '#fff', color: INK2 }} aria-label="Quitar">
               {line.quantity > 1 ? <Minus className="w-3.5 h-3.5" /> : <Trash2 className="w-3.5 h-3.5" />}
             </button>
             <span className="text-sm font-extrabold w-4 text-center" style={{ color: INK }}>{line.quantity}</span>
-            <button onClick={() => add({ id: p.id, menuItemId: p.id, name: p.name, price })} className="w-7 h-7 rounded-full flex items-center justify-center text-white" style={{ background: accent }} aria-label="Agregar"><Plus className="w-3.5 h-3.5" /></button>
+            <button onClick={() => add({ id: p.id, menuItemId: p.id, name: p.name, price })} className="w-9 h-9 rounded-full flex items-center justify-center text-white" style={{ background: accent }} aria-label="Agregar"><Plus className="w-3.5 h-3.5" /></button>
           </div>
         ) : (
           <button onClick={onOpen} className="w-11 h-11 rounded-full flex items-center justify-center text-white shrink-0 active:scale-90 transition" style={{ background: accent, boxShadow: `0 8px 18px ${accent}55` }} aria-label="Agregar">

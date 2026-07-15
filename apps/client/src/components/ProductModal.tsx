@@ -170,7 +170,7 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
         {product.imageUrl && (
           <div className="relative w-full h-44 shrink-0">
             <img src={cldImage(product.imageUrl, { width: 800 })} alt={product.name} loading="lazy" decoding="async" className={`w-full h-full ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
-            <button onClick={onClose} className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center">✕</button>
+            <button onClick={onClose} aria-label="Cerrar" className="absolute top-3 right-3 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center">✕</button>
           </div>
         )}
 
@@ -181,7 +181,7 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
               {product.description && <p className="text-sm mt-1" style={{ color: subText }}>{product.description}</p>}
             </div>
             {!product.imageUrl && (
-              <button onClick={onClose} className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center" style={{ background: chip }}>✕</button>
+              <button onClick={onClose} aria-label="Cerrar" className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center" style={{ background: chip }}>✕</button>
             )}
           </div>
 
@@ -321,9 +321,9 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
         {/* Footer: cantidad + agregar */}
         <div className="p-5 shrink-0 flex items-center gap-3" style={{ borderTop: `1px solid ${dark ? '#FFFFFF14' : '#f0f0f0'}` }}>
           <div className="flex items-center gap-2 rounded-2xl px-2 py-2" style={{ background: chip }}>
-            <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-8 h-8 font-bold text-lg">−</button>
+            <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-9 h-9 font-bold text-lg">−</button>
             <span className="w-6 text-center font-bold">{qty}</span>
-            <button onClick={() => setQty(q => q + 1)} className="w-8 h-8 font-bold text-lg">+</button>
+            <button onClick={() => setQty(q => q + 1)} className="w-9 h-9 font-bold text-lg">+</button>
           </div>
           <button onClick={handleAdd}
             className="flex-1 py-4 rounded-2xl font-bold uppercase tracking-widest text-white flex items-center justify-center gap-2 active:scale-95 transition-all"
