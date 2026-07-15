@@ -315,21 +315,23 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
             />
           </div>
 
-          {error && <p className="text-red-500 text-xs font-bold mt-4">{error}</p>}
         </div>
 
-        {/* Footer: cantidad + agregar */}
-        <div className="p-5 shrink-0 flex items-center gap-3" style={{ borderTop: `1px solid ${dark ? '#FFFFFF14' : '#f0f0f0'}` }}>
-          <div className="flex items-center gap-2 rounded-2xl px-2 py-2" style={{ background: chip }}>
-            <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-9 h-9 font-bold text-lg">−</button>
-            <span className="w-6 text-center font-bold">{qty}</span>
-            <button onClick={() => setQty(q => q + 1)} className="w-9 h-9 font-bold text-lg">+</button>
+        {/* Footer: error + cantidad + agregar (siempre visibles, sin depender del scroll) */}
+        <div className="p-5 shrink-0 flex flex-col gap-2" style={{ borderTop: `1px solid ${dark ? '#FFFFFF14' : '#f0f0f0'}` }}>
+          {error && <p className="text-red-500 text-xs font-bold text-center">{error}</p>}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 rounded-2xl px-2 py-2" style={{ background: chip }}>
+              <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-9 h-9 font-bold text-lg">−</button>
+              <span className="w-6 text-center font-bold">{qty}</span>
+              <button onClick={() => setQty(q => q + 1)} className="w-9 h-9 font-bold text-lg">+</button>
+            </div>
+            <button onClick={handleAdd}
+              className="flex-1 py-4 rounded-2xl font-bold uppercase tracking-widest text-white flex items-center justify-center gap-2 active:scale-95 transition-all"
+              style={{ background: accent }}>
+              Agregar · {fmt(unitPrice * qty)}
+            </button>
           </div>
-          <button onClick={handleAdd}
-            className="flex-1 py-4 rounded-2xl font-bold uppercase tracking-widest text-white flex items-center justify-center gap-2 active:scale-95 transition-all"
-            style={{ background: accent }}>
-            Agregar · {fmt(unitPrice * qty)}
-          </button>
         </div>
       </div>
     </div>
