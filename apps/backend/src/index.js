@@ -365,6 +365,9 @@ startRecurringPayablesJob()
 const { startWhatsappBotReportJob } = require('./jobs/whatsappBotReport.job')
 startWhatsappBotReportJob()
 
+const { startDemoExpiryJob } = require('./jobs/demoExpiry.job')
+startDemoExpiryJob()
+
 const PORT = process.env.PORT || 3001
 server.listen(PORT,'0.0.0.0', () => {
   console.log('┌─────────────────────────────────┐')

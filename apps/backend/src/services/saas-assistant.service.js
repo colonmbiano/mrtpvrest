@@ -4,12 +4,20 @@
  * Proporciona herramientas para gestionar tenants, suscripciones y métricas globales.
  */
 
+const crypto = require('crypto');
 const OpenAI = require('openai');
 const { prisma } = require('@mrtpvrest/database');
 const { sendEmail } = require('../utils/mailer');
 const { wrapGroqError } = require('./groq-error');
+const { provisionTenant, seedSampleMenu, ProvisionError } = require('../lib/tenant-provision');
 
 const MAX_ITERATIONS = 6;
+
+// Convención de dominios de la plataforma (espejo del sales-bot / saas-demos).
+const STOREFRONT_BASE = process.env.STOREFRONT_BASE || 'mrtpvrest.com';
+const ADMIN_URL       = process.env.SAAS_ADMIN_URL || 'https://admin.mrtpvrest.com';
+const storeUrlFor     = (slug) => `https://${slug}.${STOREFRONT_BASE}`;
+const genTempPassword = () => crypto.randomBytes(9).toString('base64url');
 const GROQ_MODEL = 'llama-3.3-70b-versatile'; 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 
@@ -25,6 +33,11 @@ Reglas:
     * Regalar días de prueba/servicio (gift_trial_days). Esto envía un email automático al cliente.
     * Crear cupones de descuento para marcas específicas (create_brand_coupon).
     * Configurar descuentos permanentes en el precio mensual (set_tenant_discount).
+    * Crear cuentas DEMO para prospectos (create_demo). Si el usuario pide una demo de un giro
+      concreto (ej: "créame una demo de taquería"), genera tú mismo un menú de ejemplo realista
+      para ese giro y pásalo en el parámetro "menu". Al terminar, muéstrale al usuario el link de
+      la tienda y las credenciales (email, contraseña y PIN del TPV) en un bloque claro y fácil de
+      copiar para compartir por WhatsApp.
 - Respuestas claras con markdown, tablas para listas de tenants y negritas para cifras monetarias.
 `;
 
@@ -95,6 +108,46 @@ const tools = [
           expiresInDays: { type: ['integer', 'null'], description: 'Días hasta que venza el cupón' }
         },
         required: ['restaurantId', 'code', 'discountType', 'value']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_demo',
+      description: 'Crea una cuenta DEMO funcional (login + TPV + tienda online) para enseñarle el producto a un prospecto. Devuelve credenciales y el link de la tienda listos para compartir por WhatsApp. Si el usuario pide un giro concreto (ej: "una demo de taquería"), genera tú mismo un menú de ejemplo realista para ese giro (4-6 categorías con 3-5 platillos cada una y precios en pesos mexicanos) y pásalo en el parámetro "menu".',
+      parameters: {
+        type: 'object',
+        properties: {
+          businessName:   { type: 'string', description: 'Nombre del negocio para la demo (ej: "Tacos El Güero")' },
+          businessType:   { type: ['string', 'null'], enum: ['RESTAURANT', 'GROCERY', 'BUTCHER', 'POULTRY', 'OTHER', null], description: 'Giro del negocio' },
+          demoDays:       { type: ['integer', 'null'], description: 'Días que dura la demo (default 7, máx 90)' },
+          enableWebStore: { type: ['boolean', 'null'], description: 'Activar tienda online (default true)' },
+          menu: {
+            type: ['array', 'null'],
+            description: 'Menú de ejemplo. Cada elemento es una categoría con sus platillos.',
+            items: {
+              type: 'object',
+              properties: {
+                name:  { type: 'string', description: 'Nombre de la categoría (ej: "Tacos")' },
+                items: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name:        { type: 'string' },
+                      price:       { type: 'number' },
+                      description: { type: ['string', 'null'] }
+                    },
+                    required: ['name', 'price']
+                  }
+                }
+              },
+              required: ['name', 'items']
+            }
+          }
+        },
+        required: ['businessName']
       }
     }
   },
@@ -226,6 +279,55 @@ async function execTool(name, args) {
         }
       });
       return { ok: true, coupon };
+
+    case 'create_demo': {
+      if (!args.businessName || String(args.businessName).trim().length < 2) {
+        return { error: 'Falta el nombre del negocio.' };
+      }
+      const trialDays = Number.isFinite(Number(args.demoDays))
+        ? Math.max(1, Math.min(90, Number(args.demoDays)))
+        : 7;
+      const rnd = crypto.randomBytes(3).toString('hex');
+      const email = `demo-${rnd}@demo.${STOREFRONT_BASE}`;
+      const tempPassword = genTempPassword();
+
+      try {
+        const result = await provisionTenant({
+          restaurantName: String(args.businessName).trim(),
+          ownerName: String(args.businessName).trim(),
+          email,
+          password: tempPassword,
+          enableWebStore: args.enableWebStore !== false,
+          isDemo: true,
+          businessType: args.businessType || null,
+          trialDaysOverride: trialDays,
+        });
+
+        // Menú de ejemplo (el que generó el modelo). Un fallo aquí no tumba la demo.
+        let seeded = { categories: 0, items: 0 };
+        if (Array.isArray(args.menu) && args.menu.length > 0) {
+          try {
+            seeded = await seedSampleMenu(result.restaurant.id, args.menu);
+          } catch (e) {
+            console.error('create_demo seed error:', e.message);
+          }
+        }
+
+        return {
+          ok: true,
+          business: result.tenant.name,
+          storeUrl: storeUrlFor(result.tenant.slug),
+          adminUrl: ADMIN_URL,
+          credentials: { email: result.user.email, password: tempPassword, tpvPin: '1234' },
+          menu: seeded,
+          demoDays: trialDays,
+        };
+      } catch (e) {
+        if (e instanceof ProvisionError) return { error: e.message, code: e.code };
+        console.error('create_demo error:', e.message);
+        return { error: 'No se pudo crear la demo.' };
+      }
+    }
 
     case 'set_tenant_discount':
       const updatedSub = await prisma.subscription.update({
