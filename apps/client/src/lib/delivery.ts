@@ -1,5 +1,4 @@
-// Lógica de envío compartida entre el checkout legacy (StorefrontClient) y el
-// checkout de los temas modernos (StoreCheckout). Espeja computeDeliveryFee del
+// Lógica de envío del checkout de los temas (StoreCheckout). Espeja computeDeliveryFee del
 // backend para mostrar una vista previa; el backend recalcula la verdad al cobrar.
 
 export type DeliveryConfig = {

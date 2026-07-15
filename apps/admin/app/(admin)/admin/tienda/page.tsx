@@ -101,7 +101,7 @@ export default function TiendaConfigPage() {
     minOrderAmount: 0,
     freeDeliveryFrom: 0,
     estimatedDelivery: 40,
-    storefrontTheme: "KAWAII",
+    storefrontTheme: "MOCHI",
     storefrontHeroUrl: "",
     currency: "MXN",
     currencyLocale: "es-MX",

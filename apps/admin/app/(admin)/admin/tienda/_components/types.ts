@@ -78,7 +78,7 @@ export function formatPreview(currency: string, locale: string): string {
 }
 
 export const THEMES: { id: string; name: string; icon: LucideIcon; desc: string }[] = [
-  { id: "KAWAII", name: "Kawaii", icon: Flower2, desc: "Pastel lavanda · bubble-tea · cute 🧋" },
+  { id: "MOCHI", name: "Mochi", icon: Flower2, desc: "Pastel · bubble-tea · cute 🧋" },
   { id: "MUNDIALISTA", name: "Mundialista", icon: Trophy, desc: "Estadio oscuro · Dorado · Mundial ⚽" },
   { id: "ANTOJITOS", name: "Antojitos", icon: UtensilsCrossed, desc: "Fonda mexicana · Crema masa · Terracota 🌮" },
 ];
