@@ -88,7 +88,7 @@ export default function TpvConfigPage() {
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Buscar marca o sucursal…"
             style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
-              padding:"6px 12px", fontSize:12, color:"var(--text)", outline:"none", width:240 }} />
+              padding:"6px 12px", fontSize:12, color:"var(--text)", outline:"none", width:"100%", maxWidth:280 }} />
         </div>
       </div>
 
@@ -242,7 +242,7 @@ function EditDrawer({ row, onClose, onSaved }: {
 
   return (
     <div style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 50,
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 200,
       display: "flex", alignItems: "stretch", justifyContent: "flex-end",
     }} onClick={onClose}>
       <div className="db-card" style={{ width: 440, maxWidth: "100%", height: "100%", borderRadius: 0, display: "flex", flexDirection: "column" }}
@@ -256,7 +256,7 @@ function EditDrawer({ row, onClose, onSaved }: {
           </div>
           <button onClick={onClose} className="db-btn" style={{ padding: "3px 8px", fontSize: 12 }}>✕</button>
         </div>
-        <div className="db-card-body" style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="db-card-body" style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 14, paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}>
 
           <Field label="Servidor (apiUrl)" hint="URL base del backend que este TPV debe consultar. Déjalo vacío para usar el default baked en el APK.">
             <input type="text" value={apiUrl} onChange={e => setApiUrl(e.target.value)}

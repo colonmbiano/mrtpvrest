@@ -470,7 +470,7 @@ export default function TenantDetailPage() {
               <div className="db-card-sub">Acciones irreversibles</div>
             </div>
             <div className="db-card-body" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Suspender acceso</div>
                   <div style={{ fontSize: 11, color: "var(--text3)" }}>Bloquea el login del tenant sin borrar datos</div>
@@ -480,7 +480,7 @@ export default function TenantDetailPage() {
                   <Pause size={13} /> Suspender
                 </button>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 0" }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "var(--red)" }}>Eliminar marca</div>
                   <div style={{ fontSize: 11, color: "var(--text3)" }}>Borra tenant, usuarios, restaurantes, órdenes. No reversible.</div>
@@ -572,7 +572,7 @@ function Modal({ title, children, onClose, danger }: { title: string; children: 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16 }}
          onClick={onClose}>
-      <div className="db-card" style={{ width: 360, maxWidth: "100%" }} onClick={e => e.stopPropagation()}>
+      <div className="db-card" style={{ width: 360, maxWidth: "100%", maxHeight: "calc(100dvh - 32px)", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
         <div className="db-card-header">
           <div className="db-card-title" style={danger ? { color: "var(--red)" } : undefined}>{title}</div>
         </div>

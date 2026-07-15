@@ -244,9 +244,9 @@ export default function DemosPage() {
                 <span>·</span>
                 <span>Demo: {result.trial.days} días</span>
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                <button className="db-btn db-btn-orange" style={{ flex: 1 }} onClick={() => shareWhatsApp(result)}>📱 Compartir por WhatsApp</button>
-                <button className="db-btn" style={{ flex: 1 }} onClick={resetForm}>Crear otra</button>
+              <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+                <button className="db-btn db-btn-orange" style={{ flex: "1 1 160px" }} onClick={() => shareWhatsApp(result)}>📱 Compartir por WhatsApp</button>
+                <button className="db-btn" style={{ flex: "1 1 100px" }} onClick={resetForm}>Crear otra</button>
               </div>
             </div>
           </div>
@@ -270,7 +270,7 @@ export default function DemosPage() {
         {/* 1 · Negocio */}
         <div className="db-card">
           <div className="db-card-header"><div className="db-card-title">1 · Datos del negocio</div></div>
-          <div className="db-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="db-card-body db-settings-grid" style={{ gap: 12 }}>
             <div style={{ gridColumn: "1 / -1" }}>
               <label style={labelStyle}>Nombre del negocio *</label>
               <input style={inputStyle} value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Tacos El Güero" />
@@ -351,7 +351,7 @@ export default function DemosPage() {
         {/* 3 · Imagen del negocio */}
         <div className="db-card">
           <div className="db-card-header"><div className="db-card-title">3 · Banner y logo del negocio</div></div>
-          <div className="db-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div className="db-card-body db-settings-grid" style={{ gap: 14 }}>
             <div>
               <label style={labelStyle}>Banner (16:9)</label>
               {banner

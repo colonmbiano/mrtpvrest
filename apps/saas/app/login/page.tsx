@@ -146,6 +146,7 @@ export default function SaaSLoginPage() {
 
             <div style={{ textAlign: "center", marginTop: 2 }}>
               <a href="/forgot-password" style={{
+                display: "inline-block", padding: "8px 10px",
                 fontSize: 12, fontWeight: 600, color: "var(--muted, #6b6b90)",
                 textDecoration: "none"
               }}>

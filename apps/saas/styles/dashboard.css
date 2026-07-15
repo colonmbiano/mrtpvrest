@@ -1917,3 +1917,176 @@ body {
   .ovw-fields-grid { grid-template-columns: 1fr; }
   .ovw-status-badge { display: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   FIXES MÓVIL + CLASES FALTANTES  (rediseño móvil 2026-07)
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Evitar "zona muerta" de navegación en exactamente 768px ──
+   iPad vertical = 768px CSS. Antes, a 768 el sidebar se ocultaba
+   (max-width:768) Y el chrome móvil también (md:hidden = min-width:768),
+   dejando la pantalla SIN navegación. Aquí fijamos: ≥768 = layout
+   desktop (sidebar visible, chrome móvil oculto); <768 lo maneja el
+   resto del CSS (sidebar oculto, chrome móvil visible). */
+@media (min-width: 768px) {
+  .db-sidebar { display: flex !important; }
+  .mobile-topbar,
+  .mobile-tabbar,
+  .mobile-drawer,
+  .mobile-drawer-overlay { display: none !important; }
+}
+
+/* ── Clases usadas por tpv-updates (antes SIN definir en ningún CSS) ── */
+.db-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text3);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.db-input {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  font-family: 'DM Sans', sans-serif;
+  transition: border-color 0.15s;
+  resize: vertical;
+}
+.db-input:focus { border-color: var(--orange); }
+
+.db-chip {
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  background: var(--surface2);
+  color: var(--text2);
+  border: 1px solid var(--border);
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.db-chip:hover { background: var(--surface3); color: var(--text); }
+.db-chip-active {
+  background: var(--orange-dim);
+  color: var(--orange);
+  border-color: var(--orange-glow);
+}
+
+.db-btn-ghost {
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border);
+  transition: background 0.12s, color 0.12s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.db-btn-ghost:hover { background: var(--surface2); color: var(--text); }
+.db-btn-sm { padding: 5px 10px; font-size: 11px; }
+.db-btn-danger {
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  background: var(--red);
+  color: #fff;
+  border: 1px solid var(--red);
+  transition: opacity 0.12s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.db-btn-danger:hover { opacity: 0.9; }
+
+/* Tabla genérica (tpv-updates) — mismo look que .db-brands-table. */
+.db-table { width: 100%; border-collapse: collapse; }
+.db-table th {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text3);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.db-table td {
+  padding: 11px 16px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  white-space: nowrap;
+}
+.db-table tr:last-child td { border-bottom: none; }
+.db-table tr:hover td { background: var(--brand-row-hover); }
+
+/* Modal genérico (tpv-updates) — overlay centrado + card con scroll interno.
+   z-index 200 para quedar por encima de la MobileTabBar (z-50). */
+.db-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+.db-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-md);
+  width: min(92vw, 480px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 20px;
+}
+.db-modal h2 { font-size: 16px; font-weight: 700; color: var(--text); }
+
+/* ── Ajustes exclusivos de móvil (<768px) ── */
+@media (max-width: 767px) {
+  /* Toasts por encima de la MobileTabBar (64px) en vez de solaparla. */
+  .db-toast,
+  .ovw-toast {
+    left: 16px;
+    right: 16px;
+    bottom: calc(64px + env(safe-area-inset-bottom) + 14px);
+  }
+
+  /* Alto táctil cómodo en controles compartidos. */
+  .db-tab  { padding: 9px 14px; }
+  .db-chip { padding: 9px 14px; }
+  .ovw-theme-btn { width: 40px; height: 40px; }
+  .ovw-save-btn { height: 42px; }
+  .ovw-field-input-wrap { height: 40px; }
+
+  /* La tabla genérica hace scroll horizontal (va dentro de .db-table-wrap). */
+  .db-table { min-width: 640px; }
+
+  /* Valor KPI: reducir para que cifras grandes (MRR 6 dígitos) no se recorten. */
+  .ovw-kpi-value { font-size: 26px; letter-spacing: -1px; }
+
+  /* Un poco más de aire entre los 5 items de la tab bar en pantallas chicas. */
+  .mobile-tabbar .tab-icon-wrap { padding: 4px 13px; }
+}

@@ -143,7 +143,7 @@ export default function SaasErrorsPage() {
           <button
             onClick={() => setPaused(!paused)}
             aria-label={paused ? "Reanudar polling" : "Pausar polling"}
-            className={`w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center transition-all shrink-0 ${paused ? "bg-amber-500/20 text-amber-500" : "bg-white/5 text-white/50"}`}
+            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shrink-0 ${paused ? "bg-amber-500/20 text-amber-500" : "bg-white/5 text-white/50"}`}
           >
             <RefreshCcw size={16} className={paused ? "" : "animate-spin-slow"} />
           </button>
@@ -153,7 +153,7 @@ export default function SaasErrorsPage() {
         <div className="flex gap-2 overflow-x-auto py-3 -mx-4 px-4 no-scrollbar">
           <button
             onClick={() => setFilterLevel("ALL")}
-            className={`px-4 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all ${filterLevel === "ALL" ? "bg-white text-black" : "bg-white/5 text-white/50 border border-white/10"}`}
+            className={`px-4 py-2 min-h-[38px] inline-flex items-center rounded-full text-[11px] font-bold whitespace-nowrap transition-all ${filterLevel === "ALL" ? "bg-white text-black" : "bg-white/5 text-white/50 border border-white/10"}`}
           >
             Todos
           </button>
@@ -161,7 +161,7 @@ export default function SaasErrorsPage() {
             <button
               key={lvl}
               onClick={() => setFilterLevel(lvl)}
-              className={`px-4 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all ${filterLevel === lvl ? LEVEL_STYLE[lvl].active : "bg-white/5 text-white/50 border border-white/10"}`}
+              className={`px-4 py-2 min-h-[38px] inline-flex items-center rounded-full text-[11px] font-bold whitespace-nowrap transition-all ${filterLevel === lvl ? LEVEL_STYLE[lvl].active : "bg-white/5 text-white/50 border border-white/10"}`}
             >
               {lvl}
             </button>
@@ -185,7 +185,7 @@ export default function SaasErrorsPage() {
           <button
             onClick={downloadExport}
             disabled={exporting}
-            className="flex items-center gap-1.5 text-[11px] font-bold text-white/50 active:text-white/80 transition-colors disabled:opacity-50 px-2 py-1"
+            className="flex items-center gap-1.5 text-[11px] font-bold text-white/50 active:text-white/80 transition-colors disabled:opacity-50 px-3 py-2 min-h-[36px]"
           >
             <Download size={12} /> {exporting ? "Exportando…" : "Exportar JSON"}
           </button>
@@ -219,8 +219,8 @@ export default function SaasErrorsPage() {
       </div>
 
       {/* Desktop Actions Footer */}
-      <div className="hidden md:flex fixed bottom-6 left-1/2 -translate-x-1/2 bg-surface-1 border border-border px-6 py-3 rounded-2xl items-center gap-4 shadow-2xl z-[100]">
-        <button onClick={downloadExport} disabled={exporting} className="flex items-center gap-2 text-xs font-bold hover:text-brand transition-colors disabled:opacity-50">
+      <div className="hidden md:flex fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#13131f] border border-white/10 px-6 py-3 rounded-2xl items-center gap-4 shadow-2xl z-[100]">
+        <button onClick={downloadExport} disabled={exporting} className="flex items-center gap-2 text-xs font-bold hover:text-white transition-colors disabled:opacity-50">
           <Download size={14} /> Exportar JSON
         </button>
       </div>
@@ -250,7 +250,7 @@ function ErrorRow({ record }: { record: SystemLogRecord }) {
   return (
     <div 
       onClick={() => setExpanded(!expanded)}
-      className="bg-surface-1 border border-white/5 rounded-2xl overflow-hidden transition-all active:scale-[0.98]"
+      className="bg-white/[0.04] border border-white/5 rounded-2xl overflow-hidden transition-all active:scale-[0.98]"
       style={{ borderLeft: `4px solid ${s.border}` }}
     >
       <div className="p-4">
@@ -281,7 +281,7 @@ function ErrorRow({ record }: { record: SystemLogRecord }) {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[9px] font-black uppercase tracking-widest text-white/30">Stack Trace</span>
-                  <button onClick={copyStack} className="p-1.5 bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors">
+                  <button onClick={copyStack} aria-label="Copiar stack trace" className="p-2 bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors">
                     <Copy size={12} />
                   </button>
                 </div>
@@ -293,13 +293,13 @@ function ErrorRow({ record }: { record: SystemLogRecord }) {
 
             <div className="flex gap-2">
               <button 
-                className="flex-1 bg-white/5 py-2 rounded-xl text-[10px] font-bold text-white/60 flex items-center justify-center gap-2 hover:bg-white/10"
+                className="flex-1 bg-white/5 py-2 min-h-[40px] rounded-xl text-[10px] font-bold text-white/60 flex items-center justify-center gap-2 hover:bg-white/10"
                 onClick={(e) => { e.stopPropagation(); /* AI Logic here */ }}
               >
                 <Brain size={12} /> Analizar IA
               </button>
               <button 
-                className="flex-1 bg-white/5 py-2 rounded-xl text-[10px] font-bold text-white/60 flex items-center justify-center gap-2 hover:bg-white/10"
+                className="flex-1 bg-white/5 py-2 min-h-[40px] rounded-xl text-[10px] font-bold text-white/60 flex items-center justify-center gap-2 hover:bg-white/10"
                 onClick={copyStack}
               >
                 <Copy size={12} /> Copiar

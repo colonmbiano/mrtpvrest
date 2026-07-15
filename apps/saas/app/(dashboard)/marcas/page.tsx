@@ -130,7 +130,7 @@ function MarcasContent() {
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Buscar nombre, slug o email…"
             style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
-              padding:"6px 12px", fontSize:12, color:"var(--text)", outline:"none", width:220 }} />
+              padding:"6px 12px", fontSize:12, color:"var(--text)", outline:"none", width:"100%", maxWidth:280 }} />
         </div>
       </div>
 
@@ -242,22 +242,22 @@ function MarcasContent() {
                       <td onClick={e => e.stopPropagation()}>
                         <div style={{ display:"flex", gap:6 }}>
                           {sub?.status === "TRIAL" && (
-                            <button className="db-btn db-btn-orange" style={{ padding:"3px 8px", fontSize:10 }}
+                            <button className="db-btn db-btn-orange" style={{ padding:"5px 9px", fontSize:11}}
                               onClick={() => changeStatus(t.id, "ACTIVE")}>Activar</button>
                           )}
                           {sub?.status === "ACTIVE" && (
-                            <button className="db-btn" style={{ padding:"3px 8px", fontSize:10, color:"var(--amber)", borderColor:"var(--amber-dim)" }}
+                            <button className="db-btn" style={{ padding:"5px 9px", fontSize:11, color:"var(--amber)", borderColor:"var(--amber-dim)" }}
                               onClick={() => changeStatus(t.id, "SUSPENDED")}>Pausar</button>
                           )}
                           {["SUSPENDED","EXPIRED"].includes(sub?.status ?? "") && (
-                            <button className="db-btn" style={{ padding:"3px 8px", fontSize:10, color:"var(--green)", borderColor:"var(--green-dim)" }}
+                            <button className="db-btn" style={{ padding:"5px 9px", fontSize:11, color:"var(--green)", borderColor:"var(--green-dim)" }}
                               onClick={() => changeStatus(t.id, "ACTIVE")}>Reactivar</button>
                           )}
-                          <button className="db-btn" style={{ padding:"3px 8px", fontSize:10 }}
+                          <button className="db-btn" style={{ padding:"5px 9px", fontSize:11}}
                             onClick={() => { setPlanModal(t); setNewPlanId(sub?.plan?.id ?? ""); }}>Plan</button>
-                          <button className="db-btn" style={{ padding:"3px 8px", fontSize:10, color:"var(--blue)", borderColor:"var(--blue-dim)" }}
+                          <button className="db-btn" style={{ padding:"5px 9px", fontSize:11, color:"var(--blue)", borderColor:"var(--blue-dim)" }}
                             onClick={() => { setTrialModal(t); setExtendDays(7); }}>+Días</button>
-                          <button className="db-btn" style={{ padding:"3px 8px", fontSize:10, color:"var(--red)", borderColor:"var(--red-dim)" }}
+                          <button className="db-btn" style={{ padding:"5px 9px", fontSize:11, color:"var(--red)", borderColor:"var(--red-dim)" }}
                             onClick={() => setDelConfirm(t)}>✕</button>
                         </div>
                       </td>
@@ -272,8 +272,8 @@ function MarcasContent() {
       </div>
 
       {planModal && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:50 }}>
-          <div className="db-card" style={{ width:340 }}>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:50, padding:16 }}>
+          <div className="db-card" style={{ width:340, maxWidth:"100%", maxHeight:"calc(100dvh - 32px)", overflowY:"auto" }}>
             <div className="db-card-header">
               <div className="db-card-title">Cambiar plan — {planModal.name}</div>
             </div>
@@ -299,8 +299,8 @@ function MarcasContent() {
       )}
 
       {trialModal && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:50 }}>
-          <div className="db-card" style={{ width:320 }}>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:50, padding:16 }}>
+          <div className="db-card" style={{ width:320, maxWidth:"100%", maxHeight:"calc(100dvh - 32px)", overflowY:"auto" }}>
             <div className="db-card-header">
               <div className="db-card-title">Días gratis — {trialModal.name}</div>
             </div>
@@ -324,8 +324,8 @@ function MarcasContent() {
       )}
 
       {delConfirm && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:50 }}>
-          <div className="db-card" style={{ width:320 }}>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:50, padding:16 }}>
+          <div className="db-card" style={{ width:320, maxWidth:"100%", maxHeight:"calc(100dvh - 32px)", overflowY:"auto" }}>
             <div className="db-card-header">
               <div className="db-card-title" style={{ color:"var(--red)" }}>Eliminar marca</div>
             </div>

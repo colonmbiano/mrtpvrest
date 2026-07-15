@@ -133,6 +133,8 @@ export default function SaasDashboardPage() {
   const [togglesLoaded, setTogglesLoaded] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [mrrByPlan, setMrrByPlan] = useState<Record<string, { count: number; mrr: number; displayName?: string }>>({});
+  const [monthly, setMonthly] = useState<{ label: string; revenue: number; month: string }[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -147,7 +149,7 @@ export default function SaasDashboardPage() {
     async function fetchAll() {
       try {
         const [mrrRes, tenantsRes, plansRes, configRes] = await Promise.all([
-          api.get("/api/saas/mrr").catch(() => ({ data: { mrr: 0, growth: null, byPlan: {} } })),
+          api.get("/api/saas/mrr").catch(() => ({ data: { mrr: 0, growth: null, byPlan: {}, monthlyRevenue: [] } })),
           api.get("/api/saas/tenants").catch(() => ({ data: [] })),
           api.get("/api/saas/plans").catch(() => ({ data: [] })),
           api.get("/api/admin/global-config").catch(() => ({ data: null })),
@@ -164,6 +166,8 @@ export default function SaasDashboardPage() {
           conversion: tenants.length > 0 ? Math.round((active / tenants.length) * 100) : 0,
         });
         setActivity(buildDashboardActivity(tenants));
+        setMrrByPlan(mrrRes.data.byPlan || {});
+        setMonthly(mrrRes.data.monthlyRevenue || []);
 
         const byPlan: Record<string, { count: number }> = mrrRes.data.byPlan || {};
         const planRows: PlanRow[] = plansRes.data;
@@ -331,7 +335,7 @@ export default function SaasDashboardPage() {
             <p className="text-xs font-bold text-red-500">Hay alertas críticas que requieren atención</p>
             <p className="text-[10px] text-red-500/70">Revisa la pestaña de Errores para más detalles</p>
           </div>
-          <a href="/errors" className="text-[10px] font-black uppercase tracking-widest bg-red-500 text-white px-3 py-1.5 rounded-lg shadow-lg shadow-red-500/20">Ver</a>
+          <a href="/errors" className="text-[10px] font-black uppercase tracking-widest bg-red-500 text-white px-3 py-2 min-h-[36px] inline-flex items-center rounded-lg shadow-lg shadow-red-500/20">Ver</a>
         </div>
       )}
 
@@ -437,11 +441,13 @@ export default function SaasDashboardPage() {
             </div>
           </div>
 
-          {/* MRR Chart */}
-          <MrrChart />
-          
-          {/* Revenue por plan (Mobile Design) */}
-          <MobileRevenueBars />
+          {/* Evolución de ingresos (canvas) — solo desktop; en móvil se usa MobileRevenueBars */}
+          <div className="hidden md:block">
+            <MrrChart monthly={monthly} />
+          </div>
+
+          {/* Revenue por plan — solo móvil */}
+          <MobileRevenueBars byPlan={mrrByPlan} />
         </div>
 
         {/* ── Col derecha: toggles + activity ── */}
