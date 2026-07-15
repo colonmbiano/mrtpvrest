@@ -295,6 +295,9 @@ app.use('/api/banners',      require('./routes/banners.routes'))
 app.use('/api/promos',       require('./routes/promos.routes'))
 app.use('/api/bulk-promos',  require('./routes/bulk-promos.routes'))
 app.use('/api/admin',        require('./routes/admin.routes'))
+// Demos del panel SaaS — se monta ANTES de /api/saas para tener precedencia en
+// la subruta /api/saas/demos (ver saas-demos.routes.js).
+app.use('/api/saas/demos',   require('./routes/saas-demos.routes'))
 app.use('/api/saas',         require('./routes/saas.routes'))
 app.use('/api/billing',      require('./routes/saas-billing.routes'))
 app.use('/api/ai',           require('./routes/ai.routes'));

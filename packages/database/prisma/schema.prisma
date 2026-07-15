@@ -29,6 +29,15 @@ model Tenant {
   isOnboarded    Boolean @default(false)
   activeModules  Json    @default("[]")
 
+  // Cuentas DEMO creadas desde el panel SaaS (pantalla /demos) para enseñar el
+  // producto a un prospecto con SU menú y SU banner. Son tenants reales y
+  // funcionales (login, TPV, tienda) pero se etiquetan para poder filtrarlas
+  // fuera de las métricas de clientes y purgarlas al vencer. `demoExpiresAt`
+  // marca cuándo caduca la demostración (informativo; la baja la decide el
+  // operador o un cron externo).
+  isDemo        Boolean   @default(false)
+  demoExpiresAt DateTime?
+
   // SaaS Modules Flags
   hasInventory Boolean @default(false)
   hasDelivery  Boolean @default(false)
