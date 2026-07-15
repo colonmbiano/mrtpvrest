@@ -112,7 +112,7 @@ export function Segmented<T extends string>({
 }) {
   const items = options.map((o) => (typeof o === "string" ? { value: o, label: o } : o));
   return (
-    <div className={`flex gap-1 rounded-ds-md p-1 ${className}`} style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+    <div className={`flex flex-wrap gap-1 gap-y-1 rounded-ds-md p-1 ${className}`} style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
       {items.map((o) => {
         const active = o.value === value;
         return (

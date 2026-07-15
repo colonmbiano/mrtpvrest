@@ -198,7 +198,7 @@ export default function CajaRepartidoresPage() {
                   {o.deliveryAddress ? ` · ${o.deliveryAddress}` : ""}
                 </div>
               </div>
-              <div className="hidden text-right sm:block">
+              <div className="shrink-0 text-right">
                 <div className="text-[10px] text-tx-mut">Total</div>
                 <div className="font-display font-extrabold text-primary">${(o.total || 0).toFixed(0)}</div>
               </div>

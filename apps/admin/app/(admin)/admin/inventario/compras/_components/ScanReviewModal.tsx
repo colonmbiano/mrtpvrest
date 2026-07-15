@@ -46,12 +46,12 @@ export function ScanReviewModal({
       ) : (
         <div className="space-y-2">
           {rows.map((r, idx) => (
-            <div key={idx} className="grid items-center gap-2 rounded-ds-md p-2"
-              style={{ background: "var(--surf-2)", gridTemplateColumns: "1fr 1fr 70px 80px 36px" }}>
-              <span className="truncate text-xs text-tx-mut" title={r.name || "—"}>{r.name || "—"}</span>
+            <div key={idx} className="grid grid-cols-[1fr_80px_36px] items-center gap-2 rounded-ds-md p-2 sm:grid-cols-[1fr_1fr_70px_80px_36px]"
+              style={{ background: "var(--surf-2)" }}>
+              <span className="col-span-full truncate text-xs text-tx-mut sm:col-span-1" title={r.name || "—"}>{r.name || "—"}</span>
               <select value={r.matchedId}
                 onChange={e => setRows(p => p.map((x, i) => i === idx ? { ...x, matchedId: e.target.value } : x))}
-                className={cellCls} style={cellStyle}>
+                className={`${cellCls} col-span-full sm:col-span-1`} style={cellStyle}>
                 <option value="">— omitir —</option>
                 {ingredients.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>

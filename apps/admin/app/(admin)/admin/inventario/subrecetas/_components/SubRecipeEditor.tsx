@@ -157,14 +157,14 @@ export function SubRecipeEditor({
               return (
                 <div
                   key={idx}
-                  className="grid items-center gap-2 rounded-ds-md p-2"
-                  style={{ background: "var(--surf-2)", gridTemplateColumns: "1fr 90px 44px 40px" }}
+                  className="grid grid-cols-[1fr_44px_40px] items-center gap-2 rounded-ds-md p-2 sm:grid-cols-[1fr_90px_44px_40px]"
+                  style={{ background: "var(--surf-2)" }}
                 >
                   {isNested ? (
                     <select
                       value={it.nestedSubRecipeId || ""}
                       onChange={(e) => pickNested(idx, e.target.value)}
-                      className={cellCls} style={cellStyle}
+                      className={`${cellCls} col-span-full sm:col-span-1`} style={cellStyle}
                     >
                       <option value="">Sub-receta…</option>
                       {subRecipes.filter((s) => s.id !== selectedId).map((s) => (
@@ -175,7 +175,7 @@ export function SubRecipeEditor({
                     <select
                       value={it.ingredientId || ""}
                       onChange={(e) => pickIngredient(idx, e.target.value)}
-                      className={cellCls} style={cellStyle}
+                      className={`${cellCls} col-span-full sm:col-span-1`} style={cellStyle}
                     >
                       <option value="">Ingrediente…</option>
                       {ingredients.map((i) => (

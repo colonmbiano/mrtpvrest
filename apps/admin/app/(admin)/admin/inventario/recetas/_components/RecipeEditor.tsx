@@ -374,14 +374,14 @@ export function RecipeEditor({
               return (
                 <div
                   key={idx}
-                  className="grid items-center gap-2 rounded-ds-md p-2"
-                  style={{ background: "var(--surf-2)", gridTemplateColumns: "1fr 84px 40px 66px 40px" }}
+                  className="grid grid-cols-[1fr_40px_66px_40px] items-center gap-2 rounded-ds-md p-2 sm:grid-cols-[1fr_84px_40px_66px_40px]"
+                  style={{ background: "var(--surf-2)" }}
                 >
                   {isSubrecipe ? (
                     <select
                       value={it.subRecipeId || ""}
                       onChange={(e) => pickSubRecipe(idx, e.target.value)}
-                      className={cellCls} style={cellStyle}
+                      className={`${cellCls} col-span-full sm:col-span-1`} style={cellStyle}
                     >
                       <option value="">Sub-receta…</option>
                       {subRecipes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -390,7 +390,7 @@ export function RecipeEditor({
                     <select
                       value={it.ingredientId || ""}
                       onChange={(e) => pickIngredient(idx, e.target.value)}
-                      className={cellCls} style={cellStyle}
+                      className={`${cellCls} col-span-full sm:col-span-1`} style={cellStyle}
                     >
                       <option value="">Ingrediente…</option>
                       {ingredients.map((i) => (

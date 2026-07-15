@@ -240,7 +240,7 @@ export default function PromocionesPage() {
               </p>
             </div>
           </div>
-          <div className="shrink-0 md:hidden">
+          <div className="flex shrink-0 flex-col gap-2 md:hidden">
             <Button
               icon={Bot}
               full
@@ -249,6 +249,11 @@ export default function PromocionesPage() {
             >
               {triggering === "all" ? "Analizando…" : "Analizar todas"}
             </Button>
+            {promoItems.length > 0 && (
+              <Button variant="danger" full icon={Trash2} onClick={handleClearAll}>
+                {clearing ? "Quitando…" : "Quitar todas"}
+              </Button>
+            )}
           </div>
         </div>
       </Card>

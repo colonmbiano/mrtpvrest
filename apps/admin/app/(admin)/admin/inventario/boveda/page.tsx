@@ -164,6 +164,11 @@ export default function BovedaPage() {
         actions={<Button icon={Banknote} onClick={() => setOpen(true)}>Depósito o retiro</Button>}
       />
 
+      {/* Acción en móvil (PageHeader es hidden en <md) */}
+      <div className="mb-4 md:hidden">
+        <Button full icon={Banknote} onClick={() => setOpen(true)}>Depósito o retiro</Button>
+      </div>
+
       {loading ? (
         <div className="grid gap-3 md:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}

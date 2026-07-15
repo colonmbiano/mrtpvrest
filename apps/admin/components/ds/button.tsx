@@ -83,7 +83,7 @@ export function IconButton({
   label,
   onClick,
   variant = "secondary",
-  size = 36,
+  size = 40,
   danger = false,
   disabled = false,
 }: {
