@@ -71,12 +71,21 @@ const IconClose = () => (
   </svg>
 );
 
+const IconRocket = () => (
+  <svg className="db-nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 1.5c2.2 1 3.5 3.2 3.5 6 0 1.3-.4 2.6-1 3.5H5.5c-.6-.9-1-2.2-1-3.5 0-2.8 1.3-5 3.5-6z"/>
+    <path d="M6 11c-1.3.4-2 1.5-2 3 1.5 0 2.6-.7 3-2M10 11c1.3.4 2 1.5 2 3-1.5 0-2.6-.7-3-2"/>
+    <circle cx="8" cy="6.5" r="1.1"/>
+  </svg>
+);
+
 // ── Nav structure ─────────────────────────────────────────────
 const navItems = [
   { href: "/dashboard", label: "Vista general", icon: <IconGrid /> },
 ];
 const negoItems = [
   { href: "/marcas",      label: "Marcas",      icon: <IconStar /> },
+  { href: "/demos",       label: "Demos",       icon: <IconRocket /> },
   { href: "/planes",      label: "Planes",      icon: <IconSettings /> },
   { href: "/facturacion", label: "Facturación", icon: <IconReceipt /> },
 ];
