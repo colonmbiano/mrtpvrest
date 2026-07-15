@@ -6,7 +6,6 @@ import { MundialistaTheme } from '@/components/themes/MundialistaTheme';
 import { AntojitosTheme } from '@/components/themes/AntojitosTheme';
 import { getApiUrl } from '@/lib/config';
 import { cldImage } from '@/lib/cloudinary';
-import StorefrontClient from './StorefrontClient';
 import InstallPWABanner from '@/components/InstallPWABanner';
 
 const API = getApiUrl();
@@ -69,14 +68,15 @@ type StoreInfo = {
 // (fonda mexicana artesanal). Cualquier otro valor (incluidos los temas retirados
 // HALO/BRUTALIST/ANTOJO) cae a DEFAULT, que renderiza el cliente legacy como red
 // de seguridad.
-function normalizeTheme(raw?: string | null): 'MOCHI' | 'MUNDIALISTA' | 'ANTOJITOS' | 'DEFAULT' {
-  const map: Record<string, 'MOCHI' | 'MUNDIALISTA' | 'ANTOJITOS' | 'DEFAULT'> = {
+function normalizeTheme(raw?: string | null): 'MOCHI' | 'MUNDIALISTA' | 'ANTOJITOS' {
+  const map: Record<string, 'MOCHI' | 'MUNDIALISTA' | 'ANTOJITOS'> = {
     MOCHI: 'MOCHI', KAWAII: 'MOCHI',
     MUNDIALISTA: 'MUNDIALISTA', MUNDIAL: 'MUNDIALISTA',
     ANTOJITOS: 'ANTOJITOS', ANTOJITO: 'ANTOJITOS', FONDA: 'ANTOJITOS',
-    DEFAULT: 'DEFAULT',
   };
-  return map[(raw || '').toUpperCase()] || 'DEFAULT';
+  // Cualquier tema legacy/desconocido (Kawaii/Halo/Brutalist retirados, 'DEFAULT'
+  // o nulo) cae en Mochi, el tema v2 por defecto.
+  return map[(raw || '').toUpperCase()] || 'MOCHI';
 }
 
 async function fetchStore(slug: string): Promise<StoreInfo | null> {
@@ -289,21 +289,6 @@ export default async function StorefrontPage({
   const info = { ...store, themeConfig: { theme, primaryColor: primary }, dineIn };
   const data = { info, menu, locations };
 
-  // Store base para el cliente legacy (temas Kawaii/Halo/Brutalist con checkout).
-  const legacyStore = {
-    id: store.id,
-    name: store.name,
-    logo: store.logo,
-    whatsappNumber: store.whatsappNumber,
-    whatsappOrder: store.whatsappOrder,
-    primaryColor: primary,
-    slug: store.slug,
-    minOrderAmount: store.minOrderAmount,
-    delivery: store.delivery,
-    currency: store.currency,
-    currencyLocale: store.currencyLocale,
-  };
-
   return (
     <div
       style={{ ['--color-primary' as string]: primary } as React.CSSProperties}
@@ -312,16 +297,6 @@ export default async function StorefrontPage({
       {theme === 'MOCHI' && <MochiTheme data={data} />}
       {theme === 'MUNDIALISTA' && <MundialistaTheme data={data} />}
       {theme === 'ANTOJITOS' && <AntojitosTheme data={data} />}
-
-      {/* Fallback to legacy client if no modern theme is selected or during transition */}
-      {theme === 'DEFAULT' && (
-        <div style={{ ['--primary' as string]: primary } as React.CSSProperties}>
-          <StorefrontClient
-            store={legacyStore}
-            categories={menu.categories || []}
-          />
-        </div>
-      )}
 
       {/* PWA — banner flotante de instalación con branding del tenant */}
       <InstallPWABanner
