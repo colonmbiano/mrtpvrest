@@ -118,12 +118,8 @@ export default function MiCuentaPage() {
         title="Mi Cuenta"
         subtitle="Tu perfil, región y apariencia en un solo lugar"
         actions={<Button icon={Save} full={false} disabled={saving || loading} onClick={save}>{saving ? "Guardando…" : "Guardar"}</Button>}
+        mobileActions={<Button full icon={Save} disabled={saving || loading} onClick={save}>{saving ? "Guardando…" : "Guardar"}</Button>}
       />
-
-      {/* Guardar en móvil (PageHeader es hidden en <md) */}
-      <div className="mb-4 md:hidden">
-        <Button full icon={Save} disabled={saving || loading} onClick={save}>{saving ? "Guardando…" : "Guardar"}</Button>
-      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Perfil */}

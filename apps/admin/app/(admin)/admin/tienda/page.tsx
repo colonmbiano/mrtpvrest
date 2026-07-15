@@ -268,14 +268,12 @@ export default function TiendaConfigPage() {
             {saving ? "Guardando…" : "Guardar tienda"}
           </Button>
         }
+        mobileActions={
+          <Button full icon={Store} onClick={handleSave} disabled={saving} loading={saving}>
+            {saving ? "Guardando…" : "Guardar tienda"}
+          </Button>
+        }
       />
-
-      {/* Guardar en móvil (PageHeader es hidden en <md) */}
-      <div className="mb-4 md:hidden">
-        <Button full icon={Store} onClick={handleSave} disabled={saving} loading={saving}>
-          {saving ? "Guardando…" : "Guardar tienda"}
-        </Button>
-      </div>
 
       {/* Card destacada de la tienda online: URL + estado */}
       {storeUrl && (
