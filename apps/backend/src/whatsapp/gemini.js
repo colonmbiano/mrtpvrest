@@ -406,7 +406,10 @@ ${promosParaPrompt ? `
     if (!replyText) {
       // Gemini: proveedor por defecto sin GROQ_API_KEY, y fallback si Groq cae.
       // Key en header, no en URL.
-      const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+      // gemini-2.0-flash lo APAGÓ Google el 2026-06-01 → ese respaldo estaba
+      // muerto (404). El secundario ahora es flash-lite (también en el tier
+      // gratis, mismo key/proyecto). Ver docs de rate-limits de Gemini.
+      const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
       let response = null;
       outerGemini:
       for (const model of MODELS) {
@@ -448,10 +451,25 @@ ${promosParaPrompt ? `
     return parsedReply;
 
   } catch (error) {
+    const httpStatus = error?.response?.status;
+    const detalle = error?.response?.data ? JSON.stringify(error.response.data) : (error?.message || '');
+    // ¿Cayó el PROVEEDOR (cuota agotada / límite / todos los modelos sin
+    // respuesta) o fue un parseo puntual del JSON? Solo lo primero levanta
+    // alerta al dueño (la maneja client.js) — un JSON malformado aislado no
+    // amerita correo, pero una cuota agotada SÍ (fue justo lo que tumbó al bot
+    // 2 días en silencio: Gemini "exceeded spending cap" → 429 en todo).
+    const aiDown =
+      httpStatus === 429 || httpStatus === 503 || httpStatus === 500 ||
+      /sin respuesta|respuesta vac|RESOURCE_EXHAUSTED|spending cap|quota|exhausted|\b429\b|\b503\b/i.test(detalle);
     console.error('Error in Gemini processing:', error?.response?.data || error.message);
+    // NUNCA "problema técnico, repítelo" (repetir = otra llamada que vuelve a
+    // fallar y otro mensaje roto al cliente). Devolvemos un handoff cálido a
+    // humano; client.js dispara la alerta si aiDown para que un asesor tome.
     return {
-      status: 'CONVERSING',
-      replyMessage: 'Lo siento, tuve un problema técnico procesando tu mensaje. ¿Podrías repetirlo?'
+      status: 'AI_ERROR',
+      aiDown,
+      errorDetail: httpStatus ? `HTTP ${httpStatus}` : (aiDown ? 'proveedor sin respuesta' : 'parseo'),
+      replyMessage: '¡Gracias por tu mensaje! 🙏 En este momento tengo mucha demanda y no pude procesarlo al instante. Un asesor te atiende personalmente enseguida.',
     };
   }
 }

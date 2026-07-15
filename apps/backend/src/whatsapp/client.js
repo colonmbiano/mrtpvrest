@@ -843,6 +843,18 @@ function initWhatsApp(io) {
           await safeSend('No pude agregarlo a tu pedido anterior 🙏. ¿Te lo pongo como un pedido nuevo?');
         }
       }
+    } else if (status === 'AI_ERROR') {
+      // La IA no pudo procesar el mensaje (cuota/caída del proveedor o parseo).
+      // Si fue caída del proveedor (aiDown), alertamos al dueño (correo vía
+      // WHATSAPP_BOT_ALERT_WEBHOOK, throttled 1/5min) para que un humano tome el
+      // chat. Esto es justo lo que faltó el 12–13 jul: el bot quedó respondiendo
+      // "problema técnico" ~2 días por el tope de Gemini sin que nadie se enterara.
+      if (geminiResponse.aiDown) {
+        notifyAlert('IA no disponible (cuota/proveedor)', geminiResponse.errorDetail || 'todos los modelos fallaron');
+      }
+      if (geminiResponse.replyMessage) {
+        await safeSend(sanitizeReply(geminiResponse.replyMessage));
+      }
     } else {
       // CONVERSING (o cualquier otro estado): responder normal, sanitizado.
       if (geminiResponse.replyMessage) {
