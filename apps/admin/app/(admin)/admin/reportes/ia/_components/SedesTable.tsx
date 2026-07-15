@@ -38,6 +38,7 @@ export function SedesTable({ sedes, loading }: { sedes: SedeRow[]; loading: bool
       key: "delta",
       header: "vs Mes ant.",
       width: "200px",
+      hideBelowMd: true,
       render: (s) => {
         const up = s.delta >= 0;
         const pct = Math.min(100, Math.round((s.sales / maxSales) * 100));
@@ -56,11 +57,13 @@ export function SedesTable({ sedes, loading }: { sedes: SedeRow[]; loading: bool
     {
       key: "orders",
       header: "Pedidos",
+      hideBelowMd: true,
       render: (s) => <span className="font-mono font-semibold text-tx-hi">{formatNumber(s.orders ?? 0)}</span>,
     },
     {
       key: "avgTicket",
       header: "Ticket prom.",
+      hideBelowMd: true,
       render: (s) => (
         <span className="font-mono font-semibold text-tx-hi">${(s.avgTicket ?? 0).toLocaleString("es-MX")}</span>
       ),
@@ -68,6 +71,7 @@ export function SedesTable({ sedes, loading }: { sedes: SedeRow[]; loading: bool
     {
       key: "margin",
       header: "Margen",
+      hideBelowMd: true,
       render: () => <span className="font-mono font-semibold text-tx-mut">—</span>,
     },
   ];

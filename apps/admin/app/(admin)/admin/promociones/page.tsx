@@ -271,7 +271,7 @@ export default function PromocionesPage() {
               </p>
             </div>
           </div>
-          <div className="flex items-end gap-2">
+          <div className="flex flex-wrap items-end gap-2">
             <div>
               <label className="mb-1 block font-mono text-[9.5px] uppercase tracking-[.12em] text-tx-mut">Desde</label>
               <input

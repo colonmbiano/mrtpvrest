@@ -148,7 +148,7 @@ export default function ReportesRepartidoresPage() {
       ),
     },
     {
-      key: "shipping", header: "Envío",
+      key: "shipping", header: "Envío", hideBelowMd: true,
       render: (o) => (
         <span style={{ color: o.shipping ? "var(--tx-mid)" : "var(--err)" }}>
           {o.shipping ? `${formatMoney(o.shipping)}${o.shippingZones.length ? ` · ${o.shippingZones.join(", ")}` : ""}` : "sin envío"}
@@ -156,7 +156,7 @@ export default function ReportesRepartidoresPage() {
       ),
     },
     { key: "total", header: "Total", align: "right", mono: true, render: (o) => <span className="font-semibold text-tx-hi">{formatMoney(o.total)}</span> },
-    { key: "hora", header: "Hora", mono: true, render: (o) => <span className="text-tx-mut">{horaMx(o.createdAt)}</span> },
+    { key: "hora", header: "Hora", mono: true, hideBelowMd: true, render: (o) => <span className="text-tx-mut">{horaMx(o.createdAt)}</span> },
   ];
 
   const zoneCols: Col<Zone>[] = [
