@@ -272,7 +272,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
 
       {/* Barra inferior (móvil) */}
       {quantity > 0 && !cartOpen && (
-        <div className="lg:hidden fixed bottom-3 left-3 right-3 z-40">
+        <div className="lg:hidden fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-3 right-3 z-40">
           <button onClick={() => setCartOpen(true)}
             className="w-full flex items-center justify-between pl-3 pr-2 py-2 rounded-[22px] active:scale-[0.99] transition"
             style={{ background: CREAM, border: `1.5px solid ${CARD_BD}`, boxShadow: '0 18px 40px rgba(123,79,214,0.22)' }}>
@@ -663,9 +663,9 @@ function CartLines({ allItems, accent }: { allItems: any[]; accent: string }) {
               <p className="text-[13px] font-extrabold mt-0.5" style={{ color: PINK }}>{fmt(l.price)}</p>
             </div>
             <div className="flex items-center gap-0.5 rounded-full px-1 py-1 shrink-0" style={{ background: LAV_SOFT }}>
-              <button onClick={() => remove(l.id)} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: '#fff', color: INK2 }} aria-label="Quitar">{l.quantity > 1 ? <Minus className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}</button>
+              <button onClick={() => remove(l.id)} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: '#fff', color: INK2 }} aria-label="Quitar">{l.quantity > 1 ? <Minus className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}</button>
               <span className="text-[13px] font-extrabold w-4 text-center" style={{ color: INK }}>{l.quantity}</span>
-              <button onClick={() => add({ id: l.id, menuItemId: l.menuItemId, name: l.name, price: l.price, variantId: l.variantId, modifierIds: l.modifierIds })} className="w-6 h-6 rounded-full flex items-center justify-center text-white" style={{ background: accent }} aria-label="Agregar"><Plus className="w-3 h-3" /></button>
+              <button onClick={() => add({ id: l.id, menuItemId: l.menuItemId, name: l.name, price: l.price, variantId: l.variantId, modifierIds: l.modifierIds })} className="w-9 h-9 rounded-full flex items-center justify-center text-white" style={{ background: accent }} aria-label="Agregar"><Plus className="w-3 h-3" /></button>
             </div>
           </div>
         );

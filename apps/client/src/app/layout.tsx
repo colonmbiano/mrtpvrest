@@ -72,6 +72,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#ff5c35",
+  // Dibuja bajo el notch/barra de gestos y habilita env(safe-area-inset-*)
+  // para que headers y barras fijas puedan compensarlo.
+  viewportFit: "cover",
 };
 
 // Guard global contra el bug nativo de <input type="number">: con el campo

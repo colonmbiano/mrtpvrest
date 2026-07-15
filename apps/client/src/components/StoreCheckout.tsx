@@ -421,9 +421,9 @@ export default function StoreCheckout({
                   <button type="button" onClick={forgetProfile} className="text-[11px] font-bold text-gray-500 hover:text-gray-800">No soy yo</button>
                 </div>
               )}
-              <input required placeholder="Tu nombre" className={field} value={customerName} onChange={e => setCustomerName(e.target.value)} />
-              <input placeholder="Tu teléfono" className={field} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
-              <input type="email" inputMode="email" placeholder="Tu correo (opcional, para tu confirmación)" className={field} value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
+              <input required autoComplete="name" placeholder="Tu nombre" className={field} value={customerName} onChange={e => setCustomerName(e.target.value)} />
+              <input type="tel" inputMode="tel" autoComplete="tel" placeholder="Tu teléfono" className={field} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
+              <input type="email" inputMode="email" autoComplete="email" placeholder="Tu correo (opcional, para tu confirmación)" className={field} value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
               {isDelivery && (
                 <>
                   <textarea required placeholder="Dirección de entrega" className={`${field} h-20`} value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} />
@@ -569,7 +569,7 @@ export default function StoreCheckout({
               </p>
             </div>
 
-            {/* Desglose */}
+            {/* Desglose (scrollea) */}
             <div className="pt-4 border-t border-gray-100 space-y-1.5">
               <Row label="Subtotal" value={fmt(total)} />
               {isDelivery && (
@@ -578,20 +578,25 @@ export default function StoreCheckout({
               )}
               {discount > 0 && <Row label="Descuento" value={`−${fmt(discount)}`} green />}
               {tip > 0 && <Row label="Propina" value={fmt(tip)} />}
-              <div className="flex items-center justify-between pt-2">
-                <span className="font-bold text-gray-400">Total</span>
-                <span className="text-3xl font-black" style={{ color: primary }}>{fmt(grandTotal)}</span>
-              </div>
             </div>
 
-            {belowMin && <p className="text-amber-600 text-xs font-bold">Pedido mínimo: {fmt(minOrderAmount)}.</p>}
-            {error && <p className="text-red-500 text-xs font-bold">{error}</p>}
+            {/* Footer sticky: Total + CTA siempre visibles (patrón del ProductModal),
+                para no enterrar el botón de pago al fondo del scroll. */}
+            <div className="sticky bottom-0 -mx-6 -mb-6 space-y-2 border-t border-gray-100 bg-white px-6 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-gray-400">Total</span>
+                <span className="text-2xl font-black" style={{ color: primary }}>{fmt(grandTotal)}</span>
+              </div>
 
-            <button disabled={isSubmitting || belowMin || (isDelivery && preview.outOfRange)} type="submit"
-              className="w-full py-5 text-white font-black rounded-2xl shadow-xl transition-all active:scale-95 disabled:opacity-50"
-              style={{ background: primary }}>
-              {isSubmitting ? 'PROCESANDO...' : `${paymentMethod === 'ONLINE' ? 'PAGAR' : (whatsappOrder?.enabled && !!whatsappOrder?.number ? 'CONFIRMAR Y ENVIAR POR WA' : 'CONFIRMAR')} · ${fmt(grandTotal)}`}
-            </button>
+              {belowMin && <p className="text-amber-600 text-xs font-bold">Pedido mínimo: {fmt(minOrderAmount)}.</p>}
+              {error && <p className="text-red-500 text-xs font-bold">{error}</p>}
+
+              <button disabled={isSubmitting || belowMin || (isDelivery && preview.outOfRange)} type="submit"
+                className="w-full py-4 text-white font-black rounded-2xl shadow-xl transition-all active:scale-95 disabled:opacity-50"
+                style={{ background: primary }}>
+                {isSubmitting ? 'PROCESANDO...' : `${paymentMethod === 'ONLINE' ? 'PAGAR' : (whatsappOrder?.enabled && !!whatsappOrder?.number ? 'CONFIRMAR Y ENVIAR POR WA' : 'CONFIRMAR')} · ${fmt(grandTotal)}`}
+              </button>
+            </div>
           </form>
         )}
       </div>

@@ -13,3 +13,11 @@ body { font-family: "Inter", system-ui, sans-serif; background: #f8f8f6; color: 
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* iOS hace zoom al enfocar inputs con font-size < 16px. En móvil forzamos 16px
+   para que los formularios (buscador, checkout, login) no rompan el layout. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea { font-size: 16px; }
+}
