@@ -82,7 +82,7 @@ Requieren decisión de producto o QA visual; ninguno bloquea el uso:
 
 ## Reglas de no-regresión (móvil)
 
-- Toda acción primaria de una pantalla debe ser alcanzable en móvil. Si vive en `PageHeader actions` (desktop-only), duplicarla en un bloque `md:hidden` (ver `proveedores/page.tsx` como referencia).
+- Toda acción primaria de una pantalla debe ser alcanzable en móvil. `PageHeader` es desktop-only; da la acción en celular con el prop **`mobileActions`** de `PageHeader` (ver `mi-cuenta`, `boveda`, `zonas`, `tienda`). Para tratamientos móviles a medida (varios botones, indicadores, previews) sigue valiendo un bloque `md:hidden` propio (ver `menu`, `empleados`, `pedidos`).
 - Funciones de cuenta (salir, cambiar marca/sucursal, tema) viven en la hoja "Más" de `MobileAdminChrome` **y** en el `Sidebar` desktop — mantener ambas en paridad.
 - Editores de filas: no usar `gridTemplateColumns` en píxeles sin variante móvil. El control principal (`<select>`/nombre) debe poder ocupar su fila (`col-span-full sm:col-span-1`).
 - Filas `flex` con 3+ hijos y contenido de texto: incluir `flex-wrap` o `overflow-x-auto`.

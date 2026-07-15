@@ -30,29 +30,44 @@ export function PageHeader({
   subtitle,
   actions,
   backHref,
+  mobileActions,
 }: {
   eyebrow?: string;
   title: string;
   subtitle?: string;
   actions?: ReactNode;
   backHref?: string;
+  /**
+   * Acción(es) a mostrar en móvil, donde el título lo pone MobileAdminChrome y
+   * este header está `hidden`. Es el reemplazo recomendado del bloque
+   * `md:hidden` manual: colócala aquí y la pantalla obtiene su acción primaria
+   * en celular sin markup aparte. Opt-in: si no se pasa, no se muestra nada
+   * (las pantallas con su propio bloque móvil bespoke siguen igual).
+   */
+  mobileActions?: ReactNode;
 }) {
+  const mobile = mobileActions ?? null;
   return (
-    <header className="mb-6 hidden items-end justify-between gap-4 md:flex">
-      <div className="min-w-0">
-        {backHref && (
-          <Link href={backHref} className="mb-2 inline-flex items-center gap-1 text-xs font-bold text-tx-mut transition-colors hover:text-tx">
-            <ArrowLeft size={13} /> Volver
-          </Link>
-        )}
-        {eyebrow && (
-          <div className="font-mono text-[11px] uppercase tracking-[.16em] text-primary">{eyebrow}</div>
-        )}
-        <h1 className="mt-2 font-display text-4xl font-extrabold tracking-[-.04em] text-tx-hi">{title}</h1>
-        {subtitle && <p className="mt-2 text-sm text-tx-mut">{subtitle}</p>}
-      </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
-    </header>
+    <>
+      <header className="mb-6 hidden items-end justify-between gap-4 md:flex">
+        <div className="min-w-0">
+          {backHref && (
+            <Link href={backHref} className="mb-2 inline-flex items-center gap-1 text-xs font-bold text-tx-mut transition-colors hover:text-tx">
+              <ArrowLeft size={13} /> Volver
+            </Link>
+          )}
+          {eyebrow && (
+            <div className="font-mono text-[11px] uppercase tracking-[.16em] text-primary">{eyebrow}</div>
+          )}
+          <h1 className="mt-2 font-display text-4xl font-extrabold tracking-[-.04em] text-tx-hi">{title}</h1>
+          {subtitle && <p className="mt-2 text-sm text-tx-mut">{subtitle}</p>}
+        </div>
+        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      </header>
+      {mobile ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2 md:hidden">{mobile}</div>
+      ) : null}
+    </>
   );
 }
 
