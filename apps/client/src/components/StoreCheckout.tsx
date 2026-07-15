@@ -371,9 +371,9 @@ export default function StoreCheckout({
                       <p className="text-xs font-bold" style={{ color: primary }}>{fmt(l.price)} × {l.quantity}</p>
                     </div>
                     <div className="flex items-center gap-1 bg-white rounded-xl p-1 border border-gray-100">
-                      <button type="button" onClick={() => remove(l.id)} className="w-7 h-7 font-bold text-lg text-gray-500">−</button>
+                      <button type="button" onClick={() => remove(l.id)} className="w-9 h-9 font-bold text-lg text-gray-500">−</button>
                       <span className="text-sm font-bold w-5 text-center">{l.quantity}</span>
-                      <button type="button" onClick={() => add({ id: l.id, menuItemId: l.menuItemId, name: l.name, price: l.price, variantId: l.variantId, modifierIds: l.modifierIds })} className="w-7 h-7 font-bold text-lg text-white rounded-lg" style={{ background: primary }}>+</button>
+                      <button type="button" onClick={() => add({ id: l.id, menuItemId: l.menuItemId, name: l.name, price: l.price, variantId: l.variantId, modifierIds: l.modifierIds })} className="w-9 h-9 font-bold text-lg text-white rounded-lg" style={{ background: primary }}>+</button>
                     </div>
                   </div>
                 ))}

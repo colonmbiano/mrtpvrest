@@ -633,11 +633,11 @@ function ProductCard({ p, onOpen, slug }: { p: any; onOpen: () => void; slug: st
         </div>
         {line && !needsModal(p) ? (
           <div className="flex items-center gap-1 rounded-full px-1 py-1 shrink-0" style={{ background: SURF2 }}>
-            <button onClick={() => remove(p.id)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ color: '#FFFFFFcc' }} aria-label="Quitar">
+            <button onClick={() => remove(p.id)} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ color: '#FFFFFFcc' }} aria-label="Quitar">
               {line.quantity > 1 ? <Minus className="w-3.5 h-3.5" /> : <Trash2 className="w-3.5 h-3.5" />}
             </button>
             <span className="text-sm font-extrabold w-4 text-center">{line.quantity}</span>
-            <button onClick={() => add({ id: p.id, menuItemId: p.id, name: p.name, price })} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: GOLD, color: '#1A1206' }} aria-label="Agregar"><Plus className="w-3.5 h-3.5" /></button>
+            <button onClick={() => add({ id: p.id, menuItemId: p.id, name: p.name, price })} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: GOLD, color: '#1A1206' }} aria-label="Agregar"><Plus className="w-3.5 h-3.5" /></button>
           </div>
         ) : (
           <button onClick={onOpen} className="flex items-center gap-1.5 pl-3 pr-2.5 py-2 rounded-full font-bold text-[13px] shrink-0 active:scale-95 transition group-hover:shadow-[0_8px_20px_rgba(255,193,7,0.35)]" style={{ background: GOLD, color: '#1A1206' }}>
@@ -807,7 +807,7 @@ function DesktopCart({ accent, minOrder, allItems, onCheckout, onBrowse, onWhats
                 <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>¿Algo más?</p>
                 <p className="text-[12px] font-bold truncate">{suggestion.name} · {fmt(priceOf(suggestion))}</p>
               </div>
-              <button onClick={() => onAddSuggestion(suggestion)} className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: accent, color: '#1A1206' }}><Plus className="w-4 h-4" /></button>
+              <button onClick={() => onAddSuggestion(suggestion)} className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: accent, color: '#1A1206' }}><Plus className="w-4 h-4" /></button>
             </div>
           )}
 

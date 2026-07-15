@@ -595,15 +595,15 @@ function ProductCard({ p, accent, onOpen, slug }: { p: any; accent: string; onOp
           {pf.from
             ? <span className="text-[9px] font-bold uppercase tracking-wide leading-none mb-0.5" style={{ color: FAINT }}>Desde</span>
             : (p.isPromo && <span className="text-[10px] line-through font-bold" style={{ color: FAINT }}>{fmt(p.price)}</span>)}
-          <span className="font-extrabold text-[18px]" style={{ color: RED, fontFamily: DISP }}>{fmt(pf.value)}</span>
+          <span className="font-extrabold text-[18px] truncate" style={{ color: RED, fontFamily: DISP }}>{fmt(pf.value)}</span>
         </div>
         {line && canQuickAdd ? (
           <div className="flex items-center gap-1 rounded-full px-1 py-1 shrink-0" style={{ background: MASA_SOFT, border: `1px solid ${CARD_BD}` }}>
-            <button onClick={() => remove(p.id)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: '#fff', color: INK2 }} aria-label="Quitar">
+            <button onClick={() => remove(p.id)} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: '#fff', color: INK2 }} aria-label="Quitar">
               {line.quantity > 1 ? <Minus className="w-3.5 h-3.5" /> : <Trash2 className="w-3.5 h-3.5" />}
             </button>
             <span className="text-sm font-extrabold w-4 text-center" style={{ color: INK }}>{line.quantity}</span>
-            <button onClick={() => add({ id: p.id, menuItemId: p.id, name: p.name, price })} className="w-7 h-7 rounded-full flex items-center justify-center text-white" style={{ background: accent }} aria-label="Agregar"><Plus className="w-3.5 h-3.5" /></button>
+            <button onClick={() => add({ id: p.id, menuItemId: p.id, name: p.name, price })} className="w-9 h-9 rounded-full flex items-center justify-center text-white" style={{ background: accent }} aria-label="Agregar"><Plus className="w-3.5 h-3.5" /></button>
           </div>
         ) : (
           <button onClick={onOpen} className="flex items-center gap-1.5 pl-3 pr-3.5 h-10 rounded-full text-white shrink-0 active:scale-95 transition font-extrabold text-[13px]" style={{ background: accent, boxShadow: `0 8px 18px ${accent}55` }} aria-label="Agregar">
