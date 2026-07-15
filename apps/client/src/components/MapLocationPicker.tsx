@@ -98,7 +98,10 @@ export function MapLocationPicker({
       if (cancelled || !containerRef.current || mapRef.current) return;
       leafletRef.current = L;
       const start = value || defaultCenter;
-      const map = L.map(containerRef.current, { zoomControl: true, attributionControl: true })
+      // dragging:false — sin pan de una mano el mapa NO secuestra el scroll de la
+      // página (el dedo scrollea el checkout, no panea). La ubicación se fija con
+      // el botón GPS, tocando el mapa, o arrastrando el pin (fine-tuning).
+      const map = L.map(containerRef.current, { zoomControl: true, attributionControl: true, dragging: false })
         .setView([start.lat, start.lng], value ? 16 : 13);
       L.tileLayer(OSM_TILES, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(map);
       map.on('click', (e: any) => placeMarker(e.latlng.lat, e.latlng.lng));
@@ -153,7 +156,7 @@ export function MapLocationPicker({
         style={{
           position: 'absolute', top: 10, right: 10, zIndex: 500,
           display: 'flex', alignItems: 'center', gap: 6,
-          padding: '8px 12px', borderRadius: 12, cursor: 'pointer',
+          padding: '10px 14px', borderRadius: 12, cursor: 'pointer', minHeight: 40,
           background: '#ffffff', border: '1px solid #e5e7eb',
           boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
           fontSize: 12, fontWeight: 700, color: accent,
@@ -167,7 +170,7 @@ export function MapLocationPicker({
       {ready && !value && (
         <div
           style={{
-            position: 'absolute', bottom: 10, left: 10, right: 10, zIndex: 500,
+            position: 'absolute', bottom: 22, left: 10, right: 10, zIndex: 500,
             padding: '8px 12px', borderRadius: 12, textAlign: 'center',
             background: 'rgba(255,255,255,0.94)', border: '1px solid #e5e7eb',
             fontSize: 12, fontWeight: 600, color: '#475569',

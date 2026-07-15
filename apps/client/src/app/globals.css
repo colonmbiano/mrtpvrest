@@ -6,7 +6,7 @@
 
 html { scroll-behavior: smooth; -webkit-tap-highlight-color: transparent; }
 
-body { font-family: "Inter", system-ui, sans-serif; background: #f8f8f6; color: #1a1a1a; }
+body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #f8f8f6; color: #1a1a1a; }
 
 ::-webkit-scrollbar { display: none; }
 * { scrollbar-width: none; }
