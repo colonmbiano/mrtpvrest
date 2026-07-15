@@ -197,10 +197,6 @@ export default function AdminTopbar({ onOpenMenu }: { onOpenMenu?: () => void })
           style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", color: "var(--tx-mid)" }}
         >
           <Bell size={18} />
-          <span
-            className="absolute right-2 top-2 h-2 w-2 rounded-full"
-            style={{ background: "var(--err)", boxShadow: "0 0 0 2px var(--surf-1)" }}
-          />
         </button>
         <div className="flex items-center gap-2.5 rounded-xl py-1 pl-1 pr-3" style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}>
           <span

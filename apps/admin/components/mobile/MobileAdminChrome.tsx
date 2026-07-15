@@ -84,7 +84,6 @@ export default function MobileAdminChrome() {
           </div>
           <Link href="/admin/pedidos" aria-label="Ver pedidos y notificaciones" className="relative grid h-11 w-11 place-items-center rounded-[13px] text-tx-mid" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
             <Bell size={19} strokeWidth={1.8} />
-            <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-primary ring-2" style={{ "--tw-ring-color": "var(--surf-2)" } as React.CSSProperties} />
           </Link>
           <button type="button" onClick={() => setMoreOpen(true)} className="grid h-11 w-11 place-items-center rounded-[12px] text-xs font-extrabold" style={{ background: "var(--accent-soft)", color: "var(--brand-primary)" }} aria-label={`Cuenta de ${user?.name || "usuario"}`}>
             {initials || <CircleUserRound size={18} />}
