@@ -240,7 +240,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
               {g.modifiers.map((m) => (
                 <div
                   key={m.id}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded-ds-sm"
+                  className="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded-ds-sm"
                   style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
                 >
                   <input
@@ -249,7 +249,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
                       const v = e.target.value.trim();
                       if (v && v !== m.name) updateModifierField(m, { name: v });
                     }}
-                    className="flex-1 bg-transparent text-sm font-bold outline-none text-tx"
+                    className="min-w-[140px] flex-1 bg-transparent text-sm font-bold outline-none text-tx"
                   />
                   <div className="flex items-center gap-1 text-xs text-tx-mut">
                     <span>+$</span>
@@ -283,7 +283,7 @@ export default function ModifierGroupsEditor({ itemId }: { itemId: string }) {
                   <button
                     type="button"
                     onClick={() => deleteModifier(m.id)}
-                    className="w-6 h-6 rounded-md text-xs font-black"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs font-black"
                     style={{ background: "var(--surf-2)", color: "var(--err)" }}
                     aria-label="Eliminar modificador"
                   >

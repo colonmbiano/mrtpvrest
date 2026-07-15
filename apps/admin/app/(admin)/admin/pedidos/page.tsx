@@ -175,9 +175,14 @@ export default function PedidosPage() {
         }
       />
 
-      {/* indicador live en móvil (el título lo pone MobileAdminChrome) */}
-      <div className="mb-3 md:hidden">
+      {/* indicador live + toggle de vista en móvil (el título lo pone MobileAdminChrome) */}
+      <div className="mb-3 flex items-center justify-between gap-2 md:hidden">
         <Pill tone="ok" live>Actualizado {updatedLabel}</Pill>
+        <Segmented
+          value={view}
+          onChange={setView}
+          options={[{ value: "list", label: "Lista" }, { value: "kanban", label: "Kanban" }] as const}
+        />
       </div>
 
       {/* stats */}

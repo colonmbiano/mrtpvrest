@@ -88,15 +88,15 @@ export function PurchaseTab({
             </select>
             <input type="number" step="0.001" min="0" placeholder="Cantidad" value={l.qty}
               onChange={e => updateLine(idx, { qty: e.target.value })}
-              className={`${cellCls} col-span-5 tabular-nums sm:col-span-2`} style={cellStyle} />
+              className={`${cellCls} col-span-6 tabular-nums sm:col-span-2`} style={cellStyle} />
             <input type="number" step="0.01" min="0" placeholder="$ unitario" value={l.unitPrice}
               onChange={e => updateLine(idx, { unitPrice: e.target.value })}
-              className={`${cellCls} col-span-5 tabular-nums sm:col-span-2`} style={cellStyle} />
-            <span className="col-span-1 text-right font-mono text-xs tabular-nums text-primary sm:col-span-1">
+              className={`${cellCls} col-span-6 tabular-nums sm:col-span-2`} style={cellStyle} />
+            <span className="col-span-8 text-right font-mono text-xs tabular-nums text-primary sm:col-span-1">
               {formatMoney((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))}
             </span>
             <button onClick={() => removeLine(idx)} aria-label="Quitar línea"
-              className="col-span-1 grid h-9 w-9 place-items-center justify-self-end rounded-lg"
+              className="col-span-4 grid h-9 w-9 place-items-center justify-self-end rounded-lg sm:col-span-1"
               style={{ background: "var(--err-soft)", color: "var(--err)" }}>
               <Trash2 size={14} />
             </button>

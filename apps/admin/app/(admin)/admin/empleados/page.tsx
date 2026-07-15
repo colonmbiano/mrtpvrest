@@ -383,7 +383,7 @@ export default function EmpleadosPage() {
       {/* floating bulk action bar */}
       {selectedIds.size > 0 && (
         <div
-          className="fixed bottom-24 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-ds-lg px-4 py-3 md:bottom-6"
+          className="fixed inset-x-3 bottom-24 z-40 flex flex-wrap items-center justify-center gap-2 rounded-ds-lg px-4 py-3 md:inset-x-auto md:bottom-6 md:left-1/2 md:-translate-x-1/2 md:flex-nowrap"
           style={{ background: "var(--surf-1)", border: "1px solid var(--brand-primary)", boxShadow: "var(--shadow-lg)" }}
         >
           <span

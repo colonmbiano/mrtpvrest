@@ -125,6 +125,11 @@ export default function ZonasPage() {
         actions={<Button icon={Plus} full={false} onClick={startNew}>Nueva zona</Button>}
       />
 
+      {/* Acción en móvil (PageHeader es hidden en <md) */}
+      <div className="mb-4 md:hidden">
+        <Button full icon={Plus} onClick={startNew}>Nueva zona</Button>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         {/* Columna izquierda: formulario + lista */}
         <div className="flex flex-col gap-4">

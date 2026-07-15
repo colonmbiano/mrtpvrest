@@ -445,7 +445,7 @@ export default function RastreoPage() {
 
         {/* Mapa — NO tocar lógica Leaflet, solo el contenedor */}
         <Card className="relative overflow-hidden p-0">
-          <div id="driver-map" className="h-[520px] w-full lg:h-[640px]" />
+          <div id="driver-map" className="h-[62vh] min-h-[340px] w-full lg:h-[640px]" />
           {!mapReady && (
             <div className="absolute inset-0 grid place-items-center" style={{ background: "var(--surf-1)" }}>
               <div className="text-center">
@@ -455,7 +455,7 @@ export default function RastreoPage() {
             </div>
           )}
           {selectedRoute && routePoints.length > 0 && (
-            <div className="absolute right-4 top-4 z-[400] rounded-ds-lg p-3 text-xs"
+            <div className="absolute inset-x-3 bottom-3 z-[400] rounded-ds-lg p-3 text-xs md:inset-x-auto md:bottom-auto md:right-4 md:top-4"
               style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)", boxShadow: "var(--shadow-lg)" }}>
               <div className="mb-1 flex items-center gap-1.5 font-bold text-tx">
                 <RouteIcon size={13} className="text-primary" />

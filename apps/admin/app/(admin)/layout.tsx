@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "@/components/admin/Sidebar";
 import TrialBanner from "@/components/TrialBanner";
@@ -14,16 +14,11 @@ import { ToastProvider, ConfirmProvider } from "@/components/ds";
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     const user = getUser();
     if (!user) router.push("/login");
   }, [router]);
-
-  useEffect(() => {
-    setMobileNavOpen(false);
-  }, [pathname]);
 
   return (
     <ToastProvider>
@@ -31,16 +26,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen" style={{background:"var(--bg)"}}>
       <AccentInjector />
       <div className="hidden md:block">
-        <Sidebar isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+        <Sidebar />
       </div>
-      {mobileNavOpen && (
-        <div
-          onClick={() => setMobileNavOpen(false)}
-          className="fixed inset-0 z-30 md:hidden"
-          style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)" }}
-          aria-hidden="true"
-        />
-      )}
       <div className="md:ml-64 min-h-screen flex flex-col">
         <MobileAdminChrome />
         <div className="hidden md:block">

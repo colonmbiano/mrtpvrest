@@ -72,10 +72,10 @@ export function EditableList({
                   </span>
                   <div className="col-span-3 flex justify-end gap-1">
                     <button type="button" onClick={() => onStartEdit(item)} aria-label="Editar"
-                      className="grid h-8 w-8 place-items-center rounded-ds-sm text-primary opacity-0 transition-opacity group-hover:opacity-100"
+                      className="grid h-8 w-8 place-items-center rounded-ds-sm text-primary opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100"
                       style={{ background: "var(--accent-soft)" }}><Pencil size={13} /></button>
                     <button type="button" onClick={() => onDelete(item.id)} aria-label="Eliminar"
-                      className="grid h-8 w-8 place-items-center rounded-ds-sm opacity-0 transition-opacity group-hover:opacity-100"
+                      className="grid h-8 w-8 place-items-center rounded-ds-sm opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100"
                       style={{ background: "var(--err-soft)", color: "var(--err)" }}><Trash2 size={13} /></button>
                   </div>
                 </div>
