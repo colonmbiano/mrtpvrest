@@ -184,6 +184,7 @@ export default function TpvUpdatesPage() {
 
       {/* Tabla de bundles */}
       <div className="db-card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="db-table-wrap">
         <table className="db-table">
           <thead>
             <tr>
@@ -248,6 +249,7 @@ export default function TpvUpdatesPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Modal: trigger build manual */}
@@ -312,11 +314,7 @@ export default function TpvUpdatesPage() {
       )}
 
       {/* Toast */}
-      {toast && (
-        <div className="db-toast" style={{ position: "fixed", bottom: 24, right: 24 }}>
-          {toast}
-        </div>
-      )}
+      <div className={`db-toast ${toast ? "show" : ""}`}>{toast}</div>
     </div>
   );
 }

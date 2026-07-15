@@ -128,7 +128,7 @@ export default function TenantModulesPanel({ tenant, plan, onUpdated, onError }:
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))", gap: 10 }}>
         {MODULE_CATALOG.map(def => {
           const on = isOn(def);
           const inPlan = includedByPlan(def);
@@ -201,7 +201,7 @@ export default function TenantModulesPanel({ tenant, plan, onUpdated, onError }:
               style={{
                 background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8,
                 padding: "5px 10px", fontSize: 12, color: "var(--text)", outline: "none",
-                fontFamily: "DM Mono, monospace", width: 170,
+                fontFamily: "DM Mono, monospace", flex: "1 1 150px", minWidth: 0, maxWidth: 240,
               }}
             />
             <button onClick={saveWhatsapp} disabled={isPending} className="db-btn db-btn-orange" style={{ padding: "5px 12px", fontSize: 11 }}>

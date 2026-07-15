@@ -74,7 +74,7 @@ export default function ForgotPasswordPage() {
                 Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña. Revisa tu bandeja (y spam). Expira en 1 hora.
               </div>
               <a href="/login" style={{
-                display: "block", textAlign: "center", fontSize: 12,
+                display: "block", textAlign: "center", fontSize: 12, padding: "10px 6px",
                 fontWeight: 700, color: "var(--muted, #6b6b90)", textDecoration: "none",
               }}>← Volver al inicio de sesión</a>
             </div>
@@ -113,6 +113,7 @@ export default function ForgotPasswordPage() {
 
               <div style={{ textAlign: "center" }}>
                 <a href="/login" style={{
+                  display: "inline-block", padding: "8px 10px",
                   fontSize: 12, fontWeight: 600, color: "var(--muted, #6b6b90)", textDecoration: "none",
                 }}>← Volver al inicio de sesión</a>
               </div>

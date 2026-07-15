@@ -254,11 +254,11 @@ function PlanCard({ plan, onEdit, onRemove }: { plan: Plan; onEdit: () => void; 
         )}
       </div>
       <div className="flex gap-2">
-        <button onClick={onEdit} className="flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider" style={{ background: "var(--surface2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--text)" }}>
+        <button onClick={onEdit} className="flex-1 py-2 min-h-[40px] rounded-lg text-xs font-bold uppercase tracking-wider" style={{ background: "var(--surface2, #1a1a1a)", border: "1px solid var(--border, #333)", color: "var(--text)" }}>
           Editar
         </button>
         {plan.isActive && (
-          <button onClick={onRemove} className="px-3 py-2 rounded-lg text-xs font-bold inline-flex items-center justify-center" style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
+          <button onClick={onRemove} aria-label="Desactivar plan" className="px-3 py-2 min-h-[40px] min-w-[40px] rounded-lg text-xs font-bold inline-flex items-center justify-center" style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
             <X size={14} />
           </button>
         )}
@@ -282,11 +282,11 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
           <h2 className="font-syne text-2xl font-black">
             {plan.id ? "Editar plan" : "Nuevo plan"}
           </h2>
-          <button onClick={onClose} className="text-gray-500 inline-flex items-center justify-center"><X size={20} /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-gray-500 inline-flex items-center justify-center p-2 -m-2"><X size={20} /></button>
         </div>
 
         {/* Identidad */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           <Field label="Nombre interno (slug)">
             <input
               value={plan.name || ""}
@@ -309,7 +309,7 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
         </div>
 
         {/* Pricing */}
-        <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
           <Field label="Precio/mes ($)">
             <input type="number" value={plan.price} onChange={(e) => onChange({ ...plan, price: Number(e.target.value) })}
               className="w-full px-3 py-2 rounded-lg outline-none tabular-nums text-sm"
@@ -329,7 +329,7 @@ function EditorModal({ plan, onChange, onClose, onSave, saving, toggleModule }: 
         </div>
 
         {/* Límites */}
-        <div className="grid grid-cols-2 gap-3 mb-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
           <Field label="Sucursales máx (999 = ∞)">
             <input type="number" value={plan.maxLocations} onChange={(e) => onChange({ ...plan, maxLocations: Number(e.target.value) })}
               className="w-full px-3 py-2 rounded-lg outline-none tabular-nums text-sm"

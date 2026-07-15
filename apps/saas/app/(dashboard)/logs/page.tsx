@@ -127,7 +127,7 @@ export default function AlertasPage() {
   const criticalCount = allLogs.filter(l => l.severity === "CRITICAL" && !acked.has(l.id)).length;
 
   return (
-    <div className="min-h-screen bg-[#080810] text-white">
+    <div className="min-h-full bg-[#080810] text-white">
       {/* Header */}
       <div className="px-4 py-6 md:px-10">
         <div className="flex items-center justify-between mb-2">
@@ -153,20 +153,20 @@ export default function AlertasPage() {
         <div className="flex gap-2 overflow-x-auto scrollbar-hide py-4 -mx-4 px-4 no-scrollbar">
           <button
             onClick={() => setFilter("ALL")}
-            className={`px-5 py-2.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${filter === "ALL" ? "bg-brand text-white" : "bg-white/5 text-white/40 border border-white/10"}`}
+            className={`px-5 py-2.5 min-h-[40px] inline-flex items-center rounded-full text-xs font-bold whitespace-nowrap transition-all ${filter === "ALL" ? "bg-brand text-white" : "bg-white/5 text-white/40 border border-white/10"}`}
             style={filter === "ALL" ? { background: "var(--orange)" } : {}}
           >
             Todas
           </button>
           <button
             onClick={() => setFilter("CRITICAL")}
-            className={`px-5 py-2.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${filter === "CRITICAL" ? "bg-red-500 text-white" : "bg-white/5 text-white/40 border border-white/10"}`}
+            className={`px-5 py-2.5 min-h-[40px] inline-flex items-center rounded-full text-xs font-bold whitespace-nowrap transition-all ${filter === "CRITICAL" ? "bg-red-500 text-white" : "bg-white/5 text-white/40 border border-white/10"}`}
           >
             Críticas
           </button>
           <button
             onClick={() => setFilter("WARNING")}
-            className={`px-5 py-2.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${filter === "WARNING" ? "bg-amber-500 text-white" : "bg-white/5 text-white/40 border border-white/10"}`}
+            className={`px-5 py-2.5 min-h-[40px] inline-flex items-center rounded-full text-xs font-bold whitespace-nowrap transition-all ${filter === "WARNING" ? "bg-amber-500 text-white" : "bg-white/5 text-white/40 border border-white/10"}`}
           >
             Warnings
           </button>
@@ -220,7 +220,7 @@ export default function AlertasPage() {
 
 function AlertCard({ log, isAcked, onToggleAck, onInvestigate }: { log: LogEntry, isAcked: boolean, onToggleAck: () => void, onInvestigate: () => void }) {
   return (
-    <div className={`bg-surface-1 border border-white/5 rounded-2xl p-4 transition-all ${isAcked ? "opacity-40" : ""}`}>
+    <div className={`bg-white/[0.04] border border-white/5 rounded-2xl p-4 transition-all ${isAcked ? "opacity-40" : ""}`}>
       <div className="flex items-start gap-4">
         <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-xl shrink-0">
           {log.emoji}
@@ -247,13 +247,13 @@ function AlertCard({ log, isAcked, onToggleAck, onInvestigate }: { log: LogEntry
           <div className="flex gap-2">
             <button 
               onClick={onToggleAck}
-              className={`flex-1 py-2.5 rounded-xl text-[10px] font-bold flex items-center justify-center gap-2 transition-all ${isAcked ? "bg-white/5 text-white/40" : "bg-white/10 text-white hover:bg-white/20"}`}
+              className={`flex-1 py-2.5 min-h-[40px] rounded-xl text-[10px] font-bold flex items-center justify-center gap-2 transition-all ${isAcked ? "bg-white/5 text-white/40" : "bg-white/10 text-white hover:bg-white/20"}`}
             >
               {isAcked ? <CheckCircle size={12} /> : "Marcar ACK"}
             </button>
             <button 
               onClick={onInvestigate}
-              className="flex-1 py-2.5 rounded-xl text-[10px] font-bold bg-brand/10 text-brand flex items-center justify-center gap-2 hover:bg-brand/20 transition-all"
+              className="flex-1 py-2.5 min-h-[40px] rounded-xl text-[10px] font-bold flex items-center justify-center gap-2 transition-all"
               style={{ background: "var(--orange-dim)", color: "var(--orange)" }}
             >
               Investigar

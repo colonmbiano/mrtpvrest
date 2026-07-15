@@ -197,7 +197,7 @@ export default function ApiKeysPage() {
                   </td>
                   <td>
                     {k.active && (
-                      <button className="db-btn" style={{ padding:"3px 8px", fontSize:10, color:"var(--red)", borderColor:"var(--red-dim)" }}
+                      <button className="db-btn" style={{ padding:"6px 12px", fontSize:11, color:"var(--red)", borderColor:"var(--red-dim)" }}
                         onClick={() => revokeKey(k.id)}>Revocar</button>
                     )}
                   </td>
@@ -211,8 +211,8 @@ export default function ApiKeysPage() {
 
       {/* MODAL NUEVA KEY */}
       {showNew && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:50 }}>
-          <div className="db-card" style={{ width:420 }}>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:50, padding:16 }}>
+          <div className="db-card" style={{ width:420, maxWidth:"100%", maxHeight:"calc(100dvh - 32px)", overflowY:"auto" }}>
             <div className="db-card-header">
               <div className="db-card-title">Nueva API Key</div>
             </div>
@@ -256,8 +256,8 @@ export default function ApiKeysPage() {
 
       {/* ONE-TIME REVEAL */}
       {createdKey && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:60 }}>
-          <div className="db-card" style={{ width:520 }}>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:60, padding:16 }}>
+          <div className="db-card" style={{ width:520, maxWidth:"100%", maxHeight:"calc(100dvh - 32px)", overflowY:"auto" }}>
             <div className="db-card-header">
               <div className="db-card-title">Clave generada: {createdKey.name}</div>
             </div>

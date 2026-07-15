@@ -530,24 +530,33 @@ router.get('/mrr', authenticate, requireSuperAdmin, async (req, res) => {
       byPlan[key].mrr   += s.priceSnapshot;
     }
 
-    // Growth MoM basado en facturas pagadas. Si aún no hay historia suficiente, devolvemos null.
+    // Ingresos de los últimos 6 meses (facturas pagadas, agrupadas por mes) —
+    // serie real para la gráfica de evolución del dashboard. El crecimiento MoM
+    // se deriva de la misma serie (últimos dos meses).
     const now = new Date();
-    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const MONTHS_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const monthRanges = [];
+    for (let i = 5; i >= 0; i--) {
+      const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const end   = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      monthRanges.push({ start, end });
+    }
+    const monthAggs = await Promise.all(
+      monthRanges.map(({ start, end }) =>
+        prisma.invoice.aggregate({
+          _sum: { amount: true },
+          where: { status: 'PAID', paidAt: { gte: start, lt: end } },
+        })
+      )
+    );
+    const monthlyRevenue = monthRanges.map(({ start }, i) => ({
+      month:   `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`,
+      label:   MONTHS_ES[start.getMonth()],
+      revenue: Math.round((monthAggs[i]._sum.amount || 0) * 100) / 100,
+    }));
 
-    const [thisAgg, lastAgg] = await Promise.all([
-      prisma.invoice.aggregate({
-        _sum: { amount: true },
-        where: { status: 'PAID', paidAt: { gte: thisMonthStart } },
-      }),
-      prisma.invoice.aggregate({
-        _sum: { amount: true },
-        where: { status: 'PAID', paidAt: { gte: lastMonthStart, lt: thisMonthStart } },
-      }),
-    ]);
-
-    const thisRevenue = thisAgg._sum.amount || 0;
-    const lastRevenue = lastAgg._sum.amount || 0;
+    const thisRevenue = monthlyRevenue[monthlyRevenue.length - 1].revenue;
+    const lastRevenue = monthlyRevenue[monthlyRevenue.length - 2].revenue;
     const growth = lastRevenue > 0
       ? Math.round(((thisRevenue - lastRevenue) / lastRevenue) * 1000) / 10
       : null;
@@ -557,6 +566,7 @@ router.get('/mrr', authenticate, requireSuperAdmin, async (req, res) => {
       activeCount:  active.length,
       byPlan,
       growth,
+      monthlyRevenue,
       revenueThisMonth: Math.round(thisRevenue * 100) / 100,
       revenueLastMonth: Math.round(lastRevenue * 100) / 100,
     });

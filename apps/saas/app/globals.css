@@ -2,3 +2,24 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ──────────────────────────────────────────────────────────────
+   Móvil: evitar el zoom automático de iOS Safari al enfocar un
+   input. Safari hace zoom cuando el campo tiene font-size < 16px,
+   lo que descoloca el layout. Forzamos 16px SOLO en móvil (<768px)
+   para todos los campos del panel (auth + dashboard) sin cambiar
+   el look en desktop.
+   ────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="search"],
+  input:not([type]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}

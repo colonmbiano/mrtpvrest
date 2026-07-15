@@ -33,6 +33,13 @@ export default function SaaSAgent() {
     }
   }, [isOpen]);
 
+  // El botón IA de la MobileTopBar (y cualquier otro disparador) abre el agente.
+  useEffect(() => {
+    const open = () => { setIsOpen(true); setIsMinimized(false); };
+    window.addEventListener("saas:open-agent", open);
+    return () => window.removeEventListener("saas:open-agent", open);
+  }, []);
+
   const handleSend = async (text?: string) => {
     const userMsg = (text || input).trim();
     if (!userMsg || isLoading) return;
@@ -366,8 +373,8 @@ export default function SaaSAgent() {
         }
         .ai-header-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
         .ai-icon-btn {
-          width: 34px; height: 34px;
-          border-radius: 10px;
+          width: 40px; height: 40px;
+          border-radius: 11px;
           border: 1px solid transparent;
           background: transparent;
           color: var(--text2);
@@ -465,7 +472,8 @@ export default function SaaSAgent() {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          padding: 7px 12px;
+          padding: 9px 14px;
+          min-height: 38px;
           background: var(--surface2);
           border: 1px solid var(--border);
           border-radius: 999px;
@@ -519,7 +527,7 @@ export default function SaaSAgent() {
         }
         .ai-composer-wrap input::placeholder { color: var(--text3); }
         .ai-send {
-          width: 38px; height: 38px;
+          width: 40px; height: 40px;
           border-radius: 11px;
           border: none;
           background: linear-gradient(135deg, var(--orange), var(--orange2));
