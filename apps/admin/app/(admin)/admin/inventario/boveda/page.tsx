@@ -162,12 +162,8 @@ export default function BovedaPage() {
         subtitle="El dinero del negocio que ya salió de la caja. De aquí salen las compras que haces en tiendas."
         backHref="/admin/inventario"
         actions={<Button icon={Banknote} onClick={() => setOpen(true)}>Depósito o retiro</Button>}
+        mobileActions={<Button full icon={Banknote} onClick={() => setOpen(true)}>Depósito o retiro</Button>}
       />
-
-      {/* Acción en móvil (PageHeader es hidden en <md) */}
-      <div className="mb-4 md:hidden">
-        <Button full icon={Banknote} onClick={() => setOpen(true)}>Depósito o retiro</Button>
-      </div>
 
       {loading ? (
         <div className="grid gap-3 md:grid-cols-4">
