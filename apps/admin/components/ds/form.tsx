@@ -75,7 +75,7 @@ export function Toggle({
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className="relative shrink-0 rounded-full transition-transform active:scale-95"
+      className="relative shrink-0 rounded-full transition-transform active:scale-95 before:absolute before:-inset-2 before:content-['']"
       style={{
         width: 42,
         height: 25,

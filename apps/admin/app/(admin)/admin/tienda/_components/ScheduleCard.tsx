@@ -85,7 +85,7 @@ export function ScheduleCard({ config, setConfig }: Props) {
                 {WEEK_DAYS.map((d) => {
                   const h = getDayHour(d.value);
                   return (
-                    <div key={d.value} className="flex items-center gap-3 rounded-2xl px-3 py-2.5" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
+                    <div key={d.value} className="flex flex-wrap items-center gap-3 rounded-2xl px-3 py-2.5" style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}>
                       <Toggle checked={h.enabled} onChange={(v) => setDayHour(d.value, { enabled: v })} label={`${d.label} abierto`} />
                       <span className="w-20 shrink-0 text-[12.5px] font-bold text-tx">{d.label}</span>
                       {h.enabled ? (

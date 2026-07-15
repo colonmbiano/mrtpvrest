@@ -1,10 +1,41 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { Bot, MessageSquare, Plus, Send, X } from "lucide-react";
 import { Avatar, IconButton } from "@/components/ds";
 import type { Msg } from "./types";
 
 const QUICK = ["Resumir el reporte", "Enviar por email", "Predecir próxima semana"];
+
+/* Renderiza el markdown mínimo que emite el backend (**negritas** y
+   [texto](enlace)) como nodos React — sin dependencias ni innerHTML
+   (a prueba de inyección). Los saltos de línea los preserva el
+   contenedor con whitespace-pre-wrap. */
+function renderRich(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const re = /\*\*(.+?)\*\*|\[([^\]]+)\]\(([^)]+)\)/g;
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    if (m[1] !== undefined) {
+      nodes.push(<strong key={key++} className="font-bold text-tx-hi">{m[1]}</strong>);
+    } else if (m[2] !== undefined && m[3] !== undefined) {
+      const href = m[3];
+      nodes.push(
+        href.startsWith("/") ? (
+          <Link key={key++} href={href} className="font-semibold underline" style={{ color: "var(--brand-primary)" }}>{m[2]}</Link>
+        ) : (
+          <a key={key++} href={href} target="_blank" rel="noopener noreferrer" className="font-semibold underline" style={{ color: "var(--brand-primary)" }}>{m[2]}</a>
+        ),
+      );
+    }
+    last = re.lastIndex;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
 
 function OkDot() {
   return <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: "var(--ok)" }} />;
@@ -107,7 +138,7 @@ export function ChatPanel({
                 {m.role === "ai" && <Avatar initials="M" size={28} />}
                 <div className="min-w-0 flex-1">
                   <div
-                    className={`max-w-[270px] whitespace-pre-wrap rounded-ds-md px-3.5 py-2.5 text-[13px] leading-relaxed ${
+                    className={`max-w-[270px] whitespace-pre-wrap break-words rounded-ds-md px-3.5 py-2.5 text-[13px] leading-relaxed ${
                       m.role === "user" ? "ml-auto rounded-tr-[4px]" : "rounded-tl-[4px]"
                     }`}
                     style={
@@ -119,7 +150,7 @@ export function ChatPanel({
                           }
                     }
                   >
-                    {m.text}
+                    {m.role === "ai" ? renderRich(m.text) : m.text}
                   </div>
                   {m.tools && m.tools.length > 0 && (
                     <div className="mt-1.5 flex flex-col gap-1">

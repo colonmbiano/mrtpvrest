@@ -51,20 +51,23 @@ Se reemplazaron los `gridTemplateColumns` en píxeles por un patrón responsive:
 - `empleados/page.tsx` — la barra flotante de acciones masivas pasa a full-width + `flex-wrap` en móvil (antes 5 hijos sin envolver recortaban "Eliminar" y la X fuera de pantalla).
 - `rastreo/page.tsx` — el mapa `h-[520px]` fijo → `h-[62vh] min-h-[340px]`; el overlay de ruta pasa de tapar la esquina superior derecha a una barra inferior en móvil (`inset-x-3 bottom-3`, top-right en `md:`).
 
+### Segunda pasada (seguimiento)
+
+- `reportes/ia/_components/ChatPanel.tsx` — el chat ahora renderiza el markdown del backend (`**negritas**` y `[texto](enlace)`) como nodos React (sin dependencias ni `innerHTML`) y agrega `break-words` (URLs/tokens largos ya no desbordan la burbuja).
+- `reportes/ia/_components/SedesTable.tsx` · `reportes/repartidores/page.tsx` — columnas secundarias marcadas `hideBelowMd` para reducir el scroll horizontal en móvil (SedesTable deja Sede+Ventas; el reporte de repartidores oculta Teléfono/Envío/Hora).
+- `tienda/_components/ScheduleCard.tsx` · `promociones/page.tsx` — filas de horario con `flex-wrap` (los `input[type=time]` ya no se recortan).
+- `ds/form.tsx` · `Toggle` — área táctil ampliada con hit-slop (`before:-inset-2`) sin cambiar el tamaño visual.
+
 ---
 
-## Pendientes recomendados (no incluidos en esta pasada)
+## Pendientes recomendados (no incluidos)
 
 Requieren decisión de producto o QA visual; ninguno bloquea el uso:
 
 | Pantalla / componente | Hallazgo | Sev. |
 |---|---|---|
 | `components/dashboard/widgets.tsx:145` | Heatmap de horas pico `min-w-[560px]` + labels `text-[8px]` (scroll obligatorio, ilegible). Rediseñar a vista compacta móvil. | P1 |
-| `reportes/ia/_components/ChatPanel.tsx:104` | El chat pinta markdown en crudo y sin `break-words` (URLs largas desbordan). Renderizar markdown + `break-words`. | P1 |
-| `reportes/ia/_components/SedesTable.tsx:43` · `reportes/repartidores/page.tsx:139` | Tablas de reporte densas (6–8 columnas). Aplicar `hideBelowMd` o tarjetas en móvil (patrón `ItemsTable`). | P1 |
 | `zonas/page.tsx` · `DeliveryZoneMap.tsx` | Editor de polígonos: mapa de altura fija + flujo dibujar-abajo/guardar-arriba. Reordenar en móvil. | P1 |
-| `tienda/_components/ScheduleCard.tsx:88` · `promociones/page.tsx:269` | Filas de horario: `input[type=time]` sin `flex-wrap` se recortan. | P1 |
-| `ds/form.tsx:78` · `Toggle` | Área táctil 42×25 px. Ampliar hit-slop sin cambiar el tamaño visual. | P2 |
 | `ds/button.tsx` · `IconButton` | Subir de 40 → 44 px para cumplir HIG/Material del todo (evaluar impacto en filas densas). | P2 |
 | `billing/page.tsx:205` · `ventas/importar/page.tsx:206` | Rejillas de KPIs `grid-cols-2/3` apretadas + labels `text-[9.5px]`. | P2 |
 | `MobileAdminChrome.tsx:72` · `AdminTopbar.tsx:200` | Punto rojo de notificaciones hardcodeado (alerta falsa permanente). Conectar a estado real o quitar. | P2 |
