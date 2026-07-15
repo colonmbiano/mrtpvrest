@@ -7,7 +7,10 @@ const { resolveTrialDays, decoratePublicPlans } = require('../lib/promo');
 // Tenant de sistema — contenedor del SUPER_ADMIN de plataforma. Se excluye
 // de toda lista / métrica visible a clientes o super-admins del SaaS.
 const PLATFORM_TENANT_SLUG = 'mrtpvrest-platform';
-const excludePlatform = { slug: { not: PLATFORM_TENANT_SLUG } };
+// Filtro base de las vistas de gestión (Marcas, métricas, dashboard): oculta el
+// tenant de plataforma Y las cuentas DEMO (isDemo), que se gestionan aparte en
+// la pantalla /demos y no deben contar como clientes reales ni ensuciar métricas.
+const excludeHidden = { slug: { not: PLATFORM_TENANT_SLUG }, isDemo: false };
 
 // Select de la fuente canónica de módulos (ver lib/tenantModules.js).
 const TENANT_MODULES_SELECT = { select: { moduleKey: true, enabled: true, requiresPlan: true } };
@@ -172,14 +175,14 @@ router.get('/tenants', async (req, res) => {
     let tenants;
     try {
       tenants = await prisma.tenant.findMany({
-        where: excludePlatform,
+        where: excludeHidden,
         include: { ...baseInclude, tenantModules: TENANT_MODULES_SELECT },
         orderBy: { createdAt: 'desc' }
       });
     } catch (e) {
       if (!isMissingTenantModulesTable(e)) throw e;
       tenants = (await prisma.tenant.findMany({
-        where: excludePlatform,
+        where: excludeHidden,
         include: baseInclude,
         orderBy: { createdAt: 'desc' }
       })).map(t => ({ ...t, tenantModules: [] }));
@@ -570,8 +573,8 @@ router.get('/mrr', authenticate, requireSuperAdmin, async (req, res) => {
 router.get('/health', authenticate, requireSuperAdmin, async (req, res) => {
   try {
     const [tenantCount, activeSub, orderCount24h, revenue24hAgg] = await Promise.all([
-      prisma.tenant.count({ where: excludePlatform }),
-      prisma.subscription.count({ where: { status: { in: ['ACTIVE', 'TRIAL'] }, tenant: excludePlatform } }),
+      prisma.tenant.count({ where: excludeHidden }),
+      prisma.subscription.count({ where: { status: { in: ['ACTIVE', 'TRIAL'] }, tenant: excludeHidden } }),
       prisma.order.count({ where: { createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
       prisma.order.aggregate({
         _sum: { total: true },
@@ -598,7 +601,7 @@ router.get('/top-tenants', authenticate, requireSuperAdmin, async (req, res) => 
     const limit = Math.min(parseInt(req.query.limit, 10) || 5, 50);
 
     const subs = await prisma.subscription.findMany({
-      where: { status: { in: ['ACTIVE', 'PAST_DUE'] }, tenant: excludePlatform },
+      where: { status: { in: ['ACTIVE', 'PAST_DUE'] }, tenant: excludeHidden },
       orderBy: { priceSnapshot: 'desc' },
       take: limit,
       include: {
@@ -639,7 +642,7 @@ router.get('/new-tenants', authenticate, requireSuperAdmin, async (req, res) => 
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
     const tenants = await prisma.tenant.findMany({
-      where: { createdAt: { gte: since }, ...excludePlatform },
+      where: { createdAt: { gte: since }, ...excludeHidden },
       orderBy: { createdAt: 'desc' },
       take: limit,
       select: {
