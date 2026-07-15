@@ -58,7 +58,7 @@ export function ReactionButton({
       onClick={onClick}
       aria-pressed={reacted}
       aria-label={reacted ? "Quitar me gusta" : "Me gusta"}
-      className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-bold transition-transform active:scale-90"
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-bold transition-transform active:scale-90"
       style={{
         background: reacted ? accent : "rgba(0,0,0,0.06)",
         color: reacted ? "#fff" : "inherit",

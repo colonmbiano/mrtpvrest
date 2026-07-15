@@ -27,7 +27,7 @@ export default async function manifest({
     display: 'standalone',
     orientation: 'portrait',
     theme_color: tenant.themeColor,
-    background_color: '#000000',
+    background_color: '#ffffff',
     lang: 'es-MX',
     dir: 'ltr',
     categories: ['food', 'shopping', 'lifestyle'],

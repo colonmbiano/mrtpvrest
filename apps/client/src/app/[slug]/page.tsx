@@ -80,16 +80,16 @@ function normalizeTheme(raw?: string | null): 'MOCHI' | 'MUNDIALISTA' | 'ANTOJIT
 }
 
 async function fetchStore(slug: string): Promise<StoreInfo | null> {
-  try {
-    const res = await fetch(
-      `${API}/api/store/info?r=${encodeURIComponent(slug)}`,
-      { next: { revalidate: 0 } }
-    );
-    if (!res.ok) return null;
-    return (await res.json()) as StoreInfo;
-  } catch {
-    return null;
-  }
+  const res = await fetch(
+    `${API}/api/store/info?r=${encodeURIComponent(slug)}`,
+    { next: { revalidate: 0 } }
+  );
+  // 404 = la tienda no existe → notFound()/not-found.tsx. Cualquier otro fallo
+  // (red / 5xx) se PROPAGA para que lo capture error.tsx (con reintento), en vez
+  // de mostrarse como un 404 permanente ante un problema transitorio.
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`store/info respondió ${res.status}`);
+  return (await res.json()) as StoreInfo;
 }
 
 async function fetchMenu(slug: string) {
@@ -127,7 +127,9 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const store = await fetchStore(slug);
+  // metadata no debe caer si /store/info falla: degrada a defaults.
+  let store: StoreInfo | null = null;
+  try { store = await fetchStore(slug); } catch { /* usa defaults */ }
   const name = store?.name ?? 'Tienda';
   const base = `https://${slug}.mrtpvrest.com`;
   const description = `Haz tu pedido en línea en ${name}. Rápido y fácil, directo a tu domicilio.`;
@@ -171,7 +173,9 @@ export async function generateViewport({
   params: Promise<{ slug: string }>;
 }): Promise<Viewport> {
   const { slug } = await params;
-  const store = await fetchStore(slug);
+  // viewport no debe caer si /store/info falla: degrada a defaults.
+  let store: StoreInfo | null = null;
+  try { store = await fetchStore(slug); } catch { /* usa defaults */ }
   return {
     width: 'device-width',
     initialScale: 1,

@@ -22,7 +22,7 @@ export function LanguageSwitcher({ accent = "var(--brand-primary)", compact = fa
             type="button"
             onClick={() => setLang(l.code)}
             aria-pressed={active}
-            className="rounded-full px-2 py-1 text-[11px] font-extrabold transition-colors"
+            className="rounded-full px-3 py-1.5 text-xs font-extrabold transition-colors"
             style={{ background: active ? accent : "transparent", color: active ? "#fff" : "inherit" }}
           >
             {compact ? l.label : `${l.flag} ${l.label}`}

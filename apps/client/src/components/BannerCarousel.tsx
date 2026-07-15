@@ -255,7 +255,7 @@ export default function BannerCarousel({ banners, variant = 'light', accent = '#
                 aria-current={isActive ? 'true' : undefined}
                 onClick={() => { nudge(); setActive(i); scrollToIndex(i); }}
                 className="bc-dot grid place-items-center shrink-0"
-                style={{ width: 28, height: 44 }}
+                style={{ width: 40, height: 44 }}
               >
                 <span className="relative block">
                   <span
