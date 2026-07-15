@@ -176,6 +176,7 @@ export async function generateViewport({
     width: 'device-width',
     initialScale: 1,
     themeColor: store?.primaryColor || '#ff5c35',
+    viewportFit: 'cover',
   };
 }
 

@@ -66,8 +66,8 @@ export default function InstallPWABanner({
     <div
       role="dialog"
       aria-label="Instalar aplicación"
-      className="fixed inset-x-3 bottom-3 z-[60] mx-auto max-w-md
-                 bg-white/10 border border-white/20 backdrop-blur-md
+      className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-30 mx-auto max-w-md
+                 bg-[#0c0c0e]/95 border border-white/15 backdrop-blur-md
                  rounded-xl shadow-2xl text-white
                  animate-in slide-in-from-bottom-5 fade-in duration-300"
     >
@@ -100,8 +100,8 @@ export default function InstallPWABanner({
         <button
           onClick={() => dismiss(true)}
           aria-label="Cerrar"
-          className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center
-                     text-white/60 hover:text-white hover:bg-white/10 transition"
+          className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center
+                     text-white/70 hover:text-white hover:bg-white/10 transition"
         >
           <X size={14} />
         </button>

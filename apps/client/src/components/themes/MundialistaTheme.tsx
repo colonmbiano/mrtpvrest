@@ -305,7 +305,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
 
       {/* Barra inferior (móvil) */}
       {quantity > 0 && !cartOpen && (
-        <div className="lg:hidden fixed bottom-3 left-3 right-3 z-40">
+        <div className="lg:hidden fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-3 right-3 z-40">
           <button onClick={() => setCartOpen(true)}
             className="w-full flex items-center justify-between pl-4 pr-2 py-2 rounded-[16px] font-bold active:scale-[0.99] transition"
             style={{ background: SURF, border: `1px solid ${GOLD_BD}`, boxShadow: '0 16px 36px rgba(0,0,0,0.5)' }}>
@@ -697,9 +697,9 @@ function ComboCard({ p, onOpen }: { p: any; onOpen: () => void }) {
           <span className="font-extrabold text-[16px]" style={{ color: GOLD }}>{fmt(price)}</span>
           {line ? (
             <div className="flex items-center gap-1 rounded-full px-1 py-0.5" style={{ background: SURF2 }}>
-              <button onClick={() => remove(p.id)} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ color: '#FFFFFFcc' }}>{line.quantity > 1 ? <Minus className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}</button>
+              <button onClick={() => remove(p.id)} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ color: '#FFFFFFcc' }}>{line.quantity > 1 ? <Minus className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}</button>
               <span className="text-[13px] font-extrabold w-3.5 text-center">{line.quantity}</span>
-              <button onClick={() => add({ id: p.id, menuItemId: p.id, name: p.name, price })} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: GOLD, color: '#1A1206' }}><Plus className="w-3 h-3" /></button>
+              <button onClick={() => add({ id: p.id, menuItemId: p.id, name: p.name, price })} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: GOLD, color: '#1A1206' }}><Plus className="w-3 h-3" /></button>
             </div>
           ) : (
             <button onClick={onOpen} className="flex items-center gap-1 pl-2.5 pr-2 py-1.5 rounded-full font-bold text-[12px]" style={{ background: GOLD, color: '#1A1206' }}>Agregar <Plus className="w-3.5 h-3.5" /></button>
@@ -757,9 +757,9 @@ function CartLines({ allItems, accent }: { allItems: any[]; accent: string }) {
               <p className="text-[13px] font-extrabold mt-0.5" style={{ color: accent }}>{fmt(l.price)}</p>
             </div>
             <div className="flex items-center gap-0.5 rounded-full px-1 py-1 shrink-0" style={{ background: BG }}>
-              <button onClick={() => remove(l.id)} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ color: '#FFFFFFcc' }} aria-label="Quitar">{l.quantity > 1 ? <Minus className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}</button>
+              <button onClick={() => remove(l.id)} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ color: '#FFFFFFcc' }} aria-label="Quitar">{l.quantity > 1 ? <Minus className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}</button>
               <span className="text-[13px] font-extrabold w-4 text-center">{l.quantity}</span>
-              <button onClick={() => add({ id: l.id, menuItemId: l.menuItemId, name: l.name, price: l.price, variantId: l.variantId, modifierIds: l.modifierIds })} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: accent, color: '#1A1206' }} aria-label="Agregar"><Plus className="w-3 h-3" /></button>
+              <button onClick={() => add({ id: l.id, menuItemId: l.menuItemId, name: l.name, price: l.price, variantId: l.variantId, modifierIds: l.modifierIds })} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: accent, color: '#1A1206' }} aria-label="Agregar"><Plus className="w-3 h-3" /></button>
             </div>
           </div>
         );
