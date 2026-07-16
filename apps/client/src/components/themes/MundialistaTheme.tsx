@@ -16,6 +16,7 @@ import { ReactionButton } from '../ReactionButton';
 import { StoreLocaleProvider, useMoney, useLang } from '../StoreLocaleContext';
 import { LanguageSwitcher } from '../LanguageSwitcher';
 import StoreCheckout from '../StoreCheckout';
+import MyOrdersModal from '../MyOrdersModal';
 import type { DeliveryConfig } from '../../lib/delivery';
 import {
   getAuth, clearAuth, loginCustomer, registerCustomer, type AuthState,
@@ -134,6 +135,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
   const [orderMode, setOrderMode] = useState<OrderMode>('DELIVERY');
   const [featTab, setFeatTab] = useState<'pop' | 'promo' | 'all'>('all');
   const [auth, setAuthState] = useState<AuthState | null>(null);
+  const [myOrdersOpen, setMyOrdersOpen] = useState(false);
 
   useEffect(() => { setAuthState(getAuth(slug)); }, [slug]);
 
@@ -217,7 +219,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
         <Header
           info={info} waNumber={waNumber} quantity={quantity} total={total} cityLabel={cityLabel}
           query={query} setQuery={setQuery} orderMode={orderMode} setOrderMode={setOrderMode}
-          auth={auth} onLogin={() => setLoginOpen(true)}
+          auth={auth} onLogin={() => setLoginOpen(true)} onMyOrders={() => setMyOrdersOpen(true)}
           onSignOut={() => { clearAuth(slug); setAuthState(null); }}
           onCart={() => setCartOpen(true)} onWhatsApp={orderByWhatsApp}
         />
@@ -336,6 +338,9 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
         onlinePayment={info.onlinePayment} initialOrderType={info.dineIn ? 'DINE_IN' : orderMode} whatsappOrder={info.whatsappOrder}
         lockedTable={info.dineIn?.table} lockedLocationId={info.dineIn?.locationId} />
 
+      <MyOrdersModal open={myOrdersOpen} onClose={() => setMyOrdersOpen(false)} slug={slug} primary={GOLD}
+        products={allItems} onReordered={() => setCheckoutOpen(true)} />
+
       <style dangerouslySetInnerHTML={{ __html: `.no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}` }} />
     </div>
     </StoreLocaleProvider>
@@ -345,7 +350,7 @@ export function MundialistaTheme({ data }: MundialistaThemeProps) {
 // ══════════════════════════════════════════════════════════════════════════════
 //  HEADER
 // ══════════════════════════════════════════════════════════════════════════════
-function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, orderMode, setOrderMode, auth, onLogin, onSignOut, onCart, onWhatsApp }: any) {
+function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, orderMode, setOrderMode, auth, onLogin, onMyOrders, onSignOut, onCart, onWhatsApp }: any) {
   const fmt = useMoney();
   const { t } = useLang();
   return (
@@ -400,6 +405,13 @@ function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, o
           )}
 
           {/* Login */}
+          {auth && onMyOrders && (
+            <button onClick={onMyOrders} className="flex items-center gap-1.5 px-2.5 h-10 rounded-full shrink-0" style={{ background: SURF2, border: `1px solid ${BORDER}` }} title="Mis pedidos · volver a pedir">
+              <span className="text-base leading-none">🧾</span>
+              <span className="hidden lg:block text-[12px] font-semibold" style={{ color: TEXT }}>Mis pedidos</span>
+            </button>
+          )}
+
           <button onClick={auth ? onSignOut : onLogin} className="hidden sm:flex items-center gap-1.5 px-2.5 h-10 rounded-full shrink-0" style={{ background: SURF2, border: `1px solid ${BORDER}` }} title={auth ? 'Cerrar sesión' : 'Iniciar sesión'}>
             <User className="w-5 h-5" style={{ color: auth ? GOLD : TEXT }} />
             <span className="hidden lg:block text-[12px] font-semibold max-w-[90px] truncate">{auth ? auth.customer.name.split(' ')[0] : 'Iniciar sesión'}</span>
