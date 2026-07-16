@@ -372,6 +372,8 @@ model Restaurant {
   @@map("restaurants")
   // RETAIL · núcleo separado para tiendas de ropa/SKU. No reutiliza MenuItem
   // ni Ingredient para evitar acoplar el TPV retail al dominio restaurante.
+  // Multigiro: el mismo núcleo sirve ropa, ferretería y refaccionaria; el giro
+  // vive en RestaurantConfig.retailGiro (ver docs/plan-retail-multigiro.md).
   retailProducts       RetailProduct[]
   retailSkus           RetailSku[]
   retailStockBalances  RetailStockByLocation[]
@@ -381,6 +383,9 @@ model Restaurant {
   retailDevices        RetailDevice[]
   retailSyncOutbox     RetailSyncOutbox[]
   retailCashShifts     RetailCashShift[]
+  retailPriceTiers     RetailPriceTier[]
+  retailFitments       RetailFitment[]
+  retailCrossRefs      RetailCrossRef[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3861,7 +3866,8 @@ model RetailProduct {
   imageUrl    String?
   isActive    Boolean @default(true)
 
-  skus RetailSku[]
+  skus     RetailSku[]
+  fitments RetailFitment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3908,6 +3914,8 @@ model RetailSku {
   movements     RetailStockMovement[]
   saleLines     RetailSaleLine[]
   transferItems RetailTransferItem[]
+  priceTiers    RetailPriceTier[]
+  crossRefs     RetailCrossRef[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -4209,6 +4217,82 @@ model RetailCashMovement {
 
   @@index([shiftId])
   @@map("retail_cash_movements")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RETAIL MULTIGIRO · ferretería y refaccionaria
+// Ver docs/plan-retail-multigiro.md. Todos con restaurantId ⇒ van en
+// SCOPED_MODELS de packages/database/tenant-guard.js (tenant-guard.test.js
+// falla si se olvida).
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Precio por volumen (mayoreo). Ferretería/refaccionaria: "de 100 pzas en
+/// adelante, a $X". El tier aplicable lo resuelve SIEMPRE el backend al armar la
+/// línea de venta (dinero server-side): el cliente nunca manda precio.
+model RetailPriceTier {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  skuId        String
+  sku          RetailSku  @relation(fields: [skuId], references: [id], onDelete: Cascade)
+
+  /// Cantidad mínima para que aplique el precio. Decimal(12,3) como el resto de
+  /// las cantidades: permite tiers de granel (a partir de 2.5 kg).
+  minQty Decimal @db.Decimal(12, 3)
+  /// Precio unitario a partir de minQty. Decimal, nunca Float ni @db.Money.
+  price  Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  /// Un solo precio por (sku, minQty): dos tiers con el mismo mínimo harían la
+  /// resolución dependiente del orden de inserción.
+  @@unique([skuId, minQty])
+  @@index([skuId, minQty])
+  @@index([restaurantId])
+  @@map("retail_price_tiers")
+}
+
+/// Compatibilidad marca-modelo-año (fitment). Refaccionaria: "esta balata entra
+/// en Nissan Versa 2012-2019". Cuelga del PRODUCTO, no del SKU: la compatibilidad
+/// es del artículo, no de su presentación.
+model RetailFitment {
+  id           String        @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  productId    String
+  product      RetailProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  make     String
+  model    String?
+  yearFrom Int?
+  yearTo   Int?
+  engine   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([restaurantId, make, model])
+  @@index([productId])
+  @@map("retail_fitments")
+}
+
+/// Equivalencias / cross-reference de número de parte. Refaccionaria: el cliente
+/// llega con el número de otra marca y hay que resolver a nuestro SKU.
+model RetailCrossRef {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  skuId        String
+  sku          RetailSku  @relation(fields: [skuId], references: [id], onDelete: Cascade)
+
+  brand      String?
+  partNumber String
+
+  createdAt DateTime @default(now())
+
+  /// La misma parte de la misma marca no se registra dos veces para un SKU.
+  @@unique([skuId, brand, partNumber])
+  @@index([restaurantId, partNumber])
+  @@map("retail_cross_refs")
 }
 
 
