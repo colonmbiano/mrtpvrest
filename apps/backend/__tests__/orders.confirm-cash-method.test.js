@@ -8,7 +8,8 @@
 
 jest.mock('@mrtpvrest/database', () => ({
   prisma: {
-    order: { update: jest.fn(), findUnique: jest.fn() },
+    order: { update: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn() },
+    cashShift: { findFirst: jest.fn() },
   },
 }));
 
@@ -51,6 +52,10 @@ beforeEach(() => {
   prisma.order.update.mockImplementation(async ({ data }) => ({
     id: 'o1', restaurantId: 'r1', locationId: 'loc1', orderNumber: 101, total: 250, ...data,
   }));
+  // Cobro atribuye al turno abierto: por default, sin turno abierto (no estampa
+  // shiftId, no altera las aserciones existentes de este archivo).
+  prisma.order.findFirst.mockResolvedValue({ locationId: 'loc1' });
+  prisma.cashShift.findFirst.mockResolvedValue(null);
 });
 
 describe('PUT /api/orders/:id/confirm-cash', () => {

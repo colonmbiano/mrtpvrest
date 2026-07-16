@@ -7,8 +7,9 @@
 
 jest.mock('@mrtpvrest/database', () => {
   const tx = {
-    order: { update: jest.fn() },
+    order: { update: jest.fn(), findFirst: jest.fn() },
     paymentTransaction: { deleteMany: jest.fn(), createMany: jest.fn() },
+    cashShift: { findFirst: jest.fn() },
   };
   return {
     prisma: {
@@ -55,6 +56,10 @@ beforeEach(() => {
   tx.order.update.mockImplementation(async ({ data }) => ({
     id: 'o1', restaurantId: 'r1', locationId: 'loc1', ...data,
   }));
+  // Cobro atribuye al turno abierto: por default, sin turno abierto (no estampa
+  // shiftId, no altera las aserciones existentes de este archivo).
+  tx.order.findFirst.mockResolvedValue({ locationId: 'loc1' });
+  tx.cashShift.findFirst.mockResolvedValue(null);
 });
 
 describe('PUT /:id/payment · cobro mixto', () => {
