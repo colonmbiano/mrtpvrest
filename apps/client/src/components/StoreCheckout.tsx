@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useCart } from '../lib/cartStore';
+import { authHeader } from '../lib/customerAuth';
 import { getApiUrl } from '../lib/config';
 import { computeDeliveryPreview, type DeliveryConfig } from '../lib/delivery';
 import { MapLocationPicker } from './MapLocationPicker';
@@ -234,7 +235,10 @@ export default function StoreCheckout({
     setIsSubmitting(true);
     try {
       const res = await fetch(`${API}/api/store/orders?r=${encodeURIComponent(slug)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        // authHeader: si el cliente tiene sesión, el token viaja y el backend
+        // (resolveCustomerId) liga el pedido a su cuenta → aparece en "Mis
+        // pedidos" y acumula lealtad. Sin sesión va vacío (pedido de invitado).
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeader(slug) },
         body: JSON.stringify({
           customerName, customerPhone,
           customerEmail: customerEmail.trim() || undefined,

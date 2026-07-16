@@ -1958,7 +1958,22 @@ router.get('/customer/orders', authenticate, requireCustomer, async (req, res) =
       select: {
         id: true, orderNumber: true, status: true, orderType: true, total: true,
         paymentStatus: true, pointsEarned: true, createdAt: true,
-        items: { select: { name: true, price: true, quantity: true } },
+        // Datos de entrega/contacto → el "Volver a pedir" los reusa como
+        // dirección/nombre guardados (cross-device, no solo el localStorage del
+        // dispositivo). Solo DELIVERY tiene dirección.
+        customerName: true, customerPhone: true,
+        deliveryAddress: true, deliveryLat: true, deliveryLng: true,
+        // menuItemId + modificadores + nota → el cliente reconstruye el carrito
+        // contra el menú vigente para "Volver a pedir" (el precio real lo
+        // recalcula el backend al recrear la orden). La variante NO se persiste
+        // como id (va dentro de `name` como "Producto (Variante)"); el reorder la
+        // vuelve a matchear por nombre contra el menú actual.
+        items: {
+          select: {
+            menuItemId: true, name: true, price: true, quantity: true, notes: true,
+            modifiers: { select: { modifierId: true, name: true } },
+          },
+        },
       },
     });
     res.json(orders);
