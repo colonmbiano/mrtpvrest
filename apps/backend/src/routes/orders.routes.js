@@ -1732,11 +1732,36 @@ async function releaseTableIfDineIn(orderId) {
   await releaseTableAfterPayment(prisma, orderId).catch(() => {});
 }
 
+// Turno de caja al que se atribuye un COBRO. El dinero entra a la caja cuando
+// se COBRA, no cuando se abrió la cuenta: por eso el shiftId se (re)estampa aquí
+// con el turno ABIERTO de la sucursal en el momento del cobro, y NO con el de
+// creación de la orden (Order.shiftId original, ver POST /tpv). Sin esto, una
+// cuenta abierta en un turno y cobrada en otro (p. ej. mesa que quedó a deber y
+// se salda días después, o un merge hacia una cuenta vieja) quedaba pegada al
+// turno viejo —ya cerrado— y su dinero no aparecía en NINGÚN corte.
+// Devuelve el id del turno abierto, o null si no hay turno/locationId (en ese
+// caso el caller NO pisa el shiftId existente).
+async function openShiftIdForCobro(client, locationId) {
+  if (!locationId) return null;
+  const shift = await client.cashShift.findFirst({
+    where: { locationId, isOpen: true },
+    orderBy: { openedAt: 'desc' },
+    select: { id: true },
+  });
+  return shift?.id || null;
+}
+
 router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER'), async (req, res) => {
   try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    // Atribuir el cobro al turno abierto AHORA (ver openShiftIdForCobro).
+    const existing = await prisma.order.findFirst({
+      where: { id: req.params.id, restaurantId }, select: { locationId: true },
+    });
+    const cobroShiftId = existing ? await openShiftIdForCobro(prisma, existing.locationId) : null;
     const order = await prisma.order.update({
-      where: { id: req.params.id, restaurantId: req.restaurantId || req.user?.restaurantId },
-      data: { status: 'CONFIRMED', paidAt: new Date(), paymentStatus: 'PAID' },
+      where: { id: req.params.id, restaurantId },
+      data: { status: 'CONFIRMED', paidAt: new Date(), paymentStatus: 'PAID', ...(cobroShiftId ? { shiftId: cobroShiftId } : {}) },
       include: { user: true }
     });
     await releaseTableIfDineIn(order.id);
@@ -1820,8 +1845,14 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
     const rawMethod = String(req.body?.paymentMethod || 'CASH').toUpperCase();
     const method = ['CASH', 'TRANSFER', 'CARD', 'OTHER'].includes(rawMethod) ? rawMethod : 'CASH';
     const isCash = method === 'CASH';
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    // Atribuir el cobro al turno abierto AHORA (ver openShiftIdForCobro).
+    const existing = await prisma.order.findFirst({
+      where: { id: req.params.id, restaurantId }, select: { locationId: true },
+    });
+    const cobroShiftId = existing ? await openShiftIdForCobro(prisma, existing.locationId) : null;
     const order = await prisma.order.update({
-      where: { id: req.params.id, restaurantId: req.restaurantId || req.user?.restaurantId },
+      where: { id: req.params.id, restaurantId },
       data: {
         paymentMethod: method,
         cashCollected: isCash,
@@ -1829,6 +1860,7 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
         paymentStatus: 'PAID',
         paidAt: new Date(),
         status: 'DELIVERED',
+        ...(cobroShiftId ? { shiftId: cobroShiftId } : {}),
       }
     });
 
@@ -1980,6 +2012,12 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
     }
 
     const order = await prisma.$transaction(async (tx) => {
+      // Atribuir el cobro al turno abierto AHORA, no al de creación (ver
+      // openShiftIdForCobro). Se resuelve dentro de la $transaction del cobro.
+      const target = await tx.order.findFirst({
+        where: { id: req.params.id, restaurantId }, select: { locationId: true },
+      });
+      const cobroShiftId = target ? await openShiftIdForCobro(tx, target.locationId) : null;
       let resolvedMethod;
       let cashCollected;
       if (tenderResult) {
@@ -2017,6 +2055,7 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
           // La propina del cobro mixto sí se persiste (mejora el cuadre del
           // cajón vs. el método único, que la deja informativa en notas).
           ...(tenderResult && Number(tip) > 0 ? { tip: Number(tip) } : {}),
+          ...(cobroShiftId ? { shiftId: cobroShiftId } : {}),
         },
       });
     });
@@ -2090,6 +2129,8 @@ router.post('/:id/charge-to-employee',
       const note = typeof req.body?.note === 'string' ? req.body.note.slice(0, 300) : null;
 
       const result = await prisma.$transaction(async (tx) => {
+        // Atribuir el cobro al turno abierto AHORA (ver openShiftIdForCobro).
+        const cobroShiftId = await openShiftIdForCobro(tx, order.locationId);
         const updatedOrder = await tx.order.update({
           where: { id: order.id },
           data: {
@@ -2101,6 +2142,7 @@ router.post('/:id/charge-to-employee',
             total,
             cashCollected: false,
             cashCollectedAt: null,
+            ...(cobroShiftId ? { shiftId: cobroShiftId } : {}),
           },
         });
         const charge = await tx.employeeCharge.create({
@@ -2977,3 +3019,4 @@ module.exports = router;
 module.exports.discountInventory = discountInventory;
 module.exports.restoreInventoryForCancelledOrder = restoreInventoryForCancelledOrder;
 module.exports.resolveRecipeFlatItems = resolveRecipeFlatItems;
+module.exports.openShiftIdForCobro = openShiftIdForCobro;
