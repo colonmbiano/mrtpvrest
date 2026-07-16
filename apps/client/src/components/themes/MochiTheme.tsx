@@ -395,7 +395,7 @@ function Header({ info, accent, waNumber, quantity, total, query, setQuery, orde
           )}
 
           {auth && onMyOrders && (
-            <button onClick={onMyOrders} className="hidden sm:flex items-center gap-1.5 px-3 h-11 rounded-full shrink-0" style={{ background: '#fff', border: `1.5px solid ${CARD_BD}` }} title="Mis pedidos · volver a pedir">
+            <button onClick={onMyOrders} className="flex items-center gap-1.5 px-3 h-11 rounded-full shrink-0" style={{ background: '#fff', border: `1.5px solid ${CARD_BD}` }} title="Mis pedidos · volver a pedir">
               <span className="text-base leading-none">🧾</span>
               <span className="hidden lg:block text-[12.5px] font-bold" style={{ color: INK }}>Mis pedidos</span>
             </button>
