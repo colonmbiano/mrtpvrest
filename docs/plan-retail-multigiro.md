@@ -297,16 +297,42 @@ engañoso: `page.jsx` son 1694 líneas con ~15 componentes que comparten el shap
   elegir giro y marcarlo (`PUT /api/locations/:id/business-type` — ya existe RETAIL; si se
   quiere granularidad, extender el enum `BusinessType` o guardar el giro fino en config).
 - Copys/íconos/tema por giro desde `giro.ts` (título "Ferretería", "Refaccionaria").
-- Landing: **bloqueada por la decisión de branding de abajo — no es mecánica.**
-  El patrón existe (`apps/landing/app/moda/[giro]/page.tsx`, ruta dinámica con
-  `generateStaticParams` + `generateMetadata` + JSON-LD de `BreadcrumbList`/`FAQPage`,
-  más `apps/landing/app/moda/giros/`, alimentadas por `modaVerticals` /
-  `getModaVertical` en `apps/landing/app/_data/moda-verticals.ts`).
-  **Pero `modaVerticals` son sub-nichos de ROPA** (boutique, zapatería…) bajo `/moda/*`,
-  con copy y metaTitle de "punto de venta para ropa". Agregar ferretería ahí publicaría
-  *"Punto de Venta para Ferretería | MODA+"* colgando de `/moda/ferreteria`, que es
-  incoherente de marca y de SEO. Ferretería/refaccionaria no son verticales de MODA+:
-  son **otro producto** (Retail+). Requiere decidir marca/ruta antes de escribir copy.
+
+### Landing: dos niveles de "giro" (ojo con la palabra)
+
+La landing **ya usaba** la palabra *giro* antes que este plan, y con otro significado.
+Hay que tener los dos niveles claros o el trabajo de SEO se planea mal:
+
+| Nivel | Qué es | Dónde vive |
+|---|---|---|
+| **Giro amplio** | Decide el **modelo de datos**: qué atributos tiene un SKU. | `RestaurantConfig.retailGiro` = `ROPA` / `FERRETERIA` / `REFACCIONARIA` (este plan) |
+| **Giro fino** | Long tail de búsqueda. Es lo que **captura tráfico**. | `_data/*-verticals.ts` → boutique, zapatería… / tlapalería, plomería… (`eyebrow: 'Giro · Boutique'`) |
+
+⇒ `retailGiro` **no compite** con `modaVerticals`: es su **padre**. `ROPA` es el giro
+amplio cuyos giros finos son boutique/zapatería/lencería…
+
+**Arquitectura elegida:** una **sección hermana de `/moda`** por giro amplio, bajo la
+marca madre. `/moda` **no se toca** — ya tiene equity (7 verticales + guías +
+comparativas + subdominio, todo en el sitemap); moverlo bajo un `/retail` paraguas
+serían 301s a cambio de nada.
+
+**Por qué NO `/moda/ferreteria`** (no es estética): `moda/[giro]/page.tsx` emite un
+`BreadcrumbList` con `position: 2, name: 'MODA+ · Punto de venta para ropa'`. Una página
+de ferretería ahí heredaría **structured data declarando que es un POS de ropa** — SEO
+activamente en contra.
+
+**Implementado (Fase 5):** `/ferreteria` (hub, ataca "punto de venta para ferretería")
++ `/ferreteria/[giro]` con 5 giros finos (tlapalería, material eléctrico, plomería,
+pinturas, materiales de construcción) en `_data/ferreteria-verticals.ts`, más el
+sitemap. Sin subdominio ni marca nueva: se paga ese costo cuando un giro convierta.
+
+**Refaccionaria: pendiente a propósito.** El propio plan dice "MVP: validar **un** giro".
+Cuando toque, es clonar `/ferreteria` (y ahí sí conviene extraer el componente
+compartido: a la segunda sección, no a la primera).
+
+> ⚠️ **Los slugs finos son hipótesis, no keyword research.** tlapalería / material
+> eléctrico / plomería / pinturas / materiales de construcción se eligieron por criterio
+> de negocio, sin datos de volumen. Validar antes de invertir más copy.
 - **Decisión de branding pendiente:** ¿una sola app "Retail+" multigiro (recomendado) o
   dominios/APK separados por giro (`ferreteria.mrtpvrest.com`)? El código es el mismo; solo
   cambia el `giro` inicial y el branding.
