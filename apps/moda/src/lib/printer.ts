@@ -120,8 +120,11 @@ export function buildReceipt(sale: ReceiptInput, cfg = getPrinterConfig()): stri
 
 export interface LabelInput {
   name: string;
-  color?: string;
-  size?: string;
+  /** Atributos ya resueltos por el giro y en su orden ("Acero · 1/2\""). La
+   *  etiqueta no sabe de talla ni color: el llamador decide qué imprimir. */
+  attrs?: (string | null | undefined)[];
+  /** Unidad de venta (PZA|MTS|KG|LTS|CAJA). Se omite en PZA por ser el default. */
+  unit?: string | null;
   price: number;
   code: string;
   sku: string;
@@ -129,13 +132,16 @@ export interface LabelInput {
 
 export function buildLabel(label: LabelInput, copies = 1, cfg = getPrinterConfig()): string {
   let r = "";
+  const variant = (label.attrs || []).filter(Boolean).join(" / ");
+  const priceLine = label.unit && label.unit !== "PZA"
+    ? `${money(label.price)} / ${label.unit}`
+    : money(label.price);
   for (let i = 0; i < Math.max(1, copies); i++) {
     r += CMD.INIT + CMD.ALIGN_C;
     r += CMD.BOLD_ON + ascii(cfg.storeName) + CMD.BOLD_OFF + "\n";
     r += ascii(label.name).slice(0, 32) + "\n";
-    const variant = [label.color, label.size].filter(Boolean).join(" / ");
-    if (variant) r += variant + "\n";
-    r += CMD.BIG + money(label.price) + CMD.NORMAL + "\n";
+    if (variant) r += ascii(variant).slice(0, 32) + "\n";
+    r += CMD.BIG + priceLine + CMD.NORMAL + "\n";
     r += code128(label.code) + "\n" + ascii(label.code) + "\n";
     r += ascii(label.sku) + "\n";
     r += CMD.feed(3) + CMD.CUT;

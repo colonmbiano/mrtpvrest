@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef, useMemo, createContext, useContext } from "react";
 import * as Retail from "@/lib/retail";
 import { getApiUrl, setApiUrl } from "@/lib/config";
-import { getTenant, setTenant } from "@/lib/tenant";
+import { getTenant, setTenant, getGiro } from "@/lib/tenant";
+import { DEFAULT_GIRO, giroConfig, sizesFor, attrLabel, isBulkUnit } from "@/lib/giro";
 import { getToken } from "@/lib/token-vault";
 import { buildReceipt, buildLabel, printEscpos, getPrinterConfig, setPrinterIp } from "@/lib/printer";
 
@@ -65,7 +66,10 @@ function Icon({ n, s = 18, c = "currentColor", sw = 1.9, cls = "" }) {
 
 /* ---------------- helpers + demo data ---------------- */
 const mx = (n) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n || 0);
-const SIZES = ["XS","S","M","L","XL"];
+// El eje de tallas/medidas y las etiquetas de atributos salen del giro, no de un
+// hardcode de ropa. `useGiro()` re-lee al montar para que el POS no arranque en
+// ropa cuando el tenant es ferretería.
+const useGiro = () => { const [g,setG]=useState(DEFAULT_GIRO); useEffect(()=>{ setG(getGiro()); },[]); return g; };
 const swatch = { Beige:"#d8c4ab", Blanco:"#f1f1ee", "Verde Olivo":"#5a6b3e", Negro:"#23262a", Gris:"#9aa0a3", "Azul Claro":"#9db7d4", Camel:"#b08456", Perla:"#e8e3d8", Canela:"#9a5b33" };
 
 const PRODUCTS = [
@@ -423,15 +427,21 @@ function ReceiptModal({ sale, onClose }) {
     </div></Modal>);
 }
 
-function LabelModal({ sku, onClose }) {
+function LabelModal({ sku, color, size, onClose }) {
   const [qty,setQty]=useState(1);
-  const code = sku.barcode || sku.sku;
+  const giro=useGiro();
+  // El código debe ser el de la VARIANTE seleccionada. Antes se usaba
+  // `sku.barcode` (el del primer SKU del producto) para todas las tallas, así que
+  // la etiqueta de una M salía con el código de la XS.
+  const variantCode = (sku.barcodeByVariant||{})[String(color)+"::"+String(size)];
+  const code = variantCode || sku.barcode || sku.sku;
+  const attrs = giroConfig(giro).attrs.map(a=>a.key==="color"?color:a.key==="size"?size:sku[a.key]).filter(Boolean);
   const [ip,setIp]=useState(""); const [status,setStatus]=useState("");
   useEffect(()=>{ setIp(getPrinterConfig().ip||""); },[]);
   const doPrint=async()=>{
     if(ip.trim()) setPrinterIp(ip.trim());
     setStatus("Imprimiendo…");
-    const escpos=buildLabel({ name:sku.name, color:sku.color, size:sku.size, price:sku.price, code, sku:sku.sku }, qty);
+    const escpos=buildLabel({ name:sku.name, attrs, unit:sku.unit, price:sku.price, code, sku:sku.sku }, qty);
     const res=await printEscpos(escpos);
     if(res.ok) setStatus("Enviado a la impresora ✓");
     else if(res.channel==="web"){ if(window.print) window.print(); setStatus("Sin impresora nativa — impresión del sistema"); }
@@ -440,8 +450,8 @@ function LabelModal({ sku, onClose }) {
     <div className="flex gap-6 items-start">
       <div className="mx-auto">
         <div className="w-[236px] bg-card border border-ink-300 rounded-md p-3 text-center shadow-sm">
-          <div className="text-[11px] font-semibold text-ink-900 truncate">MODA+ · {sku.name}</div>
-          <div className="text-[10px] text-ink-500">{[sku.color, SIZES.includes(sku.size)?sku.size:sku.size].filter(Boolean).join(" / ")}</div>
+          <div className="text-[11px] font-semibold text-ink-900 truncate">{giroConfig(giro).label} · {sku.name}</div>
+          <div className="text-[10px] text-ink-500">{attrs.join(" / ")}</div>
           <div className="tnum text-xl font-bold text-ink-900 my-1.5">{mx(sku.price)}</div>
           <div className="flex justify-center"><Barcode value={code} height={52} width={1.9}/></div>
           <div className="tnum text-[10px] tracking-[0.18em] text-ink-800 mt-1">{code}</div>
@@ -467,9 +477,17 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
   const setQty=(id,d)=>setCart(c=>c.map(l=>l.key===id?{...l,qty:Math.max(1,l.qty+d)}:l));
   const del=(id)=>setCart(c=>c.filter(l=>l.key!==id));
   const [scan,setScan]=useState("");
-  const addProduct=(p)=>{ const size=SIZES.includes(p.size)?p.size:(p.live?p.size:"M"); setCart(c=>[...c,{key:p.id+"-"+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,color:p.color,size,tone:p.tone,cat:p.cat,qty:1,skuId:resolveSkuId(p,p.color,p.size)}]); };
+  const giro=useGiro();
+  const sizes=sizesFor(giro);
+  const addProduct=(p)=>{ const size=sizes.includes(p.size)?p.size:(p.live?p.size:(sizes[0]||"Única")); setCart(c=>[...c,{key:p.id+"-"+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,color:p.color,size,tone:p.tone,cat:p.cat,qty:1,unit:p.unit,skuId:p.skuId||resolveSkuId(p,p.color,p.size)}]); };
+  // Resolución del escaneo, en orden de especificidad. El orden importa: la
+  // pistola manda el código de barras, y un código que casualmente aparezca como
+  // substring del nombre de otro producto agregaría el artículo equivocado.
+  //   1) barcode exacto  2) SKU exacto  3) substring de SKU+nombre (búsqueda a mano)
   const doScan=(e)=>{ e.preventDefault(); const q=scan.trim().toLowerCase(); if(!q)return;
-    const m=products.find(p=>p.sku.toLowerCase()===q)||products.find(p=>(p.sku+" "+p.name).toLowerCase().indexOf(q)>=0);
+    const m=products.find(p=>(p.barcode||"").toLowerCase()===q)
+      ||products.find(p=>p.sku.toLowerCase()===q)
+      ||products.find(p=>(p.sku+" "+p.name+" "+(p.variantLabel||"")).toLowerCase().indexOf(q)>=0);
     if(m){ addProduct(m); setSel(m); } setScan(""); };
   const subtotal=cart.reduce((s,l)=>s+l.price*l.qty,0);
   const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
@@ -487,7 +505,7 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
             <span className="tnum text-[12px] text-ink-400">Ticket {(ticketIndex??0)+1}</span>
           </div>
           <div className="grid grid-cols-[1fr_120px_56px_56px_90px_84px_40px] px-5 py-2.5 text-[11px] font-semibold text-ink-400 uppercase tracking-wide border-b border-line">
-            <span>Producto</span><span>SKU</span><span className="text-center">Talla</span><span className="text-center">Color</span><span className="text-right">Precio</span><span className="text-center">Cant.</span><span></span>
+            <span>Producto</span><span>SKU</span><span className="text-center">{attrLabel(giro,"size")||"Talla"}</span><span className="text-center">{attrLabel(giro,"color")||"Color"}</span><span className="text-right">Precio</span><span className="text-center">Cant.</span><span></span>
           </div>
           <div className="flex-1 overflow-y-auto">
             {cart.map(l=>(
@@ -543,12 +561,17 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
 function TotRow({k,v}){return(<div className="flex items-center justify-between text-[13px]"><span className="text-ink-500">{k}</span><span className="tnum text-ink-900">{v}</span></div>);}
 
 function ProductDetailPanel({ p, onAdd }) {
+  const giro=useGiro();
+  const cfg=giroConfig(giro);
+  const sizes=p.sizes?.length?p.sizes:sizesFor(giro);
+  const pick=(s)=>sizes.includes(s)?s:(sizes[0]||"Única");
   const [color,setColor]=useState(p.color);
-  const [size,setSize]=useState(SIZES.includes(p.size)?p.size:"M");
+  const [size,setSize]=useState(pick(p.size));
   const [label,setLabel]=useState(false);
-  useEffect(()=>{ setColor(p.color); setSize(SIZES.includes(p.size)?p.size:"M"); },[p.id]);
+  useEffect(()=>{ setColor(p.color); setSize(pick(p.size)); },[p.id]);
   const row=p.matrix[color]||p.matrix[p.colors[0]]||[];
   const stock=row.reduce((a,b)=>a+b,0);
+  const unitLabel=p.unit&&p.unit!=="PZA"?p.unit.toLowerCase():"pzas.";
   return (
     <Card className="flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-5 h-14 border-b border-line">
@@ -563,32 +586,50 @@ function ProductDetailPanel({ p, onAdd }) {
         <div style={{background:p.tone}} className="w-full h-44 rounded-2xl grid place-items-center border border-black/5"><Icon n="tag" s={56} cls="text-black/15"/></div>
         <div className="flex items-end justify-between mt-4">
           <div><div className="tnum text-2xl font-bold text-ink-900">{mx(p.price)}</div>
-            <div className="text-[12px] text-brand-600 font-medium mt-0.5">En stock: {stock} pzas.</div></div></div>
-        <div className="mt-5">
-          <div className="text-[12px] text-ink-500 mb-2">Color: <span className="text-ink-900 font-medium">{color}</span></div>
-          <div className="flex gap-2">{p.colors.map(c=>(
-            <button key={c} onClick={()=>setColor(c)} title={c}
-              style={{background:swatch[c]||"#ccc"}}
-              className={"w-9 h-9 rounded-full border-2 "+(color===c?"border-brand-600 ring-2 ring-brand-100":"border-black/10")}/>))}</div>
-        </div>
-        <div className="mt-5">
-          <div className="text-[12px] text-ink-500 mb-2">Talla:</div>
-          <div className="flex gap-2">{SIZES.map(s=>(
-            <button key={s} onClick={()=>setSize(s)}
-              className={"flex-1 h-10 rounded-xl border text-[13px] font-medium "+(size===s?"border-brand-600 bg-brand-100 text-brand-700":"border-line text-ink-700 hover:bg-surf")}>{s}</button>))}</div>
-        </div>
-        <div className="mt-5">
-          <div className="flex items-center justify-between mb-2"><div className="flex items-center gap-1.5 text-[12px] text-ink-700 font-medium"><Icon n="box" s={15} cls="text-brand-600"/>Stock por talla</div>
-            <button className="text-[12px] text-brand-600 font-medium">Ver inventario completo</button></div>
-          <div className="grid grid-cols-5 rounded-xl border border-line overflow-hidden text-center">
-            {SIZES.map((s,i)=>(<div key={s} className="border-r border-line last:border-0 py-2"><div className="text-[11px] text-ink-400">{s}</div>
-              <div className={"tnum text-sm font-semibold "+(s===size?"text-brand-600":"text-ink-900")}>{row[i]??0}</div></div>))}</div>
-        </div>
+            <div className="text-[12px] text-brand-600 font-medium mt-0.5">En stock: {stock} {unitLabel}</div></div></div>
+
+        {/* Ropa vende una matriz talla×color; ferretería/refaccionaria venden el
+            SKU directo, así que el selector de variante no aplica. */}
+        {cfg.useVariantMatrix ? (<>
+          <div className="mt-5">
+            <div className="text-[12px] text-ink-500 mb-2">{attrLabel(giro,"color")||"Color"}: <span className="text-ink-900 font-medium">{color}</span></div>
+            <div className="flex gap-2">{p.colors.map(c=>(
+              <button key={c} onClick={()=>setColor(c)} title={c}
+                style={{background:swatch[c]||"#ccc"}}
+                className={"w-9 h-9 rounded-full border-2 "+(color===c?"border-brand-600 ring-2 ring-brand-100":"border-black/10")}/>))}</div>
+          </div>
+          <div className="mt-5">
+            <div className="text-[12px] text-ink-500 mb-2">{attrLabel(giro,"size")||"Talla"}:</div>
+            <div className="flex gap-2">{sizes.map(s=>(
+              <button key={s} onClick={()=>setSize(s)}
+                className={"flex-1 h-10 rounded-xl border text-[13px] font-medium "+(size===s?"border-brand-600 bg-brand-100 text-brand-700":"border-line text-ink-700 hover:bg-surf")}>{s}</button>))}</div>
+          </div>
+          <div className="mt-5">
+            <div className="flex items-center justify-between mb-2"><div className="flex items-center gap-1.5 text-[12px] text-ink-700 font-medium"><Icon n="box" s={15} cls="text-brand-600"/>Stock por {(attrLabel(giro,"size")||"talla").toLowerCase()}</div>
+              <button className="text-[12px] text-brand-600 font-medium">Ver inventario completo</button></div>
+            <div className="grid rounded-xl border border-line overflow-hidden text-center" style={{gridTemplateColumns:`repeat(${sizes.length||1}, minmax(0, 1fr))`}}>
+              {sizes.map((s,i)=>(<div key={s} className="border-r border-line last:border-0 py-2"><div className="text-[11px] text-ink-400">{s}</div>
+                <div className={"tnum text-sm font-semibold "+(s===size?"text-brand-600":"text-ink-900")}>{row[i]??0}</div></div>))}</div>
+          </div>
+        </>) : (
+          <div className="mt-5 rounded-xl border border-line divide-y divide-line">
+            {cfg.attrs.map(a=>p[a.key]?(
+              <div key={a.key} className="flex items-center justify-between px-3 py-2 text-[12px]">
+                <span className="text-ink-500">{a.label}</span><span className="text-ink-900 font-medium">{p[a.key]}</span></div>):null)}
+            <div className="flex items-center justify-between px-3 py-2 text-[12px]">
+              <span className="text-ink-500">Unidad</span><span className="text-ink-900 font-medium">{p.unit}</span></div>
+            {p.unitsPerPackage?(<div className="flex items-center justify-between px-3 py-2 text-[12px]">
+              <span className="text-ink-500">Por caja</span><span className="tnum text-ink-900 font-medium">{p.unitsPerPackage}</span></div>):null}
+            {p.binLocation?(<div className="flex items-center justify-between px-3 py-2 text-[12px]">
+              <span className="text-ink-500">Ubicación</span><span className="text-ink-900 font-medium">{p.binLocation}</span></div>):null}
+          </div>
+        )}
+
         <button onClick={()=>onAdd(p,color,size)} className="w-full h-12 mt-5 rounded-xl border-2 border-brand-200 text-brand-700 font-semibold text-sm hover:bg-brand-50 inline-flex items-center justify-center gap-2"><Icon n="plus" s={18}/>Agregar a la venta</button>
         <Acc title="Descripción" body={p.desc}/>
-        <Acc title="Detalles" body={"Composición: "+p.detail}/>
+        <Acc title="Detalles" body={p.detail}/>
       </div>
-      {label && <LabelModal sku={p} onClose={()=>setLabel(false)}/>}
+      {label && <LabelModal sku={p} color={color} size={size} onClose={()=>setLabel(false)}/>}
     </Card>
   );
 }
@@ -732,8 +773,13 @@ function SuccessScreen({ sale, go, newSale }) {
 }
 
 /* ===================================================== INVENTORY ===================================================== */
+// NOTA: pantalla de maqueta — corre sobre PRODUCTS[0] (datos demo) y cifras
+// hardcodeadas, no sobre el catálogo live. El eje se deriva del giro igual, para
+// no dejar vivo el último hardcode de tallas de ropa.
 function InventoryScreen() {
   const p=PRODUCTS[0];
+  const giro=useGiro();
+  const sizes=sizesFor(giro);
   const [color,setColor]=useState("Beige");
   const cell=(v)=>{const cls=v===0?"text-red-500 font-semibold":v<5?"bg-red-50 text-red-600":v<=10?"bg-amber-50 text-amber-700":v>20?"bg-brand-50 text-brand-700":"text-ink-700";
     return <td className={"tnum text-center py-2.5 text-sm "+cls}>{v}</td>;};
@@ -760,12 +806,12 @@ function InventoryScreen() {
           </div>
           <table className="w-full mt-6 border border-line rounded-xl overflow-hidden">
             <thead><tr className="bg-surf text-[11px] text-ink-400 uppercase">
-              <th className="text-left py-2.5 px-4 font-semibold">Talla / Color</th>{SIZES.map(s=><th key={s} className="font-semibold">{s}</th>)}<th className="font-semibold">Total</th></tr></thead>
+              <th className="text-left py-2.5 px-4 font-semibold">{attrLabel(giro,"size")||"Talla"} / {attrLabel(giro,"color")||"Color"}</th>{sizes.map(s=><th key={s} className="font-semibold">{s}</th>)}<th className="font-semibold">Total</th></tr></thead>
             <tbody>{p.colors.map(c=>(<tr key={c} className="border-t border-line">
               <td className="py-2.5 px-4 text-[13px] text-ink-700 flex items-center gap-2"><span style={{background:swatch[c]}} className="w-4 h-4 rounded-full border border-black/10"/>{c}</td>
               {p.matrix[c].map((v,i)=>cell(v))}<td className="tnum text-center font-semibold text-ink-900">{p.matrix[c].reduce((a,b)=>a+b,0)}</td></tr>))}
               <tr className="border-t border-line bg-surf/50"><td className="py-2.5 px-4 text-[13px] font-semibold text-ink-900">Total</td>
-              {SIZES.map((s,i)=><td key={s} className="tnum text-center font-semibold text-ink-900">{colTotal(i)}</td>)}
+              {sizes.map((s,i)=><td key={s} className="tnum text-center font-semibold text-ink-900">{colTotal(i)}</td>)}
               <td className="tnum text-center font-bold text-ink-900">{p.colors.reduce((a,c)=>a+p.matrix[c].reduce((x,y)=>x+y,0),0)}</td></tr></tbody>
           </table>
           <div className="flex gap-5 mt-3 text-[11px]">
