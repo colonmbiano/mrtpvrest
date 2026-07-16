@@ -7,6 +7,7 @@ import { AntojitosTheme } from '@/components/themes/AntojitosTheme';
 import { getApiUrl } from '@/lib/config';
 import { cldImage } from '@/lib/cloudinary';
 import InstallPWABanner from '@/components/InstallPWABanner';
+import CartDeepLinkLoader from '@/components/CartDeepLinkLoader';
 
 const API = getApiUrl();
 
@@ -288,6 +289,8 @@ export default async function StorefrontPage({
   // de los campos planos para mantener compatibilidad de tipos y runtime.
   const info = { ...store, themeConfig: { theme, primaryColor: primary }, dineIn };
   const data = { info, menu, locations };
+  // Menú aplanado para el deep-link de carrito (rehidratar `?cart=`).
+  const allItems = (menu?.categories || []).flatMap((c: any) => c.items || []);
 
   return (
     <div
@@ -297,6 +300,9 @@ export default async function StorefrontPage({
       {theme === 'MOCHI' && <MochiTheme data={data} />}
       {theme === 'MUNDIALISTA' && <MundialistaTheme data={data} />}
       {theme === 'ANTOJITOS' && <AntojitosTheme data={data} />}
+
+      {/* Rehidrata el carrito si la URL trae ?cart= (deep-link compartible). */}
+      <CartDeepLinkLoader products={allItems} />
 
       {/* PWA — banner flotante de instalación con branding del tenant */}
       <InstallPWABanner

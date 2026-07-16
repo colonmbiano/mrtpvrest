@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCart } from '../lib/cartStore';
 import { authHeader } from '../lib/customerAuth';
+import { cartShareUrl } from '../lib/cartLink';
 import { getApiUrl } from '../lib/config';
 import { computeDeliveryPreview, type DeliveryConfig } from '../lib/delivery';
 import { MapLocationPicker } from './MapLocationPicker';
@@ -117,6 +118,7 @@ export default function StoreCheckout({
   // Checkout exprés: cliente que regresa con datos completos ve un resumen
   // "revisar → pagar"; "Editar mis datos" (editData) despliega el formulario.
   const [editData, setEditData] = useState(false);
+  const [shared, setShared] = useState(false);
 
   // Al abrir el checkout, rellenamos con el perfil guardado (si existe).
   useEffect(() => {
@@ -151,6 +153,23 @@ export default function StoreCheckout({
     try { localStorage.removeItem(PROFILE_KEY); } catch {}
     setSavedName(''); setSaveInfo(false);
     setCustomerName(''); setCustomerPhone(''); setDeliveryAddress('');
+  };
+
+  // Compartir el carrito por link (deep-link que rehidrata la tienda al abrirlo).
+  // navigator.share en móvil; fallback a copiar al portapapeles.
+  const shareCart = async () => {
+    const url = cartShareUrl(slug, lines);
+    try {
+      if (typeof navigator !== 'undefined' && (navigator as any).share) {
+        await (navigator as any).share({ title: 'Mi pedido', url });
+        return;
+      }
+    } catch { return; /* el usuario canceló el diálogo de compartir */ }
+    try {
+      await navigator.clipboard.writeText(url);
+      setShared(true);
+      setTimeout(() => setShared(false), 2500);
+    } catch {}
   };
 
   // Tipos de pedido permitidos por la sucursal
@@ -394,6 +413,11 @@ export default function StoreCheckout({
                 ))}
               </div>
             </div>
+
+            {/* Compartir el carrito por link (deep-link que rehidrata la tienda). */}
+            <button type="button" onClick={shareCart} className="w-full py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest border-2 transition-all active:scale-95" style={{ borderColor: `${primary}40`, color: primary }}>
+              {shared ? '✓ Link copiado' : '🔗 Compartir mi pedido'}
+            </button>
 
             {/* Tipo de pedido — oculto cuando el pedido viene de un QR de mesa */}
             {lockedTable ? (
