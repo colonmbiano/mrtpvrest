@@ -978,7 +978,6 @@ export default function OrderTypePage() {
         onShiftClose={goShiftClose}
         onExpenses={goExpenses}
         onConfig={goConfig}
-        onWhatsapp={() => router.push("/pos/whatsapp")}
         onSales={() => router.push("/pos/menu")}
         onHub={() => router.push("/hub?force=true")}
         onWebOrders={() => setShowWebOrders(true)}
