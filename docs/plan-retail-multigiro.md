@@ -222,6 +222,27 @@ engañoso: `page.jsx` son 1694 líneas con ~15 componentes que comparten el shap
 - **Unidad de medida + granel:** ya soportado en datos (`Decimal(12,3)` + Fase 1). UI:
   - POS permite cantidad decimal cuando `unitOfMeasure ∈ {MTS,KG,LTS}`.
   - Conversión caja↔pza usando `unitsPerPackage` al vender/recibir.
+
+  **Semántica fijada** (el plan la dejaba ambigua y de eso depende que la conversión
+  no duplique cantidades):
+  - `unitOfMeasure` = **unidad base**: en ella se cuenta el stock **y** se expresa el
+    precio.
+  - `unitsPerPackage` = cuántas unidades base trae una caja. Habilita *capturar* por
+    caja; no cambia en qué unidad vive el stock.
+  - ⇒ La conversión va en el **borde de captura** (línea del carrito, conteo,
+    traspaso), no en el backend. El contrato del API sigue siendo "cantidad en unidad
+    base", que es lo que ya asumen stock, movimientos, líneas de venta y escalones de
+    mayoreo. Convertir en dos capas invitaría a una doble conversión silenciosa.
+  - Efecto secundario deseable: capturar "2 cajas" de 100 manda 200 pza ⇒ el escalón
+    de mayoreo con `minQty: 100` **aplica solo**, sin lógica extra.
+  - El toggle "por caja" solo aparece si `unitsPerPackage > 0` **y** la unidad base no
+    es ya `CAJA` (ahí sería la identidad).
+  - Alternar pza↔caja **no cambia la cantidad real**: 250 pza siguen siendo 250 pza
+    (2.5 cajas de 100).
+
+- **UI de mayoreo:** modal por SKU en el catálogo del admin (lista, alta y baja de
+  escalones), solo en giros con `wholesale: true`. Sin esto el mayoreo existía en el
+  backend pero era inalcanzable salvo por API.
 - **Precio por mayoreo/volumen** — **migración** `<ts>_retail_price_tiers`:
   ```sql
   CREATE TABLE "retail_price_tiers" (

@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useMemo, createContext, useContext } from 
 import * as Retail from "@/lib/retail";
 import { getApiUrl, setApiUrl } from "@/lib/config";
 import { getTenant, setTenant, getGiro } from "@/lib/tenant";
-import { DEFAULT_GIRO, giroConfig, sizesFor, attrLabel, isBulkUnit } from "@/lib/giro";
+import { DEFAULT_GIRO, giroConfig, sizesFor, attrLabel, isBulkUnit, canEnterByPackage, packagesToBase, baseToPackages, round3 } from "@/lib/giro";
 import { getToken } from "@/lib/token-vault";
 import { buildReceipt, buildLabel, printEscpos, getPrinterConfig, setPrinterIp } from "@/lib/printer";
 
@@ -481,15 +481,32 @@ function LabelModal({ sku, color, size, onClose }) {
 /* ===================================================== SALE ===================================================== */
 function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketIndex, onSwitch, onAddTicket, onCloseTicket }) {
   const products=useProducts();
-  const setQty=(id,d)=>setCart(c=>c.map(l=>l.key===id?{...l,qty:Math.max(1,l.qty+d)}:l));
+  // l.qty SIEMPRE está en unidad base (pza/mts/kg…), aunque el cajero capture por
+  // caja: así el subtotal, el descuento de stock y lo que se manda al backend no
+  // dependen del modo de captura. La caja solo cambia el input y lo que se pinta.
+  const setQty=(id,d)=>setCart(c=>c.map(l=>{
+    if(l.key!==id) return l;
+    const step=l.byPackage?(l.unitsPerPackage||1):1;
+    return {...l,qty:round3(Math.max(step,Number(l.qty)+d*step))};
+  }));
   // Granel: cantidad libre. Se deja pasar el string vacío/parcial mientras el
   // cajero teclea ("0." no es un número válido todavía) y se normaliza al vender.
   const setQtyExact=(id,v)=>setCart(c=>c.map(l=>l.key===id?{...l,qty:(v===""?"":Number(v)<0?0:v)}:l));
+  // Captura por caja: el input muestra cajas, l.qty guarda unidad base.
+  const setQtyPackages=(id,v)=>setCart(c=>c.map(l=>{
+    if(l.key!==id) return l;
+    if(v==="") return {...l,qty:""};
+    const n=Number(v);
+    return {...l,qty:n<0?0:packagesToBase(n,l.unitsPerPackage||1)};
+  }));
+  // Alternar pza↔caja NO cambia la cantidad real, solo cómo se captura: si tienes
+  // 250 pza y cambias a cajas de 100, sigues teniendo 250 pza (2.5 cajas).
+  const togglePackage=(id)=>setCart(c=>c.map(l=>l.key===id?{...l,byPackage:!l.byPackage}:l));
   const del=(id)=>setCart(c=>c.filter(l=>l.key!==id));
   const [scan,setScan]=useState("");
   const giro=useGiro();
   const sizes=sizesFor(giro);
-  const addProduct=(p)=>{ const size=sizes.includes(p.size)?p.size:(p.live?p.size:(sizes[0]||"Única")); setCart(c=>[...c,{key:p.id+"-"+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,color:p.color,size,tone:p.tone,cat:p.cat,qty:1,unit:p.unit,skuId:p.skuId||resolveSkuId(p,p.color,p.size)}]); };
+  const addProduct=(p)=>{ const size=sizes.includes(p.size)?p.size:(p.live?p.size:(sizes[0]||"Única")); setCart(c=>[...c,{key:p.id+"-"+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,color:p.color,size,tone:p.tone,cat:p.cat,qty:1,unit:p.unit,unitsPerPackage:p.unitsPerPackage,byPackage:false,skuId:p.skuId||resolveSkuId(p,p.color,p.size)}]); };
   // Resolución del escaneo, en orden de especificidad. El orden importa: la
   // pistola manda el código de barras, y un código que casualmente aparezca como
   // substring del nombre de otro producto agregaría el artículo equivocado.
@@ -530,20 +547,36 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
                   ? <span style={{background:swatch[l.color]||"#ccc"}} className="w-5 h-5 rounded-full border border-black/10"/>
                   : <span className="text-[12px] text-ink-700 truncate">{l.color==="Único"?"—":l.color}</span>}</span>
                 <span className="tnum text-right text-[13px] text-ink-900">{mx(l.price)}{isBulkUnit(l.unit)?<span className="text-[10px] text-ink-400">/{l.unit}</span>:null}</span>
-                {/* Granel (MTS/KG/LTS): la cantidad es decimal, así que un stepper
-                    de ±1 no sirve — se captura a mano. El backend ya acepta
-                    decimales (Decimal(12,3) en toda la cadena de cantidades). */}
-                <span className="flex items-center justify-center gap-1.5">
-                  {isBulkUnit(l.unit) ? (
-                    <input type="number" min="0.001" step="0.001" value={l.qty}
-                      onChange={e=>setQtyExact(l.key, e.target.value)}
-                      onWheel={e=>e.currentTarget.blur()}
-                      className="tnum w-16 h-7 text-center text-[13px] rounded-lg border border-line bg-surf outline-none focus:border-brand-500"/>
-                  ) : (<>
-                    <button onClick={()=>setQty(l.key,-1)} className="w-7 h-7 grid place-items-center rounded-lg border border-line hover:bg-surf text-ink-500"><Icon n="minus" s={13}/></button>
-                    <span className="tnum w-5 text-center text-[13px]">{l.qty}</span>
-                    <button onClick={()=>setQty(l.key,1)} className="w-7 h-7 grid place-items-center rounded-lg border border-line hover:bg-surf text-ink-500"><Icon n="plus" s={13}/></button>
-                  </>)}
+                {/* Tres modos de captura, pero l.qty SIEMPRE en unidad base:
+                      · granel (MTS/KG/LTS) → decimal a mano (el stepper de ±1 no sirve)
+                      · por caja           → el input son cajas, se guardan unidades base
+                      · pieza              → stepper clásico
+                    El backend acepta decimales (Decimal(12,3) en toda la cadena). */}
+                <span className="flex flex-col items-center justify-center gap-0.5">
+                  <span className="flex items-center justify-center gap-1.5">
+                    {l.byPackage ? (
+                      <input type="number" min="0.001" step="1" value={baseToPackages(Number(l.qty)||0, l.unitsPerPackage||1)}
+                        onChange={e=>setQtyPackages(l.key, e.target.value)}
+                        onWheel={e=>e.currentTarget.blur()}
+                        className="tnum w-16 h-7 text-center text-[13px] rounded-lg border border-line bg-surf outline-none focus:border-brand-500"/>
+                    ) : isBulkUnit(l.unit) ? (
+                      <input type="number" min="0.001" step="0.001" value={l.qty}
+                        onChange={e=>setQtyExact(l.key, e.target.value)}
+                        onWheel={e=>e.currentTarget.blur()}
+                        className="tnum w-16 h-7 text-center text-[13px] rounded-lg border border-line bg-surf outline-none focus:border-brand-500"/>
+                    ) : (<>
+                      <button onClick={()=>setQty(l.key,-1)} className="w-7 h-7 grid place-items-center rounded-lg border border-line hover:bg-surf text-ink-500"><Icon n="minus" s={13}/></button>
+                      <span className="tnum w-5 text-center text-[13px]">{l.qty}</span>
+                      <button onClick={()=>setQty(l.key,1)} className="w-7 h-7 grid place-items-center rounded-lg border border-line hover:bg-surf text-ink-500"><Icon n="plus" s={13}/></button>
+                    </>)}
+                  </span>
+                  {canEnterByPackage(l.unit, l.unitsPerPackage) && (
+                    <button onClick={()=>togglePackage(l.key)}
+                      title={`1 caja = ${l.unitsPerPackage} ${l.unit}`}
+                      className={"text-[9px] px-1.5 rounded "+(l.byPackage?"bg-brand-100 text-brand-700 font-semibold":"text-ink-400 hover:text-ink-700")}>
+                      {l.byPackage?`caja ×${l.unitsPerPackage} = ${round3(Number(l.qty)||0)} ${l.unit}`:"por caja"}
+                    </button>
+                  )}
                 </span>
                 <button onClick={()=>del(l.key)} className="justify-self-center w-8 h-8 grid place-items-center rounded-lg hover:bg-red-50 text-ink-400 hover:text-red-500"><Icon n="trash" s={15}/></button>
               </div>

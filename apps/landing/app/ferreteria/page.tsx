@@ -43,7 +43,7 @@ const pains: [string, string, string][] = [
 const faqs: [string, string][] = [
   ['¿Puedo vender cable por metro o tornillos por kilo?', 'Sí. Cada artículo tiene su unidad de venta (pieza, metro, kilo, litro o caja) y la cantidad acepta decimales, así que puedes cobrar 2.5 m o 0.75 kg. El inventario se descuenta con esa misma cantidad.'],
   ['¿Maneja precio de mayoreo?', 'Sí. Defines a partir de qué cantidad aplica cada precio y el sistema resuelve el escalón al momento de cobrar, sin que el mostrador calcule nada.'],
-  ['¿Puedo convertir automáticamente de caja a pieza?', 'Todavía no. Puedes registrar cuántas piezas trae la caja y vender con unidad "caja" o "pieza" como artículos distintos, pero la conversión automática al vender o recibir no está disponible.'],
+  ['¿Puedo vender por caja y por pieza?', 'Sí. Registras cuántas piezas trae la caja y el mostrador captura "2 cajas": el sistema cobra y descuenta las 200 piezas. El inventario se sigue llevando en piezas, así que no se te desordena. Lo mismo al contar o traspasar.'],
   ['¿Funciona sin internet?', 'Sí. Se instala en Windows y Android y sigue cobrando aunque se caiga la conexión; sincroniza cuando vuelve.'],
   ['¿Sirve para tlapalería, material eléctrico o plomería?', 'Sí. Es el mismo sistema y cada giro nombra sus atributos como los usa en el mostrador. Abajo hay una página por giro.'],
 ]
