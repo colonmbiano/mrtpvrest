@@ -17,7 +17,7 @@ export type OrderTypeId = "DINE_IN" | "TAKEOUT" | "DELIVERY";
 // los indexan con el `orderType` crudo del backend (string), y otras acceden
 // por propiedad (.DINE_IN). Ambas formas funcionan así sin fricción de tipos.
 
-/** Etiqueta de acción (larga) — cards de iniciar venta / captura WhatsApp / recibo. */
+/** Etiqueta de acción (larga) — cards de iniciar venta / recibo. */
 export const ORDER_TYPE_ACTION: Record<string, string> = {
   DINE_IN: "Comer Aquí",
   TAKEOUT: "Para Llevar",
