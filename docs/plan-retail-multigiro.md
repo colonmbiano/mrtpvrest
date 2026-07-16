@@ -385,6 +385,18 @@ busca por equivalencia/compatibilidad.
 
 - **Multi-tenant:** filtrar por `restaurantId`; todo modelo nuevo con `restaurantId` va a
   `SCOPED_MODELS` y `tenant-guard.test.js` (no ignorar el fallo del test).
+- **RLS en tablas nuevas (se nos pasó una vez — no repetirlo):** toda tabla creada con
+  `CREATE TABLE` en una migración nace con **RLS apagado**, y el resto del esquema corre
+  con **RLS on + 0 políticas = deny-all** (el acceso legítimo es solo el backend vía
+  Prisma, que usa la conexión directa y no pasa por RLS). Olvidarlo deja la tabla
+  **escribible con la anon key**, que es pública por diseño. En `retail_price_tiers` eso
+  era un hueco de **dinero**: el backend resuelve el mayoreo leyendo esa tabla, así que
+  un tier insertado desde fuera se cobraría de verdad. Corregido en
+  `20260716140000_retail_multigiro_enable_rls`. Siempre cerrar con:
+  ```sql
+  ALTER TABLE "tu_tabla" ENABLE ROW LEVEL SECURITY;  -- sin políticas = deny-all
+  ```
+  Verificar con `SELECT relname, relrowsecurity FROM pg_class …` — no asumirlo.
 - **Dinero server-side:** precios/tiers se resuelven en el backend; nunca `req.body.total`.
   Sin `.catch(() => null)` en operaciones de dinero.
 - **Migraciones:** `prisma migrate dev` → `prisma migrate deploy` **manual** en prod.
