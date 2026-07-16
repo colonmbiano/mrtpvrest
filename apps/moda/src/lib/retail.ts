@@ -295,23 +295,38 @@ export async function registerTenant(input: {
   ownerName: string;
   email: string;
   password: string;
+  /** Giro de la tienda. Default ROPA (comportamiento de MODA+). */
+  giro?: Giro;
 }): Promise<void> {
+  const { giro = DEFAULT_GIRO, ...account } = input;
   const data = await apiFetch<{
     accessToken?: string;
     restaurant?: { id: string };
     location?: { id: string; name?: string };
-  }>("/api/auth/register-tenant", { method: "POST", body: JSON.stringify(input) });
+  }>("/api/auth/register-tenant", { method: "POST", body: JSON.stringify(account) });
   if (data.accessToken) setToken(data.accessToken);
   const locId = data.location?.id;
   const restId = data.restaurant?.id;
   if (!locId || !restId) throw new Error("Registro sin sucursal");
-  // Marcar la sucursal como RETAIL (usa el token recién emitido).
+  // Dos marcas DISTINTAS y ortogonales (ver docs/plan-retail-multigiro.md):
+  //   · Location.businessType = RETAIL → preset operativo "venta de mostrador".
+  //   · RestaurantConfig.retailGiro    → cuál vertical de retail.
+  // Ninguna es fatal: ambas se pueden corregir después desde el admin, así que
+  // un fallo aquí no debe tirar un registro que ya creó la cuenta.
   try {
     await apiFetch(`/api/locations/${locId}/business-type`, {
       method: "PUT",
       body: JSON.stringify({ businessType: "RETAIL" }),
     });
   } catch { /* el negocio se puede marcar luego desde admin */ }
+  try {
+    await apiFetch("/api/retail/v1/config/giro", {
+      method: "PUT",
+      headers: { "x-restaurant-id": restId },
+      body: JSON.stringify({ giro }),
+    });
+  } catch { /* el giro se puede cambiar luego desde admin */ }
+  setTenant({ giro });
   // Ligar el dispositivo a la sucursal nueva (limpia el token admin).
   linkLocation({
     id: locId,

@@ -70,6 +70,13 @@ const mx = (n) => new Intl.NumberFormat("es-MX", { style: "currency", currency: 
 // hardcode de ropa. `useGiro()` re-lee al montar para que el POS no arranque en
 // ropa cuando el tenant es ferretería.
 const useGiro = () => { const [g,setG]=useState(DEFAULT_GIRO); useEffect(()=>{ setG(getGiro()); },[]); return g; };
+// Copys del onboarding por giro. El label sale de giro.ts (fuente única); aquí
+// solo vive el placeholder del nombre de tienda, que es de esta pantalla.
+const GIROS_UI = {
+  ROPA:          { id:"ROPA",          label:giroConfig("ROPA").label,          storePlaceholder:"Boutique Aurora" },
+  FERRETERIA:    { id:"FERRETERIA",    label:giroConfig("FERRETERIA").label,    storePlaceholder:"Ferretería El Tornillo" },
+  REFACCIONARIA: { id:"REFACCIONARIA", label:giroConfig("REFACCIONARIA").label, storePlaceholder:"Refaccionaria Del Valle" },
+};
 const swatch = { Beige:"#d8c4ab", Blanco:"#f1f1ee", "Verde Olivo":"#5a6b3e", Negro:"#23262a", Gris:"#9aa0a3", "Azul Claro":"#9db7d4", Camel:"#b08456", Perla:"#e8e3d8", Canela:"#9a5b33" };
 
 const PRODUCTS = [
@@ -1347,6 +1354,7 @@ function SetupScreen({ onLinked, onDemo }){
   const [step,setStep]=useState("login");
   const [email,setEmail]=useState(""); const [password,setPassword]=useState("");
   const [rName,setRName]=useState(""); const [oName,setOName]=useState("");
+  const [rGiro,setRGiro]=useState(DEFAULT_GIRO);
   const [url,setUrl]=useState(""); const [cfg,setCfg]=useState(false);
   const [ws,setWs]=useState([]);
   const [busy,setBusy]=useState(false); const [err,setErr]=useState("");
@@ -1371,7 +1379,7 @@ function SetupScreen({ onLinked, onDemo }){
     setBusy(true);
     try{
       if(url.trim()) setApiUrl(url.trim());
-      await Retail.registerTenant({ restaurantName:rName.trim(), ownerName:oName.trim(), email:email.trim(), password });
+      await Retail.registerTenant({ restaurantName:rName.trim(), ownerName:oName.trim(), email:email.trim(), password, giro:rGiro });
       onLinked();
     }catch(e){ setErr(e?.status===409?"Ese correo o nombre de tienda ya existe.":(e?.message||"No se pudo crear la cuenta.")); }
     finally{ setBusy(false); }
@@ -1404,7 +1412,19 @@ function SetupScreen({ onLinked, onDemo }){
           <div className="text-[12px] text-ink-400 text-center mt-1 mb-5">Hasta 6 meses gratis · sin tarjeta</div>
           {err && <div className="text-[12px] text-red-500 text-center mb-3">{err}</div>}
           <div className="space-y-3">
-            {fld("Nombre de la tienda",<input value={rName} onChange={e=>setRName(e.target.value)} placeholder="Boutique Aurora" className={inputCls}/>)}
+            {/* El giro se elige AQUÍ y no después: decide los labels de todo el
+                catálogo, así que capturar SKUs antes de fijarlo obligaría a
+                releer atributos con los nombres equivocados. Cambiable luego
+                desde el admin. */}
+            {fld("¿Qué vendes?",
+              <div className="grid grid-cols-3 gap-2">
+                {Object.values(GIROS_UI).map(g=>(
+                  <button key={g.id} type="button" onClick={()=>setRGiro(g.id)}
+                    className={"h-11 rounded-xl border text-[12px] font-medium transition-colors "+(rGiro===g.id?"border-brand-600 bg-brand-50 text-brand-700":"border-line text-ink-600 hover:bg-surf")}>
+                    {g.label}
+                  </button>))}
+              </div>)}
+            {fld("Nombre de la tienda",<input value={rName} onChange={e=>setRName(e.target.value)} placeholder={GIROS_UI[rGiro]?.storePlaceholder||"Boutique Aurora"} className={inputCls}/>)}
             {fld("Tu nombre",<input value={oName} onChange={e=>setOName(e.target.value)} placeholder="Tu nombre" className={inputCls}/>)}
             {fld("Correo",<input value={email} onChange={e=>setEmail(e.target.value)} type="email" autoCapitalize="none" placeholder="tu@correo.com" className={inputCls}/>)}
             {fld("Contraseña",<input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="mínimo 8 caracteres" onKeyDown={e=>{if(e.key==="Enter")doRegister();}} className={inputCls}/>)}
