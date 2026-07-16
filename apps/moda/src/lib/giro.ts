@@ -137,7 +137,17 @@ export function attrLabel(g: Giro, key: SkuAttrKey): string | null {
   return giroConfig(g).attrs.find((a) => a.key === key)?.label ?? null;
 }
 
-/** Unidades de medida válidas. Debe coincidir con el z.enum del backend. */
+/**
+ * Unidades de medida válidas. Debe coincidir con el z.enum del backend.
+ *
+ * `unitOfMeasure` es la **unidad base**: en ella se cuenta el stock Y se expresa
+ * el precio. `unitsPerPackage` dice cuántas unidades base trae una caja, lo que
+ * habilita *capturar* por caja — pero la cantidad que viaja al backend siempre va
+ * en unidad base. La conversión vive en el borde de captura a propósito: el
+ * contrato del API ("cantidad en unidad base") es el que ya asumen el stock, los
+ * movimientos, las líneas de venta y los escalones de mayoreo, y convertir en dos
+ * capas invitaría a una doble conversión silenciosa.
+ */
 export const UNITS = ["PZA", "MTS", "KG", "LTS", "CAJA"] as const;
 export type Unit = (typeof UNITS)[number];
 
@@ -146,4 +156,30 @@ const BULK_UNITS: ReadonlySet<string> = new Set(["MTS", "KG", "LTS"]);
 
 export function isBulkUnit(u?: string | null): boolean {
   return Boolean(u && BULK_UNITS.has(u));
+}
+
+/**
+ * ¿Se puede capturar por caja? Hace falta saber cuántas unidades base trae, y que
+ * la unidad base no sea YA la caja (ahí "por caja" sería la identidad: el stock
+ * se cuenta en cajas y `unitsPerPackage` solo informa qué trae adentro).
+ */
+export function canEnterByPackage(unit?: string | null, unitsPerPackage?: number | null): boolean {
+  return Boolean(unitsPerPackage && unitsPerPackage > 0 && unit !== "CAJA");
+}
+
+/** Cajas → unidad base. */
+export function packagesToBase(packages: number, unitsPerPackage: number): number {
+  return round3(packages * unitsPerPackage);
+}
+
+/** Unidad base → cajas (para mostrar en el input cuando se captura por caja). */
+export function baseToPackages(base: number, unitsPerPackage: number): number {
+  if (!unitsPerPackage) return base;
+  return round3(base / unitsPerPackage);
+}
+
+/** Las cantidades son Decimal(12,3) en la BD: redondear igual evita que un
+ *  0.1+0.2 de coma flotante se mande como 0.30000000000000004. */
+export function round3(n: number): number {
+  return Math.round(n * 1000) / 1000;
 }

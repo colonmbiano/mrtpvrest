@@ -3,14 +3,18 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Search, Filter, ChevronDown, PackagePlus, Pencil, ArrowLeftRight, ClipboardCheck,
-  AlertTriangle, Shirt, Wrench, Car, Boxes, DollarSign, RefreshCw, X, PackageCheck, PackagePlus as PackagePlusIcon, Plus,
+  AlertTriangle, Shirt, Wrench, Car, Boxes, DollarSign, RefreshCw, X, PackageCheck, PackagePlus as PackagePlusIcon, Plus, Layers, Trash2,
 } from "lucide-react";
 import api from "@/lib/admin-api";
 import { money, num } from "@/lib/admin-format";
 import { StatCard, DataCard, StatusBadge } from "@/components/admin/atoms";
 import AdminTopbar from "@/components/admin/AdminTopbar";
 import { sparkUp, sparkWarn, sparkUp2, sparkFlat } from "@/lib/admin-mock";
-import { DEFAULT_GIRO, giroConfig, isGiro, UNITS, type Giro, type SkuAttrKey } from "@/lib/giro";
+import {
+  DEFAULT_GIRO, giroConfig, isGiro, UNITS,
+  canEnterByPackage, packagesToBase, baseToPackages, isBulkUnit, round3,
+  type Giro, type SkuAttrKey,
+} from "@/lib/giro";
 import { setGiro as cacheGiro } from "@/lib/tenant";
 
 type Location = { id: string; name: string; isCentralWarehouse?: boolean };
@@ -22,6 +26,7 @@ type RetailSku = {
   binLocation?: string | null; supplierRef?: string | null;
 };
 type RetailProduct = { id: string; name: string; brand?: string | null; category?: string | null; skus: RetailSku[] };
+type PriceTier = { id: string; skuId: string; minQty: number | string; price: number | string };
 type StockRow = { id: string; locationId: string; skuId: string; qty: number; minQty: number; location: Location; sku: RetailSku & { product: RetailProduct } };
 
 const inputCls = "h-11 w-full rounded-xl border bg-[var(--surf-1)] px-3.5 text-[13px] text-[var(--tx-hi)] outline-none focus:border-[var(--brand-primary)]";
@@ -55,7 +60,7 @@ export default function CatalogoPage() {
   const [stockFilter, setStockFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [modal, setModal] = useState<null | "product" | "edit" | "transfer" | "count">(null);
+  const [modal, setModal] = useState<null | "product" | "edit" | "transfer" | "count" | "tiers">(null);
   const [form, setForm] = useState({ ...emptyProduct });
   const [mode, setMode] = useState<"new" | "existing">("new");
   const [existingId, setExistingId] = useState("");
@@ -63,6 +68,12 @@ export default function CatalogoPage() {
   const [editForm, setEditForm] = useState({ price: "", cost: "", barcode: "", isActive: true });
   const [tForm, setTForm] = useState({ skuId: "", toLocationId: "", qty: "1" });
   const [cForm, setCForm] = useState({ skuId: "", qty: "" });
+  // Mayoreo (Fase 3). El backend ya resolvía el escalón al cobrar, pero los tiers
+  // solo se podían crear por API: sin esta pantalla el mayoreo era inalcanzable.
+  const [tierSku, setTierSku] = useState<RetailSku | null>(null);
+  const [tiers, setTiers] = useState<PriceTier[]>([]);
+  const [tiersLoading, setTiersLoading] = useState(false);
+  const [tierForm, setTierForm] = useState({ minQty: "", price: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -144,6 +155,42 @@ export default function CatalogoPage() {
     try { await api.put(`/api/retail/v1/catalog/skus/${editSku.id}`, { price: Number(editForm.price), cost: Number(editForm.cost || 0), barcode: editForm.barcode || null, isActive: editForm.isActive }); setModal(null); setEditSku(null); await load(); }
     catch (err) { alert(errMsg(err)); } finally { setSaving(false); }
   }
+  // ── Mayoreo ───────────────────────────────────────────────────────────────
+  async function openTiers(s: RetailSku) {
+    setTierSku(s); setTierForm({ minQty: "", price: "" }); setModal("tiers");
+    setTiersLoading(true);
+    try { const r = await api.get<PriceTier[]>(`/api/retail/v1/catalog/skus/${s.id}/price-tiers`); setTiers(Array.isArray(r.data) ? r.data : []); }
+    catch { setTiers([]); } finally { setTiersLoading(false); }
+  }
+  async function addTier(e: FormEvent) {
+    e.preventDefault(); if (!tierSku) return;
+    const minQty = Number(tierForm.minQty); const price = Number(tierForm.price);
+    // El backend exige minQty positivo y rechaza duplicados por (sku, minQty) con
+    // 409; validar aquí solo evita el viaje, no sustituye esa verificación.
+    if (!Number.isFinite(minQty) || minQty <= 0) { alert("La cantidad mínima debe ser mayor a 0."); return; }
+    if (!Number.isFinite(price) || price < 0) { alert("El precio no puede ser negativo."); return; }
+    if (price >= Number(tierSku.price)) {
+      // No es un error del backend: un "mayoreo" más caro que el precio de lista
+      // casi siempre es un dedazo, y el POS lo aplicaría en serio.
+      if (!confirm(`El precio de mayoreo (${money(price)}) no es menor al de lista (${money(Number(tierSku.price))}). ¿Guardar de todos modos?`)) return;
+    }
+    setSaving(true);
+    try {
+      await api.post("/api/retail/v1/catalog/price-tiers", { skuId: tierSku.id, minQty, price });
+      setTierForm({ minQty: "", price: "" });
+      const r = await api.get<PriceTier[]>(`/api/retail/v1/catalog/skus/${tierSku.id}/price-tiers`);
+      setTiers(Array.isArray(r.data) ? r.data : []);
+    } catch (err) { alert(errMsg(err)); } finally { setSaving(false); }
+  }
+  async function delTier(id: string) {
+    if (!tierSku) return;
+    setSaving(true);
+    try {
+      await api.delete(`/api/retail/v1/catalog/price-tiers/${id}`);
+      setTiers((t) => t.filter((x) => x.id !== id));
+    } catch (err) { alert(errMsg(err)); } finally { setSaving(false); }
+  }
+
   async function saveTransfer(e: FormEvent) {
     e.preventDefault(); setSaving(true);
     try { await api.post("/api/retail/v1/transfers", { fromLocationId: activeLocationId, items: [{ skuId: tForm.skuId, toLocationId: tForm.toLocationId, qty: Number(tForm.qty) }], notes: "Traspaso desde admin" }); setModal(null); setTForm({ skuId: "", toLocationId: "", qty: "1" }); await load(); }
@@ -211,6 +258,10 @@ export default function CatalogoPage() {
                     <td className="py-3">
                       <div className="flex items-center gap-1">
                         <button type="button" onClick={() => openEdit(r.sku)} aria-label="Editar SKU" className="grid h-8 w-8 place-items-center rounded-lg border text-[var(--tx-mut)] hover:bg-[var(--surf-2)]" style={{ borderColor: "var(--bd-1)" }}><Pencil size={14} /></button>
+                        {/* Solo en giros con mayoreo: en ropa el botón sería ruido. */}
+                        {giroConfig(giro).wholesale && (
+                          <button type="button" onClick={() => openTiers(r.sku)} aria-label="Precios de mayoreo" title="Precios de mayoreo" className="grid h-8 w-8 place-items-center rounded-lg border text-[var(--tx-mut)] hover:bg-[var(--surf-2)]" style={{ borderColor: "var(--bd-1)" }}><Layers size={14} /></button>
+                        )}
                         <button type="button" onClick={() => { setTForm({ skuId: r.skuId, toLocationId: locations.find((l) => l.id !== activeLocationId)?.id || "", qty: "1" }); setModal("transfer"); }} aria-label="Traspasar" className="grid h-8 w-8 place-items-center rounded-lg border text-[var(--tx-mut)] hover:bg-[var(--surf-2)]" style={{ borderColor: "var(--bd-1)" }}><ArrowLeftRight size={14} /></button>
                         <button type="button" onClick={() => { setCForm({ skuId: r.skuId, qty: String(r.qty) }); setModal("count"); }} aria-label="Conteo" className="grid h-8 w-8 place-items-center rounded-lg border text-[var(--tx-mut)] hover:bg-[var(--surf-2)]" style={{ borderColor: "var(--bd-1)" }}><ClipboardCheck size={14} /></button>
                       </div>
@@ -338,12 +389,55 @@ export default function CatalogoPage() {
         </Modal>
       )}
 
+      {modal === "tiers" && tierSku && (
+        <Modal title={`Precios de mayoreo · ${tierSku.sku}`} onClose={() => setModal(null)}>
+          <div className="space-y-3">
+            <div className="rounded-xl border px-3 py-2 text-[12px] text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)", background: "var(--surf-2)" }}>
+              Precio de lista <b className="text-[var(--tx-hi)]">{money(Number(tierSku.price))}</b> por {tierSku.unitOfMeasure || "PZA"}.
+              A partir de la cantidad que definas, el POS cobra el precio del escalón — lo resuelve el servidor, el mostrador no calcula nada.
+            </div>
+
+            {tiersLoading ? (
+              <div className="py-6 text-center text-[12px] text-[var(--tx-mut)]">Cargando…</div>
+            ) : tiers.length === 0 ? (
+              <div className="rounded-xl border border-dashed px-3 py-6 text-center text-[12px] text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)" }}>
+                Sin escalones. Este SKU siempre se cobra a precio de lista.
+              </div>
+            ) : (
+              <div className="rounded-xl border divide-y" style={{ borderColor: "var(--bd-1)" }}>
+                {tiers.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <span className="text-[13px] text-[var(--tx-hi)]">
+                      Desde <b className="tnum">{num(Number(t.minQty))}</b> {tierSku.unitOfMeasure || "PZA"}
+                    </span>
+                    <span className="flex items-center gap-3">
+                      <span className="tnum text-[13px] font-semibold text-[var(--tx-hi)]">{money(Number(t.price))}</span>
+                      <button type="button" onClick={() => delTier(t.id)} disabled={saving} aria-label="Quitar escalón" className="grid h-7 w-7 place-items-center rounded-lg border text-[var(--tx-mut)] hover:text-red-500 disabled:opacity-50" style={{ borderColor: "var(--bd-1)" }}><Trash2 size={13} /></button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={addTier} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2 border-t pt-3" style={{ borderColor: "var(--bd-1)" }}>
+              <Field label={`Desde (${tierSku.unitOfMeasure || "PZA"})`}>
+                <input type="number" min="0.001" step="0.001" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={tierForm.minQty} onChange={(e) => setTierForm({ ...tierForm, minQty: e.target.value })} placeholder="100" required />
+              </Field>
+              <Field label="Precio unitario">
+                <input type="number" min="0" step="0.01" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={tierForm.price} onChange={(e) => setTierForm({ ...tierForm, price: e.target.value })} placeholder="8.50" required />
+              </Field>
+              <button type="submit" disabled={saving} className="mb-3 grid h-11 w-11 place-items-center rounded-xl text-white disabled:opacity-50" style={{ background: "var(--brand-primary)" }} aria-label="Agregar escalón"><Plus size={16} /></button>
+            </form>
+          </div>
+        </Modal>
+      )}
+
       {modal === "transfer" && (
         <Modal title="Traspaso entre sucursales" onClose={() => setModal(null)}>
           <form onSubmit={saveTransfer} className="space-y-3">
             <Field label="SKU origen"><select className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={tForm.skuId} onChange={(e) => setTForm({ ...tForm, skuId: e.target.value })} required><option value="">Selecciona SKU</option>{stock.map((r) => <option key={r.id} value={r.skuId}>{r.sku.sku} / {r.sku.product.name} / disp {num(r.qty)}</option>)}</select></Field>
             <Field label="Sucursal destino"><select className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={tForm.toLocationId} onChange={(e) => setTForm({ ...tForm, toLocationId: e.target.value })} required><option value="">Selecciona destino</option>{locations.filter((l) => l.id !== activeLocationId).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>
-            <Field label="Cantidad"><input type="number" min="1" step="1" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={tForm.qty} onChange={(e) => setTForm({ ...tForm, qty: e.target.value })} required /></Field>
+            <QtyField label="Cantidad" sku={stock.find((r) => r.skuId === tForm.skuId)?.sku} value={tForm.qty} onChange={(v) => setTForm({ ...tForm, qty: v })} />
             <ModalActions saving={saving} onCancel={() => setModal(null)} label="Registrar traspaso" icon={ArrowLeftRight} />
           </form>
         </Modal>
@@ -353,7 +447,7 @@ export default function CatalogoPage() {
         <Modal title="Conteo físico" onClose={() => setModal(null)}>
           <form onSubmit={saveCount} className="space-y-3">
             <Field label="SKU"><select className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={cForm.skuId} onChange={(e) => setCForm({ ...cForm, skuId: e.target.value })} required><option value="">Selecciona SKU</option>{allSkus.map((s) => <option key={s.id} value={s.id}>{s.sku} / {s.product.name}</option>)}</select></Field>
-            <Field label="Conteo real"><input type="number" min="0" step="1" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={cForm.qty} onChange={(e) => setCForm({ ...cForm, qty: e.target.value })} required /></Field>
+            <QtyField label="Conteo real" sku={allSkus.find((s) => s.id === cForm.skuId)} value={cForm.qty} onChange={(v) => setCForm({ ...cForm, qty: v })} />
             <ModalActions saving={saving} onCancel={() => setModal(null)} label="Aplicar conteo" icon={ClipboardCheck} />
           </form>
         </Modal>
@@ -373,6 +467,62 @@ function Select({ value, onChange, label, options }: { value: string; onChange: 
 }
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="block"><span className="mb-1.5 block text-[12px] font-semibold text-[var(--tx-mut)]">{label}</span>{children}</label>;
+}
+
+/**
+ * Captura de cantidad para conteo/traspaso.
+ *
+ * `value` SIEMPRE está en unidad base: el toggle "por caja" solo cambia cómo se
+ * teclea (N cajas → N × unitsPerPackage unidades base). Así el body que viaja al
+ * backend no depende del modo de captura y no hay doble conversión.
+ *
+ * También arregla que el conteo usaba step="1": un SKU en KG o MTS no se puede
+ * contar en enteros.
+ */
+function QtyField({ label, sku, value, onChange }: {
+  label: string;
+  sku?: RetailSku | null;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [byPackage, setByPackage] = useState(false);
+  const upp = Number(sku?.unitsPerPackage) || 0;
+  const unit = sku?.unitOfMeasure || "PZA";
+  const canPkg = canEnterByPackage(unit, upp);
+  // Si cambian el SKU a uno sin caja, el modo "por caja" dejaría el input
+  // mostrando cajas de un artículo que no las tiene.
+  useEffect(() => { if (!canPkg) setByPackage(false); }, [canPkg]);
+  const shown = byPackage && upp ? String(baseToPackages(Number(value) || 0, upp)) : value;
+  return (
+    <Field label={`${label} (${byPackage ? "cajas" : unit})`}>
+      <div className="flex items-center gap-2">
+        <input
+          type="number" min="0" step={byPackage ? "1" : isBulkUnit(unit) ? "0.001" : "1"}
+          className={inputCls} style={{ borderColor: "var(--bd-1)" }}
+          value={shown}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === "") return onChange("");
+            const n = Number(raw);
+            if (!Number.isFinite(n)) return;
+            onChange(String(byPackage && upp ? packagesToBase(n, upp) : n));
+          }}
+          onWheel={(e) => e.currentTarget.blur()}
+          required
+        />
+        {canPkg && (
+          <button
+            type="button" onClick={() => setByPackage((b) => !b)}
+            title={`1 caja = ${upp} ${unit}`}
+            className={"shrink-0 rounded-lg border px-2 py-1.5 text-[11px] " + (byPackage ? "font-semibold" : "text-[var(--tx-mut)]")}
+            style={{ borderColor: "var(--bd-1)", color: byPackage ? "var(--brand-primary)" : undefined }}
+          >
+            {byPackage ? `= ${round3(Number(value) || 0)} ${unit}` : "por caja"}
+          </button>
+        )}
+      </div>
+    </Field>
+  );
 }
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (

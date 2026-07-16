@@ -9,10 +9,10 @@
 // Ver docs/plan-retail-multigiro.md.
 //
 // El copy describe SOLO lo que el producto hace hoy: escaneo por código de
-// barras, venta a granel por metro/kilo/litro, precio por mayoreo, ubicación en
-// anaquel, corte de caja por turno y operación sin internet. No promete
-// conversión automática caja↔pieza (el campo se captura pero la conversión al
-// vender/recibir no está implementada).
+// barras, venta a granel por metro/kilo/litro, precio por mayoreo por escalón,
+// captura por caja (N cajas → N × unitsPerPackage unidades base, al vender,
+// contar y traspasar), ubicación en anaquel, corte de caja por turno y operación
+// sin internet.
 export type FerreteriaVertical = {
   slug: string
   nav: string
@@ -104,7 +104,7 @@ export const ferreteriaVerticals: FerreteriaVertical[] = [
     ],
     faqs: [
       ['¿Puedo guardar la medida y la rosca de cada pieza?', 'Sí. El catálogo usa los nombres de tu giro (medida, rosca, material) en vez de los de ropa.'],
-      ['¿Maneja precio por caja y por pieza?', 'Puedes vender con unidad "caja" o "pieza" y definir escalones de precio por cantidad. La conversión automática entre caja y pieza no está disponible todavía.'],
+      ['¿Maneja precio por caja y por pieza?', 'Sí. Registras cuántas piezas trae la caja y el mostrador captura "2 cajas": el sistema cobra y descuenta las 200 piezas. Además puedes definir escalones de precio por cantidad, que se aplican solos.'],
       ['¿Funciona sin internet?', 'Sí, se instala en Windows y Android y sincroniza cuando vuelve la conexión.'],
     ],
   },
