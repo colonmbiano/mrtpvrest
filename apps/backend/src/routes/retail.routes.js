@@ -158,6 +158,9 @@ const productSchema = z.object({
   imageUrl: z.string().optional(),
 });
 
+// Unidad de venta del SKU. Debe coincidir con UNITS en apps/moda/src/lib/giro.ts.
+const UNITS = ['PZA', 'MTS', 'KG', 'LTS', 'CAJA'];
+
 const skuSchema = z.object({
   productId: z.string().min(1),
   sku: z.string().min(1),
@@ -169,6 +172,11 @@ const skuSchema = z.object({
   price: z.number().nonnegative(),
   cost: z.number().nonnegative().optional(),
   imageUrl: z.string().optional(),
+  // Inventario genérico (retail multigiro · Fase 1)
+  unitOfMeasure: z.enum(UNITS).optional(),
+  unitsPerPackage: z.number().positive().optional(),
+  binLocation: z.string().optional(),
+  supplierRef: z.string().optional(),
 });
 
 const skuUpdateSchema = z.object({
@@ -181,6 +189,12 @@ const skuUpdateSchema = z.object({
   price: z.number().nonnegative().optional(),
   cost: z.number().nonnegative().optional(),
   isActive: z.boolean().optional(),
+  // Inventario genérico (retail multigiro · Fase 1). unitOfMeasure no es
+  // nullable: la columna es NOT NULL DEFAULT 'PZA'.
+  unitOfMeasure: z.enum(UNITS).optional(),
+  unitsPerPackage: z.number().positive().nullable().optional(),
+  binLocation: z.string().nullable().optional(),
+  supplierRef: z.string().nullable().optional(),
 });
 
 const saleSchema = z.object({
@@ -513,21 +527,35 @@ router.get('/catalog', async (req, res) => {
     const locationId = locationIdFrom(req, req.query.locationId);
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
 
-    const products = await prisma.retailProduct.findMany({
-      where: { restaurantId, isActive: true },
-      orderBy: [{ category: 'asc' }, { name: 'asc' }],
-      include: {
-        skus: {
-          where: { isActive: true },
-          orderBy: [{ sku: 'asc' }],
-          include: locationId
-            ? { stockBalances: { where: { locationId }, select: { qty: true, minQty: true } } }
-            : undefined,
+    // El giro viaja con el catálogo (retail multigiro · Fase 1): es la primera
+    // llamada del POS y ya va en cada arranque, así que la app lo obtiene sin
+    // un round-trip extra. Ver apps/moda/src/lib/giro.ts.
+    const [products, config] = await Promise.all([
+      prisma.retailProduct.findMany({
+        where: { restaurantId, isActive: true },
+        orderBy: [{ category: 'asc' }, { name: 'asc' }],
+        include: {
+          skus: {
+            where: { isActive: true },
+            orderBy: [{ sku: 'asc' }],
+            include: locationId
+              ? { stockBalances: { where: { locationId }, select: { qty: true, minQty: true } } }
+              : undefined,
+          },
         },
-      },
-    });
+      }),
+      prisma.restaurantConfig.findUnique({
+        where: { restaurantId },
+        select: { retailGiro: true },
+      }),
+    ]);
 
-    res.json({ products, serverTime: new Date().toISOString() });
+    // Un tenant sin fila de config todavía opera como ropa (default del schema).
+    res.json({
+      products,
+      giro: config?.retailGiro || 'ROPA',
+      serverTime: new Date().toISOString(),
+    });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
@@ -581,6 +609,10 @@ router.post('/catalog/skus', requireRole(...ADMIN_ROLES), async (req, res) => {
         price: data.price,
         cost: toNumber(data.cost),
         imageUrl: data.imageUrl || null,
+        unitOfMeasure: data.unitOfMeasure || 'PZA',
+        unitsPerPackage: data.unitsPerPackage ?? null,
+        binLocation: data.binLocation || null,
+        supplierRef: data.supplierRef || null,
       },
     });
     res.status(201).json(sku);
@@ -603,12 +635,17 @@ router.put('/catalog/skus/:id', requireRole(...ADMIN_ROLES), async (req, res) =>
 
     const patch = {};
     if (data.sku !== undefined) patch.sku = data.sku.trim();
-    for (const f of ['barcode', 'size', 'color', 'material', 'style']) {
+    for (const f of ['barcode', 'size', 'color', 'material', 'style', 'binLocation', 'supplierRef']) {
       if (data[f] !== undefined) patch[f] = data[f] || null;
     }
     if (data.price !== undefined) patch.price = data.price;
     if (data.cost !== undefined) patch.cost = data.cost;
     if (data.isActive !== undefined) patch.isActive = data.isActive;
+    // unitOfMeasure es NOT NULL: un '' del cliente no debe volverlo null.
+    if (data.unitOfMeasure !== undefined) patch.unitOfMeasure = data.unitOfMeasure;
+    // unitsPerPackage sí es nullable (null = "no aplica"); ?? preserva el null
+    // explícito, que || convertiría en null igual pero también mataría un 0.
+    if (data.unitsPerPackage !== undefined) patch.unitsPerPackage = data.unitsPerPackage ?? null;
 
     const sku = await prisma.retailSku.update({ where: { id: existing.id }, data: patch });
     res.json(sku);
