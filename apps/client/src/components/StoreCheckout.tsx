@@ -114,10 +114,14 @@ export default function StoreCheckout({
   const PROFILE_KEY = `mrtpv:customer:${slug}`;
   const [saveInfo, setSaveInfo] = useState(true);
   const [savedName, setSavedName] = useState('');
+  // Checkout exprés: cliente que regresa con datos completos ve un resumen
+  // "revisar → pagar"; "Editar mis datos" (editData) despliega el formulario.
+  const [editData, setEditData] = useState(false);
 
   // Al abrir el checkout, rellenamos con el perfil guardado (si existe).
   useEffect(() => {
     if (!open) return;
+    setEditData(false); // cada apertura arranca en modo exprés si hay perfil
     try {
       const raw = localStorage.getItem(PROFILE_KEY);
       if (!raw) return;
@@ -163,6 +167,13 @@ export default function StoreCheckout({
   useEffect(() => { if (!lockedTable && !allowed.includes(orderType)) setOrderType(allowed[0]); }, [allowed]); // eslint-disable-line
 
   const isDelivery = orderType === 'DELIVERY';
+  // Cliente que regresa (perfil guardado) con datos completos → checkout exprés.
+  // DINE_IN no aplica (necesita mesa y suele venir de un QR).
+  // Para DELIVERY con envío por distancia exigimos coords guardadas: sin ellas el
+  // cliente necesita el mapa → no exprés (se muestra el formulario completo).
+  const deliveryReady = !isDelivery || (!!deliveryAddress.trim() && (delivery?.mode !== 'DISTANCE' || !!coords));
+  const hasCompleteProfile = !!customerName.trim() && deliveryReady;
+  const expressMode = !!savedName && hasCompleteProfile && orderType !== 'DINE_IN' && !editData;
   const preview = useMemo(() => computeDeliveryPreview(delivery, total, coords), [delivery, total, coords]);
   const needsLocationForFee = isDelivery && delivery?.mode === 'DISTANCE' && !!delivery?.origin && !coords;
   const deliveryFee = isDelivery ? (preview.outOfRange ? 0 : preview.fee) : 0;
@@ -419,6 +430,21 @@ export default function StoreCheckout({
 
             {/* Datos del cliente */}
             <div className="space-y-3">
+              {expressMode && (
+                <div className="rounded-2xl border-2 p-4" style={{ borderColor: `${primary}40`, background: `${primary}0a` }}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-black" style={{ color: primary }}>👋 Hola de nuevo, {(customerName || savedName).split(' ')[0]}</span>
+                    <button type="button" onClick={forgetProfile} className="text-[11px] font-bold text-gray-400 hover:text-gray-700">No soy yo</button>
+                  </div>
+                  <div className="mt-2 space-y-0.5 text-sm text-gray-600">
+                    <p className="font-bold text-gray-800">{customerName}</p>
+                    {customerPhone && <p>📞 {customerPhone}</p>}
+                    {isDelivery && deliveryAddress && <p>📍 {deliveryAddress}</p>}
+                  </div>
+                  <button type="button" onClick={() => setEditData(true)} className="mt-3 text-xs font-black uppercase tracking-widest" style={{ color: primary }}>Editar mis datos</button>
+                </div>
+              )}
+              {!expressMode && (<>
               {savedName && (
                 <div className="flex items-center justify-between rounded-2xl px-4 py-2.5" style={{ background: `${primary}14` }}>
                   <span className="text-sm font-bold" style={{ color: primary }}>👋 Hola de nuevo, {savedName.split(' ')[0]}</span>
@@ -466,6 +492,7 @@ export default function StoreCheckout({
                 </span>
                 <span className="text-xs font-bold text-gray-500">Guardar mis datos para la próxima vez</span>
               </label>
+              </>)}
             </div>
 
             {/* Cliente frecuente (lealtad) */}
