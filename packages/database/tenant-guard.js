@@ -91,6 +91,10 @@ const SCOPED_MODELS = new Set([
   'RetailDevice',
   'RetailSyncOutbox',
   'RetailCashShift',
+  // Multigiro (ferretería / refaccionaria). Ver docs/plan-retail-multigiro.md.
+  'RetailPriceTier',
+  'RetailFitment',
+  'RetailCrossRef',
 ]);
 
 const SCOPE_FIELD = 'restaurantId';

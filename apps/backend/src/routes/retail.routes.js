@@ -259,12 +259,35 @@ async function createRetailSale(input, req) {
   }
   const skuMap = new Map(skus.map((sku) => [sku.id, sku]));
 
+  // Precio por volumen (mayoreo · retail multigiro Fase 3). Se resuelve aquí,
+  // server-side, junto al resto del cálculo: el cliente nunca manda precio.
+  const tiers = await prisma.retailPriceTier.findMany({
+    where: { restaurantId, skuId: { in: skuIds } },
+    orderBy: { minQty: 'asc' },
+  });
+  const tiersBySku = new Map();
+  for (const t of tiers) {
+    if (!tiersBySku.has(t.skuId)) tiersBySku.set(t.skuId, []);
+    tiersBySku.get(t.skuId).push(t);
+  }
+
   // Precio SIEMPRE del catálogo (server-side truth); nunca confiar en el
-  // unitPrice del cliente. Descuentos acotados a [0, bruto] para que no inviertan
-  // el signo del total ni sobre-cobren.
+  // unitPrice del cliente. Aplica el tier de mayor minQty que la cantidad
+  // alcance; sin tiers, el precio de lista.
+  //
+  // Una sola función para todo el archivo A PROPÓSITO: el precio se usa dos
+  // veces (el subtotal de la venta y cada RetailSaleLine). Si las dos rutas
+  // resolvieran por separado, un tier aplicado en una y no en la otra dejaría
+  // el total sin cuadrar contra la suma de sus líneas.
+  const priceFor = (sku, quantity) => {
+    const applicable = (tiersBySku.get(sku.id) || []).filter((t) => quantity >= Number(t.minQty));
+    // Ordenados por minQty asc ⇒ el último aplicable es el de mayor mínimo.
+    return applicable.length ? Number(applicable[applicable.length - 1].price) : Number(sku.price);
+  };
+
   const totals = body.lines.reduce((acc, line) => {
     const sku = skuMap.get(line.skuId);
-    const price = Number(sku.price);
+    const price = priceFor(sku, line.quantity);
     const gross = line.quantity * price;
     const discount = Math.min(Math.max(toNumber(line.discount), 0), gross);
     return {
@@ -326,11 +349,15 @@ async function createRetailSale(input, req) {
     for (const line of body.lines) {
       const sku = skuMap.get(line.skuId);
       const quantity = assertPositiveQty(line.quantity, 'quantity');
-      const unitPrice = Number(sku.price);
+      // Mismo priceFor que el subtotal de arriba: si divergieran, el total de la
+      // venta no cuadraría contra la suma de sus líneas.
+      const unitPrice = priceFor(sku, quantity);
       const lineDiscount = Math.min(Math.max(toNumber(line.discount), 0), quantity * unitPrice);
       const subtotal = Number((quantity * unitPrice - lineDiscount).toFixed(2));
       const costSnapshot = Number((quantity * Number(sku.cost || 0)).toFixed(4));
-      const variantLabel = [sku.size, sku.color, sku.material].filter(Boolean).join(' / ') || null;
+      // El label de variante ya no asume ropa: incluye style y respeta que las
+      // columnas son genéricas (el giro las reetiqueta en la UI).
+      const variantLabel = [sku.size, sku.color, sku.material, sku.style].filter(Boolean).join(' / ') || null;
 
       const current = await tx.retailStockByLocation.upsert({
         where: { locationId_skuId: { locationId, skuId: sku.id } },
@@ -654,6 +681,204 @@ router.put('/catalog/skus/:id', requireRole(...ADMIN_ROLES), async (req, res) =>
     if (e.code === 'P2002') return res.status(409).json({ error: 'SKU o codigo de barras ya existe' });
     res.status(e.status || 500).json({ error: e.message });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RETAIL MULTIGIRO · mayoreo, compatibilidad y equivalencias
+// Ver docs/plan-retail-multigiro.md (Fases 3 y 4).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Verifica que el SKU/producto sea del tenant ANTES de colgarle nada. El guard
+// filtra por restaurantId, pero un id ajeno daría 500 por FK en vez de un 404
+// claro — y confirmar la pertenencia es lo que impide escribir en otro tenant.
+async function assertOwnedSku(restaurantId, skuId) {
+  const sku = await prisma.retailSku.findFirst({ where: { id: skuId, restaurantId }, select: { id: true } });
+  if (!sku) { const e = new Error('SKU retail no encontrado'); e.status = 404; throw e; }
+  return sku;
+}
+async function assertOwnedProduct(restaurantId, productId) {
+  const p = await prisma.retailProduct.findFirst({ where: { id: productId, restaurantId }, select: { id: true } });
+  if (!p) { const e = new Error('Producto retail no encontrado'); e.status = 404; throw e; }
+  return p;
+}
+
+// ── Fase 3 · Precios por volumen (mayoreo) ──────────────────────────────────
+const tierSchema = z.object({
+  skuId: z.string().min(1),
+  minQty: z.number().positive(),
+  price: z.number().nonnegative(),
+});
+
+router.get('/catalog/skus/:id/price-tiers', async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    await assertOwnedSku(restaurantId, req.params.id);
+    const tiers = await prisma.retailPriceTier.findMany({
+      where: { restaurantId, skuId: req.params.id },
+      orderBy: { minQty: 'asc' },
+    });
+    res.json(tiers);
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+router.post('/catalog/price-tiers', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const data = tierSchema.parse(req.body);
+    await assertOwnedSku(restaurantId, data.skuId);
+    const tier = await prisma.retailPriceTier.create({
+      data: { restaurantId, skuId: data.skuId, minQty: data.minQty, price: data.price },
+    });
+    res.status(201).json(tier);
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Payload de tier invalido', details: e.errors });
+    if (e.code === 'P2002') return res.status(409).json({ error: 'Ya existe un precio para esa cantidad minima' });
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/catalog/price-tiers/:id', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { count } = await prisma.retailPriceTier.deleteMany({ where: { id: req.params.id, restaurantId } });
+    if (!count) return res.status(404).json({ error: 'Tier no encontrado' });
+    res.json({ ok: true });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+// ── Fase 4 · Compatibilidad (fitment) ───────────────────────────────────────
+const fitmentSchema = z.object({
+  productId: z.string().min(1),
+  make: z.string().min(1),
+  model: z.string().optional(),
+  yearFrom: z.number().int().optional(),
+  yearTo: z.number().int().optional(),
+  engine: z.string().optional(),
+}).refine((d) => d.yearFrom == null || d.yearTo == null || d.yearFrom <= d.yearTo, {
+  message: 'yearFrom no puede ser mayor que yearTo',
+});
+
+router.post('/catalog/fitments', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const data = fitmentSchema.parse(req.body);
+    await assertOwnedProduct(restaurantId, data.productId);
+    const fitment = await prisma.retailFitment.create({
+      data: {
+        restaurantId,
+        productId: data.productId,
+        make: data.make.trim(),
+        model: data.model?.trim() || null,
+        yearFrom: data.yearFrom ?? null,
+        yearTo: data.yearTo ?? null,
+        engine: data.engine?.trim() || null,
+      },
+    });
+    res.status(201).json(fitment);
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Payload de compatibilidad invalido', details: e.errors });
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/catalog/fitments/:id', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { count } = await prisma.retailFitment.deleteMany({ where: { id: req.params.id, restaurantId } });
+    if (!count) return res.status(404).json({ error: 'Compatibilidad no encontrada' });
+    res.json({ ok: true });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+// ── Fase 4 · Equivalencias (cross-reference) ────────────────────────────────
+const crossRefSchema = z.object({
+  skuId: z.string().min(1),
+  brand: z.string().optional(),
+  partNumber: z.string().min(1),
+});
+
+router.post('/catalog/cross-refs', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const data = crossRefSchema.parse(req.body);
+    await assertOwnedSku(restaurantId, data.skuId);
+    const ref = await prisma.retailCrossRef.create({
+      data: {
+        restaurantId,
+        skuId: data.skuId,
+        brand: data.brand?.trim() || null,
+        partNumber: data.partNumber.trim(),
+      },
+    });
+    res.status(201).json(ref);
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Payload de equivalencia invalido', details: e.errors });
+    if (e.code === 'P2002') return res.status(409).json({ error: 'Esa equivalencia ya existe para el SKU' });
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/catalog/cross-refs/:id', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { count } = await prisma.retailCrossRef.deleteMany({ where: { id: req.params.id, restaurantId } });
+    if (!count) return res.status(404).json({ error: 'Equivalencia no encontrada' });
+    res.json({ ok: true });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+// ── Fase 4 · Búsqueda por equivalencia o compatibilidad ─────────────────────
+// El mostrador de una refaccionaria busca por número de parte de OTRA marca o
+// por el coche del cliente. Es server-side (a diferencia del escaneo del POS,
+// que filtra el catálogo ya cargado en memoria) porque estas tablas no viajan
+// en GET /catalog: crecen mucho más que el catálogo.
+router.get('/catalog/search', async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { partNumber, make, model, year } = req.query;
+
+    if (partNumber) {
+      const refs = await prisma.retailCrossRef.findMany({
+        where: { restaurantId, partNumber: { equals: String(partNumber), mode: 'insensitive' } },
+        include: { sku: { include: { product: true } } },
+        take: 50,
+      });
+      return res.json({ skus: refs.map((r) => r.sku) });
+    }
+
+    if (make) {
+      const yearNum = year ? Number(year) : null;
+      const fitments = await prisma.retailFitment.findMany({
+        where: {
+          restaurantId,
+          make: { equals: String(make), mode: 'insensitive' },
+          ...(model ? { model: { equals: String(model), mode: 'insensitive' } } : {}),
+          // Rango abierto por ambos lados: null = "aplica siempre por ese lado".
+          ...(Number.isFinite(yearNum) && yearNum
+            ? {
+              AND: [
+                { OR: [{ yearFrom: null }, { yearFrom: { lte: yearNum } }] },
+                { OR: [{ yearTo: null }, { yearTo: { gte: yearNum } }] },
+              ],
+            }
+            : {}),
+        },
+        include: { product: { include: { skus: { where: { isActive: true } } } } },
+        take: 50,
+      });
+      return res.json({ skus: fitments.flatMap((f) => f.product.skus) });
+    }
+
+    return res.status(400).json({ error: 'Indica partNumber o make' });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 
 router.get('/stock', async (req, res) => {

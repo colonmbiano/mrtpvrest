@@ -475,6 +475,9 @@ function LabelModal({ sku, color, size, onClose }) {
 function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketIndex, onSwitch, onAddTicket, onCloseTicket }) {
   const products=useProducts();
   const setQty=(id,d)=>setCart(c=>c.map(l=>l.key===id?{...l,qty:Math.max(1,l.qty+d)}:l));
+  // Granel: cantidad libre. Se deja pasar el string vacío/parcial mientras el
+  // cajero teclea ("0." no es un número válido todavía) y se normaliza al vender.
+  const setQtyExact=(id,v)=>setCart(c=>c.map(l=>l.key===id?{...l,qty:(v===""?"":Number(v)<0?0:v)}:l));
   const del=(id)=>setCart(c=>c.filter(l=>l.key!==id));
   const [scan,setScan]=useState("");
   const giro=useGiro();
@@ -512,15 +515,28 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
               <div key={l.key} className="grid grid-cols-[1fr_120px_56px_56px_90px_84px_40px] items-center px-5 py-3 border-b border-line/70 hover:bg-surf/60">
                 <div className="flex items-center gap-3 min-w-0"><Thumb p={l}/>
                   <div className="min-w-0"><div className="text-[13px] font-semibold text-ink-900 truncate">{l.name}</div>
-                    <div className="text-[11px] text-ink-400">{l.color} / {l.size}</div></div></div>
+                    <div className="text-[11px] text-ink-400">{[l.color,l.size].filter(v=>v&&v!=="Único"&&v!=="Única").join(" / ")}</div></div></div>
                 <span className="tnum text-[11px] text-ink-500">{l.sku}</span>
                 <span className="text-center text-[13px] text-ink-700">{l.size}</span>
-                <span className="flex justify-center"><span style={{background:swatch[l.color]||"#ccc"}} className="w-5 h-5 rounded-full border border-black/10"/></span>
-                <span className="tnum text-right text-[13px] text-ink-900">{mx(l.price)}</span>
+                {/* El swatch solo tiene sentido donde el atributo ES un color. */}
+                <span className="flex justify-center">{giroConfig(giro).attrs.find(a=>a.key==="color")?.swatch
+                  ? <span style={{background:swatch[l.color]||"#ccc"}} className="w-5 h-5 rounded-full border border-black/10"/>
+                  : <span className="text-[12px] text-ink-700 truncate">{l.color==="Único"?"—":l.color}</span>}</span>
+                <span className="tnum text-right text-[13px] text-ink-900">{mx(l.price)}{isBulkUnit(l.unit)?<span className="text-[10px] text-ink-400">/{l.unit}</span>:null}</span>
+                {/* Granel (MTS/KG/LTS): la cantidad es decimal, así que un stepper
+                    de ±1 no sirve — se captura a mano. El backend ya acepta
+                    decimales (Decimal(12,3) en toda la cadena de cantidades). */}
                 <span className="flex items-center justify-center gap-1.5">
-                  <button onClick={()=>setQty(l.key,-1)} className="w-7 h-7 grid place-items-center rounded-lg border border-line hover:bg-surf text-ink-500"><Icon n="minus" s={13}/></button>
-                  <span className="tnum w-5 text-center text-[13px]">{l.qty}</span>
-                  <button onClick={()=>setQty(l.key,1)} className="w-7 h-7 grid place-items-center rounded-lg border border-line hover:bg-surf text-ink-500"><Icon n="plus" s={13}/></button>
+                  {isBulkUnit(l.unit) ? (
+                    <input type="number" min="0.001" step="0.001" value={l.qty}
+                      onChange={e=>setQtyExact(l.key, e.target.value)}
+                      onWheel={e=>e.currentTarget.blur()}
+                      className="tnum w-16 h-7 text-center text-[13px] rounded-lg border border-line bg-surf outline-none focus:border-brand-500"/>
+                  ) : (<>
+                    <button onClick={()=>setQty(l.key,-1)} className="w-7 h-7 grid place-items-center rounded-lg border border-line hover:bg-surf text-ink-500"><Icon n="minus" s={13}/></button>
+                    <span className="tnum w-5 text-center text-[13px]">{l.qty}</span>
+                    <button onClick={()=>setQty(l.key,1)} className="w-7 h-7 grid place-items-center rounded-lg border border-line hover:bg-surf text-ink-500"><Icon n="plus" s={13}/></button>
+                  </>)}
                 </span>
                 <button onClick={()=>del(l.key)} className="justify-self-center w-8 h-8 grid place-items-center rounded-lg hover:bg-red-50 text-ink-400 hover:text-red-500"><Icon n="trash" s={15}/></button>
               </div>
@@ -1629,7 +1645,13 @@ function App() {
 
   const cobrar=()=>{ if(cart.length) setScreen("checkout"); };
   const approve=async(total,method,payLines)=>{
-    const subtotal=cart.reduce((s,l)=>s+l.price*l.qty,0);
+    // La cantidad de granel se captura a mano y puede quedar vacía o en 0 mientras
+    // el cajero teclea; el backend la rechaza con 400. Se normaliza aquí y se
+    // aborta antes de cobrar en vez de mandar una venta que va a fallar.
+    const qtyOf=(l)=>Number(l.qty);
+    const badQty=cart.find(l=>!Number.isFinite(qtyOf(l))||qtyOf(l)<=0);
+    if(badQty){ alert(`Cantidad inválida en "${badQty.name}".`); return; }
+    const subtotal=cart.reduce((s,l)=>s+l.price*qtyOf(l),0);
     const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
     const totalCobro=Math.round((subtotal-desc)*100)/100;
     // Venta real al backend solo si hay sesión online y TODAS las líneas tienen skuId
@@ -1640,7 +1662,9 @@ function App() {
         const payments=(payLines&&payLines.length?payLines:[{method,amount:totalCobro}])
           .map(pl=>({method:Retail.toPaymentMethod(pl.method||method),amount:Math.round(pl.amount*100)/100}));
         // tax:0 → el precio de catálogo ya incluye IVA; el backend cobra Σ precio − descuento.
-        const r=await Retail.createSale({ lines:cart.map(l=>({skuId:l.skuId,quantity:l.qty})), payments, discount:desc, tax:0 });
+        // El backend puede devolver un total MENOR si aplica un tier de mayoreo:
+        // el precio lo manda el catálogo, no el cliente, así que `sale.total` manda.
+        const r=await Retail.createSale({ lines:cart.map(l=>({skuId:l.skuId,quantity:qtyOf(l)})), payments, discount:desc, tax:0 });
         setSale({ total:Number(r.sale.total), method, items:cart, subtotal, desc, folio:r.sale.folio });
         closeTicket(activeId); // la venta ya se cobró → descartar el ticket de inmediato
         setScreen("success");
