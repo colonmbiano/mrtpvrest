@@ -72,11 +72,11 @@ async function resolveCustomerId(req, restaurantId) {
 }
 
 // ¿La petición viene de un CAJERO/STAFF autenticado de ESTE restaurante?
-// Se usa para que la captura manual del TPV (pantalla /pos/whatsapp) NO quede
-// sujeta al horario del storefront ni al mínimo de compra: el cajero procesa
-// pedidos reales que ya llegaron, a cualquier hora. El JWT está firmado, así
-// que confiar en `restaurantId`/`role` del payload es seguro. Los clientes
-// públicos (role CUSTOMER, o sin token) siguen respetando horario y mínimo.
+// Un pedido capturado por staff NO queda sujeto al horario del storefront ni al
+// mínimo de compra: el cajero procesa pedidos reales que ya llegaron, a
+// cualquier hora. El JWT está firmado, así que confiar en `restaurantId`/`role`
+// del payload es seguro. Los clientes públicos (role CUSTOMER, o sin token)
+// siguen respetando horario y mínimo.
 const STAFF_ROLES = ['OWNER', 'ADMIN', 'MANAGER', 'CASHIER', 'WAITER', 'SUPER_ADMIN'];
 function isAuthedStaff(req, restaurantId) {
   try {
