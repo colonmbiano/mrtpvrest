@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Armchair,
   ArrowLeftRight,
-  ArrowRight,
   Banknote,
   Bell,
   Bike,
@@ -19,7 +18,6 @@ import {
   Loader2,
   LogOut,
   Menu,
-  MessageCircle,
   Pencil,
   Phone,
   Receipt,
@@ -114,8 +112,6 @@ interface OrderTypeSelectorProps {
   onShiftClose?: () => void;
   onExpenses?: () => void;
   onConfig?: () => void;
-  /** Abre la captura de pedidos de WhatsApp (/pos/whatsapp). */
-  onWhatsapp?: () => void;
   /** Navegación: ir al catálogo de ventas (/pos/menu). */
   onSales?: () => void;
   /** Navegación: ir al panel de sucursal / hub. */
@@ -291,7 +287,6 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onShiftClose,
   onExpenses,
   onConfig,
-  onWhatsapp,
   onSales,
   onHub,
   onWebOrders,
@@ -1202,33 +1197,6 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               );
             })}
           </div>
-
-          {/* Captura de pedidos de WhatsApp — entrada secundaria al pie del
-              panel. Acento verde para reconocerla de un vistazo. */}
-          {onWhatsapp && (
-            <button
-              type="button"
-              onClick={onWhatsapp}
-              aria-label="Capturar pedido de WhatsApp"
-              className="group flex shrink-0 items-center gap-3 rounded-2xl border bg-[var(--surface-1)] p-4 text-left transition-colors active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366]/60"
-              style={{ borderColor: "#25D3663a" }}
-            >
-              <span
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border"
-                style={{ backgroundColor: "#25D3661f", borderColor: "#25D36640", color: "#25D366" }}
-              >
-                <MessageCircle size={22} strokeWidth={2.5} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <h3 className="text-[15px] font-semibold leading-tight tracking-tight">Pedidos WhatsApp</h3>
-                <p className="text-[10px] font-bold text-white/40">Capturar pedido del chat</p>
-              </div>
-              <ArrowRight
-                strokeWidth={3}
-                className="h-4 w-4 shrink-0 text-white/30 transition-transform group-active:translate-x-0.5"
-              />
-            </button>
-          )}
         </aside>
       </main>
 
