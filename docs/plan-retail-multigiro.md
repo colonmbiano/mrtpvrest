@@ -297,12 +297,16 @@ engañoso: `page.jsx` son 1694 líneas con ~15 componentes que comparten el shap
   elegir giro y marcarlo (`PUT /api/locations/:id/business-type` — ya existe RETAIL; si se
   quiere granularidad, extender el enum `BusinessType` o guardar el giro fino en config).
 - Copys/íconos/tema por giro desde `giro.ts` (título "Ferretería", "Refaccionaria").
-- Landing: **el patrón ya está construido**, no hay que inventarlo. Existen
-  `apps/landing/app/moda/[giro]/page.tsx` (ruta dinámica con `generateStaticParams` +
-  `generateMetadata` + JSON-LD de `BreadcrumbList`/`FAQPage`) y `apps/landing/app/moda/giros/`,
-  alimentadas por el catálogo `modaVerticals` / `getModaVertical` en
-  `apps/landing/app/_data/moda-verticals.ts`. Agregar ferretería/refaccionaria es
-  **agregar entradas a ese data module**, no crear páginas.
+- Landing: **bloqueada por la decisión de branding de abajo — no es mecánica.**
+  El patrón existe (`apps/landing/app/moda/[giro]/page.tsx`, ruta dinámica con
+  `generateStaticParams` + `generateMetadata` + JSON-LD de `BreadcrumbList`/`FAQPage`,
+  más `apps/landing/app/moda/giros/`, alimentadas por `modaVerticals` /
+  `getModaVertical` en `apps/landing/app/_data/moda-verticals.ts`).
+  **Pero `modaVerticals` son sub-nichos de ROPA** (boutique, zapatería…) bajo `/moda/*`,
+  con copy y metaTitle de "punto de venta para ropa". Agregar ferretería ahí publicaría
+  *"Punto de Venta para Ferretería | MODA+"* colgando de `/moda/ferreteria`, que es
+  incoherente de marca y de SEO. Ferretería/refaccionaria no son verticales de MODA+:
+  son **otro producto** (Retail+). Requiere decidir marca/ruta antes de escribir copy.
 - **Decisión de branding pendiente:** ¿una sola app "Retail+" multigiro (recomendado) o
   dominios/APK separados por giro (`ferreteria.mrtpvrest.com`)? El código es el mismo; solo
   cambia el `giro` inicial y el branding.

@@ -702,6 +702,32 @@ async function assertOwnedProduct(restaurantId, productId) {
   return p;
 }
 
+// ── Fase 5 · Giro del tenant ────────────────────────────────────────────────
+// Giros válidos. Debe coincidir con el tipo Giro de apps/moda/src/lib/giro.ts.
+// La columna es texto libre (agregar un giro no cuesta migración), pero la
+// ESCRITURA sí se valida: un valor arbitrario dejaría a la app cayendo al
+// default ROPA sin explicar por qué.
+const GIROS = ['ROPA', 'FERRETERIA', 'REFACCIONARIA'];
+
+router.put('/config/giro', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { giro } = req.body || {};
+    if (!GIROS.includes(giro)) {
+      return res.status(400).json({ error: `giro invalido. Valores permitidos: ${GIROS.join(', ')}` });
+    }
+    // upsert: un tenant recién creado puede no tener fila de config todavía.
+    const config = await prisma.restaurantConfig.upsert({
+      where: { restaurantId },
+      update: { retailGiro: giro },
+      create: { restaurantId, retailGiro: giro },
+      select: { retailGiro: true },
+    });
+    res.json({ giro: config.retailGiro });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
 // ── Fase 3 · Precios por volumen (mayoreo) ──────────────────────────────────
 const tierSchema = z.object({
   skuId: z.string().min(1),
