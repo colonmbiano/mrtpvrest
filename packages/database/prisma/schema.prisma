@@ -1357,6 +1357,16 @@ model RestaurantConfig {
   // lada que se antepone a los teléfonos para los enlaces/notificaciones de
   // WhatsApp. Ver packages/config/phone.js para el mapeo país→lada.
   countryCode       String  @default("MX")
+
+  // Giro del tenant retail: ROPA | FERRETERIA | REFACCIONARIA. Decide el esquema
+  // de atributos del SKU y los labels/íconos de la app Retail+ (apps/moda).
+  // Es ORTOGONAL a Location.businessType (enum): ése dice "es mostrador"
+  // (preset operativo del TPV), éste dice CUÁL vertical. Ver
+  // docs/plan-retail-multigiro.md → "Dónde vive el giro".
+  // Texto libre (no enum) para agregar giros sin migración; la app valida
+  // contra apps/moda/src/lib/giro.ts y cae a ROPA si no reconoce el valor.
+  retailGiro        String  @default("ROPA")
+
   deliveryFee       Float   @default(0)
   freeDeliveryFrom  Float?
   minOrderAmount    Float   @default(0)
@@ -3868,8 +3878,11 @@ model RetailSku {
   productId    String
   product      RetailProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  sku      String
-  barcode  String?
+  sku     String
+  barcode String?
+  // Atributos genéricos. NO son "talla/color" salvo en el giro ROPA: cada giro
+  // los reetiqueta (ferretería: size=Medida, style=Rosca; refaccionaria:
+  // size=Posición, style=Lado). El mapeo vive en apps/moda/src/lib/giro.ts.
   size     String?
   color    String?
   material String?
@@ -3878,6 +3891,18 @@ model RetailSku {
   cost     Decimal @default(0) @db.Decimal(12, 2)
   imageUrl String?
   isActive Boolean @default(true)
+
+  // ── Inventario genérico (Fase 1 · retail multigiro) ────────────────────────
+  // Unidad de venta: PZA | MTS | KG | LTS | CAJA. Las cantidades ya son
+  // Decimal(12,3) en stock/movimientos/líneas, así que el granel (cable por
+  // metro, tornillos por kilo) no necesita cambio de tipos.
+  unitOfMeasure   String   @default("PZA")
+  // Conversión caja↔pza al vender/recibir. Null = no aplica.
+  unitsPerPackage Decimal? @db.Decimal(12, 3)
+  // Ubicación física en almacén (pasillo/anaquel/bin).
+  binLocation     String?
+  // Proveedor por SKU. Texto libre: no hay tabla de proveedores en retail aún.
+  supplierRef     String?
 
   stockBalances RetailStockByLocation[]
   movements     RetailStockMovement[]
