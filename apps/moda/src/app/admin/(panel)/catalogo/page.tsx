@@ -3,29 +3,50 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Search, Filter, ChevronDown, PackagePlus, Pencil, ArrowLeftRight, ClipboardCheck,
-  AlertTriangle, Shirt, Boxes, DollarSign, RefreshCw, X, PackageCheck, PackagePlus as PackagePlusIcon, Plus,
+  AlertTriangle, Shirt, Wrench, Car, Boxes, DollarSign, RefreshCw, X, PackageCheck, PackagePlus as PackagePlusIcon, Plus,
 } from "lucide-react";
 import api from "@/lib/admin-api";
 import { money, num } from "@/lib/admin-format";
 import { StatCard, DataCard, StatusBadge } from "@/components/admin/atoms";
 import AdminTopbar from "@/components/admin/AdminTopbar";
 import { sparkUp, sparkWarn, sparkUp2, sparkFlat } from "@/lib/admin-mock";
+import { DEFAULT_GIRO, giroConfig, isGiro, UNITS, type Giro, type SkuAttrKey } from "@/lib/giro";
+import { setGiro as cacheGiro } from "@/lib/tenant";
 
 type Location = { id: string; name: string; isCentralWarehouse?: boolean };
-type RetailSku = { id: string; sku: string; barcode?: string | null; size?: string | null; color?: string | null; material?: string | null; price: number; cost: number; isActive: boolean };
+type RetailSku = {
+  id: string; sku: string; barcode?: string | null;
+  size?: string | null; color?: string | null; material?: string | null; style?: string | null;
+  price: number; cost: number; isActive: boolean;
+  unitOfMeasure?: string | null; unitsPerPackage?: number | string | null;
+  binLocation?: string | null; supplierRef?: string | null;
+};
 type RetailProduct = { id: string; name: string; brand?: string | null; category?: string | null; skus: RetailSku[] };
 type StockRow = { id: string; locationId: string; skuId: string; qty: number; minQty: number; location: Location; sku: RetailSku & { product: RetailProduct } };
 
 const inputCls = "h-11 w-full rounded-xl border bg-[var(--surf-1)] px-3.5 text-[13px] text-[var(--tx-hi)] outline-none focus:border-[var(--brand-primary)]";
-const variantLabel = (s: { size?: string | null; color?: string | null; material?: string | null }) => [s.size, s.color, s.material].filter(Boolean).join(" / ") || "Variante única";
+// Los atributos se muestran en el orden que define el giro, no en un "talla /
+// color / material" fijo.
+const variantLabelFor = (giro: Giro, s: Partial<Record<SkuAttrKey, string | null | undefined>>) =>
+  giroConfig(giro).attrs.map((a) => s[a.key]).filter(Boolean).join(" / ") || "Variante única";
+// Ícono por giro. Mapa explícito: lucide no resuelve por nombre en runtime sin
+// arrastrar el paquete entero al bundle.
+const GIRO_ICON = { Shirt, Wrench, Car } as const;
+const giroIcon = (giro: Giro) => GIRO_ICON[giroConfig(giro).icon as keyof typeof GIRO_ICON] ?? Shirt;
 const errMsg = (e: unknown) => (e as { response?: { data?: { error?: string } } })?.response?.data?.error || (e instanceof Error ? e.message : "No se pudo completar la acción");
 const stockStatus = (qty: number, minQty: number) => (qty <= 0 ? "sin_stock" : minQty > 0 && qty <= minQty ? "stock_bajo" : "disponible");
 const statusLabel: Record<string, string> = { sin_stock: "Sin stock", stock_bajo: "Stock bajo", disponible: "Disponible" };
 
-const emptyProduct = { name: "", category: "", brand: "", sku: "", barcode: "", size: "", color: "", material: "", price: "", cost: "" };
+const emptyProduct = {
+  name: "", category: "", brand: "", sku: "", barcode: "",
+  size: "", color: "", material: "", style: "",
+  price: "", cost: "",
+  unitOfMeasure: "PZA", unitsPerPackage: "", binLocation: "", supplierRef: "",
+};
 
 export default function CatalogoPage() {
   const [activeLocationId, setActiveLocationId] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("moda-admin-locationId") || "" : ""));
+  const [giro, setGiroState] = useState<Giro>(DEFAULT_GIRO);
   const [locations, setLocations] = useState<Location[]>([]);
   const [products, setProducts] = useState<RetailProduct[]>([]);
   const [stock, setStock] = useState<StockRow[]>([]);
@@ -49,11 +70,14 @@ export default function CatalogoPage() {
     try {
       const [loc, cat, stk] = await Promise.all([
         api.get<Location[]>("/api/admin/locations"),
-        api.get<{ products: RetailProduct[] }>(`/api/retail/v1/catalog${q}`),
+        api.get<{ products: RetailProduct[]; giro?: string }>(`/api/retail/v1/catalog${q}`),
         api.get<StockRow[]>(`/api/retail/v1/stock${q}`),
       ]);
       const locs = Array.isArray(loc.data) ? loc.data : [];
       setLocations(locs);
+      // El giro llega con el catálogo (Fase 1). Un backend anterior a la
+      // migración no lo manda ⇒ se queda en ROPA, que es el comportamiento previo.
+      if (isGiro(cat.data.giro)) { setGiroState(cat.data.giro); cacheGiro(cat.data.giro); }
       setProducts(cat.data.products || []);
       setStock(Array.isArray(stk.data) ? stk.data : []);
       if (!activeLocationId && locs[0]?.id) { localStorage.setItem("moda-admin-locationId", locs[0].id); setActiveLocationId(locs[0].id); }
@@ -71,7 +95,7 @@ export default function CatalogoPage() {
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return stock.filter((r) => {
-      const okQ = !q || [r.sku.sku, r.sku.barcode, r.sku.product.name, r.sku.size, r.sku.color].filter(Boolean).join(" ").toLowerCase().includes(q);
+      const okQ = !q || [r.sku.sku, r.sku.barcode, r.sku.product.name, r.sku.size, r.sku.color, r.sku.material, r.sku.style, r.sku.binLocation].filter(Boolean).join(" ").toLowerCase().includes(q);
       const okCat = categoryFilter === "all" || r.sku.product.category === categoryFilter;
       const st = stockStatus(Number(r.qty), Number(r.minQty));
       const okStock = stockFilter === "all" || st === stockFilter;
@@ -97,7 +121,20 @@ export default function CatalogoPage() {
         productId = r.data.id;
       }
       if (!productId) throw new Error("Selecciona o crea un producto");
-      await api.post("/api/retail/v1/catalog/skus", { productId, sku: form.sku, barcode: form.barcode || undefined, size: form.size || undefined, color: form.color || undefined, material: form.material || undefined, price: Number(form.price), cost: Number(form.cost || 0) });
+      await api.post("/api/retail/v1/catalog/skus", {
+        productId, sku: form.sku,
+        barcode: form.barcode || undefined,
+        size: form.size || undefined,
+        color: form.color || undefined,
+        material: form.material || undefined,
+        style: form.style || undefined,
+        price: Number(form.price), cost: Number(form.cost || 0),
+        unitOfMeasure: form.unitOfMeasure || undefined,
+        // Number("") es 0 y el backend exige positivo ⇒ mandar undefined si viene vacío.
+        unitsPerPackage: form.unitsPerPackage ? Number(form.unitsPerPackage) : undefined,
+        binLocation: form.binLocation || undefined,
+        supplierRef: form.supplierRef || undefined,
+      });
       setModal(null); setForm({ ...emptyProduct }); setMode("new"); setExistingId(""); await load();
     } catch (err) { alert(errMsg(err)); } finally { setSaving(false); }
   }
@@ -141,7 +178,7 @@ export default function CatalogoPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={Shirt} tone="green" title="Productos activos" value={loading ? "—" : num(stats.skuCount)} trend="12.5%" trendLabel="vs. mes anterior" spark={sparkUp} />
+        <StatCard icon={giroIcon(giro)} tone="green" title="Productos activos" value={loading ? "—" : num(stats.skuCount)} trend="12.5%" trendLabel="vs. mes anterior" spark={sparkUp} />
         <StatCard icon={AlertTriangle} tone="orange" title="Stock bajo" value={loading ? "—" : num(stats.low)} trend={`${stats.low} por revisar`} trendTone="warn" spark={sparkWarn} />
         <StatCard icon={Boxes} tone="purple" title="Categorías" value={loading ? "—" : num(stats.cats)} trend="catálogo" trendTone="up" spark={sparkFlat} />
         <StatCard icon={DollarSign} tone="blue" title="Valor inventario" value={loading ? "—" : money(stats.value)} trend="8.7%" trendLabel="vs. mes anterior" spark={sparkUp2} />
@@ -162,8 +199,8 @@ export default function CatalogoPage() {
                   <tr key={r.id} className="border-b text-[13px]" style={{ borderColor: "var(--bd-1)" }}>
                     <td className="py-3 pr-3">
                       <div className="flex items-center gap-2.5">
-                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: "var(--surf-2)", color: "var(--tx-dim)" }}><Shirt size={16} /></span>
-                        <span className="min-w-0"><span className="block truncate font-semibold text-[var(--tx-hi)]">{r.sku.product.name}</span><span className="block truncate text-[11px] text-[var(--tx-mut)]">{variantLabel(r.sku)}</span></span>
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: "var(--surf-2)", color: "var(--tx-dim)" }}>{(() => { const I = giroIcon(giro); return <I size={16} />; })()}</span>
+                        <span className="min-w-0"><span className="block truncate font-semibold text-[var(--tx-hi)]">{r.sku.product.name}</span><span className="block truncate text-[11px] text-[var(--tx-mut)]">{variantLabelFor(giro, r.sku)}</span></span>
                       </div>
                     </td>
                     <td className="py-3 pr-3 font-mono text-[12px] text-[var(--tx-mut)]">{r.sku.sku}</td>
@@ -227,7 +264,7 @@ export default function CatalogoPage() {
             </div>
             {mode === "new" ? (
               <>
-                <Field label="Producto"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="Camisa Oxford Slim" /></Field>
+                <Field label="Producto"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder={giroConfig(giro).productPlaceholder} /></Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Categoría"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Camisas" /></Field>
                   <Field label="Marca"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></Field>
@@ -237,17 +274,46 @@ export default function CatalogoPage() {
               <Field label="Producto existente"><select className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={existingId} onChange={(e) => setExistingId(e.target.value)} required><option value="">Selecciona producto</option>{products.map((p) => <option key={p.id} value={p.id}>{p.name}{p.category ? ` / ${p.category}` : ""} ({p.skus.length} SKU)</option>)}</select></Field>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <Field label="SKU"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} required placeholder="CAM-OXF-M-NEG" /></Field>
+              <Field label="SKU"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} required placeholder={giroConfig(giro).skuPlaceholder} /></Field>
               <Field label="Código de barras"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} /></Field>
             </div>
+            {/* Atributos del giro: mismas 4 columnas de RetailSku, reetiquetadas.
+                Ropa → Talla/Color/Material; ferretería → Medida/Rosca/Material/
+                Presentación; refaccionaria → Posición/Lado/Línea/Marca. */}
             <div className="grid grid-cols-3 gap-3">
-              <Field label="Talla"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} placeholder="M" /></Field>
-              <Field label="Color"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} placeholder="Negro" /></Field>
-              <Field label="Material"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.material} onChange={(e) => setForm({ ...form, material: e.target.value })} placeholder="Algodón" /></Field>
+              {giroConfig(giro).attrs.map((a) => (
+                <Field key={a.key} label={a.label}>
+                  <input
+                    className={inputCls} style={{ borderColor: "var(--bd-1)" }}
+                    list={`sug-${a.key}`}
+                    value={form[a.key]}
+                    onChange={(e) => setForm({ ...form, [a.key]: e.target.value })}
+                    placeholder={a.suggest?.[0] || ""}
+                  />
+                  {/* Sugerencias, no restricción: la columna es texto libre y un
+                      inventario real siempre tiene medidas fuera del catálogo. */}
+                  {a.suggest?.length ? (
+                    <datalist id={`sug-${a.key}`}>{a.suggest.map((s) => <option key={s} value={s} />)}</datalist>
+                  ) : null}
+                </Field>
+              ))}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Precio"><input type="number" min="0" step="0.01" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required /></Field>
               <Field label="Costo"><input type="number" min="0" step="0.01" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} /></Field>
+            </div>
+            {/* Inventario genérico (Fase 1). La unidad se muestra en todos los
+                giros; el resto solo donde el giro lo declara. */}
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Unidad">
+                <select className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.unitOfMeasure} onChange={(e) => setForm({ ...form, unitOfMeasure: e.target.value })}>
+                  {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </Field>
+              {giroConfig(giro).unitOfMeasure ? (
+                <Field label="Piezas por caja"><input type="number" min="0" step="0.001" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.unitsPerPackage} onChange={(e) => setForm({ ...form, unitsPerPackage: e.target.value })} placeholder="100" /></Field>
+              ) : null}
+              <Field label="Ubicación"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.binLocation} onChange={(e) => setForm({ ...form, binLocation: e.target.value })} placeholder="P3-A2" /></Field>
             </div>
             <ModalActions saving={saving} onCancel={() => setModal(null)} label="Crear SKU" icon={Plus} />
           </form>
@@ -257,7 +323,7 @@ export default function CatalogoPage() {
       {modal === "edit" && editSku && (
         <Modal title={`Editar ${editSku.sku}`} onClose={() => setModal(null)}>
           <form onSubmit={saveEdit} className="space-y-3">
-            <div className="rounded-xl border px-3 py-2 text-[12px] text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)", background: "var(--surf-2)" }}>{variantLabel(editSku)}</div>
+            <div className="rounded-xl border px-3 py-2 text-[12px] text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)", background: "var(--surf-2)" }}>{variantLabelFor(giro, editSku)}</div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Precio"><input type="number" min="0" step="0.01" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={editForm.price} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} required /></Field>
               <Field label="Costo"><input type="number" min="0" step="0.01" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={editForm.cost} onChange={(e) => setEditForm({ ...editForm, cost: e.target.value })} /></Field>
