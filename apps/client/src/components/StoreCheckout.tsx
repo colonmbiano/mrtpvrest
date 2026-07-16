@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useCart } from '../lib/cartStore';
+import { authHeader } from '../lib/customerAuth';
+import { cartShareUrl } from '../lib/cartLink';
 import { getApiUrl } from '../lib/config';
 import { computeDeliveryPreview, type DeliveryConfig } from '../lib/delivery';
 import { MapLocationPicker } from './MapLocationPicker';
@@ -113,10 +115,15 @@ export default function StoreCheckout({
   const PROFILE_KEY = `mrtpv:customer:${slug}`;
   const [saveInfo, setSaveInfo] = useState(true);
   const [savedName, setSavedName] = useState('');
+  // Checkout exprés: cliente que regresa con datos completos ve un resumen
+  // "revisar → pagar"; "Editar mis datos" (editData) despliega el formulario.
+  const [editData, setEditData] = useState(false);
+  const [shared, setShared] = useState(false);
 
   // Al abrir el checkout, rellenamos con el perfil guardado (si existe).
   useEffect(() => {
     if (!open) return;
+    setEditData(false); // cada apertura arranca en modo exprés si hay perfil
     try {
       const raw = localStorage.getItem(PROFILE_KEY);
       if (!raw) return;
@@ -148,6 +155,23 @@ export default function StoreCheckout({
     setCustomerName(''); setCustomerPhone(''); setDeliveryAddress('');
   };
 
+  // Compartir el carrito por link (deep-link que rehidrata la tienda al abrirlo).
+  // navigator.share en móvil; fallback a copiar al portapapeles.
+  const shareCart = async () => {
+    const url = cartShareUrl(slug, lines);
+    try {
+      if (typeof navigator !== 'undefined' && (navigator as any).share) {
+        await (navigator as any).share({ title: 'Mi pedido', url });
+        return;
+      }
+    } catch { return; /* el usuario canceló el diálogo de compartir */ }
+    try {
+      await navigator.clipboard.writeText(url);
+      setShared(true);
+      setTimeout(() => setShared(false), 2500);
+    } catch {}
+  };
+
   // Tipos de pedido permitidos por la sucursal
   const allowed: OrderType[] = useMemo(() => {
     const l = selectedLocation;
@@ -162,6 +186,13 @@ export default function StoreCheckout({
   useEffect(() => { if (!lockedTable && !allowed.includes(orderType)) setOrderType(allowed[0]); }, [allowed]); // eslint-disable-line
 
   const isDelivery = orderType === 'DELIVERY';
+  // Cliente que regresa (perfil guardado) con datos completos → checkout exprés.
+  // DINE_IN no aplica (necesita mesa y suele venir de un QR).
+  // Para DELIVERY con envío por distancia exigimos coords guardadas: sin ellas el
+  // cliente necesita el mapa → no exprés (se muestra el formulario completo).
+  const deliveryReady = !isDelivery || (!!deliveryAddress.trim() && (delivery?.mode !== 'DISTANCE' || !!coords));
+  const hasCompleteProfile = !!customerName.trim() && deliveryReady;
+  const expressMode = !!savedName && hasCompleteProfile && orderType !== 'DINE_IN' && !editData;
   const preview = useMemo(() => computeDeliveryPreview(delivery, total, coords), [delivery, total, coords]);
   const needsLocationForFee = isDelivery && delivery?.mode === 'DISTANCE' && !!delivery?.origin && !coords;
   const deliveryFee = isDelivery ? (preview.outOfRange ? 0 : preview.fee) : 0;
@@ -234,7 +265,10 @@ export default function StoreCheckout({
     setIsSubmitting(true);
     try {
       const res = await fetch(`${API}/api/store/orders?r=${encodeURIComponent(slug)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        // authHeader: si el cliente tiene sesión, el token viaja y el backend
+        // (resolveCustomerId) liga el pedido a su cuenta → aparece en "Mis
+        // pedidos" y acumula lealtad. Sin sesión va vacío (pedido de invitado).
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeader(slug) },
         body: JSON.stringify({
           customerName, customerPhone,
           customerEmail: customerEmail.trim() || undefined,
@@ -380,6 +414,11 @@ export default function StoreCheckout({
               </div>
             </div>
 
+            {/* Compartir el carrito por link (deep-link que rehidrata la tienda). */}
+            <button type="button" onClick={shareCart} className="w-full py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest border-2 transition-all active:scale-95" style={{ borderColor: `${primary}40`, color: primary }}>
+              {shared ? '✓ Link copiado' : '🔗 Compartir mi pedido'}
+            </button>
+
             {/* Tipo de pedido — oculto cuando el pedido viene de un QR de mesa */}
             {lockedTable ? (
               <div className="flex items-center gap-2 rounded-2xl px-4 py-3" style={{ background: `${primary}14` }}>
@@ -415,6 +454,21 @@ export default function StoreCheckout({
 
             {/* Datos del cliente */}
             <div className="space-y-3">
+              {expressMode && (
+                <div className="rounded-2xl border-2 p-4" style={{ borderColor: `${primary}40`, background: `${primary}0a` }}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-black" style={{ color: primary }}>👋 Hola de nuevo, {(customerName || savedName).split(' ')[0]}</span>
+                    <button type="button" onClick={forgetProfile} className="text-[11px] font-bold text-gray-400 hover:text-gray-700">No soy yo</button>
+                  </div>
+                  <div className="mt-2 space-y-0.5 text-sm text-gray-600">
+                    <p className="font-bold text-gray-800">{customerName}</p>
+                    {customerPhone && <p>📞 {customerPhone}</p>}
+                    {isDelivery && deliveryAddress && <p>📍 {deliveryAddress}</p>}
+                  </div>
+                  <button type="button" onClick={() => setEditData(true)} className="mt-3 text-xs font-black uppercase tracking-widest" style={{ color: primary }}>Editar mis datos</button>
+                </div>
+              )}
+              {!expressMode && (<>
               {savedName && (
                 <div className="flex items-center justify-between rounded-2xl px-4 py-2.5" style={{ background: `${primary}14` }}>
                   <span className="text-sm font-bold" style={{ color: primary }}>👋 Hola de nuevo, {savedName.split(' ')[0]}</span>
@@ -462,6 +516,7 @@ export default function StoreCheckout({
                 </span>
                 <span className="text-xs font-bold text-gray-500">Guardar mis datos para la próxima vez</span>
               </label>
+              </>)}
             </div>
 
             {/* Cliente frecuente (lealtad) */}
