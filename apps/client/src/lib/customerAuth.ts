@@ -68,10 +68,19 @@ export type LoyaltyInfo = {
   transactions: { type: string; points: number; description: string; createdAt: string }[];
 };
 
+export type CustomerOrderItem = {
+  menuItemId: string; name: string; price: number; quantity: number;
+  notes: string | null;
+  modifiers: { modifierId: string | null; name: string }[];
+};
+
 export type CustomerOrder = {
   id: string; orderNumber: string; status: string; orderType: string; total: number;
   paymentStatus: string; pointsEarned: number; createdAt: string;
-  items: { name: string; price: number; quantity: number }[];
+  // Contacto/entrega del pedido → "Volver a pedir" los reusa como datos guardados.
+  customerName: string | null; customerPhone: string | null;
+  deliveryAddress: string | null; deliveryLat: number | null; deliveryLng: number | null;
+  items: CustomerOrderItem[];
 };
 
 export const fetchMyOrders = (slug: string) => get('customer/orders', slug) as Promise<CustomerOrder[]>;

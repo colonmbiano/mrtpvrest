@@ -12,6 +12,7 @@ import { productEmoji } from '../../lib/productEmoji';
 import BannerCarousel, { collectBanners } from '../BannerCarousel';
 import ProductModal, { needsModal } from '../ProductModal';
 import StoreCheckout from '../StoreCheckout';
+import MyOrdersModal from '../MyOrdersModal';
 import { ReactionButton } from '../ReactionButton';
 import { StoreLocaleProvider, useMoney, useLang } from '../StoreLocaleContext';
 import { LanguageSwitcher } from '../LanguageSwitcher';
@@ -131,6 +132,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
   const [activeCat, setActiveCat] = useState<string>(categories[0]?.id ?? '');
   const [orderMode, setOrderMode] = useState<OrderMode>('DELIVERY');
   const [auth, setAuthState] = useState<AuthState | null>(null);
+  const [myOrdersOpen, setMyOrdersOpen] = useState(false);
 
   useEffect(() => { setAuthState(getAuth(slug)); }, [slug]);
 
@@ -203,7 +205,7 @@ export function MochiTheme({ data }: MochiThemeProps) {
         <Header
           info={info} accent={ACCENT} waNumber={waNumber} quantity={quantity} total={total}
           query={query} setQuery={setQuery} orderMode={orderMode} setOrderMode={setOrderMode}
-          auth={auth} onLogin={() => setLoginOpen(true)}
+          auth={auth} onLogin={() => setLoginOpen(true)} onMyOrders={() => setMyOrdersOpen(true)}
           onSignOut={() => { clearAuth(slug); setAuthState(null); }}
           onCart={() => setCartOpen(true)} onWhatsApp={orderByWhatsApp}
         />
@@ -305,6 +307,9 @@ export function MochiTheme({ data }: MochiThemeProps) {
         onlinePayment={info.onlinePayment} initialOrderType={info.dineIn ? 'DINE_IN' : orderMode} whatsappOrder={info.whatsappOrder}
         lockedTable={info.dineIn?.table} lockedLocationId={info.dineIn?.locationId} />
 
+      <MyOrdersModal open={myOrdersOpen} onClose={() => setMyOrdersOpen(false)} slug={slug} primary={ACCENT}
+        products={allItems} onReordered={() => setCheckoutOpen(true)} />
+
       <style dangerouslySetInnerHTML={{ __html: `
         .no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
         @keyframes mkFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
@@ -346,7 +351,7 @@ function Decor() {
 // ══════════════════════════════════════════════════════════════════════════════
 //  HEADER
 // ══════════════════════════════════════════════════════════════════════════════
-function Header({ info, accent, waNumber, quantity, total, query, setQuery, orderMode, setOrderMode, auth, onLogin, onSignOut, onCart, onWhatsApp }: any) {
+function Header({ info, accent, waNumber, quantity, total, query, setQuery, orderMode, setOrderMode, auth, onLogin, onMyOrders, onSignOut, onCart, onWhatsApp }: any) {
   const fmt = useMoney();
   const { t } = useLang();
   return (
@@ -386,6 +391,13 @@ function Header({ info, accent, waNumber, quantity, total, query, setQuery, orde
           {waNumber && (
             <button onClick={onWhatsApp} className="hidden md:flex items-center gap-2 px-4 h-11 rounded-full font-bold text-sm text-white active:scale-95 transition shrink-0" style={{ background: WA }}>
               <MessageCircle className="w-4 h-4" /> <span className="hidden lg:inline">WhatsApp</span>
+            </button>
+          )}
+
+          {auth && onMyOrders && (
+            <button onClick={onMyOrders} className="hidden sm:flex items-center gap-1.5 px-3 h-11 rounded-full shrink-0" style={{ background: '#fff', border: `1.5px solid ${CARD_BD}` }} title="Mis pedidos · volver a pedir">
+              <span className="text-base leading-none">🧾</span>
+              <span className="hidden lg:block text-[12.5px] font-bold" style={{ color: INK }}>Mis pedidos</span>
             </button>
           )}
 
