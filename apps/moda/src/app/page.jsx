@@ -852,7 +852,9 @@ function SuccessScreen({ sale, go, newSale }) {
         <div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 rounded-full bg-brand-600 text-white grid place-items-center tnum text-xs">1</div><span className="font-semibold text-ink-900">Resumen de compra</span></div>
         <div className="space-y-3">{sale.items.map(l=>(<div key={l.key} className="flex items-center gap-3">
           <Thumb p={l} size={44}/><div className="flex-1 min-w-0"><div className="text-[13px] font-semibold text-ink-900 truncate">{l.name}</div><div className="text-[11px] text-ink-400">{l.color} / {l.size}</div></div>
-          <div className="tnum text-[13px] font-semibold text-ink-900">{mx(lineTotal(l,priceListId))}</div></div>))}</div>
+          {/* La lista de la VENTA, no la del selector: el cajero pudo cambiarlo
+              después de cobrar y el recibo no debe reescribirse solo. */}
+          <div className="tnum text-[13px] font-semibold text-ink-900">{mx(lineTotal(l,sale.priceListId))}</div></div>))}</div>
         <div className="mt-5 pt-4 border-t border-line space-y-2">
           <TotRow k="Subtotal" v={mx(sale.subtotal)}/>{sale.desc?<TotRow k="Descuento" v={<span className="text-brand-600">- {mx(sale.desc)}</span>}/>:null}
           <div className="flex items-center justify-between pt-2 border-t border-line"><span className="font-semibold text-ink-900">Total</span><span className="tnum text-lg font-bold text-ink-900">{mx(sale.total)}</span></div>
@@ -1785,7 +1787,7 @@ function App() {
         // priceListId viaja para que el backend resuelva la MISMA lista que se
         // cotizó; él recalcula y rechaza si su total no cuadra con los pagos.
         const r=await Retail.createSale({ lines:cart.map(l=>({skuId:l.skuId,quantity:qtyOf(l)})), payments, discount:desc, tax:0, priceListId:data.priceListId });
-        setSale({ total:Number(r.sale.total), method, items:cart, subtotal, desc, folio:r.sale.folio });
+        setSale({ total:Number(r.sale.total), method, items:cart, subtotal, desc, folio:r.sale.folio, priceListId:data.priceListId });
         closeTicket(activeId); // la venta ya se cobró → descartar el ticket de inmediato
         setScreen("success");
         if(data.refreshCatalog) data.refreshCatalog();
@@ -1797,7 +1799,7 @@ function App() {
       return;
     }
     // Demo / sin catálogo en vivo: venta local (NO persiste en backend).
-    setSale({ total:totalCobro, method, items:cart, subtotal, desc, folio:"DEMO-"+String(Date.now()).slice(-6) });
+    setSale({ total:totalCobro, method, items:cart, subtotal, desc, folio:"DEMO-"+String(Date.now()).slice(-6), priceListId:data.priceListId });
     closeTicket(activeId); // venta demo completada → descartar el ticket
     setScreen("success");
   };
