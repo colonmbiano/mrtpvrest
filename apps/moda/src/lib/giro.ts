@@ -148,10 +148,16 @@ export function attrLabel(g: Giro, key: SkuAttrKey): string | null {
  * movimientos, las líneas de venta y los escalones de mayoreo, y convertir en dos
  * capas invitaría a una doble conversión silenciosa.
  */
-export const UNITS = ["PZA", "MTS", "KG", "LTS", "CAJA"] as const;
+export const UNITS = ["PZA", "MTS", "KG", "LTS", "CAJA", "BULTO", "CUBETA", "PAQUETE"] as const;
 export type Unit = (typeof UNITS)[number];
 
-/** Unidades que se venden fraccionadas (habilitan cantidad decimal en el POS). */
+/**
+ * Unidades que se venden fraccionadas (habilitan cantidad decimal en el POS).
+ *
+ * BULTO/CUBETA/PAQUETE NO van aquí a propósito aunque contengan peso o volumen:
+ * un bulto de cemento se vende entero, no 2.5 bultos. Lo que se fracciona es el
+ * CONTENIDO, y eso se modela con un SKU en KG/LTS, no partiendo el empaque.
+ */
 const BULK_UNITS: ReadonlySet<string> = new Set(["MTS", "KG", "LTS"]);
 
 export function isBulkUnit(u?: string | null): boolean {

@@ -24,8 +24,12 @@ export interface BackendSku {
   binLocation?: string | null;
   supplierRef?: string | null;
   priceTiers?: { minQty: number | string; price: number | string }[];
+  priceListItems?: { priceListId: string; price: number | string }[];
   stockBalances?: { qty: number | string; minQty?: number | string }[];
 }
+
+/** Lista de precios por tipo de cliente (Público, Contratista, …). */
+export interface PriceList { id: string; name: string; isDefault: boolean }
 export interface BackendProduct {
   id: string;
   name: string;
@@ -76,6 +80,9 @@ export interface UiProduct {
   /** Escalones de mayoreo de ESTA fila, ordenados por minQty asc. El POS los
    *  necesita para cotizar el mismo precio que cobrará el backend. */
   priceTiers: PriceTier[];
+  /** priceListId → precio en esa lista. Vacío = esta fila usa precio de catálogo
+   *  en todas las listas. */
+  listPrices: Record<string, number>;
   matrix: Record<string, number[]>;
   /** Resolución talla/color → skuId real (para mandar ventas al backend). */
   skuByVariant: Record<string, string>;
@@ -97,9 +104,18 @@ const tiersOf = (s: BackendSku): PriceTier[] =>
     .map((t) => ({ minQty: Number(t.minQty), price: Number(t.price) }))
     .sort((a, b) => a.minQty - b.minQty);
 
+/** priceListId → precio de este SKU en esa lista. */
+const listPricesOf = (s: BackendSku): Record<string, number> =>
+  Object.fromEntries((s.priceListItems || []).map((i) => [i.priceListId, Number(i.price)]));
+
 /**
- * Precio unitario según la cantidad: aplica el escalón de mayor minQty que la
- * cantidad alcance; sin escalones, el de lista.
+ * Precio unitario de un SKU para una cantidad y una lista de precios.
+ *
+ * Regla: la LISTA fija el precio base de ese cliente (un SKU sin precio en la
+ * lista usa el de catálogo); el ESCALÓN por cantidad compite y gana el más
+ * barato. Son ortogonales — la lista depende de quién compra, el escalón de
+ * cuánto lleva — y sin el min() un contratista que compra volumen podría pagar
+ * MÁS que el público.
  *
  * ESPEJO EXACTO de `priceFor` en apps/backend/src/routes/retail.routes.js. El
  * backend sigue siendo la autoridad (recalcula y `POST /sales` rechaza la venta
@@ -108,9 +124,19 @@ const tiersOf = (s: BackendSku): PriceTier[] =>
  * rechaza con "Pagos no cuadran con total retail" — que es justo lo que pasaba
  * cuando el POS no conocía los escalones.
  */
-export function unitPriceFor(listPrice: number, tiers: PriceTier[] | undefined, quantity: number): number {
+export function unitPriceFor(
+  catalogPrice: number,
+  tiers: PriceTier[] | undefined,
+  quantity: number,
+  listPrices?: Record<string, number>,
+  priceListId?: string | null,
+): number {
+  const base = (priceListId && listPrices?.[priceListId] !== undefined)
+    ? listPrices[priceListId]
+    : catalogPrice;
   const applicable = (tiers || []).filter((t) => quantity >= t.minQty);
-  return applicable.length ? applicable[applicable.length - 1].price : listPrice;
+  if (!applicable.length) return base;
+  return Math.min(base, applicable[applicable.length - 1].price);
 }
 
 function numOrNull(v: number | string | null | undefined): number | null {
@@ -179,6 +205,7 @@ function mapAsMatrix(products: BackendProduct[], giro: Giro): UiProduct[] {
       unitsPerPackage: numOrNull(first.unitsPerPackage),
       binLocation: first.binLocation || null,
       priceTiers: tiersOf(first),
+      listPrices: listPricesOf(first),
       matrix,
       skuByVariant,
       barcodeByVariant,
@@ -223,6 +250,7 @@ function mapAsFlatSkus(products: BackendProduct[], giro: Giro): UiProduct[] {
         unitsPerPackage: numOrNull(s.unitsPerPackage),
         binLocation: s.binLocation || null,
         priceTiers: tiersOf(s),
+        listPrices: listPricesOf(s),
         // Matriz de una celda: `totalStock()` y demás helpers siguen funcionando
         // sin ramificar por giro.
         matrix: { [color]: [qtyOf(s)] },
@@ -402,16 +430,19 @@ export function unlink(): void {
 // retailGiro): es la primera llamada del POS y ya viaja en cada arranque, así
 // que no hace falta un round-trip extra. Se cachea en localStorage para que la
 // UI no arranque en ropa y salte a ferretería al resolver el fetch.
-export async function fetchCatalog(): Promise<UiProduct[]> {
+export async function fetchCatalog(): Promise<{ products: UiProduct[]; priceLists: PriceList[] }> {
   const { locationId } = getTenant();
   const qs = locationId ? `?locationId=${encodeURIComponent(locationId)}` : "";
-  const data = await apiFetch<{ products: BackendProduct[]; giro?: string }>(
+  const data = await apiFetch<{ products: BackendProduct[]; giro?: string; priceLists?: PriceList[] }>(
     `/api/retail/v1/catalog${qs}`,
   );
   // Un backend anterior a la Fase 1 no manda `giro`: se conserva el cacheado.
   const giro: Giro = isGiro(data.giro) ? data.giro : getGiro();
   setTenant({ giro });
-  return mapCatalogToProducts(data.products || [], giro);
+  return {
+    products: mapCatalogToProducts(data.products || [], giro),
+    priceLists: data.priceLists || [],
+  };
 }
 
 // ── Ventas ───────────────────────────────────────────────────────────────────
@@ -424,6 +455,9 @@ export async function createSale(input: {
   customerName?: string;
   discount?: number;
   tax?: number;
+  /** Lista de precios con la que se cotizó. El backend la re-resuelve y rechaza
+   *  la venta si su total no coincide con los pagos. */
+  priceListId?: string | null;
 }): Promise<{ sale: { id: string; folio: string; total: number | string }; idempotent: boolean }> {
   const clientSaleId = `moda-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
   return apiFetch("/api/retail/v1/sales", {
@@ -435,6 +469,7 @@ export async function createSale(input: {
       customerName: input.customerName,
       discount: input.discount,
       tax: input.tax,
+      priceListId: input.priceListId || undefined,
       device: { deviceKey: getDeviceKey(), platform: "WINDOWS", name: "Caja MODA+" },
     }),
   });

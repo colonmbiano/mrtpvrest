@@ -93,6 +93,8 @@ const SCOPED_MODELS = new Set([
   'RetailCashShift',
   // Multigiro (ferretería / refaccionaria). Ver docs/plan-retail-multigiro.md.
   'RetailPriceTier',
+  'RetailPriceList',
+  'RetailPriceListItem',
   'RetailFitment',
   'RetailCrossRef',
 ]);
