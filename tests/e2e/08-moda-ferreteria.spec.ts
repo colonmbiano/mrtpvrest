@@ -95,11 +95,28 @@ async function loginPin(page: Page, pin: string) {
   await expect(page.getByPlaceholder(/Escanea o escribe/i)).toBeVisible({ timeout: 20_000 });
 }
 
-/** Escanea un código y espera a que la línea entre al carrito. */
-async function scan(page: Page, code: string) {
+/**
+ * Escanea un código y espera a que la línea entre al carrito.
+ *
+ * Se acota a la fila del carrito: escanear también hace setSel(), así que el SKU
+ * queda visible en el carrito Y en el panel de detalle. Un getByText suelto casa
+ * los dos y revienta por strict mode.
+ */
+async function scan(page: Page, code: string, sku: string) {
   const input = page.getByPlaceholder(/Escanea o escribe/i);
   await input.fill(code);
   await input.press('Enter');
+  await expect(page.getByTestId('cart-row').filter({ hasText: sku })).toHaveCount(1, { timeout: 10_000 });
+}
+
+/** El JWT del empleado que la app dejó en la bóveda (lib/token-vault.ts). */
+async function authHeaders(page: Page, seed: Seed) {
+  const token = await page.evaluate(() => localStorage.getItem('moda-token'));
+  return {
+    Authorization: `Bearer ${token}`,
+    'x-restaurant-id': seed.restaurantId,
+    'x-location-id': seed.locationId,
+  };
 }
 
 /** Total que pinta el POS, como número. */
@@ -133,24 +150,23 @@ test.describe('Retail multigiro · ferretería', () => {
   test('el giro llega del backend y des-modiza la UI', async ({ page }) => {
     // Los encabezados del carrito son la señal más barata de que el giro mandó:
     // en ROPA dirían "Talla" y "Color"; en ferretería, "Medida" y "Presentación".
-    await expect(page.getByText('Medida', { exact: true })).toBeVisible();
-    await expect(page.getByText('Presentación', { exact: true })).toBeVisible();
-    await expect(page.getByText('Talla', { exact: true })).toHaveCount(0);
+    // Se asserta sobre la columna concreta y no con getByText: los labels del
+    // giro también salen en el panel de detalle, y ahí "Medida" casa 2 veces.
+    await expect(page.getByTestId('cart-col-size')).toHaveText('Medida');
+    await expect(page.getByTestId('cart-col-color')).toHaveText('Presentación');
   });
 
   test('escanear por código de barras agrega el artículo correcto', async ({ page }) => {
     const seed = readSeed();
-    await scan(page, seed.skus.pieza.barcode);
-
-    // El SKU en la línea prueba que resolvió por barcode y no por otra cosa.
-    await expect(page.getByText(seed.skus.pieza.sku)).toBeVisible({ timeout: 10_000 });
+    // scan() ya verifica que la fila del SKU correcto entró al carrito: eso es
+    // lo que prueba que resolvió por barcode y no por otra cosa.
+    await scan(page, seed.skus.pieza.barcode, seed.skus.pieza.sku);
     expect(await readTotal(page)).toBeCloseTo(seed.skus.pieza.price, 2);
   });
 
   test('granel: cobra 2.5 metros como 2.5, no redondeado', async ({ page }) => {
     const seed = readSeed();
-    await scan(page, seed.skus.granel.barcode);
-    await expect(page.getByText(seed.skus.granel.sku)).toBeVisible({ timeout: 10_000 });
+    await scan(page, seed.skus.granel.barcode, seed.skus.granel.sku);
 
     // En unidad MTS el carrito da input libre en vez del stepper de ±1.
     const qty = page.getByTestId('cart-qty-input').first();
@@ -164,8 +180,7 @@ test.describe('Retail multigiro · ferretería', () => {
   test('por caja: 2 cajas de 100 mandan 200 y disparan el mayoreo', async ({ page }) => {
     const seed = readSeed();
     const caja = seed.skus.caja;
-    await scan(page, caja.barcode);
-    await expect(page.getByText(caja.sku)).toBeVisible({ timeout: 10_000 });
+    await scan(page, caja.barcode, caja.sku);
 
     // Cambiar a captura por caja no altera la cantidad real (sigue en 1 pza).
     await page.getByTestId('cart-package-toggle').first().click();
@@ -174,43 +189,43 @@ test.describe('Retail multigiro · ferretería', () => {
     await qty.fill('2');
     await qty.blur();
 
-    // El POS pinta el precio de lista (no conoce los tiers): 200 × 2.50 = 500.
-    // El backend es quien aplica el escalón — se verifica abajo con el cobro.
-    expect(await readTotal(page)).toBeCloseTo(200 * caja.price, 2);
+    // El POS ya cotiza CON escalón: 200 ≥ minQty 100 ⇒ 200 × 1.80 = 360.
+    // Tiene que coincidir con lo que calcula el backend o POST /sales rechaza la
+    // venta ("Pagos no cuadran con total retail").
+    const esperado = 200 * caja.tier!.price;
+    expect(await readTotal(page)).toBeCloseTo(esperado, 2);
 
-    // Cobro: aquí manda el servidor.
+    // Cobro: aquí manda el servidor, que recalcula el escalón por su cuenta y
+    // rechaza la venta si no coincide con lo cotizado.
     await cobrarEnEfectivo(page);
 
-    // 200 ≥ minQty 100 ⇒ unitario 1.80 ⇒ 200 × 1.80 = 360.
-    // Si la conversión no ocurriera (2 pza) no habría tier: $5.00.
-    // Si se duplicara (400 pza) daría $720. Solo 200 da 360.
-    const esperado = 200 * caja.tier!.price;
+    // El total del servidor delata los tres modos de falla de la conversión:
+    // si no convirtiera (2 pza) no habría tier → $5.00; si duplicara (400) → $720.
+    // Solo 200 da $360.
     await expect(page.getByTestId('sale-success-total')).toContainText(esperado.toFixed(2));
   });
 
   test('el backend descuenta el stock con la cantidad decimal', async ({ page, request }) => {
     const seed = readSeed();
-    const before = await request.get(`${API_URL}/api/retail/v1/stock?locationId=${seed.locationId}`, {
-      headers: { 'x-restaurant-id': seed.restaurantId },
-    });
-    expect(before.ok()).toBeTruthy();
+    // /api/retail/v1 va detrás de authenticate: sin el JWT del empleado esto da
+    // 401. Se toma el token real que la app dejó en la bóveda.
+    const headers = await authHeaders(page, seed);
+    const stockOf = async () => {
+      const res = await request.get(`${API_URL}/api/retail/v1/stock?locationId=${seed.locationId}`, { headers });
+      expect(res.ok()).toBeTruthy();
+      const rows = (await res.json()) as Array<{ skuId: string; qty: string | number }>;
+      return Number(rows.find((r) => r.skuId === seed.skus.granel.id)!.qty);
+    };
 
-    await scan(page, seed.skus.granel.barcode);
-    await expect(page.getByText(seed.skus.granel.sku)).toBeVisible({ timeout: 10_000 });
+    const antes = await stockOf();
+
+    await scan(page, seed.skus.granel.barcode, seed.skus.granel.sku);
     const qty = page.getByTestId('cart-qty-input').first();
     await qty.fill('2.5');
     await qty.blur();
     await cobrarEnEfectivo(page);
 
-    const after = await request.get(`${API_URL}/api/retail/v1/stock?locationId=${seed.locationId}`, {
-      headers: { 'x-restaurant-id': seed.restaurantId },
-    });
-    const rows = (await after.json()) as Array<{ skuId: string; qty: string | number }>;
-    const row = rows.find((r) => r.skuId === seed.skus.granel.id);
-    const prev = ((await before.json()) as Array<{ skuId: string; qty: string | number }>)
-      .find((r) => r.skuId === seed.skus.granel.id);
-
-    // El descuento debe ser exactamente 2.5, no 2 ni 3.
-    expect(Number(prev!.qty) - Number(row!.qty)).toBeCloseTo(2.5, 3);
+    // Exactamente 2.5: no 2 (truncado) ni 3 (redondeado).
+    expect(antes - (await stockOf())).toBeCloseTo(2.5, 3);
   });
 });

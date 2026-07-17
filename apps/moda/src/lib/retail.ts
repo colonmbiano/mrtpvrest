@@ -23,6 +23,7 @@ export interface BackendSku {
   unitsPerPackage?: number | string | null;
   binLocation?: string | null;
   supplierRef?: string | null;
+  priceTiers?: { minQty: number | string; price: number | string }[];
   stockBalances?: { qty: number | string; minQty?: number | string }[];
 }
 export interface BackendProduct {
@@ -72,6 +73,9 @@ export interface UiProduct {
   unit: string;
   unitsPerPackage: number | null;
   binLocation: string | null;
+  /** Escalones de mayoreo de ESTA fila, ordenados por minQty asc. El POS los
+   *  necesita para cotizar el mismo precio que cobrará el backend. */
+  priceTiers: PriceTier[];
   matrix: Record<string, number[]>;
   /** Resolución talla/color → skuId real (para mandar ventas al backend). */
   skuByVariant: Record<string, string>;
@@ -85,6 +89,29 @@ const variantKey = (color: string, size: string) => `${color}::${size}`;
 
 const qtyOf = (s: BackendSku) => Number(s.stockBalances?.[0]?.qty ?? 0);
 const unitOf = (s: BackendSku) => s.unitOfMeasure || "PZA";
+
+export interface PriceTier { minQty: number; price: number }
+
+const tiersOf = (s: BackendSku): PriceTier[] =>
+  (s.priceTiers || [])
+    .map((t) => ({ minQty: Number(t.minQty), price: Number(t.price) }))
+    .sort((a, b) => a.minQty - b.minQty);
+
+/**
+ * Precio unitario según la cantidad: aplica el escalón de mayor minQty que la
+ * cantidad alcance; sin escalones, el de lista.
+ *
+ * ESPEJO EXACTO de `priceFor` en apps/backend/src/routes/retail.routes.js. El
+ * backend sigue siendo la autoridad (recalcula y `POST /sales` rechaza la venta
+ * si los pagos no cuadran con SU total); esto existe para que el POS pueda
+ * COTIZAR lo mismo que se va a cobrar. Si las dos reglas divergen, la venta se
+ * rechaza con "Pagos no cuadran con total retail" — que es justo lo que pasaba
+ * cuando el POS no conocía los escalones.
+ */
+export function unitPriceFor(listPrice: number, tiers: PriceTier[] | undefined, quantity: number): number {
+  const applicable = (tiers || []).filter((t) => quantity >= t.minQty);
+  return applicable.length ? applicable[applicable.length - 1].price : listPrice;
+}
 
 function numOrNull(v: number | string | null | undefined): number | null {
   if (v === null || v === undefined || v === "") return null;
@@ -151,6 +178,7 @@ function mapAsMatrix(products: BackendProduct[], giro: Giro): UiProduct[] {
       unit: unitOf(first),
       unitsPerPackage: numOrNull(first.unitsPerPackage),
       binLocation: first.binLocation || null,
+      priceTiers: tiersOf(first),
       matrix,
       skuByVariant,
       barcodeByVariant,
@@ -194,6 +222,7 @@ function mapAsFlatSkus(products: BackendProduct[], giro: Giro): UiProduct[] {
         unit: unitOf(s),
         unitsPerPackage: numOrNull(s.unitsPerPackage),
         binLocation: s.binLocation || null,
+        priceTiers: tiersOf(s),
         // Matriz de una celda: `totalStock()` y demás helpers siguen funcionando
         // sin ramificar por giro.
         matrix: { [color]: [qtyOf(s)] },

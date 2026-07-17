@@ -565,9 +565,20 @@ router.get('/catalog', async (req, res) => {
           skus: {
             where: { isActive: true },
             orderBy: [{ sku: 'asc' }],
-            include: locationId
-              ? { stockBalances: { where: { locationId }, select: { qty: true, minQty: true } } }
-              : undefined,
+            include: {
+              // Los escalones viajan al POS para que pueda COTIZAR el mismo
+              // precio que este backend va a cobrar. No es aflojar el
+              // "dinero server-side": el precio se sigue resolviendo aquí y
+              // POST /sales rechaza la venta si los pagos no cuadran con el
+              // total del servidor. Sin esto, el POS cotizaba lista, el backend
+              // cobraba mayoreo, y la venta reventaba con
+              // "Pagos no cuadran con total retail" — el mayoreo era
+              // imposible de cobrar.
+              priceTiers: { orderBy: { minQty: 'asc' }, select: { minQty: true, price: true } },
+              ...(locationId
+                ? { stockBalances: { where: { locationId }, select: { qty: true, minQty: true } } }
+                : {}),
+            },
           },
         },
       }),
