@@ -304,8 +304,8 @@ function BottomBar({ go, onCobrar, onNewTicket }) {
 
 /* ---------------- generic UI ---------------- */
 function Card({ className="", children }) { return <div className={"bg-card border border-line rounded-2xl "+className}>{children}</div>; }
-function PrimaryBtn({ children, onClick, className="" }) {
-  return <button onClick={onClick} className={"inline-flex items-center justify-center gap-2 h-12 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm transition-colors active:scale-[.99] "+className}>{children}</button>;
+function PrimaryBtn({ children, onClick, className="", testid }) {
+  return <button onClick={onClick} data-testid={testid} className={"inline-flex items-center justify-center gap-2 h-12 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm transition-colors active:scale-[.99] "+className}>{children}</button>;
 }
 function GhostBtn({ children, onClick, className="" }) {
   return <button onClick={onClick} className={"inline-flex items-center justify-center gap-2 h-11 px-4 rounded-xl border border-line hover:bg-surf text-ink-700 font-medium text-[13px] "+className}>{children}</button>;
@@ -645,7 +645,7 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
             <div className="flex items-center justify-between pt-2 mt-1 border-t border-line">
               <span className="font-semibold text-ink-900">Total</span>
               <span data-testid="sale-total" className="tnum text-2xl font-bold text-ink-900">{mx(total)}</span></div>
-            <PrimaryBtn onClick={()=>go("checkout")} className="w-full mt-1"><Icon n="card" s={18}/>Cobrar <span className="tnum opacity-80">F5</span></PrimaryBtn>
+            <PrimaryBtn onClick={()=>go("checkout")} testid="btn-cobrar" className="w-full mt-1"><Icon n="card" s={18}/>Cobrar <span className="tnum opacity-80">F5</span></PrimaryBtn>
           </div>
         </Card>
       </div>
@@ -818,7 +818,7 @@ function CheckoutScreen({ cart, go, onApprove }) {
         <Card className="p-4"><div className="text-[12px] text-ink-500 mb-1">{remaining>0?"Restante":"Cambio"}</div>
           <div className={"h-12 rounded-xl border flex items-center justify-end px-4 tnum text-xl font-bold "+(remaining>0?"bg-amber-50 border-amber-100 text-amber-700":"bg-brand-50 border-brand-100 text-brand-700")}>{remaining>0?mx(remaining):mx(changeDue)}</div></Card>
         <div className="flex gap-3 items-end">
-          <PrimaryBtn onClick={()=>{ if(remaining<=0) onApprove(total,payLabel,lines.length?lines:[{method:payLabel,amount:total}]); }} className={"flex-1 h-14 text-base "+(remaining>0?"opacity-50 pointer-events-none":"")}><Icon n="check" s={20}/>{remaining>0?"Falta "+mx(remaining):"Cobrar "+mx(total)} <span className="tnum opacity-80">(F5)</span></PrimaryBtn>
+          <PrimaryBtn testid="btn-confirmar-cobro" onClick={()=>{ if(remaining<=0) onApprove(total,payLabel,lines.length?lines:[{method:payLabel,amount:total}]); }} className={"flex-1 h-14 text-base "+(remaining>0?"opacity-50 pointer-events-none":"")}><Icon n="check" s={20}/>{remaining>0?"Falta "+mx(remaining):"Cobrar "+mx(total)} <span className="tnum opacity-80">(F5)</span></PrimaryBtn>
           <GhostBtn className="h-14" onClick={()=>setRcpt(true)}><Icon n="printer" s={18}/>Imprimir ticket</GhostBtn>
         </div>
       </div>
