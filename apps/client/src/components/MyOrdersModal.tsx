@@ -37,9 +37,12 @@ type Props = {
   products: StoreProduct[];
   // Se llama tras un "Volver a pedir" exitoso → el tema abre el carrito/checkout.
   onReordered: () => void;
+  // Nombre del cliente logueado, o undefined sin sesión: gobierna el pie de cuenta.
+  customerName?: string;
+  onSignOut: () => void;
 };
 
-export default function MyOrdersModal({ open, onClose, slug, primary, products, onReordered }: Props) {
+export default function MyOrdersModal({ open, onClose, slug, primary, products, onReordered, customerName, onSignOut }: Props) {
   const fmt = useMoney();
   const add = useCart((s) => s.add);
   const [orders, setOrders] = useState<CustomerOrder[] | null>(null);
@@ -142,6 +145,23 @@ export default function MyOrdersModal({ open, onClose, slug, primary, products, 
             );
           })}
         </div>
+
+        {/* Cerrar sesión vive aquí porque en móvil este modal es el único acceso
+            a la cuenta: el botón del header es desktop-only cuando hay sesión
+            (con sesión no cabe junto a "Mis pedidos" y el carrito con total en
+            360px), así que sin esto el cliente quedaba atrapado. */}
+        {customerName !== undefined && (
+          <div className="p-4 shrink-0 flex items-center justify-between gap-3" style={{ borderTop: '1px solid #f0f0f0' }}>
+            <span className="text-[12px] text-gray-400 min-w-0 truncate">Sesión de {customerName}</span>
+            <button
+              onClick={() => { onClose(); onSignOut(); }}
+              className="px-3.5 py-2 rounded-xl font-bold text-[12px] shrink-0 active:scale-95 transition-all"
+              style={{ background: '#f3f4f6', color: '#ef4444' }}
+            >
+              Cerrar sesión
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

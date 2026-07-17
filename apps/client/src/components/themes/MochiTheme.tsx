@@ -309,7 +309,8 @@ export function MochiTheme({ data }: MochiThemeProps) {
         lockedTable={info.dineIn?.table} lockedLocationId={info.dineIn?.locationId} />
 
       <MyOrdersModal open={myOrdersOpen} onClose={() => setMyOrdersOpen(false)} slug={slug} primary={ACCENT}
-        products={allItems} onReordered={() => setCheckoutOpen(true)} />
+        products={allItems} onReordered={() => setCheckoutOpen(true)}
+        customerName={auth?.customer.name} onSignOut={() => { clearAuth(slug); setAuthState(null); }} />
 
       <style dangerouslySetInnerHTML={{ __html: `
         .no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
@@ -405,8 +406,8 @@ function Header({ info, accent, waNumber, quantity, total, query, setQuery, orde
           {/* Sin sesión el botón se ve TAMBIÉN en móvil: era el único acceso al
               registro y estaba oculto ahí, así que desde el celular no había
               forma de crear cuenta. Con sesión sigue siendo desktop-only porque
-              en móvil ya está "Mis pedidos" y ambos + carrito con total no caben
-              en 360px. */}
+              ambos + carrito con total no caben en 360px; ahí cerrar sesión vive
+              en el pie de MyOrdersModal, alcanzable con el botón 🧾. */}
           <button onClick={auth ? onSignOut : onLogin} className={`${auth ? 'hidden sm:flex' : 'flex'} items-center gap-1.5 px-3 h-11 rounded-full shrink-0`} style={{ background: '#fff', border: `1.5px solid ${CARD_BD}` }} title={auth ? 'Cerrar sesión' : 'Iniciar sesión'}>
             <User className="w-5 h-5" style={{ color: auth ? accent : INK2 }} />
             <span className="hidden lg:block text-[12.5px] font-bold max-w-[90px] truncate" style={{ color: INK }}>{auth ? auth.customer.name.split(' ')[0] : 'Iniciar sesión'}</span>
