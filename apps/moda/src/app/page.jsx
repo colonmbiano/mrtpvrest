@@ -66,13 +66,16 @@ function Icon({ n, s = 18, c = "currentColor", sw = 1.9, cls = "" }) {
 
 /* ---------------- helpers + demo data ---------------- */
 const mx = (n) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n || 0);
-// Precio unitario de una línea con su escalón de mayoreo aplicado, y su importe.
-// El POS DEBE cotizar lo mismo que cobra el backend: POST /sales rechaza la
-// venta si los pagos no cuadran con el total del servidor, así que si aquí se
-// usara el precio de lista, cualquier venta con mayoreo sería incobrable.
-const linePrice = (l) => Retail.unitPriceFor(l.price, l.priceTiers, Number(l.qty) || 0);
-const lineTotal = (l) => linePrice(l) * (Number(l.qty) || 0);
-const cartTotal = (cart) => cart.reduce((s, l) => s + lineTotal(l), 0);
+// Precio unitario de una línea (lista del cliente + escalón por cantidad) y su
+// importe. El POS DEBE cotizar lo mismo que cobra el backend: POST /sales
+// rechaza la venta si los pagos no cuadran con el total del servidor, así que
+// cualquier divergencia aquí vuelve la venta INCOBRABLE. Por eso la regla vive
+// en unitPriceFor (lib/retail.ts), espejo de priceFor del backend, y no se
+// reimplementa en la UI.
+const linePrice = (l, priceListId) =>
+  Retail.unitPriceFor(l.price, l.priceTiers, Number(l.qty) || 0, l.listPrices, priceListId);
+const lineTotal = (l, priceListId) => linePrice(l, priceListId) * (Number(l.qty) || 0);
+const cartTotal = (cart, priceListId) => cart.reduce((s, l) => s + lineTotal(l, priceListId), 0);
 // El eje de tallas/medidas y las etiquetas de atributos salen del giro, no de un
 // hardcode de ropa.
 //
@@ -518,6 +521,7 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
   const del=(id)=>setCart(c=>c.filter(l=>l.key!==id));
   const [scan,setScan]=useState("");
   const giro=useGiro();
+  const { priceLists, priceListId, setPriceListId }=useData();
   const sizes=sizesFor(giro);
   const addProduct=(p)=>{ const size=sizes.includes(p.size)?p.size:(p.live?p.size:(sizes[0]||"Única")); setCart(c=>[...c,{key:p.id+"-"+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,priceTiers:p.priceTiers,color:p.color,size,tone:p.tone,cat:p.cat,qty:1,unit:p.unit,unitsPerPackage:p.unitsPerPackage,byPackage:false,skuId:p.skuId||resolveSkuId(p,p.color,p.size)}]); };
   // Resolución del escaneo, en orden de especificidad. El orden importa: la
@@ -529,7 +533,7 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
       ||products.find(p=>p.sku.toLowerCase()===q)
       ||products.find(p=>(p.sku+" "+p.name+" "+(p.variantLabel||"")).toLowerCase().indexOf(q)>=0);
     if(m){ addProduct(m); setSel(m); } setScan(""); };
-  const subtotal=cartTotal(cart);
+  const subtotal=cartTotal(cart,priceListId);
   const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
   const total=Math.round((subtotal-desc)*100)/100;
   const iva=Math.round((total-total/1.16)*100)/100; // IVA incluido (informativo)
@@ -542,7 +546,21 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
           <div className="flex items-center justify-between px-5 h-14 border-b border-line">
             <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-xl bg-brand-100 grid place-items-center text-brand-600"><Icon n="cart" s={18}/></div>
               <span className="font-semibold text-ink-900">Venta activa</span></div>
-            <span className="tnum text-[12px] text-ink-400">Ticket {(ticketIndex??0)+1}</span>
+            <div className="flex items-center gap-3">
+              {/* Tipo de cliente: cambia el precio de TODO el carrito. Solo si el
+                  tenant definió listas — una tienda sin listas no ve el selector. */}
+              {priceLists?.length>0 && (
+                <label className="flex items-center gap-1.5 text-[12px] text-ink-500">
+                  <Icon n="users" s={14}/>
+                  <select data-testid="price-list-select" value={priceListId||""} onChange={e=>setPriceListId(e.target.value||null)}
+                    className="h-8 rounded-lg border border-line bg-surf px-2 text-[12px] text-ink-900 outline-none focus:border-brand-500">
+                    <option value="">Precio de catálogo</option>
+                    {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}</option>)}
+                  </select>
+                </label>
+              )}
+              <span className="tnum text-[12px] text-ink-400">Ticket {(ticketIndex??0)+1}</span>
+            </div>
           </div>
           <div className="grid grid-cols-[1fr_120px_56px_56px_90px_84px_40px] px-5 py-2.5 text-[11px] font-semibold text-ink-400 uppercase tracking-wide border-b border-line">
             <span>Producto</span><span>SKU</span><span data-testid="cart-col-size" className="text-center">{attrLabel(giro,"size")||"Talla"}</span><span data-testid="cart-col-color" className="text-center">{attrLabel(giro,"color")||"Color"}</span><span className="text-right">Precio</span><span className="text-center">Cant.</span><span></span>
@@ -562,9 +580,9 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
                 {/* Precio con escalón aplicado: si el mayoreo entró, el cajero
                     tiene que verlo — es lo que se va a cobrar. */}
                 <span className="tnum text-right text-[13px] text-ink-900">
-                  {mx(linePrice(l))}
+                  {mx(linePrice(l,priceListId))}
                   {isBulkUnit(l.unit)?<span className="text-[10px] text-ink-400">/{l.unit}</span>:null}
-                  {linePrice(l)<l.price?<span className="block text-[9px] text-brand-600 font-semibold">mayoreo</span>:null}
+                  {linePrice(l,priceListId)<l.price?<span className="block text-[9px] text-brand-600 font-semibold">precio especial</span>:null}
                 </span>
                 {/* Tres modos de captura, pero l.qty SIEMPRE en unidad base:
                       · granel (MTS/KG/LTS) → decimal a mano (el stepper de ±1 no sirve)
@@ -722,7 +740,8 @@ function CheckoutScreen({ cart, go, onApprove }) {
   const [lines,setLines]=useState([]);
   const [changeDue,setChangeDue]=useState(0);
   const [rcpt,setRcpt]=useState(false);
-  const subtotal=cartTotal(cart);
+  const { priceListId }=useData();
+  const subtotal=cartTotal(cart,priceListId);
   const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
   const total=Math.round((subtotal-desc)*100)/100;
   const iva=Math.round((total-total/1.16)*100)/100; // IVA incluido (informativo)
@@ -833,7 +852,7 @@ function SuccessScreen({ sale, go, newSale }) {
         <div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 rounded-full bg-brand-600 text-white grid place-items-center tnum text-xs">1</div><span className="font-semibold text-ink-900">Resumen de compra</span></div>
         <div className="space-y-3">{sale.items.map(l=>(<div key={l.key} className="flex items-center gap-3">
           <Thumb p={l} size={44}/><div className="flex-1 min-w-0"><div className="text-[13px] font-semibold text-ink-900 truncate">{l.name}</div><div className="text-[11px] text-ink-400">{l.color} / {l.size}</div></div>
-          <div className="tnum text-[13px] font-semibold text-ink-900">{mx(lineTotal(l))}</div></div>))}</div>
+          <div className="tnum text-[13px] font-semibold text-ink-900">{mx(lineTotal(l,priceListId))}</div></div>))}</div>
         <div className="mt-5 pt-4 border-t border-line space-y-2">
           <TotRow k="Subtotal" v={mx(sale.subtotal)}/>{sale.desc?<TotRow k="Descuento" v={<span className="text-brand-600">- {mx(sale.desc)}</span>}/>:null}
           <div className="flex items-center justify-between pt-2 border-t border-line"><span className="font-semibold text-ink-900">Total</span><span className="tnum text-lg font-bold text-ink-900">{mx(sale.total)}</span></div>
@@ -1566,11 +1585,18 @@ function Root(){
   // Arranca en el default para que SSR e hidratación coincidan; el valor real
   // (cacheado o del catálogo) entra en el efecto de abajo y en loadCatalog.
   const [giro,setGiroState]=useState(DEFAULT_GIRO);
+  // Listas de precio (tipo de cliente) y la seleccionada para la venta en curso.
+  const [priceLists,setPriceLists]=useState([]);
+  const [priceListId,setPriceListId]=useState(null);
 
   const loadCatalog=async()=>{
     try{
-      const ps=await Retail.fetchCatalog(); // también cachea el giro del backend
+      const { products:ps, priceLists:pls }=await Retail.fetchCatalog(); // también cachea el giro
       setProducts(ps);
+      setPriceLists(pls);
+      // Preselecciona la lista default del tenant (p.ej. "Público"); si no hay
+      // ninguna marcada, se cotiza a precio de catálogo.
+      setPriceListId(prev=>prev ?? (pls.find(l=>l.isDefault)?.id || null));
       setGiroState(getGiro()); // propaga a la UI sin esperar un reload
       setOnline(true);
       return ps;
@@ -1634,7 +1660,7 @@ function Root(){
       onLogin={async(emp)=>{ setSession(emp); await loadCatalog(); }}
       onRelink={()=>{ Retail.unlink(); setSession(null); setLinked(false); }}/></div>;
   }
-  const value={ products, online, demo, session, giro,
+  const value={ products, online, demo, session, giro, priceLists, priceListId, setPriceListId,
     refreshCatalog:loadCatalog,
     logout:()=>{ Retail.logout(); setSession(null); setDemo(false); setOnline(false); setProducts([]); } };
   return (<DataCtx.Provider value={value}><App/></DataCtx.Provider>);
@@ -1670,12 +1696,13 @@ function saveTickets(tickets, activeId) {
 // Barra de pestañas de tickets (ventas en espera). Click = cambiar; ✕ = cerrar;
 // "Nuevo ticket" = abrir uno vacío. Se muestra arriba de la venta activa.
 function TicketTabs({ tickets, activeId, onSwitch, onAdd, onClose }) {
+  const { priceListId }=useData();
   return (
     <div className="flex items-center gap-2 overflow-x-auto pb-0.5 shrink-0">
       {tickets.map((t, i) => {
         const a = t.id === activeId;
         const count = t.cart.reduce((s, l) => s + l.qty, 0);
-        const total = cartTotal(t.cart);
+        const total = cartTotal(t.cart, priceListId);
         return (
           <div key={t.id} onClick={() => onSwitch(t.id)} role="button" tabIndex={0}
             className={"group flex items-center gap-2 h-11 pl-2.5 pr-1.5 rounded-xl border shrink-0 cursor-pointer transition-colors " + (a ? "bg-brand-100 border-brand-500" : "bg-card border-line hover:bg-surf")}>
@@ -1741,7 +1768,10 @@ function App() {
     const qtyOf=(l)=>Number(l.qty);
     const badQty=cart.find(l=>!Number.isFinite(qtyOf(l))||qtyOf(l)<=0);
     if(badQty){ alert(`Cantidad inválida en "${badQty.name}".`); return; }
-    const subtotal=cart.reduce((s,l)=>s+l.price*qtyOf(l),0);
+    // cartTotal (no Σ l.price×qty): tiene que aplicar lista y escalón igual que
+    // el backend. Con el precio de catálogo, el pago no cuadraría con el total
+    // del servidor y POST /sales rechazaría la venta.
+    const subtotal=cartTotal(cart,data.priceListId);
     const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
     const totalCobro=Math.round((subtotal-desc)*100)/100;
     // Venta real al backend solo si hay sesión online y TODAS las líneas tienen skuId
@@ -1752,9 +1782,9 @@ function App() {
         const payments=(payLines&&payLines.length?payLines:[{method,amount:totalCobro}])
           .map(pl=>({method:Retail.toPaymentMethod(pl.method||method),amount:Math.round(pl.amount*100)/100}));
         // tax:0 → el precio de catálogo ya incluye IVA; el backend cobra Σ precio − descuento.
-        // El backend puede devolver un total MENOR si aplica un tier de mayoreo:
-        // el precio lo manda el catálogo, no el cliente, así que `sale.total` manda.
-        const r=await Retail.createSale({ lines:cart.map(l=>({skuId:l.skuId,quantity:qtyOf(l)})), payments, discount:desc, tax:0 });
+        // priceListId viaja para que el backend resuelva la MISMA lista que se
+        // cotizó; él recalcula y rechaza si su total no cuadra con los pagos.
+        const r=await Retail.createSale({ lines:cart.map(l=>({skuId:l.skuId,quantity:qtyOf(l)})), payments, discount:desc, tax:0, priceListId:data.priceListId });
         setSale({ total:Number(r.sale.total), method, items:cart, subtotal, desc, folio:r.sale.folio });
         closeTicket(activeId); // la venta ya se cobró → descartar el ticket de inmediato
         setScreen("success");

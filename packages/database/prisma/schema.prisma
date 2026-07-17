@@ -384,6 +384,8 @@ model Restaurant {
   retailSyncOutbox     RetailSyncOutbox[]
   retailCashShifts     RetailCashShift[]
   retailPriceTiers     RetailPriceTier[]
+  retailPriceLists     RetailPriceList[]
+  retailPriceListItems RetailPriceListItem[]
   retailFitments       RetailFitment[]
   retailCrossRefs      RetailCrossRef[]
 }
@@ -3915,6 +3917,7 @@ model RetailSku {
   saleLines     RetailSaleLine[]
   transferItems RetailTransferItem[]
   priceTiers    RetailPriceTier[]
+  priceListItems RetailPriceListItem[]
   crossRefs     RetailCrossRef[]
 
   createdAt DateTime @default(now())
@@ -4000,6 +4003,13 @@ model RetailSale {
   notes         String?
   createdById   String?
   syncedAt      DateTime?
+
+  /// Lista de precios con la que se cobró. Se guarda para poder explicar DESPUÉS
+  /// por qué un ticket salió a cierto precio: sin esto, un total de contratista
+  /// es indistinguible de un descuento no autorizado.
+  /// SetNull: borrar una lista no debe borrar el histórico de ventas.
+  priceListId String?
+  priceList   RetailPriceList? @relation(fields: [priceListId], references: [id], onDelete: SetNull)
 
   lines    RetailSaleLine[]
   payments RetailPayment[]
@@ -4225,6 +4235,57 @@ model RetailCashMovement {
 // SCOPED_MODELS de packages/database/tenant-guard.js (tenant-guard.test.js
 // falla si se olvida).
 // ═══════════════════════════════════════════════════════════════════════════
+
+/// Lista de precios por tipo de cliente: "Público", "Contratista", "Mayoreo".
+///
+/// Es ORTOGONAL a RetailPriceTier: la lista depende de QUIÉN compra, el tier de
+/// CUÁNTO lleva. Cuando ambos aplican gana el más barato para el cliente — ver
+/// `priceFor` en retail.routes.js y su espejo `unitPriceFor` en moda/lib/retail.ts.
+/// Sin esa regla, un contratista que compra volumen podría terminar pagando MÁS
+/// que el público, que es justo lo que nadie espera de un mostrador.
+model RetailPriceList {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name String
+  /// La que el POS preselecciona. No hay unique parcial en Prisma; el backend
+  /// garantiza que solo una quede en true por restaurante.
+  isDefault Boolean @default(false)
+  sortOrder Int     @default(0)
+
+  items RetailPriceListItem[]
+  sales RetailSale[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([restaurantId, name])
+  @@index([restaurantId])
+  @@map("retail_price_lists")
+}
+
+/// Precio de un SKU dentro de una lista. Si un SKU no tiene fila aquí, esa lista
+/// usa su precio de catálogo (RetailSku.price) — así una lista nueva no obliga a
+/// capturar los cientos de SKUs que no cambian de precio.
+model RetailPriceListItem {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  priceListId String
+  priceList   RetailPriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  skuId       String
+  sku         RetailSku       @relation(fields: [skuId], references: [id], onDelete: Cascade)
+
+  price Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  @@unique([priceListId, skuId])
+  @@index([restaurantId])
+  @@index([skuId])
+  @@map("retail_price_list_items")
+}
 
 /// Precio por volumen (mayoreo). Ferretería/refaccionaria: "de 100 pzas en
 /// adelante, a $X". El tier aplicable lo resuelve SIEMPRE el backend al armar la
