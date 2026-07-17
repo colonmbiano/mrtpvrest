@@ -3,13 +3,12 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Search, Filter, ChevronDown, PackagePlus, Pencil, ArrowLeftRight, ClipboardCheck,
-  AlertTriangle, Shirt, Wrench, Car, Boxes, DollarSign, RefreshCw, X, PackageCheck, PackagePlus as PackagePlusIcon, Plus, Layers, Trash2,
+  AlertTriangle, Shirt, Wrench, Car, Boxes, DollarSign, RefreshCw, X, Plus, Layers, Trash2,
 } from "lucide-react";
 import api from "@/lib/admin-api";
 import { money, num } from "@/lib/admin-format";
 import { StatCard, DataCard, StatusBadge } from "@/components/admin/atoms";
 import AdminTopbar from "@/components/admin/AdminTopbar";
-import { sparkUp, sparkWarn, sparkUp2, sparkFlat } from "@/lib/admin-mock";
 import {
   DEFAULT_GIRO, giroConfig, isGiro, UNITS,
   canEnterByPackage, packagesToBase, baseToPackages, isBulkUnit, round3,
@@ -203,11 +202,10 @@ export default function CatalogoPage() {
   }
 
   const alerts = stock.filter((r) => stockStatus(Number(r.qty), Number(r.minQty)) !== "disponible").slice(0, 4);
-  const updates = [
-    { icon: PackagePlusIcon, text: "Nuevo producto agregado: Campera Puffer Beige (CMP-012)", time: "Hace 15 min" },
-    { icon: Pencil, text: "Producto actualizado: Jean Slim Fit Azul (JEA-002)", time: "Hace 2 h" },
-    { icon: PackageCheck, text: "Imagen actualizada: Camisa Oversize Negra (CAM-001)", time: "Hace 3 h" },
-  ];
+  // Aquí vivía "Actualizaciones recientes": tres entradas fijas con productos de
+  // ropa inventados ("Campera Puffer Beige · Hace 15 min") que se pintaban igual
+  // en una ferretería y no cambiaban nunca. No hay feed de auditoría del catálogo
+  // que alimentarlo, así que se quitó en vez de fingirlo.
 
   return (
     <div className="mx-auto w-full max-w-[1320px]">
@@ -225,10 +223,13 @@ export default function CatalogoPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={giroIcon(giro)} tone="green" title="Productos activos" value={loading ? "—" : num(stats.skuCount)} trend="12.5%" trendLabel="vs. mes anterior" spark={sparkUp} />
-        <StatCard icon={AlertTriangle} tone="orange" title="Stock bajo" value={loading ? "—" : num(stats.low)} trend={`${stats.low} por revisar`} trendTone="warn" spark={sparkWarn} />
-        <StatCard icon={Boxes} tone="purple" title="Categorías" value={loading ? "—" : num(stats.cats)} trend="catálogo" trendTone="up" spark={sparkFlat} />
-        <StatCard icon={DollarSign} tone="blue" title="Valor inventario" value={loading ? "—" : money(stats.value)} trend="8.7%" trendLabel="vs. mes anterior" spark={sparkUp2} />
+        {/* Los valores son reales (salen del catálogo y del stock); los "12.5% vs.
+            mes anterior" y las curvitas eran constantes inventadas. Fuera hasta
+            que exista comparativa histórica de verdad. */}
+        <StatCard icon={giroIcon(giro)} tone="green" title="Productos activos" value={loading ? "—" : num(stats.skuCount)} />
+        <StatCard icon={AlertTriangle} tone="orange" title="Stock bajo" value={loading ? "—" : num(stats.low)} trend={`${stats.low} por revisar`} trendTone="warn" />
+        <StatCard icon={Boxes} tone="purple" title="Categorías" value={loading ? "—" : num(stats.cats)} />
+        <StatCard icon={DollarSign} tone="blue" title="Valor inventario" value={loading ? "—" : money(stats.value)} />
       </div>
 
       <DataCard title="Inventario de productos" className="mt-4" action={<button type="button" onClick={load} disabled={loading} className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[var(--tx-mut)] disabled:opacity-50"><RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Actualizar</button>}>
@@ -276,7 +277,7 @@ export default function CatalogoPage() {
         <div className="pt-2 text-[12px] text-[var(--tx-mut)]">Mostrando {num(rows.length)} de {num(stats.skuCount)} SKUs</div>
       </DataCard>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-4">
         <DataCard title="Alertas de inventario">
           {alerts.length === 0 ? <p className="py-6 text-center text-[13px] text-[var(--tx-mut)]">Todo el stock está sobre su mínimo. 🎉</p> : (
             <ul className="space-y-2">
@@ -292,17 +293,6 @@ export default function CatalogoPage() {
               })}
             </ul>
           )}
-        </DataCard>
-        <DataCard title="Actualizaciones recientes">
-          <ul className="space-y-1">
-            {updates.map((u, i) => { const Icon = u.icon; return (
-              <li key={i} className="flex items-center gap-3 px-1 py-2">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg" style={{ background: "var(--iris-soft)", color: "var(--brand-dark)" }}><Icon size={15} /></span>
-                <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--tx-hi)]">{u.text}</span>
-                <span className="shrink-0 text-[11px] text-[var(--tx-dim)]">{u.time}</span>
-              </li>
-            ); })}
-          </ul>
         </DataCard>
       </div>
 

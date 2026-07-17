@@ -2,20 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ShoppingBag, ReceiptText, Boxes, UsersRound, ShoppingCart, Download, PackagePlus,
-  UserPlus, AlertTriangle, Shirt, ArrowRight, RefreshCw, type LucideIcon,
+  ShoppingBag, ReceiptText, Boxes, ShoppingCart, Download, PackagePlus,
+  UserPlus, AlertTriangle, ArrowRight, RefreshCw, type LucideIcon,
 } from "lucide-react";
 import api from "@/lib/admin-api";
-import { ADMIN_KEYS, getAdminUser } from "@/lib/admin-auth";
+import { ADMIN_KEYS } from "@/lib/admin-auth";
 import { money, num } from "@/lib/admin-format";
 import { StatCard, DataCard, ActionTile, SalesAreaChart } from "@/components/admin/atoms";
 import AdminTopbar from "@/components/admin/AdminTopbar";
-import { salesToday as salesSeries, topProducts, sparkUp, sparkUp2, sparkWarn } from "@/lib/admin-mock";
-
 type Sku = { stockBalances?: { qty: number }[] };
 type Product = { skus: Sku[] };
 type StockRow = { id: string; qty: number; minQty: number; sku: { product: { name: string } } };
-type Sale = { id: string; folio: string; total: number; status: string; createdAt: string };
+// `lines` viene en GET /sales (include: { lines: true }) con productName y skuCode
+// ya desnormalizados — el top de productos sale de ahí, sin pedir el catálogo.
+type SaleLine = { skuId: string; skuCode: string; productName: string; quantity: number | string; subtotal: number | string };
+type Sale = { id: string; folio: string; total: number; status: string; createdAt: string; lines?: SaleLine[] };
 
 export default function DashboardPage() {
   const [stock, setStock] = useState<StockRow[]>([]);
@@ -56,50 +57,108 @@ export default function DashboardPage() {
     return { revenue, tickets: todays.length, low, out, todays };
   }, [sales, stock]);
 
+  // Solo entradas derivadas de datos reales. Aquí había dos fijas —"Nuevo cliente
+  // registrado: Sofía Ramírez" y una "Descarga de caja realizada por {tu nombre}"—
+  // mezcladas con la venta y la alerta de stock, que sí son reales. La segunda era
+  // la peor: usaba el nombre del admin logueado para parecer auténtica.
   const activity = useMemo(() => {
-    const user = getAdminUser();
     const list: Array<{ icon: LucideIcon; tone: string; text: string; time: string }> = [];
     const lastSale = kpi.todays[0] || sales[0];
     if (lastSale) list.push({ icon: ShoppingCart, tone: "green", text: `Nueva venta ${lastSale.folio} por ${money(lastSale.total)}`, time: "reciente" });
     if (kpi.low[0]) list.push({ icon: AlertTriangle, tone: "orange", text: `Stock bajo: ${kpi.low[0].sku.product.name}`, time: "" });
-    list.push({ icon: UserPlus, tone: "blue", text: "Nuevo cliente registrado: Sofía Ramírez", time: "Hace 32 min" });
-    list.push({ icon: Download, tone: "green", text: `Descarga de caja realizada por ${user?.name || "Renata"}`, time: "Hace 1 h" });
     return list;
   }, [kpi, sales]);
+
+  // Ventas de hoy acumuladas por hora, de la primera venta a la última. Misma
+  // forma que usa ventas/page.tsx con datos reales: `ayer: 0` porque no hay
+  // comparativa contra ayer (antes la curva entera era una constante que subía
+  // hasta $12,540 sin importar el tenant).
+  const series = useMemo(() => {
+    const byHour = new Map<number, number>();
+    for (const s of kpi.todays) {
+      const h = new Date(s.createdAt).getHours();
+      byHour.set(h, (byHour.get(h) || 0) + Number(s.total || 0));
+    }
+    const hours = [...byHour.keys()].sort((a, b) => a - b);
+    if (!hours.length) return [];
+    const out: Array<{ h: string; hoy: number; ayer: number }> = [];
+    let acc = 0;
+    for (let h = hours[0]; h <= hours[hours.length - 1]; h++) {
+      acc += byHour.get(h) || 0;
+      out.push({ h: `${String(h).padStart(2, "0")}:00`, hoy: Math.round(acc), ayer: 0 });
+    }
+    return out;
+  }, [kpi.todays]);
+
+  // Top real desde las líneas de venta. Sobre la ventana consultada (no solo hoy):
+  // una tienda sin ventas hoy vería la tarjeta vacía, y el dato útil es qué se
+  // vende. Antes eran 5 prendas fijas — "Camiseta Oversize Negra", "Jean Slim
+  // Fit"— que se pintaban igual en una ferretería.
+  const top = useMemo(() => {
+    const by = new Map<string, { name: string; sku: string; units: number; total: number }>();
+    for (const s of sales) {
+      if (s.status !== "COMPLETED") continue;
+      for (const l of s.lines || []) {
+        const k = l.skuId || l.skuCode;
+        const cur = by.get(k) || { name: l.productName, sku: l.skuCode, units: 0, total: 0 };
+        cur.units += Number(l.quantity || 0);
+        cur.total += Number(l.subtotal || 0);
+        by.set(k, cur);
+      }
+    }
+    return [...by.values()].sort((a, b) => b.units - a.units).slice(0, 5);
+  }, [sales]);
 
   return (
     <div className="mx-auto w-full max-w-[1320px]">
       <AdminTopbar title="Resumen" subtitle="Vista general del rendimiento de tu tienda." />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={ShoppingBag} tone="green" title="Ventas del día" value={loading ? "—" : money(kpi.revenue)} trend="18.6%" trendLabel="vs. ayer" spark={sparkUp} />
-        <StatCard icon={ReceiptText} tone="green" title="Tickets" value={loading ? "—" : num(kpi.tickets)} trend="12.4%" trendLabel="vs. ayer" spark={sparkUp2} />
-        <StatCard icon={Boxes} tone="orange" title="Productos bajos" value={loading ? "—" : num(kpi.low.length)} trend={`${kpi.out.length} requieren atención`} trendTone="warn" spark={sparkWarn} />
-        <StatCard icon={UsersRound} tone="green" title="Clientes nuevos" value="34" trend="21.2%" trendLabel="vs. ayer" spark={sparkUp} />
+      {/* Sin `trend` ni `spark` inventados: el valor sale de la BD, pero el
+          "18.6% vs. ayer" y la curvita eran constantes escritas a mano. Mezclar
+          un dato real con una comparación falsa en la MISMA tarjeta es peor que
+          una pantalla toda de maqueta: nadie puede distinguir cuál es cuál.
+          Cuando haya comparativa contra ayer de verdad, vuelven.
+          "Clientes nuevos" se quitó entero: el 34 también era inventado. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <StatCard icon={ShoppingBag} tone="green" title="Ventas del día" value={loading ? "—" : money(kpi.revenue)} />
+        <StatCard icon={ReceiptText} tone="green" title="Tickets" value={loading ? "—" : num(kpi.tickets)} />
+        <StatCard icon={Boxes} tone="orange" title="Productos bajos" value={loading ? "—" : num(kpi.low.length)} trend={`${kpi.out.length} requieren atención`} trendTone="warn" />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <DataCard title="Ventas" action={<span className="rounded-lg border px-2.5 py-1 text-[12px] font-semibold text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)" }}>Hoy ▾</span>}>
+          {/* Sin "▲ 18.6% vs. ayer": era una constante. Y sin leyenda "Ayer": esa
+              serie no existe. */}
           <div className="flex items-end gap-2">
             <div className="tnum text-[30px] font-extrabold leading-none text-[var(--tx-hi)]" style={{ fontFamily: "var(--font-syne), Syne, sans-serif" }}>{loading ? "—" : money(kpi.revenue)}</div>
-            <span className="tnum mb-1 text-[12px] font-semibold text-[var(--ok)]">▲ 18.6%</span>
-            <span className="mb-1 text-[12px] text-[var(--tx-dim)]">vs. ayer</span>
+            <span className="mb-1 text-[12px] text-[var(--tx-dim)]">acumulado de hoy</span>
           </div>
           <div className="mt-3">
-            <SalesAreaChart data={salesSeries} />
-          </div>
-          <div className="mt-2 flex items-center gap-4 text-[12px] text-[var(--tx-mut)]">
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: "var(--brand-primary)" }} /> Hoy</span>
-            <span className="flex items-center gap-1.5"><span className="h-0 w-3.5 border-t-2 border-dashed" style={{ borderColor: "var(--bd-2)" }} /> Ayer</span>
+            {/* SalesAreaChart divide entre (data.length - 1): con un solo punto
+                daría NaN. Mismo guard que ventas/page.tsx. */}
+            {series.length >= 2
+              ? <SalesAreaChart data={series} />
+              : (
+                <div className="grid h-[210px] place-items-center text-center text-[12px] text-[var(--tx-mut)]">
+                  {loading ? "Cargando…" : kpi.tickets > 0
+                    ? "Aún no hay suficientes ventas hoy para dibujar la curva."
+                    : "Sin ventas hoy todavía."}
+                </div>
+              )}
           </div>
         </DataCard>
 
         <DataCard title="Productos más vendidos" action={<a href="/admin/catalogo" className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--brand-dark)]">Ver todos <ArrowRight size={13} /></a>}>
           <ul className="space-y-1">
-            {topProducts.map((p) => (
+            {top.length === 0 && (
+              <li className="py-8 text-center text-[13px] text-[var(--tx-mut)]">{loading ? "Cargando…" : "Sin ventas registradas todavía."}</li>
+            )}
+            {top.map((p, i) => (
               <li key={p.sku} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-[var(--surf-2)]">
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-bold text-[var(--tx-mut)]" style={{ background: "var(--surf-2)" }}>{p.rank}</span>
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: "var(--surf-2)", color: "var(--tx-dim)" }}><Shirt size={16} /></span>
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-bold text-[var(--tx-mut)]" style={{ background: "var(--surf-2)" }}>{i + 1}</span>
+                {/* Boxes y no Shirt: el ícono de camisa venía de cuando esto solo
+                    era MODA+ y quedaba absurdo en una ferretería. */}
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: "var(--surf-2)", color: "var(--tx-dim)" }}><Boxes size={16} /></span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-semibold text-[var(--tx-hi)]">{p.name}</span>
                   <span className="block truncate font-mono text-[11px] text-[var(--tx-dim)]">SKU: {p.sku}</span>
