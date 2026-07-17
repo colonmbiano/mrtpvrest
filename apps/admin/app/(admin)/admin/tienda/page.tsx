@@ -139,6 +139,7 @@ export default function TiendaConfigPage() {
     // Programa de puntos
     pointsPerTen: 1,
     pointsValuePesos: 0.1,
+    welcomeBonusPoints: 0,
   });
 
   const [heroUploading, setHeroUploading] = useState(false);
@@ -310,6 +311,9 @@ export default function TiendaConfigPage() {
             </Field>
             <Field label="Valor del punto ($)">
               <Input type="number" min="0" step="any" value={config.pointsValuePesos} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setConfig((p) => ({ ...p, pointsValuePesos: v })); }} />
+            </Field>
+            <Field label="Bono de bienvenida (puntos)" hint="Se abonan una sola vez al crear la cuenta en la tienda online. 0 = sin bono.">
+              <Input type="number" min="0" step="1" value={config.welcomeBonusPoints} onChange={(e) => { const v = parseInt(e.target.value) || 0; setConfig((p) => ({ ...p, welcomeBonusPoints: v < 0 ? 0 : v })); }} />
             </Field>
           </div>
           <RewardsSection />

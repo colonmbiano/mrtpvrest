@@ -129,6 +129,7 @@ export type TiendaConfig = {
   deliveryMaxKm: number | null;
   pointsPerTen: number;
   pointsValuePesos: number;
+  welcomeBonusPoints: number;
 };
 
 // ── Recompensas por puntos (lealtad Fase 3) ─────────────────────────────────

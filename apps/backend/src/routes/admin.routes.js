@@ -104,7 +104,7 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       'minOrderAmount','estimatedDelivery','isOpen','closedMessage',
       // Freno de saturación (tope de pedidos abiertos para canales remotos)
       'maxOpenOrders','saturatedMessage',
-      'pointsPerTen','pointsValuePesos','storefrontTheme','storefrontHeroUrl',
+      'pointsPerTen','pointsValuePesos','welcomeBonusPoints','storefrontTheme','storefrontHeroUrl',
       'currency','currencyLocale',
       'centralWarehouseEnabled','adminCanViewExpectedCash','blockOnInsufficientStock','hasPackingStage',
       // Corte de caja por correo (toggle + lista de destinatarios)
@@ -143,6 +143,11 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
         // Freno de saturación: entero positivo; vacío/0 → null (sin freno).
         const n = Math.floor(Number(v));
         data[k] = Number.isFinite(n) && n > 0 ? n : null;
+      } else if (k === 'welcomeBonusPoints') {
+        // Bono de bienvenida: entero >= 0 (la columna es Int NOT NULL). Un
+        // vacío, negativo o no-numérico se interpreta como 0 = sin bono.
+        const n = Math.floor(Number(v));
+        data[k] = Number.isFinite(n) && n > 0 ? n : 0;
       } else if (k === 'cashCutEmails' || k === 'saturatedMessage' || k === 'orderAlertWhatsapp') {
         // String opcional: un vacío se guarda como null (cae al default).
         data[k] = (typeof v === 'string' && v.trim()) ? v.trim() : null;

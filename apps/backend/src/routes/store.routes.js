@@ -32,7 +32,7 @@ const { nextOrderNumber } = require('../lib/order-number');
 const { sendOrderPaidEmail } = require('../lib/order-confirmation-mailer');
 const { computeOpenState } = require('../utils/storeHours');
 const { authenticate } = require('../middleware/auth.middleware');
-const { addLoyaltyPoints, genLoyaltyQr } = require('../services/loyalty.service');
+const { addLoyaltyPoints, genLoyaltyQr, getTier } = require('../services/loyalty.service');
 const { isMilestoneEnabled, processCustomerMilestone } = require('../services/loyalty-milestone.service');
 const { runOrderDictationSmart } = require('../services/order-dictation.service');
 const router = express.Router();
@@ -241,6 +241,10 @@ router.get('/info', async (req, res) => {
     heroImageUrl:    config?.storefrontHeroUrl || null,
     currency:        config?.currency || "MXN",
     currencyLocale:  config?.currencyLocale || "es-MX",
+
+    // Gancho de registro: puntos de bienvenida. 0 = sin bono; el storefront
+    // solo anuncia el gancho cuando es > 0.
+    welcomeBonusPoints: config?.welcomeBonusPoints || 0,
 
     // Estado de la tienda — el storefront debe bloquear pedidos si está cerrada.
     // isOpen se calcula combinando el override manual y el horario automático.
@@ -1886,16 +1890,41 @@ router.post('/customer/register', async (req, res) => {
     const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     if (existing) return res.status(409).json({ error: 'Ese correo ya está registrado. Inicia sesión.' });
 
+    // Bono de bienvenida (gancho de registro). Se abona dentro del MISMO create
+    // anidado que la cuenta de lealtad: o se crean usuario + cuenta + asiento
+    // juntos, o no se crea nada. No hace falta guardar contra el doble abono —
+    // este camino corre una sola vez por cuenta (User.email es único global).
+    const config = await prisma.restaurantConfig.findUnique({
+      where: { restaurantId: restaurant.id },
+      select: { welcomeBonusPoints: true },
+    });
+    const bonus = Math.max(0, config?.welcomeBonusPoints || 0);
+
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
         name, email, phone, passwordHash, role: 'CUSTOMER', isActive: true,
         restaurantId: restaurant.id, tenantId: restaurant.tenantId || null,
-        loyalty: { create: { restaurantId: restaurant.id, qrCode: genLoyaltyQr() } },
+        loyalty: {
+          create: {
+            restaurantId: restaurant.id,
+            qrCode: genLoyaltyQr(),
+            points: bonus,
+            totalEarned: bonus,
+            tier: getTier(bonus),
+            ...(bonus > 0 && {
+              transactions: { create: { type: 'BONUS', points: bonus, description: 'Bono de bienvenida' } },
+            }),
+          },
+        },
       },
       select: { id: true, name: true, email: true, phone: true, restaurantId: true, tenantId: true },
     });
-    res.status(201).json({ token: signCustomerToken(user), customer: { id: user.id, name: user.name, email: user.email, phone: user.phone } });
+    res.status(201).json({
+      token: signCustomerToken(user),
+      customer: { id: user.id, name: user.name, email: user.email, phone: user.phone },
+      welcomeBonus: bonus,
+    });
   } catch (e) {
     console.error('[store] customer register error:', e.message);
     res.status(400).json({ error: 'No se pudo crear la cuenta.' });
