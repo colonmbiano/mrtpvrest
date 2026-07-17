@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef, useMemo, createContext, useContext } from "react";
 import * as Retail from "@/lib/retail";
 import { getApiUrl, setApiUrl } from "@/lib/config";
-import { getTenant, setTenant } from "@/lib/tenant";
+import { getTenant, setTenant, getGiro } from "@/lib/tenant";
+import { DEFAULT_GIRO, giroConfig, sizesFor, attrLabel, isBulkUnit, canEnterByPackage, packagesToBase, baseToPackages, round3 } from "@/lib/giro";
 import { getToken } from "@/lib/token-vault";
 import { buildReceipt, buildLabel, printEscpos, getPrinterConfig, setPrinterIp } from "@/lib/printer";
 
@@ -65,7 +66,33 @@ function Icon({ n, s = 18, c = "currentColor", sw = 1.9, cls = "" }) {
 
 /* ---------------- helpers + demo data ---------------- */
 const mx = (n) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n || 0);
-const SIZES = ["XS","S","M","L","XL"];
+// Precio unitario de una línea (lista del cliente + escalón por cantidad) y su
+// importe. El POS DEBE cotizar lo mismo que cobra el backend: POST /sales
+// rechaza la venta si los pagos no cuadran con el total del servidor, así que
+// cualquier divergencia aquí vuelve la venta INCOBRABLE. Por eso la regla vive
+// en unitPriceFor (lib/retail.ts), espejo de priceFor del backend, y no se
+// reimplementa en la UI.
+const linePrice = (l, priceListId) =>
+  Retail.unitPriceFor(l.price, l.priceTiers, Number(l.qty) || 0, l.listPrices, priceListId);
+const lineTotal = (l, priceListId) => linePrice(l, priceListId) * (Number(l.qty) || 0);
+const cartTotal = (cart, priceListId) => cart.reduce((s, l) => s + lineTotal(l, priceListId), 0);
+// El eje de tallas/medidas y las etiquetas de atributos salen del giro, no de un
+// hardcode de ropa.
+//
+// Sale del CONTEXTO, no de localStorage: el giro llega con el catálogo, y
+// `onLogin` hace setSession() ANTES de await loadCatalog(). Leyéndolo de
+// localStorage al montar, la UI se pintaba antes de que el fetch lo escribiera
+// ⇒ en el primer login tras vincular, una ferretería mostraba "Talla/Color" y
+// solo se acomodaba al recargar. Por contexto, el setState del catálogo lo
+// propaga solo. Root lo inicializa con el valor cacheado para no parpadear.
+const useGiro = () => useData().giro || DEFAULT_GIRO;
+// Copys del onboarding por giro. El label sale de giro.ts (fuente única); aquí
+// solo vive el placeholder del nombre de tienda, que es de esta pantalla.
+const GIROS_UI = {
+  ROPA:          { id:"ROPA",          label:giroConfig("ROPA").label,          storePlaceholder:"Boutique Aurora" },
+  FERRETERIA:    { id:"FERRETERIA",    label:giroConfig("FERRETERIA").label,    storePlaceholder:"Ferretería El Tornillo" },
+  REFACCIONARIA: { id:"REFACCIONARIA", label:giroConfig("REFACCIONARIA").label, storePlaceholder:"Refaccionaria Del Valle" },
+};
 const swatch = { Beige:"#d8c4ab", Blanco:"#f1f1ee", "Verde Olivo":"#5a6b3e", Negro:"#23262a", Gris:"#9aa0a3", "Azul Claro":"#9db7d4", Camel:"#b08456", Perla:"#e8e3d8", Canela:"#9a5b33" };
 
 const PRODUCTS = [
@@ -277,8 +304,8 @@ function BottomBar({ go, onCobrar, onNewTicket }) {
 
 /* ---------------- generic UI ---------------- */
 function Card({ className="", children }) { return <div className={"bg-card border border-line rounded-2xl "+className}>{children}</div>; }
-function PrimaryBtn({ children, onClick, className="" }) {
-  return <button onClick={onClick} className={"inline-flex items-center justify-center gap-2 h-12 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm transition-colors active:scale-[.99] "+className}>{children}</button>;
+function PrimaryBtn({ children, onClick, className="", testid }) {
+  return <button onClick={onClick} data-testid={testid} className={"inline-flex items-center justify-center gap-2 h-12 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm transition-colors active:scale-[.99] "+className}>{children}</button>;
 }
 function GhostBtn({ children, onClick, className="" }) {
   return <button onClick={onClick} className={"inline-flex items-center justify-center gap-2 h-11 px-4 rounded-xl border border-line hover:bg-surf text-ink-700 font-medium text-[13px] "+className}>{children}</button>;
@@ -423,15 +450,21 @@ function ReceiptModal({ sale, onClose }) {
     </div></Modal>);
 }
 
-function LabelModal({ sku, onClose }) {
+function LabelModal({ sku, color, size, onClose }) {
   const [qty,setQty]=useState(1);
-  const code = sku.barcode || sku.sku;
+  const giro=useGiro();
+  // El código debe ser el de la VARIANTE seleccionada. Antes se usaba
+  // `sku.barcode` (el del primer SKU del producto) para todas las tallas, así que
+  // la etiqueta de una M salía con el código de la XS.
+  const variantCode = (sku.barcodeByVariant||{})[String(color)+"::"+String(size)];
+  const code = variantCode || sku.barcode || sku.sku;
+  const attrs = giroConfig(giro).attrs.map(a=>a.key==="color"?color:a.key==="size"?size:sku[a.key]).filter(Boolean);
   const [ip,setIp]=useState(""); const [status,setStatus]=useState("");
   useEffect(()=>{ setIp(getPrinterConfig().ip||""); },[]);
   const doPrint=async()=>{
     if(ip.trim()) setPrinterIp(ip.trim());
     setStatus("Imprimiendo…");
-    const escpos=buildLabel({ name:sku.name, color:sku.color, size:sku.size, price:sku.price, code, sku:sku.sku }, qty);
+    const escpos=buildLabel({ name:sku.name, attrs, unit:sku.unit, price:sku.price, code, sku:sku.sku }, qty);
     const res=await printEscpos(escpos);
     if(res.ok) setStatus("Enviado a la impresora ✓");
     else if(res.channel==="web"){ if(window.print) window.print(); setStatus("Sin impresora nativa — impresión del sistema"); }
@@ -440,8 +473,8 @@ function LabelModal({ sku, onClose }) {
     <div className="flex gap-6 items-start">
       <div className="mx-auto">
         <div className="w-[236px] bg-card border border-ink-300 rounded-md p-3 text-center shadow-sm">
-          <div className="text-[11px] font-semibold text-ink-900 truncate">MODA+ · {sku.name}</div>
-          <div className="text-[10px] text-ink-500">{[sku.color, SIZES.includes(sku.size)?sku.size:sku.size].filter(Boolean).join(" / ")}</div>
+          <div className="text-[11px] font-semibold text-ink-900 truncate">{giroConfig(giro).label} · {sku.name}</div>
+          <div className="text-[10px] text-ink-500">{attrs.join(" / ")}</div>
           <div className="tnum text-xl font-bold text-ink-900 my-1.5">{mx(sku.price)}</div>
           <div className="flex justify-center"><Barcode value={code} height={52} width={1.9}/></div>
           <div className="tnum text-[10px] tracking-[0.18em] text-ink-800 mt-1">{code}</div>
@@ -464,14 +497,43 @@ function LabelModal({ sku, onClose }) {
 /* ===================================================== SALE ===================================================== */
 function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketIndex, onSwitch, onAddTicket, onCloseTicket }) {
   const products=useProducts();
-  const setQty=(id,d)=>setCart(c=>c.map(l=>l.key===id?{...l,qty:Math.max(1,l.qty+d)}:l));
+  // l.qty SIEMPRE está en unidad base (pza/mts/kg…), aunque el cajero capture por
+  // caja: así el subtotal, el descuento de stock y lo que se manda al backend no
+  // dependen del modo de captura. La caja solo cambia el input y lo que se pinta.
+  const setQty=(id,d)=>setCart(c=>c.map(l=>{
+    if(l.key!==id) return l;
+    const step=l.byPackage?(l.unitsPerPackage||1):1;
+    return {...l,qty:round3(Math.max(step,Number(l.qty)+d*step))};
+  }));
+  // Granel: cantidad libre. Se deja pasar el string vacío/parcial mientras el
+  // cajero teclea ("0." no es un número válido todavía) y se normaliza al vender.
+  const setQtyExact=(id,v)=>setCart(c=>c.map(l=>l.key===id?{...l,qty:(v===""?"":Number(v)<0?0:v)}:l));
+  // Captura por caja: el input muestra cajas, l.qty guarda unidad base.
+  const setQtyPackages=(id,v)=>setCart(c=>c.map(l=>{
+    if(l.key!==id) return l;
+    if(v==="") return {...l,qty:""};
+    const n=Number(v);
+    return {...l,qty:n<0?0:packagesToBase(n,l.unitsPerPackage||1)};
+  }));
+  // Alternar pza↔caja NO cambia la cantidad real, solo cómo se captura: si tienes
+  // 250 pza y cambias a cajas de 100, sigues teniendo 250 pza (2.5 cajas).
+  const togglePackage=(id)=>setCart(c=>c.map(l=>l.key===id?{...l,byPackage:!l.byPackage}:l));
   const del=(id)=>setCart(c=>c.filter(l=>l.key!==id));
   const [scan,setScan]=useState("");
-  const addProduct=(p)=>{ const size=SIZES.includes(p.size)?p.size:(p.live?p.size:"M"); setCart(c=>[...c,{key:p.id+"-"+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,color:p.color,size,tone:p.tone,cat:p.cat,qty:1,skuId:resolveSkuId(p,p.color,p.size)}]); };
+  const giro=useGiro();
+  const { priceLists, priceListId, setPriceListId }=useData();
+  const sizes=sizesFor(giro);
+  const addProduct=(p)=>{ const size=sizes.includes(p.size)?p.size:(p.live?p.size:(sizes[0]||"Única")); setCart(c=>[...c,{key:p.id+"-"+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,priceTiers:p.priceTiers,color:p.color,size,tone:p.tone,cat:p.cat,qty:1,unit:p.unit,unitsPerPackage:p.unitsPerPackage,byPackage:false,skuId:p.skuId||resolveSkuId(p,p.color,p.size)}]); };
+  // Resolución del escaneo, en orden de especificidad. El orden importa: la
+  // pistola manda el código de barras, y un código que casualmente aparezca como
+  // substring del nombre de otro producto agregaría el artículo equivocado.
+  //   1) barcode exacto  2) SKU exacto  3) substring de SKU+nombre (búsqueda a mano)
   const doScan=(e)=>{ e.preventDefault(); const q=scan.trim().toLowerCase(); if(!q)return;
-    const m=products.find(p=>p.sku.toLowerCase()===q)||products.find(p=>(p.sku+" "+p.name).toLowerCase().indexOf(q)>=0);
+    const m=products.find(p=>(p.barcode||"").toLowerCase()===q)
+      ||products.find(p=>p.sku.toLowerCase()===q)
+      ||products.find(p=>(p.sku+" "+p.name+" "+(p.variantLabel||"")).toLowerCase().indexOf(q)>=0);
     if(m){ addProduct(m); setSel(m); } setScan(""); };
-  const subtotal=cart.reduce((s,l)=>s+l.price*l.qty,0);
+  const subtotal=cartTotal(cart,priceListId);
   const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
   const total=Math.round((subtotal-desc)*100)/100;
   const iva=Math.round((total-total/1.16)*100)/100; // IVA incluido (informativo)
@@ -484,27 +546,79 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
           <div className="flex items-center justify-between px-5 h-14 border-b border-line">
             <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-xl bg-brand-100 grid place-items-center text-brand-600"><Icon n="cart" s={18}/></div>
               <span className="font-semibold text-ink-900">Venta activa</span></div>
-            <span className="tnum text-[12px] text-ink-400">Ticket {(ticketIndex??0)+1}</span>
+            <div className="flex items-center gap-3">
+              {/* Tipo de cliente: cambia el precio de TODO el carrito. Solo si el
+                  tenant definió listas — una tienda sin listas no ve el selector. */}
+              {priceLists?.length>0 && (
+                <label className="flex items-center gap-1.5 text-[12px] text-ink-500">
+                  <Icon n="users" s={14}/>
+                  <select data-testid="price-list-select" value={priceListId||""} onChange={e=>setPriceListId(e.target.value||null)}
+                    className="h-8 rounded-lg border border-line bg-surf px-2 text-[12px] text-ink-900 outline-none focus:border-brand-500">
+                    <option value="">Precio de catálogo</option>
+                    {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}</option>)}
+                  </select>
+                </label>
+              )}
+              <span className="tnum text-[12px] text-ink-400">Ticket {(ticketIndex??0)+1}</span>
+            </div>
           </div>
           <div className="grid grid-cols-[1fr_120px_56px_56px_90px_84px_40px] px-5 py-2.5 text-[11px] font-semibold text-ink-400 uppercase tracking-wide border-b border-line">
-            <span>Producto</span><span>SKU</span><span className="text-center">Talla</span><span className="text-center">Color</span><span className="text-right">Precio</span><span className="text-center">Cant.</span><span></span>
+            <span>Producto</span><span>SKU</span><span data-testid="cart-col-size" className="text-center">{attrLabel(giro,"size")||"Talla"}</span><span data-testid="cart-col-color" className="text-center">{attrLabel(giro,"color")||"Color"}</span><span className="text-right">Precio</span><span className="text-center">Cant.</span><span></span>
           </div>
           <div className="flex-1 overflow-y-auto">
             {cart.map(l=>(
-              <div key={l.key} className="grid grid-cols-[1fr_120px_56px_56px_90px_84px_40px] items-center px-5 py-3 border-b border-line/70 hover:bg-surf/60">
+              <div key={l.key} data-testid="cart-row" className="grid grid-cols-[1fr_120px_56px_56px_90px_84px_40px] items-center px-5 py-3 border-b border-line/70 hover:bg-surf/60">
                 <div className="flex items-center gap-3 min-w-0"><Thumb p={l}/>
                   <div className="min-w-0"><div className="text-[13px] font-semibold text-ink-900 truncate">{l.name}</div>
-                    <div className="text-[11px] text-ink-400">{l.color} / {l.size}</div></div></div>
+                    <div className="text-[11px] text-ink-400">{[l.color,l.size].filter(v=>v&&v!=="Único"&&v!=="Única").join(" / ")}</div></div></div>
                 <span className="tnum text-[11px] text-ink-500">{l.sku}</span>
                 <span className="text-center text-[13px] text-ink-700">{l.size}</span>
-                <span className="flex justify-center"><span style={{background:swatch[l.color]||"#ccc"}} className="w-5 h-5 rounded-full border border-black/10"/></span>
-                <span className="tnum text-right text-[13px] text-ink-900">{mx(l.price)}</span>
-                <span className="flex items-center justify-center gap-1.5">
-                  <button onClick={()=>setQty(l.key,-1)} className="w-7 h-7 grid place-items-center rounded-lg border border-line hover:bg-surf text-ink-500"><Icon n="minus" s={13}/></button>
-                  <span className="tnum w-5 text-center text-[13px]">{l.qty}</span>
-                  <button onClick={()=>setQty(l.key,1)} className="w-7 h-7 grid place-items-center rounded-lg border border-line hover:bg-surf text-ink-500"><Icon n="plus" s={13}/></button>
+                {/* El swatch solo tiene sentido donde el atributo ES un color. */}
+                <span className="flex justify-center">{giroConfig(giro).attrs.find(a=>a.key==="color")?.swatch
+                  ? <span style={{background:swatch[l.color]||"#ccc"}} className="w-5 h-5 rounded-full border border-black/10"/>
+                  : <span className="text-[12px] text-ink-700 truncate">{l.color==="Único"?"—":l.color}</span>}</span>
+                {/* Precio con escalón aplicado: si el mayoreo entró, el cajero
+                    tiene que verlo — es lo que se va a cobrar. */}
+                <span className="tnum text-right text-[13px] text-ink-900">
+                  {mx(linePrice(l,priceListId))}
+                  {isBulkUnit(l.unit)?<span className="text-[10px] text-ink-400">/{l.unit}</span>:null}
+                  {linePrice(l,priceListId)<l.price?<span className="block text-[9px] text-brand-600 font-semibold">precio especial</span>:null}
                 </span>
-                <button onClick={()=>del(l.key)} className="justify-self-center w-8 h-8 grid place-items-center rounded-lg hover:bg-red-50 text-ink-400 hover:text-red-500"><Icon n="trash" s={15}/></button>
+                {/* Tres modos de captura, pero l.qty SIEMPRE en unidad base:
+                      · granel (MTS/KG/LTS) → decimal a mano (el stepper de ±1 no sirve)
+                      · por caja           → el input son cajas, se guardan unidades base
+                      · pieza              → stepper clásico
+                    El backend acepta decimales (Decimal(12,3) en toda la cadena). */}
+                <span className="flex flex-col items-center justify-center gap-0.5">
+                  <span className="flex items-center justify-center gap-1.5">
+                    {l.byPackage ? (
+                      <input type="number" min="0.001" step="1" data-testid="cart-qty-input" aria-label={`Cajas de ${l.name}`}
+                        value={baseToPackages(Number(l.qty)||0, l.unitsPerPackage||1)}
+                        onChange={e=>setQtyPackages(l.key, e.target.value)}
+                        onWheel={e=>e.currentTarget.blur()}
+                        className="tnum w-16 h-7 text-center text-[13px] rounded-lg border border-line bg-surf outline-none focus:border-brand-500"/>
+                    ) : isBulkUnit(l.unit) ? (
+                      <input type="number" min="0.001" step="0.001" data-testid="cart-qty-input" aria-label={`Cantidad de ${l.name} en ${l.unit}`}
+                        value={l.qty}
+                        onChange={e=>setQtyExact(l.key, e.target.value)}
+                        onWheel={e=>e.currentTarget.blur()}
+                        className="tnum w-16 h-7 text-center text-[13px] rounded-lg border border-line bg-surf outline-none focus:border-brand-500"/>
+                    ) : (<>
+                      <button onClick={()=>setQty(l.key,-1)} className="w-7 h-7 grid place-items-center rounded-lg border border-line hover:bg-surf text-ink-500"><Icon n="minus" s={13}/></button>
+                      <span className="tnum w-5 text-center text-[13px]">{l.qty}</span>
+                      <button onClick={()=>setQty(l.key,1)} className="w-7 h-7 grid place-items-center rounded-lg border border-line hover:bg-surf text-ink-500"><Icon n="plus" s={13}/></button>
+                    </>)}
+                  </span>
+                  {canEnterByPackage(l.unit, l.unitsPerPackage) && (
+                    <button onClick={()=>togglePackage(l.key)}
+                      data-testid="cart-package-toggle"
+                      title={`1 caja = ${l.unitsPerPackage} ${l.unit}`}
+                      className={"text-[9px] px-1.5 rounded "+(l.byPackage?"bg-brand-100 text-brand-700 font-semibold":"text-ink-400 hover:text-ink-700")}>
+                      {l.byPackage?`caja ×${l.unitsPerPackage} = ${round3(Number(l.qty)||0)} ${l.unit}`:"por caja"}
+                    </button>
+                  )}
+                </span>
+                <button onClick={()=>del(l.key)} aria-label={`Quitar ${l.name}`} className="justify-self-center w-8 h-8 grid place-items-center rounded-lg hover:bg-red-50 text-ink-400 hover:text-red-500"><Icon n="trash" s={15}/></button>
               </div>
             ))}
             {cart.length===0&&<div className="py-16 text-center text-ink-400 text-sm">Escanea o agrega un producto para iniciar la venta.</div>}
@@ -530,12 +644,12 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
             <TotRow k="IVA 16% incluido" v={mx(iva)}/>
             <div className="flex items-center justify-between pt-2 mt-1 border-t border-line">
               <span className="font-semibold text-ink-900">Total</span>
-              <span className="tnum text-2xl font-bold text-ink-900">{mx(total)}</span></div>
-            <PrimaryBtn onClick={()=>go("checkout")} className="w-full mt-1"><Icon n="card" s={18}/>Cobrar <span className="tnum opacity-80">F5</span></PrimaryBtn>
+              <span data-testid="sale-total" className="tnum text-2xl font-bold text-ink-900">{mx(total)}</span></div>
+            <PrimaryBtn onClick={()=>go("checkout")} testid="btn-cobrar" className="w-full mt-1"><Icon n="card" s={18}/>Cobrar <span className="tnum opacity-80">F5</span></PrimaryBtn>
           </div>
         </Card>
       </div>
-      <ProductDetailPanel p={sel} onAdd={(p,color,size)=>setCart(c=>[...c,{key:p.id+color+size+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,color,size,tone:p.tone,cat:p.cat,qty:1,skuId:resolveSkuId(p,color,size)}])}/>
+      <ProductDetailPanel p={sel} onAdd={(p,color,size)=>setCart(c=>[...c,{key:p.id+color+size+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,priceTiers:p.priceTiers,color,size,tone:p.tone,cat:p.cat,qty:1,unit:p.unit,unitsPerPackage:p.unitsPerPackage,byPackage:false,skuId:p.skuId||resolveSkuId(p,color,size)}])}/>
       </div>
     </div>
   );
@@ -543,12 +657,17 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
 function TotRow({k,v}){return(<div className="flex items-center justify-between text-[13px]"><span className="text-ink-500">{k}</span><span className="tnum text-ink-900">{v}</span></div>);}
 
 function ProductDetailPanel({ p, onAdd }) {
+  const giro=useGiro();
+  const cfg=giroConfig(giro);
+  const sizes=p.sizes?.length?p.sizes:sizesFor(giro);
+  const pick=(s)=>sizes.includes(s)?s:(sizes[0]||"Única");
   const [color,setColor]=useState(p.color);
-  const [size,setSize]=useState(SIZES.includes(p.size)?p.size:"M");
+  const [size,setSize]=useState(pick(p.size));
   const [label,setLabel]=useState(false);
-  useEffect(()=>{ setColor(p.color); setSize(SIZES.includes(p.size)?p.size:"M"); },[p.id]);
+  useEffect(()=>{ setColor(p.color); setSize(pick(p.size)); },[p.id]);
   const row=p.matrix[color]||p.matrix[p.colors[0]]||[];
   const stock=row.reduce((a,b)=>a+b,0);
+  const unitLabel=p.unit&&p.unit!=="PZA"?p.unit.toLowerCase():"pzas.";
   return (
     <Card className="flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-5 h-14 border-b border-line">
@@ -563,32 +682,50 @@ function ProductDetailPanel({ p, onAdd }) {
         <div style={{background:p.tone}} className="w-full h-44 rounded-2xl grid place-items-center border border-black/5"><Icon n="tag" s={56} cls="text-black/15"/></div>
         <div className="flex items-end justify-between mt-4">
           <div><div className="tnum text-2xl font-bold text-ink-900">{mx(p.price)}</div>
-            <div className="text-[12px] text-brand-600 font-medium mt-0.5">En stock: {stock} pzas.</div></div></div>
-        <div className="mt-5">
-          <div className="text-[12px] text-ink-500 mb-2">Color: <span className="text-ink-900 font-medium">{color}</span></div>
-          <div className="flex gap-2">{p.colors.map(c=>(
-            <button key={c} onClick={()=>setColor(c)} title={c}
-              style={{background:swatch[c]||"#ccc"}}
-              className={"w-9 h-9 rounded-full border-2 "+(color===c?"border-brand-600 ring-2 ring-brand-100":"border-black/10")}/>))}</div>
-        </div>
-        <div className="mt-5">
-          <div className="text-[12px] text-ink-500 mb-2">Talla:</div>
-          <div className="flex gap-2">{SIZES.map(s=>(
-            <button key={s} onClick={()=>setSize(s)}
-              className={"flex-1 h-10 rounded-xl border text-[13px] font-medium "+(size===s?"border-brand-600 bg-brand-100 text-brand-700":"border-line text-ink-700 hover:bg-surf")}>{s}</button>))}</div>
-        </div>
-        <div className="mt-5">
-          <div className="flex items-center justify-between mb-2"><div className="flex items-center gap-1.5 text-[12px] text-ink-700 font-medium"><Icon n="box" s={15} cls="text-brand-600"/>Stock por talla</div>
-            <button className="text-[12px] text-brand-600 font-medium">Ver inventario completo</button></div>
-          <div className="grid grid-cols-5 rounded-xl border border-line overflow-hidden text-center">
-            {SIZES.map((s,i)=>(<div key={s} className="border-r border-line last:border-0 py-2"><div className="text-[11px] text-ink-400">{s}</div>
-              <div className={"tnum text-sm font-semibold "+(s===size?"text-brand-600":"text-ink-900")}>{row[i]??0}</div></div>))}</div>
-        </div>
+            <div className="text-[12px] text-brand-600 font-medium mt-0.5">En stock: {stock} {unitLabel}</div></div></div>
+
+        {/* Ropa vende una matriz talla×color; ferretería/refaccionaria venden el
+            SKU directo, así que el selector de variante no aplica. */}
+        {cfg.useVariantMatrix ? (<>
+          <div className="mt-5">
+            <div className="text-[12px] text-ink-500 mb-2">{attrLabel(giro,"color")||"Color"}: <span className="text-ink-900 font-medium">{color}</span></div>
+            <div className="flex gap-2">{p.colors.map(c=>(
+              <button key={c} onClick={()=>setColor(c)} title={c}
+                style={{background:swatch[c]||"#ccc"}}
+                className={"w-9 h-9 rounded-full border-2 "+(color===c?"border-brand-600 ring-2 ring-brand-100":"border-black/10")}/>))}</div>
+          </div>
+          <div className="mt-5">
+            <div className="text-[12px] text-ink-500 mb-2">{attrLabel(giro,"size")||"Talla"}:</div>
+            <div className="flex gap-2">{sizes.map(s=>(
+              <button key={s} onClick={()=>setSize(s)}
+                className={"flex-1 h-10 rounded-xl border text-[13px] font-medium "+(size===s?"border-brand-600 bg-brand-100 text-brand-700":"border-line text-ink-700 hover:bg-surf")}>{s}</button>))}</div>
+          </div>
+          <div className="mt-5">
+            <div className="flex items-center justify-between mb-2"><div className="flex items-center gap-1.5 text-[12px] text-ink-700 font-medium"><Icon n="box" s={15} cls="text-brand-600"/>Stock por {(attrLabel(giro,"size")||"talla").toLowerCase()}</div>
+              <button className="text-[12px] text-brand-600 font-medium">Ver inventario completo</button></div>
+            <div className="grid rounded-xl border border-line overflow-hidden text-center" style={{gridTemplateColumns:`repeat(${sizes.length||1}, minmax(0, 1fr))`}}>
+              {sizes.map((s,i)=>(<div key={s} className="border-r border-line last:border-0 py-2"><div className="text-[11px] text-ink-400">{s}</div>
+                <div className={"tnum text-sm font-semibold "+(s===size?"text-brand-600":"text-ink-900")}>{row[i]??0}</div></div>))}</div>
+          </div>
+        </>) : (
+          <div className="mt-5 rounded-xl border border-line divide-y divide-line">
+            {cfg.attrs.map(a=>p[a.key]?(
+              <div key={a.key} className="flex items-center justify-between px-3 py-2 text-[12px]">
+                <span className="text-ink-500">{a.label}</span><span className="text-ink-900 font-medium">{p[a.key]}</span></div>):null)}
+            <div className="flex items-center justify-between px-3 py-2 text-[12px]">
+              <span className="text-ink-500">Unidad</span><span className="text-ink-900 font-medium">{p.unit}</span></div>
+            {p.unitsPerPackage?(<div className="flex items-center justify-between px-3 py-2 text-[12px]">
+              <span className="text-ink-500">Por caja</span><span className="tnum text-ink-900 font-medium">{p.unitsPerPackage}</span></div>):null}
+            {p.binLocation?(<div className="flex items-center justify-between px-3 py-2 text-[12px]">
+              <span className="text-ink-500">Ubicación</span><span className="text-ink-900 font-medium">{p.binLocation}</span></div>):null}
+          </div>
+        )}
+
         <button onClick={()=>onAdd(p,color,size)} className="w-full h-12 mt-5 rounded-xl border-2 border-brand-200 text-brand-700 font-semibold text-sm hover:bg-brand-50 inline-flex items-center justify-center gap-2"><Icon n="plus" s={18}/>Agregar a la venta</button>
         <Acc title="Descripción" body={p.desc}/>
-        <Acc title="Detalles" body={"Composición: "+p.detail}/>
+        <Acc title="Detalles" body={p.detail}/>
       </div>
-      {label && <LabelModal sku={p} onClose={()=>setLabel(false)}/>}
+      {label && <LabelModal sku={p} color={color} size={size} onClose={()=>setLabel(false)}/>}
     </Card>
   );
 }
@@ -603,7 +740,8 @@ function CheckoutScreen({ cart, go, onApprove }) {
   const [lines,setLines]=useState([]);
   const [changeDue,setChangeDue]=useState(0);
   const [rcpt,setRcpt]=useState(false);
-  const subtotal=cart.reduce((s,l)=>s+l.price*l.qty,0);
+  const { priceListId }=useData();
+  const subtotal=cartTotal(cart,priceListId);
   const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
   const total=Math.round((subtotal-desc)*100)/100;
   const iva=Math.round((total-total/1.16)*100)/100; // IVA incluido (informativo)
@@ -680,7 +818,7 @@ function CheckoutScreen({ cart, go, onApprove }) {
         <Card className="p-4"><div className="text-[12px] text-ink-500 mb-1">{remaining>0?"Restante":"Cambio"}</div>
           <div className={"h-12 rounded-xl border flex items-center justify-end px-4 tnum text-xl font-bold "+(remaining>0?"bg-amber-50 border-amber-100 text-amber-700":"bg-brand-50 border-brand-100 text-brand-700")}>{remaining>0?mx(remaining):mx(changeDue)}</div></Card>
         <div className="flex gap-3 items-end">
-          <PrimaryBtn onClick={()=>{ if(remaining<=0) onApprove(total,payLabel,lines.length?lines:[{method:payLabel,amount:total}]); }} className={"flex-1 h-14 text-base "+(remaining>0?"opacity-50 pointer-events-none":"")}><Icon n="check" s={20}/>{remaining>0?"Falta "+mx(remaining):"Cobrar "+mx(total)} <span className="tnum opacity-80">(F5)</span></PrimaryBtn>
+          <PrimaryBtn testid="btn-confirmar-cobro" onClick={()=>{ if(remaining<=0) onApprove(total,payLabel,lines.length?lines:[{method:payLabel,amount:total}]); }} className={"flex-1 h-14 text-base "+(remaining>0?"opacity-50 pointer-events-none":"")}><Icon n="check" s={20}/>{remaining>0?"Falta "+mx(remaining):"Cobrar "+mx(total)} <span className="tnum opacity-80">(F5)</span></PrimaryBtn>
           <GhostBtn className="h-14" onClick={()=>setRcpt(true)}><Icon n="printer" s={18}/>Imprimir ticket</GhostBtn>
         </div>
       </div>
@@ -699,8 +837,8 @@ function SuccessScreen({ sale, go, newSale }) {
         <h1 className="text-2xl font-bold text-ink-900">¡Pago aprobado!</h1>
         <p className="text-ink-500 mt-1">La venta ha sido completada correctamente.</p>
         <div className="grid grid-cols-3 gap-px bg-line rounded-2xl overflow-hidden mt-6 w-full max-w-xl border border-line">
-          {[["Total pagado",mx(sale.total)],["Método de pago",sale.method],["Folio de venta",sale.folio||"—"]].map(([k,v])=>(
-            <div key={k} className="bg-card p-4 text-center"><div className="text-[11px] text-ink-400 mb-1">{k}</div><div className="tnum font-semibold text-ink-900 text-sm">{v}</div></div>))}
+          {[["Total pagado",mx(sale.total),"sale-success-total"],["Método de pago",sale.method],["Folio de venta",sale.folio||"—","sale-success-folio"]].map(([k,v,tid])=>(
+            <div key={k} className="bg-card p-4 text-center"><div className="text-[11px] text-ink-400 mb-1">{k}</div><div data-testid={tid} className="tnum font-semibold text-ink-900 text-sm">{v}</div></div>))}
         </div>
         <div className="grid grid-cols-5 gap-3 mt-6 w-full max-w-xl">
           {[["Nueva venta","cart"],["Enviar ticket por correo","mail"],["Mostrar QR recibo digital","qr"],["Imprimir recibo","printer"],["Facturar CFDI","file"]].map(([t,ic])=>(
@@ -714,7 +852,9 @@ function SuccessScreen({ sale, go, newSale }) {
         <div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 rounded-full bg-brand-600 text-white grid place-items-center tnum text-xs">1</div><span className="font-semibold text-ink-900">Resumen de compra</span></div>
         <div className="space-y-3">{sale.items.map(l=>(<div key={l.key} className="flex items-center gap-3">
           <Thumb p={l} size={44}/><div className="flex-1 min-w-0"><div className="text-[13px] font-semibold text-ink-900 truncate">{l.name}</div><div className="text-[11px] text-ink-400">{l.color} / {l.size}</div></div>
-          <div className="tnum text-[13px] font-semibold text-ink-900">{mx(l.price*l.qty)}</div></div>))}</div>
+          {/* La lista de la VENTA, no la del selector: el cajero pudo cambiarlo
+              después de cobrar y el recibo no debe reescribirse solo. */}
+          <div className="tnum text-[13px] font-semibold text-ink-900">{mx(lineTotal(l,sale.priceListId))}</div></div>))}</div>
         <div className="mt-5 pt-4 border-t border-line space-y-2">
           <TotRow k="Subtotal" v={mx(sale.subtotal)}/>{sale.desc?<TotRow k="Descuento" v={<span className="text-brand-600">- {mx(sale.desc)}</span>}/>:null}
           <div className="flex items-center justify-between pt-2 border-t border-line"><span className="font-semibold text-ink-900">Total</span><span className="tnum text-lg font-bold text-ink-900">{mx(sale.total)}</span></div>
@@ -732,8 +872,13 @@ function SuccessScreen({ sale, go, newSale }) {
 }
 
 /* ===================================================== INVENTORY ===================================================== */
+// NOTA: pantalla de maqueta — corre sobre PRODUCTS[0] (datos demo) y cifras
+// hardcodeadas, no sobre el catálogo live. El eje se deriva del giro igual, para
+// no dejar vivo el último hardcode de tallas de ropa.
 function InventoryScreen() {
   const p=PRODUCTS[0];
+  const giro=useGiro();
+  const sizes=sizesFor(giro);
   const [color,setColor]=useState("Beige");
   const cell=(v)=>{const cls=v===0?"text-red-500 font-semibold":v<5?"bg-red-50 text-red-600":v<=10?"bg-amber-50 text-amber-700":v>20?"bg-brand-50 text-brand-700":"text-ink-700";
     return <td className={"tnum text-center py-2.5 text-sm "+cls}>{v}</td>;};
@@ -760,12 +905,12 @@ function InventoryScreen() {
           </div>
           <table className="w-full mt-6 border border-line rounded-xl overflow-hidden">
             <thead><tr className="bg-surf text-[11px] text-ink-400 uppercase">
-              <th className="text-left py-2.5 px-4 font-semibold">Talla / Color</th>{SIZES.map(s=><th key={s} className="font-semibold">{s}</th>)}<th className="font-semibold">Total</th></tr></thead>
+              <th className="text-left py-2.5 px-4 font-semibold">{attrLabel(giro,"size")||"Talla"} / {attrLabel(giro,"color")||"Color"}</th>{sizes.map(s=><th key={s} className="font-semibold">{s}</th>)}<th className="font-semibold">Total</th></tr></thead>
             <tbody>{p.colors.map(c=>(<tr key={c} className="border-t border-line">
               <td className="py-2.5 px-4 text-[13px] text-ink-700 flex items-center gap-2"><span style={{background:swatch[c]}} className="w-4 h-4 rounded-full border border-black/10"/>{c}</td>
               {p.matrix[c].map((v,i)=>cell(v))}<td className="tnum text-center font-semibold text-ink-900">{p.matrix[c].reduce((a,b)=>a+b,0)}</td></tr>))}
               <tr className="border-t border-line bg-surf/50"><td className="py-2.5 px-4 text-[13px] font-semibold text-ink-900">Total</td>
-              {SIZES.map((s,i)=><td key={s} className="tnum text-center font-semibold text-ink-900">{colTotal(i)}</td>)}
+              {sizes.map((s,i)=><td key={s} className="tnum text-center font-semibold text-ink-900">{colTotal(i)}</td>)}
               <td className="tnum text-center font-bold text-ink-900">{p.colors.reduce((a,c)=>a+p.matrix[c].reduce((x,y)=>x+y,0),0)}</td></tr></tbody>
           </table>
           <div className="flex gap-5 mt-3 text-[11px]">
@@ -1262,7 +1407,7 @@ function SectionTitle({t}){return <div className="text-base font-semibold text-i
 
 /* ============================== DATA LAYER (backend real) ============================== */
 const DataCtx = createContext(null);
-function useData(){ return useContext(DataCtx) || { products:[], online:false, demo:true, session:null }; }
+function useData(){ return useContext(DataCtx) || { products:[], online:false, demo:true, session:null, giro:DEFAULT_GIRO }; }
 // Catálogo en vivo si existe; si no (sin login / sin productos retail), cae al demo.
 function useProducts(){ const d=useContext(DataCtx); return (d && d.products && d.products.length) ? d.products : PRODUCTS; }
 // Resuelve el skuId real de una variante color/talla; undefined en productos demo.
@@ -1285,6 +1430,7 @@ function SetupScreen({ onLinked, onDemo }){
   const [step,setStep]=useState("login");
   const [email,setEmail]=useState(""); const [password,setPassword]=useState("");
   const [rName,setRName]=useState(""); const [oName,setOName]=useState("");
+  const [rGiro,setRGiro]=useState(DEFAULT_GIRO);
   const [url,setUrl]=useState(""); const [cfg,setCfg]=useState(false);
   const [ws,setWs]=useState([]);
   const [busy,setBusy]=useState(false); const [err,setErr]=useState("");
@@ -1309,7 +1455,7 @@ function SetupScreen({ onLinked, onDemo }){
     setBusy(true);
     try{
       if(url.trim()) setApiUrl(url.trim());
-      await Retail.registerTenant({ restaurantName:rName.trim(), ownerName:oName.trim(), email:email.trim(), password });
+      await Retail.registerTenant({ restaurantName:rName.trim(), ownerName:oName.trim(), email:email.trim(), password, giro:rGiro });
       onLinked();
     }catch(e){ setErr(e?.status===409?"Ese correo o nombre de tienda ya existe.":(e?.message||"No se pudo crear la cuenta.")); }
     finally{ setBusy(false); }
@@ -1342,7 +1488,19 @@ function SetupScreen({ onLinked, onDemo }){
           <div className="text-[12px] text-ink-400 text-center mt-1 mb-5">Hasta 6 meses gratis · sin tarjeta</div>
           {err && <div className="text-[12px] text-red-500 text-center mb-3">{err}</div>}
           <div className="space-y-3">
-            {fld("Nombre de la tienda",<input value={rName} onChange={e=>setRName(e.target.value)} placeholder="Boutique Aurora" className={inputCls}/>)}
+            {/* El giro se elige AQUÍ y no después: decide los labels de todo el
+                catálogo, así que capturar SKUs antes de fijarlo obligaría a
+                releer atributos con los nombres equivocados. Cambiable luego
+                desde el admin. */}
+            {fld("¿Qué vendes?",
+              <div className="grid grid-cols-3 gap-2">
+                {Object.values(GIROS_UI).map(g=>(
+                  <button key={g.id} type="button" onClick={()=>setRGiro(g.id)}
+                    className={"h-11 rounded-xl border text-[12px] font-medium transition-colors "+(rGiro===g.id?"border-brand-600 bg-brand-50 text-brand-700":"border-line text-ink-600 hover:bg-surf")}>
+                    {g.label}
+                  </button>))}
+              </div>)}
+            {fld("Nombre de la tienda",<input value={rName} onChange={e=>setRName(e.target.value)} placeholder={GIROS_UI[rGiro]?.storePlaceholder||"Boutique Aurora"} className={inputCls}/>)}
             {fld("Tu nombre",<input value={oName} onChange={e=>setOName(e.target.value)} placeholder="Tu nombre" className={inputCls}/>)}
             {fld("Correo",<input value={email} onChange={e=>setEmail(e.target.value)} type="email" autoCapitalize="none" placeholder="tu@correo.com" className={inputCls}/>)}
             {fld("Contraseña",<input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="mínimo 8 caracteres" onKeyDown={e=>{if(e.key==="Enter")doRegister();}} className={inputCls}/>)}
@@ -1406,9 +1564,11 @@ function LoginScreen({ onLogin, onDemo, onRelink }){
         <div className="grid grid-cols-3 gap-2.5">
           {["1","2","3","4","5","6","7","8","9"].map(d=>(
             <button key={d} onClick={()=>key(d)} className="h-12 rounded-xl border border-line bg-surf hover:bg-card tnum text-lg text-ink-900 transition-colors">{d}</button>))}
-          <button onClick={()=>key("del")} className="h-12 rounded-xl border border-line hover:bg-surf grid place-items-center text-ink-400"><Icon n="x" s={18}/></button>
+          {/* Botones de solo icono: sin aria-label un lector de pantalla no
+              anuncia nada y no hay forma de referirlos por su nombre. */}
+          <button onClick={()=>key("del")} aria-label="Borrar" className="h-12 rounded-xl border border-line hover:bg-surf grid place-items-center text-ink-400"><Icon n="x" s={18}/></button>
           <button onClick={()=>key("0")} className="h-12 rounded-xl border border-line bg-surf hover:bg-card tnum text-lg text-ink-900">0</button>
-          <button onClick={()=>key("ok")} disabled={busy} className="h-12 rounded-xl bg-brand-600 hover:bg-brand-700 text-white grid place-items-center disabled:opacity-50">{busy?<span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin"/>:<Icon n="check" s={18} c="#fff"/>}</button>
+          <button onClick={()=>key("ok")} disabled={busy} aria-label="Entrar" className="h-12 rounded-xl bg-brand-600 hover:bg-brand-700 text-white grid place-items-center disabled:opacity-50">{busy?<span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin"/>:<Icon n="check" s={18} c="#fff"/>}</button>
         </div>
         <button onClick={onRelink} className="w-full mt-4 text-[11px] text-ink-400 hover:text-ink-700 flex items-center justify-center gap-1.5"><Icon n="store" s={13}/>Cambiar sucursal</button>
       </div>
@@ -1424,9 +1584,25 @@ function Root(){
   const [demo,setDemo]=useState(false);
   const [linked,setLinked]=useState(false);
   const [ready,setReady]=useState(false);
+  // Arranca en el default para que SSR e hidratación coincidan; el valor real
+  // (cacheado o del catálogo) entra en el efecto de abajo y en loadCatalog.
+  const [giro,setGiroState]=useState(DEFAULT_GIRO);
+  // Listas de precio (tipo de cliente) y la seleccionada para la venta en curso.
+  const [priceLists,setPriceLists]=useState([]);
+  const [priceListId,setPriceListId]=useState(null);
 
   const loadCatalog=async()=>{
-    try{ const ps=await Retail.fetchCatalog(); setProducts(ps); setOnline(true); return ps; }
+    try{
+      const { products:ps, priceLists:pls }=await Retail.fetchCatalog(); // también cachea el giro
+      setProducts(ps);
+      setPriceLists(pls);
+      // Preselecciona la lista default del tenant (p.ej. "Público"); si no hay
+      // ninguna marcada, se cotiza a precio de catálogo.
+      setPriceListId(prev=>prev ?? (pls.find(l=>l.isDefault)?.id || null));
+      setGiroState(getGiro()); // propaga a la UI sin esperar un reload
+      setOnline(true);
+      return ps;
+    }
     catch{ setOnline(false); return []; }
   };
 
@@ -1441,6 +1617,10 @@ function Root(){
       if(api||rid||lid) window.history.replaceState({}, "", window.location.pathname);
     }
     setLinked(Retail.isLinked());
+    // Giro cacheado de la última sesión: evita que la caja arranque en ropa y
+    // salte a ferretería cuando resuelve el catálogo. Si no hay cache, queda en
+    // el default hasta que loadCatalog traiga el del backend.
+    setGiroState(getGiro());
     try{ const s=Retail.getSession(); if(s && getToken()){ setSession(s); await loadCatalog(); } }
     catch{ /* sesión corrupta → login */ }
     setReady(true);
@@ -1482,7 +1662,7 @@ function Root(){
       onLogin={async(emp)=>{ setSession(emp); await loadCatalog(); }}
       onRelink={()=>{ Retail.unlink(); setSession(null); setLinked(false); }}/></div>;
   }
-  const value={ products, online, demo, session,
+  const value={ products, online, demo, session, giro, priceLists, priceListId, setPriceListId,
     refreshCatalog:loadCatalog,
     logout:()=>{ Retail.logout(); setSession(null); setDemo(false); setOnline(false); setProducts([]); } };
   return (<DataCtx.Provider value={value}><App/></DataCtx.Provider>);
@@ -1518,12 +1698,13 @@ function saveTickets(tickets, activeId) {
 // Barra de pestañas de tickets (ventas en espera). Click = cambiar; ✕ = cerrar;
 // "Nuevo ticket" = abrir uno vacío. Se muestra arriba de la venta activa.
 function TicketTabs({ tickets, activeId, onSwitch, onAdd, onClose }) {
+  const { priceListId }=useData();
   return (
     <div className="flex items-center gap-2 overflow-x-auto pb-0.5 shrink-0">
       {tickets.map((t, i) => {
         const a = t.id === activeId;
         const count = t.cart.reduce((s, l) => s + l.qty, 0);
-        const total = t.cart.reduce((s, l) => s + l.price * l.qty, 0);
+        const total = cartTotal(t.cart, priceListId);
         return (
           <div key={t.id} onClick={() => onSwitch(t.id)} role="button" tabIndex={0}
             className={"group flex items-center gap-2 h-11 pl-2.5 pr-1.5 rounded-xl border shrink-0 cursor-pointer transition-colors " + (a ? "bg-brand-100 border-brand-500" : "bg-card border-line hover:bg-surf")}>
@@ -1583,7 +1764,16 @@ function App() {
 
   const cobrar=()=>{ if(cart.length) setScreen("checkout"); };
   const approve=async(total,method,payLines)=>{
-    const subtotal=cart.reduce((s,l)=>s+l.price*l.qty,0);
+    // La cantidad de granel se captura a mano y puede quedar vacía o en 0 mientras
+    // el cajero teclea; el backend la rechaza con 400. Se normaliza aquí y se
+    // aborta antes de cobrar en vez de mandar una venta que va a fallar.
+    const qtyOf=(l)=>Number(l.qty);
+    const badQty=cart.find(l=>!Number.isFinite(qtyOf(l))||qtyOf(l)<=0);
+    if(badQty){ alert(`Cantidad inválida en "${badQty.name}".`); return; }
+    // cartTotal (no Σ l.price×qty): tiene que aplicar lista y escalón igual que
+    // el backend. Con el precio de catálogo, el pago no cuadraría con el total
+    // del servidor y POST /sales rechazaría la venta.
+    const subtotal=cartTotal(cart,data.priceListId);
     const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
     const totalCobro=Math.round((subtotal-desc)*100)/100;
     // Venta real al backend solo si hay sesión online y TODAS las líneas tienen skuId
@@ -1594,8 +1784,10 @@ function App() {
         const payments=(payLines&&payLines.length?payLines:[{method,amount:totalCobro}])
           .map(pl=>({method:Retail.toPaymentMethod(pl.method||method),amount:Math.round(pl.amount*100)/100}));
         // tax:0 → el precio de catálogo ya incluye IVA; el backend cobra Σ precio − descuento.
-        const r=await Retail.createSale({ lines:cart.map(l=>({skuId:l.skuId,quantity:l.qty})), payments, discount:desc, tax:0 });
-        setSale({ total:Number(r.sale.total), method, items:cart, subtotal, desc, folio:r.sale.folio });
+        // priceListId viaja para que el backend resuelva la MISMA lista que se
+        // cotizó; él recalcula y rechaza si su total no cuadra con los pagos.
+        const r=await Retail.createSale({ lines:cart.map(l=>({skuId:l.skuId,quantity:qtyOf(l)})), payments, discount:desc, tax:0, priceListId:data.priceListId });
+        setSale({ total:Number(r.sale.total), method, items:cart, subtotal, desc, folio:r.sale.folio, priceListId:data.priceListId });
         closeTicket(activeId); // la venta ya se cobró → descartar el ticket de inmediato
         setScreen("success");
         if(data.refreshCatalog) data.refreshCatalog();
@@ -1607,7 +1799,7 @@ function App() {
       return;
     }
     // Demo / sin catálogo en vivo: venta local (NO persiste en backend).
-    setSale({ total:totalCobro, method, items:cart, subtotal, desc, folio:"DEMO-"+String(Date.now()).slice(-6) });
+    setSale({ total:totalCobro, method, items:cart, subtotal, desc, folio:"DEMO-"+String(Date.now()).slice(-6), priceListId:data.priceListId });
     closeTicket(activeId); // venta demo completada → descartar el ticket
     setScreen("success");
   };

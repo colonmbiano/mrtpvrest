@@ -56,5 +56,25 @@ export default defineConfig({
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'] },
     },
+    // 5) Retail multigiro (app moda / ferretería). NO depende del setup: se
+    //    vincula con su propio seed (.auth/moda.json de e2e-seed-retail.js) y no
+    //    toca el tenant de restaurante de los demás specs.
+    //
+    //    Artefactos SIEMPRE encendidos, a diferencia del resto: este flujo es el
+    //    que se revisa a ojo (`playwright show-report` → video del cajero
+    //    operando, o el trace paso a paso con el DOM de cada momento). Cuesta
+    //    unos MB por corrida; para una caja que maneja dinero, ver la venta
+    //    ocurrir vale más que eso.
+    {
+      name: 'moda-retail',
+      testMatch: '08-moda-ferreteria.spec.ts',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.MODA_URL ?? 'http://localhost:3012',
+        video: 'on',
+        screenshot: 'on',
+        trace: 'on',
+      },
+    },
   ],
 });

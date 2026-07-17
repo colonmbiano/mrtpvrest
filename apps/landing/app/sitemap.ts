@@ -6,6 +6,7 @@ import { posts } from './_data/posts'
 import { modaComparisons } from './_data/moda-comparisons'
 import { modaVerticals } from './_data/moda-verticals'
 import { modaGuides } from './_data/moda-guides'
+import { ferreteriaVerticals } from './_data/ferreteria-verticals'
 
 const baseUrl = 'https://mrtpvrest.com'
 
@@ -21,6 +22,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${baseUrl}/moda/giros`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${baseUrl}/moda/comparativa`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${baseUrl}/moda/guias`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${baseUrl}/ferreteria`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
     { url: `${baseUrl}/blog`, lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
   ]
 
@@ -33,6 +35,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const modaVerticalPages: MetadataRoute.Sitemap = modaVerticals.map((v) => ({
     url: `${baseUrl}/moda/${v.slug}`,
+    lastModified: now,
+    changeFrequency: 'monthly',
+    priority: 0.7,
+  }))
+
+  const ferreteriaVerticalPages: MetadataRoute.Sitemap = ferreteriaVerticals.map((v) => ({
+    url: `${baseUrl}/ferreteria/${v.slug}`,
     lastModified: now,
     changeFrequency: 'monthly',
     priority: 0.7,
@@ -81,6 +90,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...modaVerticalPages,
     ...modaComparisonPages,
     ...modaGuidePages,
+    ...ferreteriaVerticalPages,
     ...blogPages,
   ]
 }
