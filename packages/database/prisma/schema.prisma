@@ -1413,6 +1413,13 @@ model RestaurantConfig {
   pointsPerTen     Int   @default(1)
   pointsValuePesos Float @default(0.10)
 
+  // Bono de bienvenida: puntos que se abonan UNA sola vez al crear la cuenta de
+  // lealtad desde el registro del storefront (LoyaltyTransaction tipo BONUS).
+  // 0 = sin bono. El abono va en el mismo create anidado que la cuenta, así que
+  // es atómico y no se puede repetir (User.email es único global). Las cuentas
+  // creadas al vuelo por loyalty.service NO reciben bono: no son un registro.
+  welcomeBonusPoints Int @default(0)
+
   storefrontTheme String @default("KAWAII") // KAWAII | HALO | BRUTALIST | ANTOJO | MUNDIALISTA
 
   // Moneda de la tienda. Antes el símbolo "$" y "es-MX" estaban hardcodeados en

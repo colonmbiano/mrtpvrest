@@ -5,7 +5,7 @@ import {
   Search, ShoppingBag, Plus, Minus, Trash2, X, MessageCircle, MapPin, Phone,
   Trophy, ChevronRight, ChevronDown, Star, Banknote, CreditCard, Building2,
   Truck, Leaf, Clock, Headphones, User, Instagram, Facebook,
-  Youtube, Music2, Mail, Lock, Navigation,
+  Youtube, Music2, Mail, Lock, Navigation, Gift,
 } from 'lucide-react';
 import { useCart } from '../../lib/cartStore';
 import { cldImage } from '@/lib/cloudinary';
@@ -101,6 +101,7 @@ type Info = {
   dineIn?: { table: string; locationId: string | null } | null;
   onlinePayment?: boolean; delivery?: DeliveryConfig; heroImageUrl?: string | null;
   currency?: string | null; currencyLocale?: string | null;
+  welcomeBonusPoints?: number;
   themeConfig: { theme?: string; primaryColor?: string } | null;
 };
 
@@ -1021,6 +1022,13 @@ function LoginModal({ slug, info, profileKey, onClose, onAuthed }: { slug: strin
             <button key={m} onClick={() => { setMode(m); setError(''); }} className="flex-1 py-2 rounded-full text-sm font-bold transition-all" style={mode === m ? { background: GOLD, color: '#1A1206' } : { color: MUTED }}>{m === 'login' ? 'Entrar' : 'Registrarme'}</button>
           ))}
         </div>
+
+        {mode === 'register' && (info.welcomeBonusPoints || 0) > 0 && (
+          <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl mb-3" style={{ background: `${GOLD}14`, border: `1px solid ${GOLD}55` }}>
+            <Gift className="w-4 h-4 shrink-0" style={{ color: GOLD }} />
+            <p className="text-[12px] font-bold leading-snug" style={{ color: GOLD }}>Crea tu cuenta y te regalamos {info.welcomeBonusPoints} puntos de bienvenida.</p>
+          </div>
+        )}
 
         <form onSubmit={submit} className="space-y-2.5">
           {mode === 'register' && (
