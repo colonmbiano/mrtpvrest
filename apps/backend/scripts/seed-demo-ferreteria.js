@@ -15,9 +15,17 @@
  * Uso:  node apps/backend/scripts/seed-demo-ferreteria.js
  */
 const { prisma } = require('@mrtpvrest/database');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const SLUG = 'ferreteria-el-constructor';
 const PIN = process.env.DEMO_PIN || '1234';
+// Contraseña del admin del demo. La caja NO arranca en el PIN pad: primero pide
+// vincular el dispositivo con correo+password (User), y hasta entonces el PIN no
+// existe. Sin este usuario el tenant sembrado era inalcanzable desde la app —
+// se podía ver por API, no por la caja.
+const EMAIL = process.env.DEMO_EMAIL || 'demo-ferreteria@mrtpvrest.com';
+const PASSWORD = process.env.DEMO_PASSWORD || 'DemoFerreteria2026';
 
 // Listas de precio del guion: el catálogo del PDF trae columna Público y
 // Contratista para cada producto, y la escena 2 del demo es "el sistema aplica
@@ -70,12 +78,17 @@ async function main() {
 
   const tenant = await prisma.tenant.upsert({
     where: { slug: SLUG },
-    update: {},
+    // welcomeEmailSent en true a propósito: al primer login de un ADMIN con el
+    // tenant verificado, auth.routes dispara el correo de bienvenida. El correo
+    // del demo no existe, así que sería un envío fallido (o peor, un rebote) por
+    // cada demo. Marcarlo como ya enviado apaga ese camino.
+    update: { welcomeEmailSent: true },
     create: {
       name: 'Ferretería El Constructor',
       slug: SLUG,
-      ownerEmail: 'demo-ferreteria@mrtpvrest.com',
+      ownerEmail: EMAIL,
       emailVerifiedAt: new Date(),
+      welcomeEmailSent: true,
       isOnboarded: true,
       isDemo: true, // se filtra fuera de las métricas de clientes reales
       activeModules: JSON.stringify([]),
@@ -105,6 +118,28 @@ async function main() {
       data: { restaurantId: restaurant.id, name: 'Matriz', slug: SLUG, businessType: 'RETAIL' },
     });
   }
+
+  // Admin del demo (tabla User). Es quien VINCULA la caja: la app arranca en
+  // "Configurar dispositivo" pidiendo correo+password, y solo después aparece el
+  // PIN pad del Employee. Mismo shape que crea /api/auth/register-tenant.
+  //
+  // Re-correr el seed RESETEA la contraseña a DEMO_PASSWORD: es una cuenta de
+  // demo desechable, y que sea idempotente vale más que conservar un cambio
+  // manual que nadie recordaría.
+  const passwordHash = await bcrypt.hash(PASSWORD, 12);
+  await prisma.user.upsert({
+    where: { email: EMAIL.toLowerCase() },
+    update: { passwordHash, tenantId: tenant.id, restaurantId: restaurant.id, role: 'ADMIN', isActive: true },
+    create: {
+      tenantId: tenant.id,
+      restaurantId: restaurant.id,
+      name: 'Demo Ferretería',
+      email: EMAIL.toLowerCase(),
+      passwordHash,
+      role: 'ADMIN',
+      isActive: true,
+    },
+  });
 
   let employee = await prisma.employee.findFirst({
     where: { locationId: location.id, name: 'Demo Ferretería' },
@@ -187,9 +222,12 @@ async function main() {
   console.log('\n✅ Demo "Ferretería El Constructor" sembrado');
   console.log(`   restaurantId: ${restaurant.id}`);
   console.log(`   locationId:   ${location.id}`);
-  console.log(`   PIN:          ${PIN}`);
   console.log(`   Productos:    ${CATALOG.length}  ·  Listas: ${LISTS.map((l) => l.name).join(', ')}`);
   console.log(`   Inventario bajo: ${bajos}`);
+  console.log('\n   Cómo entrar en la caja (DOS pasos, en este orden):');
+  console.log(`   1) Configurar dispositivo → ${EMAIL} / ${PASSWORD}`);
+  console.log('      (elige la sucursal "Matriz"; esto vincula el equipo y ya no se vuelve a pedir)');
+  console.log(`   2) PIN del cajero → ${PIN}`);
   console.log('\n   Guion: escanea 7500000000011 (cemento), cambia a Contratista y compara.');
 }
 
