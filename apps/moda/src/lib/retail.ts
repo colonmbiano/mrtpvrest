@@ -3,18 +3,8 @@
 
 import { apiFetch } from "./api";
 import { setToken, clearToken } from "./token-vault";
-import { setTenant, getTenant, getDeviceKey, clearTenant } from "./tenant";
-
-const SIZES = ["XS", "S", "M", "L", "XL"];
-
-// Tonos de muestra por nombre de color (igual que la paleta `swatch` de la UI),
-// para pintar el thumbnail aunque el backend no mande imagen.
-const TONE: Record<string, string> = {
-  Beige: "#efe7da", Blanco: "#f4f4f1", "Verde Olivo": "#5a6b3e", Negro: "#23262a",
-  Gris: "#e9eaec", "Azul Claro": "#dde6f0", Camel: "#e9d8c2", Perla: "#efece2",
-  Canela: "#e6cdb2", Azul: "#cdd9ea", Rojo: "#e9c9c4", Verde: "#cfe0c4",
-};
-const toneFor = (color?: string | null) => (color && TONE[color]) || "#e9eaec";
+import { setTenant, getTenant, getGiro, getDeviceKey, clearTenant } from "./tenant";
+import { DEFAULT_GIRO, giroConfig, isGiro, sizesFor, toneFor, type Giro } from "./giro";
 
 // ── Tipos del backend (parciales, lo que usamos) ─────────────────────────────
 export interface BackendSku {
@@ -24,10 +14,22 @@ export interface BackendSku {
   size?: string | null;
   color?: string | null;
   material?: string | null;
+  style?: string | null;
   price: number | string;
   cost?: number | string | null;
+  // Campos genéricos de inventario (Fase 1). Opcionales: un backend anterior a
+  // la migración simplemente no los manda.
+  unitOfMeasure?: string | null;
+  unitsPerPackage?: number | string | null;
+  binLocation?: string | null;
+  supplierRef?: string | null;
+  priceTiers?: { minQty: number | string; price: number | string }[];
+  priceListItems?: { priceListId: string; price: number | string }[];
   stockBalances?: { qty: number | string; minQty?: number | string }[];
 }
+
+/** Lista de precios por tipo de cliente (Público, Contratista, …). */
+export interface PriceList { id: string; name: string; isDefault: boolean }
 export interface BackendProduct {
   id: string;
   name: string;
@@ -39,11 +41,26 @@ export interface BackendProduct {
   skus: BackendSku[];
 }
 
-// ── Forma que consume la UI MODA+ ────────────────────────────────────────────
+// ── Forma que consume la UI de Retail+ ───────────────────────────────────────
+// Dos formas según el giro:
+//   · useVariantMatrix (ROPA)  → un UiProduct por PRODUCTO, con matriz talla×color.
+//   · !useVariantMatrix (resto) → un UiProduct por SKU, con su precio y su código.
+// Los campos existen en ambas para no obligar a la UI a ramificar en todos lados;
+// lo que cambia es la granularidad de la fila.
 export interface UiProduct {
   id: string;
+  /** Id del RetailProduct padre (en modo matriz coincide con `id`). */
+  productId: string;
+  /** Id del RetailSku cuando la fila ES un SKU (modo plano). En modo matriz va
+   *  null: el SKU se resuelve por variante con `skuByVariant`. */
+  skuId: string | null;
   name: string;
+  /** Atributos del SKU ya formateados ("Acero · 1/2\""). Vacío si no aplica. */
+  variantLabel: string;
   sku: string;
+  /** Código de barras de ESTA fila. En modo matriz, el del primer SKU: para el
+   *  código correcto por variante usar `barcodeByVariant`. */
+  barcode: string | null;
   cat: string;
   price: number;
   cost: number;
@@ -55,55 +72,195 @@ export interface UiProduct {
   color: string;
   size: string;
   tone: string;
+  /** Eje de tallas/medidas de este giro (antes la constante global SIZES). */
+  sizes: string[];
+  unit: string;
+  unitsPerPackage: number | null;
+  binLocation: string | null;
+  /** Escalones de mayoreo de ESTA fila, ordenados por minQty asc. El POS los
+   *  necesita para cotizar el mismo precio que cobrará el backend. */
+  priceTiers: PriceTier[];
+  /** priceListId → precio en esa lista. Vacío = esta fila usa precio de catálogo
+   *  en todas las listas. */
+  listPrices: Record<string, number>;
   matrix: Record<string, number[]>;
-  // Resolución talla/color → skuId real (para mandar ventas al backend).
+  /** Resolución talla/color → skuId real (para mandar ventas al backend). */
   skuByVariant: Record<string, string>;
+  /** Resolución talla/color → barcode (para que la etiqueta imprima el código
+   *  de la variante y no el del primer SKU). */
+  barcodeByVariant: Record<string, string>;
   live: true;
 }
 
 const variantKey = (color: string, size: string) => `${color}::${size}`;
 
-export function mapCatalogToProducts(products: BackendProduct[]): UiProduct[] {
-  return products
-    .filter((p) => Array.isArray(p.skus) && p.skus.length > 0)
-    .map((p) => {
-      const colors = [...new Set(p.skus.map((s) => s.color).filter(Boolean) as string[])];
-      const skuByVariant: Record<string, string> = {};
-      const matrix: Record<string, number[]> = {};
-      for (const color of colors.length ? colors : ["Único"]) {
-        matrix[color] = SIZES.map(() => 0);
-      }
-      for (const s of p.skus) {
-        const color = s.color || "Único";
-        const size = s.size || "Única";
-        if (!matrix[color]) matrix[color] = SIZES.map(() => 0);
-        const qty = Number(s.stockBalances?.[0]?.qty ?? 0);
-        const sizeIdx = SIZES.indexOf(size);
-        if (sizeIdx >= 0) matrix[color][sizeIdx] += qty;
-        else matrix[color].push(qty);
-        skuByVariant[variantKey(color, size)] = s.id;
-      }
-      const first = p.skus[0];
-      return {
-        id: p.id,
+const qtyOf = (s: BackendSku) => Number(s.stockBalances?.[0]?.qty ?? 0);
+const unitOf = (s: BackendSku) => s.unitOfMeasure || "PZA";
+
+export interface PriceTier { minQty: number; price: number }
+
+const tiersOf = (s: BackendSku): PriceTier[] =>
+  (s.priceTiers || [])
+    .map((t) => ({ minQty: Number(t.minQty), price: Number(t.price) }))
+    .sort((a, b) => a.minQty - b.minQty);
+
+/** priceListId → precio de este SKU en esa lista. */
+const listPricesOf = (s: BackendSku): Record<string, number> =>
+  Object.fromEntries((s.priceListItems || []).map((i) => [i.priceListId, Number(i.price)]));
+
+/**
+ * Precio unitario de un SKU para una cantidad y una lista de precios.
+ *
+ * Regla: la LISTA fija el precio base de ese cliente (un SKU sin precio en la
+ * lista usa el de catálogo); el ESCALÓN por cantidad compite y gana el más
+ * barato. Son ortogonales — la lista depende de quién compra, el escalón de
+ * cuánto lleva — y sin el min() un contratista que compra volumen podría pagar
+ * MÁS que el público.
+ *
+ * ESPEJO EXACTO de `priceFor` en apps/backend/src/routes/retail.routes.js. El
+ * backend sigue siendo la autoridad (recalcula y `POST /sales` rechaza la venta
+ * si los pagos no cuadran con SU total); esto existe para que el POS pueda
+ * COTIZAR lo mismo que se va a cobrar. Si las dos reglas divergen, la venta se
+ * rechaza con "Pagos no cuadran con total retail" — que es justo lo que pasaba
+ * cuando el POS no conocía los escalones.
+ */
+export function unitPriceFor(
+  catalogPrice: number,
+  tiers: PriceTier[] | undefined,
+  quantity: number,
+  listPrices?: Record<string, number>,
+  priceListId?: string | null,
+): number {
+  const base = (priceListId && listPrices?.[priceListId] !== undefined)
+    ? listPrices[priceListId]
+    : catalogPrice;
+  const applicable = (tiers || []).filter((t) => quantity >= t.minQty);
+  if (!applicable.length) return base;
+  return Math.min(base, applicable[applicable.length - 1].price);
+}
+
+function numOrNull(v: number | string | null | undefined): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Atributos del SKU en el orden que define el giro, ya formateados. */
+function variantLabelFor(s: BackendSku, giro: Giro): string {
+  return giroConfig(giro)
+    .attrs.map((a) => s[a.key])
+    .filter(Boolean)
+    .join(" · ");
+}
+
+export function mapCatalogToProducts(products: BackendProduct[], giro: Giro = DEFAULT_GIRO): UiProduct[] {
+  const cfg = giroConfig(giro);
+  const withSkus = products.filter((p) => Array.isArray(p.skus) && p.skus.length > 0);
+  return cfg.useVariantMatrix ? mapAsMatrix(withSkus, giro) : mapAsFlatSkus(withSkus, giro);
+}
+
+/** ROPA: un producto = una matriz talla×color. */
+function mapAsMatrix(products: BackendProduct[], giro: Giro): UiProduct[] {
+  const sizes = sizesFor(giro);
+  return products.map((p) => {
+    const colors = [...new Set(p.skus.map((s) => s.color).filter(Boolean) as string[])];
+    const skuByVariant: Record<string, string> = {};
+    const barcodeByVariant: Record<string, string> = {};
+    const matrix: Record<string, number[]> = {};
+    for (const color of colors.length ? colors : ["Único"]) {
+      matrix[color] = sizes.map(() => 0);
+    }
+    for (const s of p.skus) {
+      const color = s.color || "Único";
+      const size = s.size || "Única";
+      if (!matrix[color]) matrix[color] = sizes.map(() => 0);
+      const sizeIdx = sizes.indexOf(size);
+      if (sizeIdx >= 0) matrix[color][sizeIdx] += qtyOf(s);
+      else matrix[color].push(qtyOf(s));
+      skuByVariant[variantKey(color, size)] = s.id;
+      if (s.barcode) barcodeByVariant[variantKey(color, size)] = s.barcode;
+    }
+    const first = p.skus[0];
+    return {
+      id: p.id,
+      productId: p.id,
+      skuId: null,
+      name: p.name,
+      variantLabel: "",
+      sku: first.sku,
+      barcode: first.barcode || null,
+      cat: p.category || "General",
+      price: Number(first.price),
+      cost: Number(first.cost || 0),
+      season: p.season || "Continua",
+      prov: p.brand || "—",
+      desc: p.description || "",
+      detail: [first.material, p.brand].filter(Boolean).join(" · ") || "—",
+      colors: colors.length ? colors : ["Único"],
+      color: first.color || "Único",
+      size: first.size || "Única",
+      tone: toneFor(first.color),
+      sizes,
+      unit: unitOf(first),
+      unitsPerPackage: numOrNull(first.unitsPerPackage),
+      binLocation: first.binLocation || null,
+      priceTiers: tiersOf(first),
+      listPrices: listPricesOf(first),
+      matrix,
+      skuByVariant,
+      barcodeByVariant,
+      live: true,
+    };
+  });
+}
+
+/**
+ * FERRETERÍA / REFACCIONARIA: el SKU es la unidad vendible, con su propio precio
+ * y su propio código de barras. Aplanar en vez de colapsar al primer SKU evita
+ * el bug de "todas las variantes cuestan lo que la primera".
+ */
+function mapAsFlatSkus(products: BackendProduct[], giro: Giro): UiProduct[] {
+  const rows: UiProduct[] = [];
+  for (const p of products) {
+    for (const s of p.skus) {
+      const color = s.color || "Único";
+      const size = s.size || "Única";
+      const variantLabel = variantLabelFor(s, giro);
+      rows.push({
+        id: s.id, // la fila ES el SKU: su id debe ser único en la lista
+        productId: p.id,
+        skuId: s.id,
         name: p.name,
-        sku: first.sku,
+        variantLabel,
+        sku: s.sku,
+        barcode: s.barcode || null,
         cat: p.category || "General",
-        price: Number(first.price),
-        cost: Number(first.cost || 0),
+        price: Number(s.price),
+        cost: Number(s.cost || 0),
         season: p.season || "Continua",
         prov: p.brand || "—",
         desc: p.description || "",
-        detail: [first.material, p.brand].filter(Boolean).join(" · ") || "—",
-        colors: colors.length ? colors : ["Único"],
-        color: first.color || "Único",
-        size: first.size || "Única",
-        tone: toneFor(first.color),
-        matrix,
-        skuByVariant,
+        detail: [variantLabel, p.brand].filter(Boolean).join(" · ") || "—",
+        colors: [color],
+        color,
+        size,
+        tone: toneFor(s.color),
+        sizes: [],
+        unit: unitOf(s),
+        unitsPerPackage: numOrNull(s.unitsPerPackage),
+        binLocation: s.binLocation || null,
+        priceTiers: tiersOf(s),
+        listPrices: listPricesOf(s),
+        // Matriz de una celda: `totalStock()` y demás helpers siguen funcionando
+        // sin ramificar por giro.
+        matrix: { [color]: [qtyOf(s)] },
+        skuByVariant: { [variantKey(color, size)]: s.id },
+        barcodeByVariant: s.barcode ? { [variantKey(color, size)]: s.barcode } : {},
         live: true,
-      };
-    });
+      });
+    }
+  }
+  return rows;
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -195,23 +352,38 @@ export async function registerTenant(input: {
   ownerName: string;
   email: string;
   password: string;
+  /** Giro de la tienda. Default ROPA (comportamiento de MODA+). */
+  giro?: Giro;
 }): Promise<void> {
+  const { giro = DEFAULT_GIRO, ...account } = input;
   const data = await apiFetch<{
     accessToken?: string;
     restaurant?: { id: string };
     location?: { id: string; name?: string };
-  }>("/api/auth/register-tenant", { method: "POST", body: JSON.stringify(input) });
+  }>("/api/auth/register-tenant", { method: "POST", body: JSON.stringify(account) });
   if (data.accessToken) setToken(data.accessToken);
   const locId = data.location?.id;
   const restId = data.restaurant?.id;
   if (!locId || !restId) throw new Error("Registro sin sucursal");
-  // Marcar la sucursal como RETAIL (usa el token recién emitido).
+  // Dos marcas DISTINTAS y ortogonales (ver docs/plan-retail-multigiro.md):
+  //   · Location.businessType = RETAIL → preset operativo "venta de mostrador".
+  //   · RestaurantConfig.retailGiro    → cuál vertical de retail.
+  // Ninguna es fatal: ambas se pueden corregir después desde el admin, así que
+  // un fallo aquí no debe tirar un registro que ya creó la cuenta.
   try {
     await apiFetch(`/api/locations/${locId}/business-type`, {
       method: "PUT",
       body: JSON.stringify({ businessType: "RETAIL" }),
     });
   } catch { /* el negocio se puede marcar luego desde admin */ }
+  try {
+    await apiFetch("/api/retail/v1/config/giro", {
+      method: "PUT",
+      headers: { "x-restaurant-id": restId },
+      body: JSON.stringify({ giro }),
+    });
+  } catch { /* el giro se puede cambiar luego desde admin */ }
+  setTenant({ giro });
   // Ligar el dispositivo a la sucursal nueva (limpia el token admin).
   linkLocation({
     id: locId,
@@ -254,11 +426,23 @@ export function unlink(): void {
 }
 
 // ── Catálogo ─────────────────────────────────────────────────────────────────
-export async function fetchCatalog(): Promise<UiProduct[]> {
+// El catálogo es también el canal por el que llega el giro (RestaurantConfig.
+// retailGiro): es la primera llamada del POS y ya viaja en cada arranque, así
+// que no hace falta un round-trip extra. Se cachea en localStorage para que la
+// UI no arranque en ropa y salte a ferretería al resolver el fetch.
+export async function fetchCatalog(): Promise<{ products: UiProduct[]; priceLists: PriceList[] }> {
   const { locationId } = getTenant();
   const qs = locationId ? `?locationId=${encodeURIComponent(locationId)}` : "";
-  const data = await apiFetch<{ products: BackendProduct[] }>(`/api/retail/v1/catalog${qs}`);
-  return mapCatalogToProducts(data.products || []);
+  const data = await apiFetch<{ products: BackendProduct[]; giro?: string; priceLists?: PriceList[] }>(
+    `/api/retail/v1/catalog${qs}`,
+  );
+  // Un backend anterior a la Fase 1 no manda `giro`: se conserva el cacheado.
+  const giro: Giro = isGiro(data.giro) ? data.giro : getGiro();
+  setTenant({ giro });
+  return {
+    products: mapCatalogToProducts(data.products || [], giro),
+    priceLists: data.priceLists || [],
+  };
 }
 
 // ── Ventas ───────────────────────────────────────────────────────────────────
@@ -271,6 +455,9 @@ export async function createSale(input: {
   customerName?: string;
   discount?: number;
   tax?: number;
+  /** Lista de precios con la que se cotizó. El backend la re-resuelve y rechaza
+   *  la venta si su total no coincide con los pagos. */
+  priceListId?: string | null;
 }): Promise<{ sale: { id: string; folio: string; total: number | string }; idempotent: boolean }> {
   const clientSaleId = `moda-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
   return apiFetch("/api/retail/v1/sales", {
@@ -282,6 +469,7 @@ export async function createSale(input: {
       customerName: input.customerName,
       discount: input.discount,
       tax: input.tax,
+      priceListId: input.priceListId || undefined,
       device: { deviceKey: getDeviceKey(), platform: "WINDOWS", name: "Caja MODA+" },
     }),
   });

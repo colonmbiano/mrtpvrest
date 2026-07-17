@@ -3,29 +3,55 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Search, Filter, ChevronDown, PackagePlus, Pencil, ArrowLeftRight, ClipboardCheck,
-  AlertTriangle, Shirt, Boxes, DollarSign, RefreshCw, X, PackageCheck, PackagePlus as PackagePlusIcon, Plus,
+  AlertTriangle, Shirt, Wrench, Car, Boxes, DollarSign, RefreshCw, X, PackageCheck, PackagePlus as PackagePlusIcon, Plus, Layers, Trash2,
 } from "lucide-react";
 import api from "@/lib/admin-api";
 import { money, num } from "@/lib/admin-format";
 import { StatCard, DataCard, StatusBadge } from "@/components/admin/atoms";
 import AdminTopbar from "@/components/admin/AdminTopbar";
 import { sparkUp, sparkWarn, sparkUp2, sparkFlat } from "@/lib/admin-mock";
+import {
+  DEFAULT_GIRO, giroConfig, isGiro, UNITS,
+  canEnterByPackage, packagesToBase, baseToPackages, isBulkUnit, round3,
+  type Giro, type SkuAttrKey,
+} from "@/lib/giro";
+import { setGiro as cacheGiro } from "@/lib/tenant";
 
 type Location = { id: string; name: string; isCentralWarehouse?: boolean };
-type RetailSku = { id: string; sku: string; barcode?: string | null; size?: string | null; color?: string | null; material?: string | null; price: number; cost: number; isActive: boolean };
+type RetailSku = {
+  id: string; sku: string; barcode?: string | null;
+  size?: string | null; color?: string | null; material?: string | null; style?: string | null;
+  price: number; cost: number; isActive: boolean;
+  unitOfMeasure?: string | null; unitsPerPackage?: number | string | null;
+  binLocation?: string | null; supplierRef?: string | null;
+};
 type RetailProduct = { id: string; name: string; brand?: string | null; category?: string | null; skus: RetailSku[] };
+type PriceTier = { id: string; skuId: string; minQty: number | string; price: number | string };
 type StockRow = { id: string; locationId: string; skuId: string; qty: number; minQty: number; location: Location; sku: RetailSku & { product: RetailProduct } };
 
 const inputCls = "h-11 w-full rounded-xl border bg-[var(--surf-1)] px-3.5 text-[13px] text-[var(--tx-hi)] outline-none focus:border-[var(--brand-primary)]";
-const variantLabel = (s: { size?: string | null; color?: string | null; material?: string | null }) => [s.size, s.color, s.material].filter(Boolean).join(" / ") || "Variante única";
+// Los atributos se muestran en el orden que define el giro, no en un "talla /
+// color / material" fijo.
+const variantLabelFor = (giro: Giro, s: Partial<Record<SkuAttrKey, string | null | undefined>>) =>
+  giroConfig(giro).attrs.map((a) => s[a.key]).filter(Boolean).join(" / ") || "Variante única";
+// Ícono por giro. Mapa explícito: lucide no resuelve por nombre en runtime sin
+// arrastrar el paquete entero al bundle.
+const GIRO_ICON = { Shirt, Wrench, Car } as const;
+const giroIcon = (giro: Giro) => GIRO_ICON[giroConfig(giro).icon as keyof typeof GIRO_ICON] ?? Shirt;
 const errMsg = (e: unknown) => (e as { response?: { data?: { error?: string } } })?.response?.data?.error || (e instanceof Error ? e.message : "No se pudo completar la acción");
 const stockStatus = (qty: number, minQty: number) => (qty <= 0 ? "sin_stock" : minQty > 0 && qty <= minQty ? "stock_bajo" : "disponible");
 const statusLabel: Record<string, string> = { sin_stock: "Sin stock", stock_bajo: "Stock bajo", disponible: "Disponible" };
 
-const emptyProduct = { name: "", category: "", brand: "", sku: "", barcode: "", size: "", color: "", material: "", price: "", cost: "" };
+const emptyProduct = {
+  name: "", category: "", brand: "", sku: "", barcode: "",
+  size: "", color: "", material: "", style: "",
+  price: "", cost: "",
+  unitOfMeasure: "PZA", unitsPerPackage: "", binLocation: "", supplierRef: "",
+};
 
 export default function CatalogoPage() {
   const [activeLocationId, setActiveLocationId] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("moda-admin-locationId") || "" : ""));
+  const [giro, setGiroState] = useState<Giro>(DEFAULT_GIRO);
   const [locations, setLocations] = useState<Location[]>([]);
   const [products, setProducts] = useState<RetailProduct[]>([]);
   const [stock, setStock] = useState<StockRow[]>([]);
@@ -34,7 +60,7 @@ export default function CatalogoPage() {
   const [stockFilter, setStockFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [modal, setModal] = useState<null | "product" | "edit" | "transfer" | "count">(null);
+  const [modal, setModal] = useState<null | "product" | "edit" | "transfer" | "count" | "tiers">(null);
   const [form, setForm] = useState({ ...emptyProduct });
   const [mode, setMode] = useState<"new" | "existing">("new");
   const [existingId, setExistingId] = useState("");
@@ -42,6 +68,12 @@ export default function CatalogoPage() {
   const [editForm, setEditForm] = useState({ price: "", cost: "", barcode: "", isActive: true });
   const [tForm, setTForm] = useState({ skuId: "", toLocationId: "", qty: "1" });
   const [cForm, setCForm] = useState({ skuId: "", qty: "" });
+  // Mayoreo (Fase 3). El backend ya resolvía el escalón al cobrar, pero los tiers
+  // solo se podían crear por API: sin esta pantalla el mayoreo era inalcanzable.
+  const [tierSku, setTierSku] = useState<RetailSku | null>(null);
+  const [tiers, setTiers] = useState<PriceTier[]>([]);
+  const [tiersLoading, setTiersLoading] = useState(false);
+  const [tierForm, setTierForm] = useState({ minQty: "", price: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,11 +81,14 @@ export default function CatalogoPage() {
     try {
       const [loc, cat, stk] = await Promise.all([
         api.get<Location[]>("/api/admin/locations"),
-        api.get<{ products: RetailProduct[] }>(`/api/retail/v1/catalog${q}`),
+        api.get<{ products: RetailProduct[]; giro?: string }>(`/api/retail/v1/catalog${q}`),
         api.get<StockRow[]>(`/api/retail/v1/stock${q}`),
       ]);
       const locs = Array.isArray(loc.data) ? loc.data : [];
       setLocations(locs);
+      // El giro llega con el catálogo (Fase 1). Un backend anterior a la
+      // migración no lo manda ⇒ se queda en ROPA, que es el comportamiento previo.
+      if (isGiro(cat.data.giro)) { setGiroState(cat.data.giro); cacheGiro(cat.data.giro); }
       setProducts(cat.data.products || []);
       setStock(Array.isArray(stk.data) ? stk.data : []);
       if (!activeLocationId && locs[0]?.id) { localStorage.setItem("moda-admin-locationId", locs[0].id); setActiveLocationId(locs[0].id); }
@@ -71,7 +106,7 @@ export default function CatalogoPage() {
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return stock.filter((r) => {
-      const okQ = !q || [r.sku.sku, r.sku.barcode, r.sku.product.name, r.sku.size, r.sku.color].filter(Boolean).join(" ").toLowerCase().includes(q);
+      const okQ = !q || [r.sku.sku, r.sku.barcode, r.sku.product.name, r.sku.size, r.sku.color, r.sku.material, r.sku.style, r.sku.binLocation].filter(Boolean).join(" ").toLowerCase().includes(q);
       const okCat = categoryFilter === "all" || r.sku.product.category === categoryFilter;
       const st = stockStatus(Number(r.qty), Number(r.minQty));
       const okStock = stockFilter === "all" || st === stockFilter;
@@ -97,7 +132,20 @@ export default function CatalogoPage() {
         productId = r.data.id;
       }
       if (!productId) throw new Error("Selecciona o crea un producto");
-      await api.post("/api/retail/v1/catalog/skus", { productId, sku: form.sku, barcode: form.barcode || undefined, size: form.size || undefined, color: form.color || undefined, material: form.material || undefined, price: Number(form.price), cost: Number(form.cost || 0) });
+      await api.post("/api/retail/v1/catalog/skus", {
+        productId, sku: form.sku,
+        barcode: form.barcode || undefined,
+        size: form.size || undefined,
+        color: form.color || undefined,
+        material: form.material || undefined,
+        style: form.style || undefined,
+        price: Number(form.price), cost: Number(form.cost || 0),
+        unitOfMeasure: form.unitOfMeasure || undefined,
+        // Number("") es 0 y el backend exige positivo ⇒ mandar undefined si viene vacío.
+        unitsPerPackage: form.unitsPerPackage ? Number(form.unitsPerPackage) : undefined,
+        binLocation: form.binLocation || undefined,
+        supplierRef: form.supplierRef || undefined,
+      });
       setModal(null); setForm({ ...emptyProduct }); setMode("new"); setExistingId(""); await load();
     } catch (err) { alert(errMsg(err)); } finally { setSaving(false); }
   }
@@ -107,6 +155,42 @@ export default function CatalogoPage() {
     try { await api.put(`/api/retail/v1/catalog/skus/${editSku.id}`, { price: Number(editForm.price), cost: Number(editForm.cost || 0), barcode: editForm.barcode || null, isActive: editForm.isActive }); setModal(null); setEditSku(null); await load(); }
     catch (err) { alert(errMsg(err)); } finally { setSaving(false); }
   }
+  // ── Mayoreo ───────────────────────────────────────────────────────────────
+  async function openTiers(s: RetailSku) {
+    setTierSku(s); setTierForm({ minQty: "", price: "" }); setModal("tiers");
+    setTiersLoading(true);
+    try { const r = await api.get<PriceTier[]>(`/api/retail/v1/catalog/skus/${s.id}/price-tiers`); setTiers(Array.isArray(r.data) ? r.data : []); }
+    catch { setTiers([]); } finally { setTiersLoading(false); }
+  }
+  async function addTier(e: FormEvent) {
+    e.preventDefault(); if (!tierSku) return;
+    const minQty = Number(tierForm.minQty); const price = Number(tierForm.price);
+    // El backend exige minQty positivo y rechaza duplicados por (sku, minQty) con
+    // 409; validar aquí solo evita el viaje, no sustituye esa verificación.
+    if (!Number.isFinite(minQty) || minQty <= 0) { alert("La cantidad mínima debe ser mayor a 0."); return; }
+    if (!Number.isFinite(price) || price < 0) { alert("El precio no puede ser negativo."); return; }
+    if (price >= Number(tierSku.price)) {
+      // No es un error del backend: un "mayoreo" más caro que el precio de lista
+      // casi siempre es un dedazo, y el POS lo aplicaría en serio.
+      if (!confirm(`El precio de mayoreo (${money(price)}) no es menor al de lista (${money(Number(tierSku.price))}). ¿Guardar de todos modos?`)) return;
+    }
+    setSaving(true);
+    try {
+      await api.post("/api/retail/v1/catalog/price-tiers", { skuId: tierSku.id, minQty, price });
+      setTierForm({ minQty: "", price: "" });
+      const r = await api.get<PriceTier[]>(`/api/retail/v1/catalog/skus/${tierSku.id}/price-tiers`);
+      setTiers(Array.isArray(r.data) ? r.data : []);
+    } catch (err) { alert(errMsg(err)); } finally { setSaving(false); }
+  }
+  async function delTier(id: string) {
+    if (!tierSku) return;
+    setSaving(true);
+    try {
+      await api.delete(`/api/retail/v1/catalog/price-tiers/${id}`);
+      setTiers((t) => t.filter((x) => x.id !== id));
+    } catch (err) { alert(errMsg(err)); } finally { setSaving(false); }
+  }
+
   async function saveTransfer(e: FormEvent) {
     e.preventDefault(); setSaving(true);
     try { await api.post("/api/retail/v1/transfers", { fromLocationId: activeLocationId, items: [{ skuId: tForm.skuId, toLocationId: tForm.toLocationId, qty: Number(tForm.qty) }], notes: "Traspaso desde admin" }); setModal(null); setTForm({ skuId: "", toLocationId: "", qty: "1" }); await load(); }
@@ -141,7 +225,7 @@ export default function CatalogoPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={Shirt} tone="green" title="Productos activos" value={loading ? "—" : num(stats.skuCount)} trend="12.5%" trendLabel="vs. mes anterior" spark={sparkUp} />
+        <StatCard icon={giroIcon(giro)} tone="green" title="Productos activos" value={loading ? "—" : num(stats.skuCount)} trend="12.5%" trendLabel="vs. mes anterior" spark={sparkUp} />
         <StatCard icon={AlertTriangle} tone="orange" title="Stock bajo" value={loading ? "—" : num(stats.low)} trend={`${stats.low} por revisar`} trendTone="warn" spark={sparkWarn} />
         <StatCard icon={Boxes} tone="purple" title="Categorías" value={loading ? "—" : num(stats.cats)} trend="catálogo" trendTone="up" spark={sparkFlat} />
         <StatCard icon={DollarSign} tone="blue" title="Valor inventario" value={loading ? "—" : money(stats.value)} trend="8.7%" trendLabel="vs. mes anterior" spark={sparkUp2} />
@@ -162,8 +246,8 @@ export default function CatalogoPage() {
                   <tr key={r.id} className="border-b text-[13px]" style={{ borderColor: "var(--bd-1)" }}>
                     <td className="py-3 pr-3">
                       <div className="flex items-center gap-2.5">
-                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: "var(--surf-2)", color: "var(--tx-dim)" }}><Shirt size={16} /></span>
-                        <span className="min-w-0"><span className="block truncate font-semibold text-[var(--tx-hi)]">{r.sku.product.name}</span><span className="block truncate text-[11px] text-[var(--tx-mut)]">{variantLabel(r.sku)}</span></span>
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: "var(--surf-2)", color: "var(--tx-dim)" }}>{(() => { const I = giroIcon(giro); return <I size={16} />; })()}</span>
+                        <span className="min-w-0"><span className="block truncate font-semibold text-[var(--tx-hi)]">{r.sku.product.name}</span><span className="block truncate text-[11px] text-[var(--tx-mut)]">{variantLabelFor(giro, r.sku)}</span></span>
                       </div>
                     </td>
                     <td className="py-3 pr-3 font-mono text-[12px] text-[var(--tx-mut)]">{r.sku.sku}</td>
@@ -174,6 +258,10 @@ export default function CatalogoPage() {
                     <td className="py-3">
                       <div className="flex items-center gap-1">
                         <button type="button" onClick={() => openEdit(r.sku)} aria-label="Editar SKU" className="grid h-8 w-8 place-items-center rounded-lg border text-[var(--tx-mut)] hover:bg-[var(--surf-2)]" style={{ borderColor: "var(--bd-1)" }}><Pencil size={14} /></button>
+                        {/* Solo en giros con mayoreo: en ropa el botón sería ruido. */}
+                        {giroConfig(giro).wholesale && (
+                          <button type="button" onClick={() => openTiers(r.sku)} aria-label="Precios de mayoreo" title="Precios de mayoreo" className="grid h-8 w-8 place-items-center rounded-lg border text-[var(--tx-mut)] hover:bg-[var(--surf-2)]" style={{ borderColor: "var(--bd-1)" }}><Layers size={14} /></button>
+                        )}
                         <button type="button" onClick={() => { setTForm({ skuId: r.skuId, toLocationId: locations.find((l) => l.id !== activeLocationId)?.id || "", qty: "1" }); setModal("transfer"); }} aria-label="Traspasar" className="grid h-8 w-8 place-items-center rounded-lg border text-[var(--tx-mut)] hover:bg-[var(--surf-2)]" style={{ borderColor: "var(--bd-1)" }}><ArrowLeftRight size={14} /></button>
                         <button type="button" onClick={() => { setCForm({ skuId: r.skuId, qty: String(r.qty) }); setModal("count"); }} aria-label="Conteo" className="grid h-8 w-8 place-items-center rounded-lg border text-[var(--tx-mut)] hover:bg-[var(--surf-2)]" style={{ borderColor: "var(--bd-1)" }}><ClipboardCheck size={14} /></button>
                       </div>
@@ -227,7 +315,7 @@ export default function CatalogoPage() {
             </div>
             {mode === "new" ? (
               <>
-                <Field label="Producto"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="Camisa Oxford Slim" /></Field>
+                <Field label="Producto"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder={giroConfig(giro).productPlaceholder} /></Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Categoría"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Camisas" /></Field>
                   <Field label="Marca"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></Field>
@@ -237,17 +325,46 @@ export default function CatalogoPage() {
               <Field label="Producto existente"><select className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={existingId} onChange={(e) => setExistingId(e.target.value)} required><option value="">Selecciona producto</option>{products.map((p) => <option key={p.id} value={p.id}>{p.name}{p.category ? ` / ${p.category}` : ""} ({p.skus.length} SKU)</option>)}</select></Field>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <Field label="SKU"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} required placeholder="CAM-OXF-M-NEG" /></Field>
+              <Field label="SKU"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} required placeholder={giroConfig(giro).skuPlaceholder} /></Field>
               <Field label="Código de barras"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} /></Field>
             </div>
+            {/* Atributos del giro: mismas 4 columnas de RetailSku, reetiquetadas.
+                Ropa → Talla/Color/Material; ferretería → Medida/Rosca/Material/
+                Presentación; refaccionaria → Posición/Lado/Línea/Marca. */}
             <div className="grid grid-cols-3 gap-3">
-              <Field label="Talla"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} placeholder="M" /></Field>
-              <Field label="Color"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} placeholder="Negro" /></Field>
-              <Field label="Material"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.material} onChange={(e) => setForm({ ...form, material: e.target.value })} placeholder="Algodón" /></Field>
+              {giroConfig(giro).attrs.map((a) => (
+                <Field key={a.key} label={a.label}>
+                  <input
+                    className={inputCls} style={{ borderColor: "var(--bd-1)" }}
+                    list={`sug-${a.key}`}
+                    value={form[a.key]}
+                    onChange={(e) => setForm({ ...form, [a.key]: e.target.value })}
+                    placeholder={a.suggest?.[0] || ""}
+                  />
+                  {/* Sugerencias, no restricción: la columna es texto libre y un
+                      inventario real siempre tiene medidas fuera del catálogo. */}
+                  {a.suggest?.length ? (
+                    <datalist id={`sug-${a.key}`}>{a.suggest.map((s) => <option key={s} value={s} />)}</datalist>
+                  ) : null}
+                </Field>
+              ))}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Precio"><input type="number" min="0" step="0.01" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required /></Field>
               <Field label="Costo"><input type="number" min="0" step="0.01" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} /></Field>
+            </div>
+            {/* Inventario genérico (Fase 1). La unidad se muestra en todos los
+                giros; el resto solo donde el giro lo declara. */}
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Unidad">
+                <select className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.unitOfMeasure} onChange={(e) => setForm({ ...form, unitOfMeasure: e.target.value })}>
+                  {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </Field>
+              {giroConfig(giro).unitOfMeasure ? (
+                <Field label="Piezas por caja"><input type="number" min="0" step="0.001" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.unitsPerPackage} onChange={(e) => setForm({ ...form, unitsPerPackage: e.target.value })} placeholder="100" /></Field>
+              ) : null}
+              <Field label="Ubicación"><input className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={form.binLocation} onChange={(e) => setForm({ ...form, binLocation: e.target.value })} placeholder="P3-A2" /></Field>
             </div>
             <ModalActions saving={saving} onCancel={() => setModal(null)} label="Crear SKU" icon={Plus} />
           </form>
@@ -257,7 +374,7 @@ export default function CatalogoPage() {
       {modal === "edit" && editSku && (
         <Modal title={`Editar ${editSku.sku}`} onClose={() => setModal(null)}>
           <form onSubmit={saveEdit} className="space-y-3">
-            <div className="rounded-xl border px-3 py-2 text-[12px] text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)", background: "var(--surf-2)" }}>{variantLabel(editSku)}</div>
+            <div className="rounded-xl border px-3 py-2 text-[12px] text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)", background: "var(--surf-2)" }}>{variantLabelFor(giro, editSku)}</div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Precio"><input type="number" min="0" step="0.01" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={editForm.price} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} required /></Field>
               <Field label="Costo"><input type="number" min="0" step="0.01" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={editForm.cost} onChange={(e) => setEditForm({ ...editForm, cost: e.target.value })} /></Field>
@@ -272,12 +389,55 @@ export default function CatalogoPage() {
         </Modal>
       )}
 
+      {modal === "tiers" && tierSku && (
+        <Modal title={`Precios de mayoreo · ${tierSku.sku}`} onClose={() => setModal(null)}>
+          <div className="space-y-3">
+            <div className="rounded-xl border px-3 py-2 text-[12px] text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)", background: "var(--surf-2)" }}>
+              Precio de lista <b className="text-[var(--tx-hi)]">{money(Number(tierSku.price))}</b> por {tierSku.unitOfMeasure || "PZA"}.
+              A partir de la cantidad que definas, el POS cobra el precio del escalón — lo resuelve el servidor, el mostrador no calcula nada.
+            </div>
+
+            {tiersLoading ? (
+              <div className="py-6 text-center text-[12px] text-[var(--tx-mut)]">Cargando…</div>
+            ) : tiers.length === 0 ? (
+              <div className="rounded-xl border border-dashed px-3 py-6 text-center text-[12px] text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)" }}>
+                Sin escalones. Este SKU siempre se cobra a precio de lista.
+              </div>
+            ) : (
+              <div className="rounded-xl border divide-y" style={{ borderColor: "var(--bd-1)" }}>
+                {tiers.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <span className="text-[13px] text-[var(--tx-hi)]">
+                      Desde <b className="tnum">{num(Number(t.minQty))}</b> {tierSku.unitOfMeasure || "PZA"}
+                    </span>
+                    <span className="flex items-center gap-3">
+                      <span className="tnum text-[13px] font-semibold text-[var(--tx-hi)]">{money(Number(t.price))}</span>
+                      <button type="button" onClick={() => delTier(t.id)} disabled={saving} aria-label="Quitar escalón" className="grid h-7 w-7 place-items-center rounded-lg border text-[var(--tx-mut)] hover:text-red-500 disabled:opacity-50" style={{ borderColor: "var(--bd-1)" }}><Trash2 size={13} /></button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={addTier} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2 border-t pt-3" style={{ borderColor: "var(--bd-1)" }}>
+              <Field label={`Desde (${tierSku.unitOfMeasure || "PZA"})`}>
+                <input type="number" min="0.001" step="0.001" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={tierForm.minQty} onChange={(e) => setTierForm({ ...tierForm, minQty: e.target.value })} placeholder="100" required />
+              </Field>
+              <Field label="Precio unitario">
+                <input type="number" min="0" step="0.01" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={tierForm.price} onChange={(e) => setTierForm({ ...tierForm, price: e.target.value })} placeholder="8.50" required />
+              </Field>
+              <button type="submit" disabled={saving} className="mb-3 grid h-11 w-11 place-items-center rounded-xl text-white disabled:opacity-50" style={{ background: "var(--brand-primary)" }} aria-label="Agregar escalón"><Plus size={16} /></button>
+            </form>
+          </div>
+        </Modal>
+      )}
+
       {modal === "transfer" && (
         <Modal title="Traspaso entre sucursales" onClose={() => setModal(null)}>
           <form onSubmit={saveTransfer} className="space-y-3">
             <Field label="SKU origen"><select className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={tForm.skuId} onChange={(e) => setTForm({ ...tForm, skuId: e.target.value })} required><option value="">Selecciona SKU</option>{stock.map((r) => <option key={r.id} value={r.skuId}>{r.sku.sku} / {r.sku.product.name} / disp {num(r.qty)}</option>)}</select></Field>
             <Field label="Sucursal destino"><select className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={tForm.toLocationId} onChange={(e) => setTForm({ ...tForm, toLocationId: e.target.value })} required><option value="">Selecciona destino</option>{locations.filter((l) => l.id !== activeLocationId).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>
-            <Field label="Cantidad"><input type="number" min="1" step="1" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={tForm.qty} onChange={(e) => setTForm({ ...tForm, qty: e.target.value })} required /></Field>
+            <QtyField label="Cantidad" sku={stock.find((r) => r.skuId === tForm.skuId)?.sku} value={tForm.qty} onChange={(v) => setTForm({ ...tForm, qty: v })} />
             <ModalActions saving={saving} onCancel={() => setModal(null)} label="Registrar traspaso" icon={ArrowLeftRight} />
           </form>
         </Modal>
@@ -287,7 +447,7 @@ export default function CatalogoPage() {
         <Modal title="Conteo físico" onClose={() => setModal(null)}>
           <form onSubmit={saveCount} className="space-y-3">
             <Field label="SKU"><select className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={cForm.skuId} onChange={(e) => setCForm({ ...cForm, skuId: e.target.value })} required><option value="">Selecciona SKU</option>{allSkus.map((s) => <option key={s.id} value={s.id}>{s.sku} / {s.product.name}</option>)}</select></Field>
-            <Field label="Conteo real"><input type="number" min="0" step="1" className={inputCls} style={{ borderColor: "var(--bd-1)" }} value={cForm.qty} onChange={(e) => setCForm({ ...cForm, qty: e.target.value })} required /></Field>
+            <QtyField label="Conteo real" sku={allSkus.find((s) => s.id === cForm.skuId)} value={cForm.qty} onChange={(v) => setCForm({ ...cForm, qty: v })} />
             <ModalActions saving={saving} onCancel={() => setModal(null)} label="Aplicar conteo" icon={ClipboardCheck} />
           </form>
         </Modal>
@@ -307,6 +467,62 @@ function Select({ value, onChange, label, options }: { value: string; onChange: 
 }
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="block"><span className="mb-1.5 block text-[12px] font-semibold text-[var(--tx-mut)]">{label}</span>{children}</label>;
+}
+
+/**
+ * Captura de cantidad para conteo/traspaso.
+ *
+ * `value` SIEMPRE está en unidad base: el toggle "por caja" solo cambia cómo se
+ * teclea (N cajas → N × unitsPerPackage unidades base). Así el body que viaja al
+ * backend no depende del modo de captura y no hay doble conversión.
+ *
+ * También arregla que el conteo usaba step="1": un SKU en KG o MTS no se puede
+ * contar en enteros.
+ */
+function QtyField({ label, sku, value, onChange }: {
+  label: string;
+  sku?: RetailSku | null;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [byPackage, setByPackage] = useState(false);
+  const upp = Number(sku?.unitsPerPackage) || 0;
+  const unit = sku?.unitOfMeasure || "PZA";
+  const canPkg = canEnterByPackage(unit, upp);
+  // Si cambian el SKU a uno sin caja, el modo "por caja" dejaría el input
+  // mostrando cajas de un artículo que no las tiene.
+  useEffect(() => { if (!canPkg) setByPackage(false); }, [canPkg]);
+  const shown = byPackage && upp ? String(baseToPackages(Number(value) || 0, upp)) : value;
+  return (
+    <Field label={`${label} (${byPackage ? "cajas" : unit})`}>
+      <div className="flex items-center gap-2">
+        <input
+          type="number" min="0" step={byPackage ? "1" : isBulkUnit(unit) ? "0.001" : "1"}
+          className={inputCls} style={{ borderColor: "var(--bd-1)" }}
+          value={shown}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === "") return onChange("");
+            const n = Number(raw);
+            if (!Number.isFinite(n)) return;
+            onChange(String(byPackage && upp ? packagesToBase(n, upp) : n));
+          }}
+          onWheel={(e) => e.currentTarget.blur()}
+          required
+        />
+        {canPkg && (
+          <button
+            type="button" onClick={() => setByPackage((b) => !b)}
+            title={`1 caja = ${upp} ${unit}`}
+            className={"shrink-0 rounded-lg border px-2 py-1.5 text-[11px] " + (byPackage ? "font-semibold" : "text-[var(--tx-mut)]")}
+            style={{ borderColor: "var(--bd-1)", color: byPackage ? "var(--brand-primary)" : undefined }}
+          >
+            {byPackage ? `= ${round3(Number(value) || 0)} ${unit}` : "por caja"}
+          </button>
+        )}
+      </div>
+    </Field>
+  );
 }
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (

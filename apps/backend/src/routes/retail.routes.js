@@ -158,6 +158,9 @@ const productSchema = z.object({
   imageUrl: z.string().optional(),
 });
 
+// Unidad de venta del SKU. Debe coincidir con UNITS en apps/moda/src/lib/giro.ts.
+const UNITS = ['PZA', 'MTS', 'KG', 'LTS', 'CAJA', 'BULTO', 'CUBETA', 'PAQUETE'];
+
 const skuSchema = z.object({
   productId: z.string().min(1),
   sku: z.string().min(1),
@@ -169,6 +172,11 @@ const skuSchema = z.object({
   price: z.number().nonnegative(),
   cost: z.number().nonnegative().optional(),
   imageUrl: z.string().optional(),
+  // Inventario genérico (retail multigiro · Fase 1)
+  unitOfMeasure: z.enum(UNITS).optional(),
+  unitsPerPackage: z.number().positive().optional(),
+  binLocation: z.string().optional(),
+  supplierRef: z.string().optional(),
 });
 
 const skuUpdateSchema = z.object({
@@ -181,6 +189,12 @@ const skuUpdateSchema = z.object({
   price: z.number().nonnegative().optional(),
   cost: z.number().nonnegative().optional(),
   isActive: z.boolean().optional(),
+  // Inventario genérico (retail multigiro · Fase 1). unitOfMeasure no es
+  // nullable: la columna es NOT NULL DEFAULT 'PZA'.
+  unitOfMeasure: z.enum(UNITS).optional(),
+  unitsPerPackage: z.number().positive().nullable().optional(),
+  binLocation: z.string().nullable().optional(),
+  supplierRef: z.string().nullable().optional(),
 });
 
 const saleSchema = z.object({
@@ -197,6 +211,10 @@ const saleSchema = z.object({
   discount: z.number().optional(),
   tax: z.number().optional(),
   allowNegativeStock: z.boolean().optional(),
+  // Lista de precios (tipo de cliente). El id NO se confía: se filtra por
+  // restaurantId al leer los precios, así que uno ajeno no puede traer precios
+  // de otro tenant.
+  priceListId: z.string().optional(),
   lines: z.array(z.object({
     skuId: z.string(),
     quantity: z.number().positive(),
@@ -245,12 +263,55 @@ async function createRetailSale(input, req) {
   }
   const skuMap = new Map(skus.map((sku) => [sku.id, sku]));
 
+  // Precio por volumen (mayoreo · Fase 3) y por tipo de cliente (lista). Ambos
+  // se resuelven aquí, server-side: el cliente nunca manda precio.
+  const [tiers, listItems] = await Promise.all([
+    prisma.retailPriceTier.findMany({
+      where: { restaurantId, skuId: { in: skuIds } },
+      orderBy: { minQty: 'asc' },
+    }),
+    // Solo si la venta declara lista. Se valida que sea del tenant vía el where:
+    // un priceListId ajeno simplemente no trae filas ⇒ cae a precio de catálogo,
+    // nunca a los precios de otro restaurante.
+    body.priceListId
+      ? prisma.retailPriceListItem.findMany({
+        where: { restaurantId, priceListId: body.priceListId, skuId: { in: skuIds } },
+        select: { skuId: true, price: true },
+      })
+      : Promise.resolve([]),
+  ]);
+  const tiersBySku = new Map();
+  for (const t of tiers) {
+    if (!tiersBySku.has(t.skuId)) tiersBySku.set(t.skuId, []);
+    tiersBySku.get(t.skuId).push(t);
+  }
+  const listPriceBySku = new Map(listItems.map((i) => [i.skuId, Number(i.price)]));
+
   // Precio SIEMPRE del catálogo (server-side truth); nunca confiar en el
-  // unitPrice del cliente. Descuentos acotados a [0, bruto] para que no inviertan
-  // el signo del total ni sobre-cobren.
+  // unitPrice del cliente.
+  //
+  // Regla: la LISTA fija el precio base de ese cliente (un SKU sin fila en la
+  // lista usa el de catálogo); el ESCALÓN por cantidad compite con él y gana el
+  // más barato para el cliente. Son ortogonales — la lista depende de quién
+  // compra, el escalón de cuánto lleva — y sin el min() un contratista que
+  // compra volumen podría pagar MÁS que el público, que es lo que nadie espera
+  // de un mostrador.
+  //
+  // Una sola función para todo el archivo A PROPÓSITO: el precio se usa dos
+  // veces (el subtotal de la venta y cada RetailSaleLine). Si las dos rutas
+  // resolvieran por separado, un tier aplicado en una y no en la otra dejaría
+  // el total sin cuadrar contra la suma de sus líneas.
+  const priceFor = (sku, quantity) => {
+    const base = listPriceBySku.has(sku.id) ? listPriceBySku.get(sku.id) : Number(sku.price);
+    const applicable = (tiersBySku.get(sku.id) || []).filter((t) => quantity >= Number(t.minQty));
+    if (!applicable.length) return base;
+    // Ordenados por minQty asc ⇒ el último aplicable es el de mayor mínimo.
+    return Math.min(base, Number(applicable[applicable.length - 1].price));
+  };
+
   const totals = body.lines.reduce((acc, line) => {
     const sku = skuMap.get(line.skuId);
-    const price = Number(sku.price);
+    const price = priceFor(sku, line.quantity);
     const gross = line.quantity * price;
     const discount = Math.min(Math.max(toNumber(line.discount), 0), gross);
     return {
@@ -304,6 +365,10 @@ async function createRetailSale(input, req) {
         customerName: body.customerName || null,
         customerPhone: body.customerPhone || null,
         notes: body.notes || null,
+        // Solo si la lista trajo precios de ESTE tenant: guardar un id ajeno
+        // dejaría el ticket citando una lista que no explica su total (y la FK
+        // lo rechazaría). listItems ya se filtró por restaurantId.
+        priceListId: listItems.length ? body.priceListId : null,
         createdById: req.user?.id || null,
         syncedAt: new Date(),
       },
@@ -312,11 +377,15 @@ async function createRetailSale(input, req) {
     for (const line of body.lines) {
       const sku = skuMap.get(line.skuId);
       const quantity = assertPositiveQty(line.quantity, 'quantity');
-      const unitPrice = Number(sku.price);
+      // Mismo priceFor que el subtotal de arriba: si divergieran, el total de la
+      // venta no cuadraría contra la suma de sus líneas.
+      const unitPrice = priceFor(sku, quantity);
       const lineDiscount = Math.min(Math.max(toNumber(line.discount), 0), quantity * unitPrice);
       const subtotal = Number((quantity * unitPrice - lineDiscount).toFixed(2));
       const costSnapshot = Number((quantity * Number(sku.cost || 0)).toFixed(4));
-      const variantLabel = [sku.size, sku.color, sku.material].filter(Boolean).join(' / ') || null;
+      // El label de variante ya no asume ropa: incluye style y respeta que las
+      // columnas son genéricas (el giro las reetiqueta en la UI).
+      const variantLabel = [sku.size, sku.color, sku.material, sku.style].filter(Boolean).join(' / ') || null;
 
       const current = await tx.retailStockByLocation.upsert({
         where: { locationId_skuId: { locationId, skuId: sku.id } },
@@ -513,21 +582,55 @@ router.get('/catalog', async (req, res) => {
     const locationId = locationIdFrom(req, req.query.locationId);
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
 
-    const products = await prisma.retailProduct.findMany({
-      where: { restaurantId, isActive: true },
-      orderBy: [{ category: 'asc' }, { name: 'asc' }],
-      include: {
-        skus: {
-          where: { isActive: true },
-          orderBy: [{ sku: 'asc' }],
-          include: locationId
-            ? { stockBalances: { where: { locationId }, select: { qty: true, minQty: true } } }
-            : undefined,
+    // El giro viaja con el catálogo (retail multigiro · Fase 1): es la primera
+    // llamada del POS y ya va en cada arranque, así que la app lo obtiene sin
+    // un round-trip extra. Ver apps/moda/src/lib/giro.ts.
+    const [products, config, priceLists] = await Promise.all([
+      prisma.retailProduct.findMany({
+        where: { restaurantId, isActive: true },
+        orderBy: [{ category: 'asc' }, { name: 'asc' }],
+        include: {
+          skus: {
+            where: { isActive: true },
+            orderBy: [{ sku: 'asc' }],
+            include: {
+              // Los escalones viajan al POS para que pueda COTIZAR el mismo
+              // precio que este backend va a cobrar. No es aflojar el
+              // "dinero server-side": el precio se sigue resolviendo aquí y
+              // POST /sales rechaza la venta si los pagos no cuadran con el
+              // total del servidor. Sin esto, el POS cotizaba lista, el backend
+              // cobraba mayoreo, y la venta reventaba con
+              // "Pagos no cuadran con total retail" — el mayoreo era
+              // imposible de cobrar.
+              priceTiers: { orderBy: { minQty: 'asc' }, select: { minQty: true, price: true } },
+              // Precios por lista, por el mismo motivo que los tiers: el POS
+              // tiene que poder cotizar lo que el backend va a cobrar.
+              priceListItems: { select: { priceListId: true, price: true } },
+              ...(locationId
+                ? { stockBalances: { where: { locationId }, select: { qty: true, minQty: true } } }
+                : {}),
+            },
+          },
         },
-      },
-    });
+      }),
+      prisma.restaurantConfig.findUnique({
+        where: { restaurantId },
+        select: { retailGiro: true },
+      }),
+      prisma.retailPriceList.findMany({
+        where: { restaurantId },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        select: { id: true, name: true, isDefault: true },
+      }),
+    ]);
 
-    res.json({ products, serverTime: new Date().toISOString() });
+    // Un tenant sin fila de config todavía opera como ropa (default del schema).
+    res.json({
+      products,
+      giro: config?.retailGiro || 'ROPA',
+      priceLists,
+      serverTime: new Date().toISOString(),
+    });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
@@ -581,6 +684,10 @@ router.post('/catalog/skus', requireRole(...ADMIN_ROLES), async (req, res) => {
         price: data.price,
         cost: toNumber(data.cost),
         imageUrl: data.imageUrl || null,
+        unitOfMeasure: data.unitOfMeasure || 'PZA',
+        unitsPerPackage: data.unitsPerPackage ?? null,
+        binLocation: data.binLocation || null,
+        supplierRef: data.supplierRef || null,
       },
     });
     res.status(201).json(sku);
@@ -603,12 +710,17 @@ router.put('/catalog/skus/:id', requireRole(...ADMIN_ROLES), async (req, res) =>
 
     const patch = {};
     if (data.sku !== undefined) patch.sku = data.sku.trim();
-    for (const f of ['barcode', 'size', 'color', 'material', 'style']) {
+    for (const f of ['barcode', 'size', 'color', 'material', 'style', 'binLocation', 'supplierRef']) {
       if (data[f] !== undefined) patch[f] = data[f] || null;
     }
     if (data.price !== undefined) patch.price = data.price;
     if (data.cost !== undefined) patch.cost = data.cost;
     if (data.isActive !== undefined) patch.isActive = data.isActive;
+    // unitOfMeasure es NOT NULL: un '' del cliente no debe volverlo null.
+    if (data.unitOfMeasure !== undefined) patch.unitOfMeasure = data.unitOfMeasure;
+    // unitsPerPackage sí es nullable (null = "no aplica"); ?? preserva el null
+    // explícito, que || convertiría en null igual pero también mataría un 0.
+    if (data.unitsPerPackage !== undefined) patch.unitsPerPackage = data.unitsPerPackage ?? null;
 
     const sku = await prisma.retailSku.update({ where: { id: existing.id }, data: patch });
     res.json(sku);
@@ -617,6 +729,331 @@ router.put('/catalog/skus/:id', requireRole(...ADMIN_ROLES), async (req, res) =>
     if (e.code === 'P2002') return res.status(409).json({ error: 'SKU o codigo de barras ya existe' });
     res.status(e.status || 500).json({ error: e.message });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RETAIL MULTIGIRO · mayoreo, compatibilidad y equivalencias
+// Ver docs/plan-retail-multigiro.md (Fases 3 y 4).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Verifica que el SKU/producto sea del tenant ANTES de colgarle nada. El guard
+// filtra por restaurantId, pero un id ajeno daría 500 por FK en vez de un 404
+// claro — y confirmar la pertenencia es lo que impide escribir en otro tenant.
+async function assertOwnedSku(restaurantId, skuId) {
+  const sku = await prisma.retailSku.findFirst({ where: { id: skuId, restaurantId }, select: { id: true } });
+  if (!sku) { const e = new Error('SKU retail no encontrado'); e.status = 404; throw e; }
+  return sku;
+}
+async function assertOwnedProduct(restaurantId, productId) {
+  const p = await prisma.retailProduct.findFirst({ where: { id: productId, restaurantId }, select: { id: true } });
+  if (!p) { const e = new Error('Producto retail no encontrado'); e.status = 404; throw e; }
+  return p;
+}
+
+// ── Fase 5 · Giro del tenant ────────────────────────────────────────────────
+// Giros válidos. Debe coincidir con el tipo Giro de apps/moda/src/lib/giro.ts.
+// La columna es texto libre (agregar un giro no cuesta migración), pero la
+// ESCRITURA sí se valida: un valor arbitrario dejaría a la app cayendo al
+// default ROPA sin explicar por qué.
+const GIROS = ['ROPA', 'FERRETERIA', 'REFACCIONARIA'];
+
+router.put('/config/giro', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { giro } = req.body || {};
+    if (!GIROS.includes(giro)) {
+      return res.status(400).json({ error: `giro invalido. Valores permitidos: ${GIROS.join(', ')}` });
+    }
+    // upsert: un tenant recién creado puede no tener fila de config todavía.
+    const config = await prisma.restaurantConfig.upsert({
+      where: { restaurantId },
+      update: { retailGiro: giro },
+      create: { restaurantId, retailGiro: giro },
+      select: { retailGiro: true },
+    });
+    res.json({ giro: config.retailGiro });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+// ── Listas de precio (tipo de cliente: Público / Contratista / …) ───────────
+const priceListSchema = z.object({
+  name: z.string().min(1),
+  isDefault: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+const priceListItemSchema = z.object({
+  priceListId: z.string().min(1),
+  skuId: z.string().min(1),
+  price: z.number().nonnegative(),
+});
+
+async function assertOwnedPriceList(restaurantId, priceListId) {
+  const l = await prisma.retailPriceList.findFirst({ where: { id: priceListId, restaurantId }, select: { id: true } });
+  if (!l) { const e = new Error('Lista de precios no encontrada'); e.status = 404; throw e; }
+  return l;
+}
+
+router.get('/catalog/price-lists', async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const lists = await prisma.retailPriceList.findMany({
+      where: { restaurantId },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+    res.json(lists);
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+router.post('/catalog/price-lists', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const data = priceListSchema.parse(req.body);
+    // Solo una default por restaurante: si ésta lo es, las demás dejan de serlo.
+    // En transacción para que no queden dos (o cero) si algo falla en medio.
+    const list = await prisma.$transaction(async (tx) => {
+      if (data.isDefault) {
+        await tx.retailPriceList.updateMany({ where: { restaurantId }, data: { isDefault: false } });
+      }
+      return tx.retailPriceList.create({
+        data: {
+          restaurantId,
+          name: data.name.trim(),
+          isDefault: data.isDefault ?? false,
+          sortOrder: data.sortOrder ?? 0,
+        },
+      });
+    });
+    res.status(201).json(list);
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Payload de lista invalido', details: e.errors });
+    if (e.code === 'P2002') return res.status(409).json({ error: 'Ya existe una lista con ese nombre' });
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/catalog/price-lists/:id', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { count } = await prisma.retailPriceList.deleteMany({ where: { id: req.params.id, restaurantId } });
+    if (!count) return res.status(404).json({ error: 'Lista no encontrada' });
+    res.json({ ok: true });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+// Precio de un SKU dentro de una lista. Upsert: capturar dos veces el mismo SKU
+// es corregir el precio, no un error que deba dar 409.
+router.put('/catalog/price-list-items', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const data = priceListItemSchema.parse(req.body);
+    await Promise.all([
+      assertOwnedPriceList(restaurantId, data.priceListId),
+      assertOwnedSku(restaurantId, data.skuId),
+    ]);
+    const item = await prisma.retailPriceListItem.upsert({
+      where: { priceListId_skuId: { priceListId: data.priceListId, skuId: data.skuId } },
+      update: { price: data.price },
+      create: { restaurantId, priceListId: data.priceListId, skuId: data.skuId, price: data.price },
+    });
+    res.json(item);
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Payload de precio invalido', details: e.errors });
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/catalog/price-list-items/:id', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { count } = await prisma.retailPriceListItem.deleteMany({ where: { id: req.params.id, restaurantId } });
+    if (!count) return res.status(404).json({ error: 'Precio no encontrado' });
+    res.json({ ok: true });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+// ── Fase 3 · Precios por volumen (mayoreo) ──────────────────────────────────
+const tierSchema = z.object({
+  skuId: z.string().min(1),
+  minQty: z.number().positive(),
+  price: z.number().nonnegative(),
+});
+
+router.get('/catalog/skus/:id/price-tiers', async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    await assertOwnedSku(restaurantId, req.params.id);
+    const tiers = await prisma.retailPriceTier.findMany({
+      where: { restaurantId, skuId: req.params.id },
+      orderBy: { minQty: 'asc' },
+    });
+    res.json(tiers);
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+router.post('/catalog/price-tiers', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const data = tierSchema.parse(req.body);
+    await assertOwnedSku(restaurantId, data.skuId);
+    const tier = await prisma.retailPriceTier.create({
+      data: { restaurantId, skuId: data.skuId, minQty: data.minQty, price: data.price },
+    });
+    res.status(201).json(tier);
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Payload de tier invalido', details: e.errors });
+    if (e.code === 'P2002') return res.status(409).json({ error: 'Ya existe un precio para esa cantidad minima' });
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/catalog/price-tiers/:id', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { count } = await prisma.retailPriceTier.deleteMany({ where: { id: req.params.id, restaurantId } });
+    if (!count) return res.status(404).json({ error: 'Tier no encontrado' });
+    res.json({ ok: true });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+// ── Fase 4 · Compatibilidad (fitment) ───────────────────────────────────────
+const fitmentSchema = z.object({
+  productId: z.string().min(1),
+  make: z.string().min(1),
+  model: z.string().optional(),
+  yearFrom: z.number().int().optional(),
+  yearTo: z.number().int().optional(),
+  engine: z.string().optional(),
+}).refine((d) => d.yearFrom == null || d.yearTo == null || d.yearFrom <= d.yearTo, {
+  message: 'yearFrom no puede ser mayor que yearTo',
+});
+
+router.post('/catalog/fitments', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const data = fitmentSchema.parse(req.body);
+    await assertOwnedProduct(restaurantId, data.productId);
+    const fitment = await prisma.retailFitment.create({
+      data: {
+        restaurantId,
+        productId: data.productId,
+        make: data.make.trim(),
+        model: data.model?.trim() || null,
+        yearFrom: data.yearFrom ?? null,
+        yearTo: data.yearTo ?? null,
+        engine: data.engine?.trim() || null,
+      },
+    });
+    res.status(201).json(fitment);
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Payload de compatibilidad invalido', details: e.errors });
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/catalog/fitments/:id', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { count } = await prisma.retailFitment.deleteMany({ where: { id: req.params.id, restaurantId } });
+    if (!count) return res.status(404).json({ error: 'Compatibilidad no encontrada' });
+    res.json({ ok: true });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+// ── Fase 4 · Equivalencias (cross-reference) ────────────────────────────────
+const crossRefSchema = z.object({
+  skuId: z.string().min(1),
+  brand: z.string().optional(),
+  partNumber: z.string().min(1),
+});
+
+router.post('/catalog/cross-refs', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const data = crossRefSchema.parse(req.body);
+    await assertOwnedSku(restaurantId, data.skuId);
+    const ref = await prisma.retailCrossRef.create({
+      data: {
+        restaurantId,
+        skuId: data.skuId,
+        brand: data.brand?.trim() || null,
+        partNumber: data.partNumber.trim(),
+      },
+    });
+    res.status(201).json(ref);
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Payload de equivalencia invalido', details: e.errors });
+    if (e.code === 'P2002') return res.status(409).json({ error: 'Esa equivalencia ya existe para el SKU' });
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/catalog/cross-refs/:id', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { count } = await prisma.retailCrossRef.deleteMany({ where: { id: req.params.id, restaurantId } });
+    if (!count) return res.status(404).json({ error: 'Equivalencia no encontrada' });
+    res.json({ ok: true });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+// ── Fase 4 · Búsqueda por equivalencia o compatibilidad ─────────────────────
+// El mostrador de una refaccionaria busca por número de parte de OTRA marca o
+// por el coche del cliente. Es server-side (a diferencia del escaneo del POS,
+// que filtra el catálogo ya cargado en memoria) porque estas tablas no viajan
+// en GET /catalog: crecen mucho más que el catálogo.
+router.get('/catalog/search', async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { partNumber, make, model, year } = req.query;
+
+    if (partNumber) {
+      const refs = await prisma.retailCrossRef.findMany({
+        where: { restaurantId, partNumber: { equals: String(partNumber), mode: 'insensitive' } },
+        include: { sku: { include: { product: true } } },
+        take: 50,
+      });
+      return res.json({ skus: refs.map((r) => r.sku) });
+    }
+
+    if (make) {
+      const yearNum = year ? Number(year) : null;
+      const fitments = await prisma.retailFitment.findMany({
+        where: {
+          restaurantId,
+          make: { equals: String(make), mode: 'insensitive' },
+          ...(model ? { model: { equals: String(model), mode: 'insensitive' } } : {}),
+          // Rango abierto por ambos lados: null = "aplica siempre por ese lado".
+          ...(Number.isFinite(yearNum) && yearNum
+            ? {
+              AND: [
+                { OR: [{ yearFrom: null }, { yearFrom: { lte: yearNum } }] },
+                { OR: [{ yearTo: null }, { yearTo: { gte: yearNum } }] },
+              ],
+            }
+            : {}),
+        },
+        include: { product: { include: { skus: { where: { isActive: true } } } } },
+        take: 50,
+      });
+      return res.json({ skus: fitments.flatMap((f) => f.product.skus) });
+    }
+
+    return res.status(400).json({ error: 'Indica partNumber o make' });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 
 router.get('/stock', async (req, res) => {

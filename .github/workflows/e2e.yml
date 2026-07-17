@@ -115,18 +115,25 @@ jobs:
           # sin esto el rate limiter (10/15min) tira 429 a mitad de corrida.
           PIN_LOGIN_RATE_MAX: "1000"
 
-      - name: Arrancar admin + tpv + saas + kds
+      # Seed de retail multigiro (ferretería) para el spec 08. Va aparte del
+      # db:seed porque siembra otro tenant (giro FERRETERIA) y deja los ids en
+      # tests/e2e/.auth/moda.json, que es lo que lee el spec para vincular la caja.
+      - name: Seed retail (ferretería)
+        run: node apps/backend/scripts/e2e-seed-retail.js
+
+      - name: Arrancar admin + tpv + saas + kds + moda
         run: |
           pnpm --filter @mrtpvrest/admin dev > admin.log 2>&1 &
           pnpm --filter @mrtpvrest/tpv dev > tpv.log 2>&1 &
           pnpm --filter @mrtpvrest/saas dev > saas.log 2>&1 &
           pnpm --filter @mrtpvrest/kds dev > kds.log 2>&1 &
+          pnpm --filter @mrtpvrest/moda dev > moda.log 2>&1 &
         env:
           NEXT_PUBLIC_API_URL: "http://localhost:3001"
 
       - name: Esperar a los servicios
         # El KDS web sirve bajo basePath /kds (la raíz :3009/ es 404)
-        run: pnpm dlx wait-on@8.0.1 -t 120000 http://localhost:3001/health http://localhost:3002 http://localhost:3004 http://localhost:3005 http://localhost:3009/kds/
+        run: pnpm dlx wait-on@8.0.1 -t 120000 http://localhost:3001/health http://localhost:3002 http://localhost:3004 http://localhost:3005 http://localhost:3009/kds/ http://localhost:3012
 
       - name: Logs del backend (pre-tests)
         run: tail -40 backend.log || true
@@ -138,6 +145,8 @@ jobs:
           TPV_URL: "http://localhost:3005"
           SAAS_URL: "http://localhost:3004"
           KDS_URL: "http://localhost:3009/kds/"
+          MODA_URL: "http://localhost:3012"
+          API_URL: "http://localhost:3001"
           ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
           ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
           SUPERADMIN_EMAIL: ${{ secrets.SUPERADMIN_EMAIL }}
