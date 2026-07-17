@@ -111,7 +111,7 @@ Cuatro features que dan al cliente control real sobre su pedido. Dos requieren m
 ### A.3 — Marcar extra/modificador como agotado — `verdict: ok`
 
 - **Objetivo:** apagar un extra ("Tocino" agotado) sin borrarlo ni perder su mapeo de inventario.
-- **Schema + migración:** `Modifier.isAvailable Boolean @default(true)` (espejo de `MenuItemVariant.isAvailable`). Migración `add_modifier_is_available`: `ALTER TABLE "modifiers" ADD COLUMN IF NOT EXISTS "isAvailable" BOOLEAN NOT NULL DEFAULT true;`. **Tenancy:** `Modifier` NO tiene `restaurantId` → **NO a `SCOPED_MODELS`** (agregarlo rompería el assert `{extra:[]}`). Scope sube por `group.menuItem.restaurantId`. Editar **ambas copias** del schema en el mismo commit (canónica `packages/database` + espejo stale `apps/backend/prisma`).
+- **Schema + migración:** `Modifier.isAvailable Boolean @default(true)` (espejo de `MenuItemVariant.isAvailable`). Migración `add_modifier_is_available`: `ALTER TABLE "modifiers" ADD COLUMN IF NOT EXISTS "isAvailable" BOOLEAN NOT NULL DEFAULT true;`. **Tenancy:** `Modifier` NO tiene `restaurantId` → **NO a `SCOPED_MODELS`** (agregarlo rompería el assert `{extra:[]}`). Scope sube por `group.menuItem.restaurantId`. Editar el schema canónico `packages/database/prisma/schema.prisma` (la copia espejo `apps/backend/prisma` era código muerto y se borró).
 
 - **Semántica resuelta (filtro vs mostrar):** el endpoint público `GET /api/store/menu` **NO filtra** por `isAvailable` — expone el flag y el modal pinta el extra **deshabilitado, no oculto**. El filtro `where:{isAvailable:true}` solo en superficies que oculten (futuro kiosk si se decide).
 
@@ -189,7 +189,7 @@ Tres features de cocina/empaque. C.1 es **dependencia dura** de C.2 y C.3.
 ### C.1 — Estado "En empaque" + máquina de estados con guardrails — `verdict: needs-fix → corregido`
 
 - **Objetivo:** agregar `PACKING` al enum `OrderStatus` y convertir `PUT /:id/status` (hoy cambio libre) en máquina de estados con transiciones válidas por rol.
-- **Schema + migración:** `ALTER TYPE "OrderStatus" ADD VALUE IF NOT EXISTS 'PACKING';` **al final del enum** (orden de declaración Postgres, como se hizo con `OPEN`). `ADD VALUE` corre fuera de tx (Prisma lo emite así, no envolver a mano). **CORRECCIÓN (grounding — alta):** generar la migración desde **`packages/database`** (schema canónico, líneas reales: enum `:697`), NO `apps/backend/prisma` (copia stale). Editar **ambas** copias del enum en el mismo commit. **REFUNDED NO va a `OrderStatus`** (ya es `PaymentStatus`, ortogonal — decisión correcta).
+- **Schema + migración:** `ALTER TYPE "OrderStatus" ADD VALUE IF NOT EXISTS 'PACKING';` **al final del enum** (orden de declaración Postgres, como se hizo con `OPEN`). `ADD VALUE` corre fuera de tx (Prisma lo emite así, no envolver a mano). **CORRECCIÓN (grounding — alta):** generar la migración desde **`packages/database`** (schema canónico, líneas reales: enum `:697`). La copia stale `apps/backend/prisma` era código muerto y se borró: el enum se edita en un solo lugar. **REFUNDED NO va a `OrderStatus`** (ya es `PaymentStatus`, ortogonal — decisión correcta).
 
 - **Backend — `lib/order-status.js` (nuevo, fuente única):** `ORDER_STATUSES`, `ACTIVE_ORDER_STATUSES` (+PACKING), `ALLOWED_TRANSITIONS`, `ROLE_TRANSITIONS`, `canTransition(from,to,role)`. Permite A→A no-op idempotente.
 
@@ -211,7 +211,7 @@ Tres features de cocina/empaque. C.1 es **dependencia dura** de C.2 y C.3.
 
 - **Objetivo:** checklist por pedido en KDS para gate `PACKING→READY`. **Depende de C.1.**
 - **Schema:** `OrderPackingCheck` (hija de `Order`, `@@unique([orderId, checkKey])`, `checked`, `checkedAt`, `checkedById` String suelto, `onDelete:Cascade`). Sin `restaurantId` → **NO a `SCOPED_MODELS`**.
-- **CORRECCIÓN OBLIGATORIA #1 (grounding — alta):** editar **`packages/database/prisma/schema.prisma`** (canónico: enum `:697`, `KdsItemStatus :2399`, Order relations `:864-867`), NO `apps/backend/prisma` (stale). Agregar relación inversa `packingChecks` en `Order`.
+- **CORRECCIÓN OBLIGATORIA #1 (grounding — alta):** editar **`packages/database/prisma/schema.prisma`** (canónico: enum `:697`, `KdsItemStatus :2399`, Order relations `:864-867`) — único schema del repo. Agregar relación inversa `packingChecks` en `Order`.
 - **CORRECCIÓN #2 (precedente — media):** `KdsItemStatus`/`KdsMessage` usan `orderId String` **suelto sin `@relation`**. Aquí se introduce FK relacional con `onDelete:Cascade` (mejor integridad/cleanup) — afirmarlo como decisión propia, no "idéntico al precedente".
 
 - **Lista canónica de checks (fija en backend):** `DRINKS_COMPLETE`, `SAUCES_PACKED`, `TICKET_PRINTED`, `ADDRESS_CONFIRMED`, `PAYMENT_CONFIRMED`. Los derivables se **pre-calculan** en el GET (auto-sugeridos); el operador confirma.
@@ -336,7 +336,7 @@ Probar contra la tienda corriendo para **confirmar las tres brechas** que el pla
 ## 10. Notas operativas transversales (aplican a toda feature con migración)
 
 - **Migración:** `prisma migrate dev` desde **`packages/database`** (schema canónico) → commit → `prisma migrate deploy` **MANUAL** a prod **antes** del push del backend que lee la columna nueva → verificar la columna en prod. **Prohibido `prisma db push`.** No re-tocar el `.sql` generado (checksum sha256; no normalizar EOL/BOM; `git diff` limpio).
-- **Doble schema:** editar **ambas** copias (`packages/database` canónica + `apps/backend/prisma` espejo stale) en el mismo commit cuando se toca el enum/modelo, o `prisma generate` del backend no conocerá el cambio.
+- **Schema único:** el schema vive **solo** en `packages/database/prisma/schema.prisma`. La copia espejo `apps/backend/prisma/schema.prisma` era código muerto (nada la leía: `build`/`db:migrate`/`db:seed` del backend, el Dockerfile, nixpacks y el CI apuntan todos al canónico) y se borró. No recrearla.
 - **Tenancy:** ningún modelo nuevo de estos diseños lleva `restaurantId` → ninguno entra a `SCOPED_MODELS`; correr `tenant-guard.test.js` en cada PR para confirmar verde. Mantener el filtro `restaurantId` **explícito** aunque enforce lo inyecte (regla del proyecto).
 - **Dinero:** totales siempre server-side (`computeOrderTotals`); precios re-leídos de DB; nada de `req.body.total`; nada de `.catch(()=>null)` en stock/dinero; `pick()`/destructuring, nunca `data: req.body`.
 - **Git:** push directo a master permitido y preferido; PR solo para cambios grandes (B Combos amerita PR). Revisar `git diff --stat` antes de commitear (WIP ajeno se barre a master). Cerrar el agente Codex concurrente antes de operar git.

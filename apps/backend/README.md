@@ -127,9 +127,6 @@ Content-Type: application/json
 
 ```
 backend/
-├── prisma/
-│   ├── schema.prisma      ← Diseño completo de la BD
-│   └── seed.js            ← Datos iniciales
 ├── src/
 │   ├── index.js           ← Servidor Express + Socket.io
 │   ├── middleware/
@@ -151,6 +148,10 @@ backend/
 ├── .env.example           ← Variables de entorno (plantilla)
 └── package.json
 ```
+
+El schema de Prisma y las migraciones **no** viven aquí: están en
+`packages/database/prisma/` (canónico). Los scripts de este paquete lo apuntan
+explícitamente con `--schema=../../packages/database/prisma/schema.prisma`.
 
 ---
 
