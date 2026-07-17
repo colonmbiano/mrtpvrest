@@ -67,9 +67,15 @@ function Icon({ n, s = 18, c = "currentColor", sw = 1.9, cls = "" }) {
 /* ---------------- helpers + demo data ---------------- */
 const mx = (n) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n || 0);
 // El eje de tallas/medidas y las etiquetas de atributos salen del giro, no de un
-// hardcode de ropa. `useGiro()` re-lee al montar para que el POS no arranque en
-// ropa cuando el tenant es ferretería.
-const useGiro = () => { const [g,setG]=useState(DEFAULT_GIRO); useEffect(()=>{ setG(getGiro()); },[]); return g; };
+// hardcode de ropa.
+//
+// Sale del CONTEXTO, no de localStorage: el giro llega con el catálogo, y
+// `onLogin` hace setSession() ANTES de await loadCatalog(). Leyéndolo de
+// localStorage al montar, la UI se pintaba antes de que el fetch lo escribiera
+// ⇒ en el primer login tras vincular, una ferretería mostraba "Talla/Color" y
+// solo se acomodaba al recargar. Por contexto, el setState del catálogo lo
+// propaga solo. Root lo inicializa con el valor cacheado para no parpadear.
+const useGiro = () => useData().giro || DEFAULT_GIRO;
 // Copys del onboarding por giro. El label sale de giro.ts (fuente única); aquí
 // solo vive el placeholder del nombre de tienda, que es de esta pantalla.
 const GIROS_UI = {
@@ -555,12 +561,14 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
                 <span className="flex flex-col items-center justify-center gap-0.5">
                   <span className="flex items-center justify-center gap-1.5">
                     {l.byPackage ? (
-                      <input type="number" min="0.001" step="1" value={baseToPackages(Number(l.qty)||0, l.unitsPerPackage||1)}
+                      <input type="number" min="0.001" step="1" data-testid="cart-qty-input" aria-label={`Cajas de ${l.name}`}
+                        value={baseToPackages(Number(l.qty)||0, l.unitsPerPackage||1)}
                         onChange={e=>setQtyPackages(l.key, e.target.value)}
                         onWheel={e=>e.currentTarget.blur()}
                         className="tnum w-16 h-7 text-center text-[13px] rounded-lg border border-line bg-surf outline-none focus:border-brand-500"/>
                     ) : isBulkUnit(l.unit) ? (
-                      <input type="number" min="0.001" step="0.001" value={l.qty}
+                      <input type="number" min="0.001" step="0.001" data-testid="cart-qty-input" aria-label={`Cantidad de ${l.name} en ${l.unit}`}
+                        value={l.qty}
                         onChange={e=>setQtyExact(l.key, e.target.value)}
                         onWheel={e=>e.currentTarget.blur()}
                         className="tnum w-16 h-7 text-center text-[13px] rounded-lg border border-line bg-surf outline-none focus:border-brand-500"/>
@@ -572,13 +580,14 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
                   </span>
                   {canEnterByPackage(l.unit, l.unitsPerPackage) && (
                     <button onClick={()=>togglePackage(l.key)}
+                      data-testid="cart-package-toggle"
                       title={`1 caja = ${l.unitsPerPackage} ${l.unit}`}
                       className={"text-[9px] px-1.5 rounded "+(l.byPackage?"bg-brand-100 text-brand-700 font-semibold":"text-ink-400 hover:text-ink-700")}>
                       {l.byPackage?`caja ×${l.unitsPerPackage} = ${round3(Number(l.qty)||0)} ${l.unit}`:"por caja"}
                     </button>
                   )}
                 </span>
-                <button onClick={()=>del(l.key)} className="justify-self-center w-8 h-8 grid place-items-center rounded-lg hover:bg-red-50 text-ink-400 hover:text-red-500"><Icon n="trash" s={15}/></button>
+                <button onClick={()=>del(l.key)} aria-label={`Quitar ${l.name}`} className="justify-self-center w-8 h-8 grid place-items-center rounded-lg hover:bg-red-50 text-ink-400 hover:text-red-500"><Icon n="trash" s={15}/></button>
               </div>
             ))}
             {cart.length===0&&<div className="py-16 text-center text-ink-400 text-sm">Escanea o agrega un producto para iniciar la venta.</div>}
@@ -604,7 +613,7 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
             <TotRow k="IVA 16% incluido" v={mx(iva)}/>
             <div className="flex items-center justify-between pt-2 mt-1 border-t border-line">
               <span className="font-semibold text-ink-900">Total</span>
-              <span className="tnum text-2xl font-bold text-ink-900">{mx(total)}</span></div>
+              <span data-testid="sale-total" className="tnum text-2xl font-bold text-ink-900">{mx(total)}</span></div>
             <PrimaryBtn onClick={()=>go("checkout")} className="w-full mt-1"><Icon n="card" s={18}/>Cobrar <span className="tnum opacity-80">F5</span></PrimaryBtn>
           </div>
         </Card>
@@ -796,8 +805,8 @@ function SuccessScreen({ sale, go, newSale }) {
         <h1 className="text-2xl font-bold text-ink-900">¡Pago aprobado!</h1>
         <p className="text-ink-500 mt-1">La venta ha sido completada correctamente.</p>
         <div className="grid grid-cols-3 gap-px bg-line rounded-2xl overflow-hidden mt-6 w-full max-w-xl border border-line">
-          {[["Total pagado",mx(sale.total)],["Método de pago",sale.method],["Folio de venta",sale.folio||"—"]].map(([k,v])=>(
-            <div key={k} className="bg-card p-4 text-center"><div className="text-[11px] text-ink-400 mb-1">{k}</div><div className="tnum font-semibold text-ink-900 text-sm">{v}</div></div>))}
+          {[["Total pagado",mx(sale.total),"sale-success-total"],["Método de pago",sale.method],["Folio de venta",sale.folio||"—","sale-success-folio"]].map(([k,v,tid])=>(
+            <div key={k} className="bg-card p-4 text-center"><div className="text-[11px] text-ink-400 mb-1">{k}</div><div data-testid={tid} className="tnum font-semibold text-ink-900 text-sm">{v}</div></div>))}
         </div>
         <div className="grid grid-cols-5 gap-3 mt-6 w-full max-w-xl">
           {[["Nueva venta","cart"],["Enviar ticket por correo","mail"],["Mostrar QR recibo digital","qr"],["Imprimir recibo","printer"],["Facturar CFDI","file"]].map(([t,ic])=>(
@@ -1364,7 +1373,7 @@ function SectionTitle({t}){return <div className="text-base font-semibold text-i
 
 /* ============================== DATA LAYER (backend real) ============================== */
 const DataCtx = createContext(null);
-function useData(){ return useContext(DataCtx) || { products:[], online:false, demo:true, session:null }; }
+function useData(){ return useContext(DataCtx) || { products:[], online:false, demo:true, session:null, giro:DEFAULT_GIRO }; }
 // Catálogo en vivo si existe; si no (sin login / sin productos retail), cae al demo.
 function useProducts(){ const d=useContext(DataCtx); return (d && d.products && d.products.length) ? d.products : PRODUCTS; }
 // Resuelve el skuId real de una variante color/talla; undefined en productos demo.
@@ -1521,9 +1530,11 @@ function LoginScreen({ onLogin, onDemo, onRelink }){
         <div className="grid grid-cols-3 gap-2.5">
           {["1","2","3","4","5","6","7","8","9"].map(d=>(
             <button key={d} onClick={()=>key(d)} className="h-12 rounded-xl border border-line bg-surf hover:bg-card tnum text-lg text-ink-900 transition-colors">{d}</button>))}
-          <button onClick={()=>key("del")} className="h-12 rounded-xl border border-line hover:bg-surf grid place-items-center text-ink-400"><Icon n="x" s={18}/></button>
+          {/* Botones de solo icono: sin aria-label un lector de pantalla no
+              anuncia nada y no hay forma de referirlos por su nombre. */}
+          <button onClick={()=>key("del")} aria-label="Borrar" className="h-12 rounded-xl border border-line hover:bg-surf grid place-items-center text-ink-400"><Icon n="x" s={18}/></button>
           <button onClick={()=>key("0")} className="h-12 rounded-xl border border-line bg-surf hover:bg-card tnum text-lg text-ink-900">0</button>
-          <button onClick={()=>key("ok")} disabled={busy} className="h-12 rounded-xl bg-brand-600 hover:bg-brand-700 text-white grid place-items-center disabled:opacity-50">{busy?<span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin"/>:<Icon n="check" s={18} c="#fff"/>}</button>
+          <button onClick={()=>key("ok")} disabled={busy} aria-label="Entrar" className="h-12 rounded-xl bg-brand-600 hover:bg-brand-700 text-white grid place-items-center disabled:opacity-50">{busy?<span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin"/>:<Icon n="check" s={18} c="#fff"/>}</button>
         </div>
         <button onClick={onRelink} className="w-full mt-4 text-[11px] text-ink-400 hover:text-ink-700 flex items-center justify-center gap-1.5"><Icon n="store" s={13}/>Cambiar sucursal</button>
       </div>
@@ -1539,9 +1550,18 @@ function Root(){
   const [demo,setDemo]=useState(false);
   const [linked,setLinked]=useState(false);
   const [ready,setReady]=useState(false);
+  // Arranca en el default para que SSR e hidratación coincidan; el valor real
+  // (cacheado o del catálogo) entra en el efecto de abajo y en loadCatalog.
+  const [giro,setGiroState]=useState(DEFAULT_GIRO);
 
   const loadCatalog=async()=>{
-    try{ const ps=await Retail.fetchCatalog(); setProducts(ps); setOnline(true); return ps; }
+    try{
+      const ps=await Retail.fetchCatalog(); // también cachea el giro del backend
+      setProducts(ps);
+      setGiroState(getGiro()); // propaga a la UI sin esperar un reload
+      setOnline(true);
+      return ps;
+    }
     catch{ setOnline(false); return []; }
   };
 
@@ -1556,6 +1576,10 @@ function Root(){
       if(api||rid||lid) window.history.replaceState({}, "", window.location.pathname);
     }
     setLinked(Retail.isLinked());
+    // Giro cacheado de la última sesión: evita que la caja arranque en ropa y
+    // salte a ferretería cuando resuelve el catálogo. Si no hay cache, queda en
+    // el default hasta que loadCatalog traiga el del backend.
+    setGiroState(getGiro());
     try{ const s=Retail.getSession(); if(s && getToken()){ setSession(s); await loadCatalog(); } }
     catch{ /* sesión corrupta → login */ }
     setReady(true);
@@ -1597,7 +1621,7 @@ function Root(){
       onLogin={async(emp)=>{ setSession(emp); await loadCatalog(); }}
       onRelink={()=>{ Retail.unlink(); setSession(null); setLinked(false); }}/></div>;
   }
-  const value={ products, online, demo, session,
+  const value={ products, online, demo, session, giro,
     refreshCatalog:loadCatalog,
     logout:()=>{ Retail.logout(); setSession(null); setDemo(false); setOnline(false); setProducts([]); } };
   return (<DataCtx.Provider value={value}><App/></DataCtx.Provider>);
