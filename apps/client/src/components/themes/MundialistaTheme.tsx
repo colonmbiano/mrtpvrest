@@ -413,7 +413,12 @@ function Header({ info, waNumber, quantity, total, cityLabel, query, setQuery, o
             </button>
           )}
 
-          <button onClick={auth ? onSignOut : onLogin} className="hidden sm:flex items-center gap-1.5 px-2.5 h-10 rounded-full shrink-0" style={{ background: SURF2, border: `1px solid ${BORDER}` }} title={auth ? 'Cerrar sesión' : 'Iniciar sesión'}>
+          {/* Sin sesión el botón se ve TAMBIÉN en móvil: era el único acceso al
+              registro y estaba oculto ahí, así que desde el celular no había
+              forma de crear cuenta. Con sesión sigue siendo desktop-only porque
+              en móvil ya está "Mis pedidos" y ambos + carrito con total no caben
+              en 360px. */}
+          <button onClick={auth ? onSignOut : onLogin} className={`${auth ? 'hidden sm:flex' : 'flex'} items-center gap-1.5 px-2.5 h-10 rounded-full shrink-0`} style={{ background: SURF2, border: `1px solid ${BORDER}` }} title={auth ? 'Cerrar sesión' : 'Iniciar sesión'}>
             <User className="w-5 h-5" style={{ color: auth ? GOLD : TEXT }} />
             <span className="hidden lg:block text-[12px] font-semibold max-w-[90px] truncate">{auth ? auth.customer.name.split(' ')[0] : 'Iniciar sesión'}</span>
           </button>
