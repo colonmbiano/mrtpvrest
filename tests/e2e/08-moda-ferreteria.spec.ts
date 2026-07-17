@@ -133,10 +133,11 @@ async function readTotal(page: Page): Promise<number> {
  * monto vacío aplica el restante completo.
  */
 async function cobrarEnEfectivo(page: Page) {
-  await page.getByRole('button', { name: /^Cobrar/i }).click();
+  // Por testid y no por texto: "Cobrar" casa también el atajo F5 de la barra
+  // inferior, y el del checkout cambia de texto según el restante.
+  await page.getByTestId('btn-cobrar').click();
   await page.getByRole('button', { name: /Agregar pago/i }).click();
-  // Ya con remaining=0 el botón se activa y su texto pasa a "Cobrar $X".
-  await page.getByRole('button', { name: /^Cobrar \$/i }).click();
+  await page.getByTestId('btn-confirmar-cobro').click();
   await expect(page.getByTestId('sale-success-total')).toBeVisible({ timeout: 25_000 });
 }
 
