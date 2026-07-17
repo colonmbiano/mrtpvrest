@@ -649,13 +649,36 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
           </div>
         </Card>
       </div>
-      <ProductDetailPanel p={sel} onAdd={(p,color,size)=>setCart(c=>[...c,{key:p.id+color+size+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,priceTiers:p.priceTiers,color,size,tone:p.tone,cat:p.cat,qty:1,unit:p.unit,unitsPerPackage:p.unitsPerPackage,byPackage:false,skuId:p.skuId||resolveSkuId(p,color,size)}])}/>
+      {/* La guarda va aquí y no dentro del panel: ProductDetailPanel arranca con
+          useState(p.color)/useEffect, así que un early-return por p==null
+          rompería el orden de hooks. */}
+      {sel
+        ? <ProductDetailPanel p={sel} onAdd={(p,color,size)=>setCart(c=>[...c,{key:p.id+color+size+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,priceTiers:p.priceTiers,color,size,tone:p.tone,cat:p.cat,qty:1,unit:p.unit,unitsPerPackage:p.unitsPerPackage,byPackage:false,skuId:p.skuId||resolveSkuId(p,color,size)}])}/>
+        : <EmptyDetailPanel/>}
       </div>
     </div>
   );
 }
 function TotRow({k,v}){return(<div className="flex items-center justify-between text-[13px]"><span className="text-ink-500">{k}</span><span className="tnum text-ink-900">{v}</span></div>);}
 
+// Panel de detalle sin producto seleccionado: catálogo vacío o todavía cargando.
+// Antes este hueco lo tapaba PRODUCTS[0] — una camisa de lino inventada.
+function EmptyDetailPanel(){
+  const { online }=useData();
+  return (
+    <Card className="flex flex-col items-center justify-center text-center p-8">
+      <div className="w-14 h-14 rounded-2xl bg-surf grid place-items-center text-ink-300 mb-3"><Icon n="tag" s={24}/></div>
+      <div className="text-[13px] font-semibold text-ink-600">
+        {online?"Selecciona un producto":"Sin conexión con el servidor"}
+      </div>
+      <div className="text-[12px] text-ink-400 mt-1 max-w-[220px]">
+        {online
+          ? "Escanea un código o elige uno del catálogo para ver su detalle."
+          : "No se pudo cargar el catálogo. Revisa la conexión y vuelve a intentar."}
+      </div>
+    </Card>
+  );
+}
 function ProductDetailPanel({ p, onAdd }) {
   const giro=useGiro();
   const cfg=giroConfig(giro);
@@ -1409,7 +1432,21 @@ function SectionTitle({t}){return <div className="text-base font-semibold text-i
 const DataCtx = createContext(null);
 function useData(){ return useContext(DataCtx) || { products:[], online:false, demo:true, session:null, giro:DEFAULT_GIRO }; }
 // Catálogo en vivo si existe; si no (sin login / sin productos retail), cae al demo.
-function useProducts(){ const d=useContext(DataCtx); return (d && d.products && d.products.length) ? d.products : PRODUCTS; }
+// PRODUCTS es el catálogo del MODO DEMOSTRACIÓN, no un fallback de emergencia.
+// Servirlo cuando una tienda REAL se queda sin catálogo (fetch fallido, o
+// catálogo vacío) es peor que no mostrar nada: el cajero ve camisas de lino con
+// "En stock: 68 pzas." que no existen, y en una ferretería encima con etiquetas
+// de ferretería sobre productos de ropa. Tienda real sin productos ⇒ lista vacía.
+// Constante a nivel de módulo, no un `[]` literal: `useProducts` alimenta un
+// efecto con dependencia [products], y un array nuevo por render lo dispararía
+// en cada uno. Hoy no cicla sólo porque setSel(null) sobre null no re-renderiza
+// — eso es suerte, no diseño.
+const NO_PRODUCTS = [];
+function useProducts(){
+  const d=useContext(DataCtx);
+  if(d && d.products && d.products.length) return d.products;
+  return d && d.demo ? PRODUCTS : NO_PRODUCTS;
+}
 // Resuelve el skuId real de una variante color/talla; undefined en productos demo.
 function resolveSkuId(p, color, size){
   if(!p || !p.live || !p.skuByVariant) return undefined;
@@ -1732,7 +1769,16 @@ function App() {
   const products=useProducts();
   const [screen,setScreen]=useState("venta");
   const [query,setQuery]=useState("");
-  const [sel,setSel]=useState(()=>products[0]||PRODUCTS[0]);
+  // El catálogo llega DESPUÉS de montar App: onLogin hace setSession(emp) y solo
+  // luego `await loadCatalog()`. Al primer render products está vacío, así que un
+  // useState con inicial se quedaba clavado en lo que hubiera entonces —
+  // PRODUCTS[0], una camisa— y NUNCA se re-sincronizaba: el catálogo real podía
+  // estar cargado y el panel seguía mostrando ropa. Por eso se sincroniza por
+  // efecto, conservando la selección si sigue existiendo en el catálogo nuevo.
+  const [sel,setSel]=useState(null);
+  useEffect(()=>{
+    setSel(s=>(s && products.some(p=>p.id===s.id)) ? s : (products[0]||null));
+  },[products]);
   // Multiticket: varias ventas en curso a la vez. El carrito activo es el del
   // ticket seleccionado; setCart mapea el updater sobre ese ticket.
   const [tickets,setTickets]=useState(loadTickets);

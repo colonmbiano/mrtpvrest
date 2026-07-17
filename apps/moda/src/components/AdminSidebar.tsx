@@ -8,12 +8,16 @@ import api from "@/lib/admin-api";
 import { ADMIN_KEYS, getAdminUser, adminLogout } from "@/lib/admin-auth";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
+// "Clientes" NO está aquí a propósito: esa pantalla no hace ni una llamada al
+// backend — sus 2,845 clientes, 156 VIP y 38.7% de recompra son constantes
+// escritas a mano. Enseñarla como una sección más hacía que un tenant con cero
+// clientes viera una cartera inventada. La ruta sigue existiendo (/admin/clientes)
+// para retomarla; vuelve al nav cuando lea datos reales.
 const NAV: NavItem[] = [
   { href: "/admin", label: "Resumen", icon: LayoutDashboard },
   { href: "/admin/catalogo", label: "Catálogo & Stock", icon: Tag },
   { href: "/admin/listas", label: "Listas de precio", icon: Tags },
   { href: "/admin/ventas", label: "Ventas", icon: TrendingUp },
-  { href: "/admin/clientes", label: "Clientes", icon: Users },
   { href: "/admin/descargas", label: "Descargar caja", icon: Download },
   { href: "/admin/configuracion", label: "Configuración", icon: Settings },
 ];
