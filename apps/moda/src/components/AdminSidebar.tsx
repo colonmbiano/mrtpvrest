@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Tag, TrendingUp, Users, Download, Settings, LogOut, ChevronDown, ShoppingBag, Building2, MoreVertical, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Tag, Tags, TrendingUp, Users, Download, Settings, LogOut, ChevronDown, ShoppingBag, Building2, MoreVertical, type LucideIcon } from "lucide-react";
 import api from "@/lib/admin-api";
 import { ADMIN_KEYS, getAdminUser, adminLogout } from "@/lib/admin-auth";
 
@@ -11,6 +11,7 @@ type NavItem = { href: string; label: string; icon: LucideIcon };
 const NAV: NavItem[] = [
   { href: "/admin", label: "Resumen", icon: LayoutDashboard },
   { href: "/admin/catalogo", label: "Catálogo & Stock", icon: Tag },
+  { href: "/admin/listas", label: "Listas de precio", icon: Tags },
   { href: "/admin/ventas", label: "Ventas", icon: TrendingUp },
   { href: "/admin/clientes", label: "Clientes", icon: Users },
   { href: "/admin/descargas", label: "Descargar caja", icon: Download },

@@ -605,7 +605,9 @@ router.get('/catalog', async (req, res) => {
               priceTiers: { orderBy: { minQty: 'asc' }, select: { minQty: true, price: true } },
               // Precios por lista, por el mismo motivo que los tiers: el POS
               // tiene que poder cotizar lo que el backend va a cobrar.
-              priceListItems: { select: { priceListId: true, price: true } },
+              // El `id` no lo usa el POS: lo necesita el admin de listas, que se
+              // arma con este mismo catálogo y borra un precio por id.
+              priceListItems: { select: { id: true, priceListId: true, price: true } },
               ...(locationId
                 ? { stockBalances: { where: { locationId }, select: { qty: true, minQty: true } } }
                 : {}),
@@ -782,10 +784,25 @@ const priceListSchema = z.object({
   isDefault: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 });
+const priceListUpdateSchema = z.object({
+  name: z.string().min(1).optional(),
+  isDefault: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
 const priceListItemSchema = z.object({
   priceListId: z.string().min(1),
   skuId: z.string().min(1),
   price: z.number().nonnegative(),
+});
+// Alta masiva: "contratista = 8% abajo de catálogo" son N precios de un jalón.
+// El cliente manda cada precio ya calculado en vez de un % — la regla de
+// redondeo se ve en pantalla antes de escribir, y el servidor no adivina.
+const priceListBulkSchema = z.object({
+  priceListId: z.string().min(1),
+  items: z.array(z.object({
+    skuId: z.string().min(1),
+    price: z.number().nonnegative(),
+  })).min(1).max(500),
 });
 
 async function assertOwnedPriceList(restaurantId, priceListId) {
@@ -834,6 +851,43 @@ router.post('/catalog/price-lists', requireRole(...ADMIN_ROLES), async (req, res
   }
 });
 
+// Renombrar / reordenar / cambiar cuál preselecciona el POS. Sin esto la lista
+// quedaba congelada en como se creó: `isDefault` solo se podía fijar al crearla.
+router.put('/catalog/price-lists/:id', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const data = priceListUpdateSchema.parse(req.body);
+    const { id } = req.params;
+
+    const list = await prisma.$transaction(async (tx) => {
+      const patch = {};
+      if (data.name !== undefined) patch.name = data.name.trim();
+      if (data.isDefault !== undefined) patch.isDefault = data.isDefault;
+      if (data.sortOrder !== undefined) patch.sortOrder = data.sortOrder;
+
+      // Solo una default por restaurante. Dentro de la transacción para que no
+      // queden dos si algo falla entre el updateMany y el update.
+      if (data.isDefault) {
+        await tx.retailPriceList.updateMany({
+          where: { restaurantId, id: { not: id } },
+          data: { isDefault: false },
+        });
+      }
+      // updateMany con restaurantId en el WHERE (no update by id): un id de otro
+      // restaurante no matchea y sale 404, sin un read previo que sea TOCTOU.
+      const { count } = await tx.retailPriceList.updateMany({ where: { id, restaurantId }, data: patch });
+      if (!count) { const e = new Error('Lista no encontrada'); e.status = 404; throw e; }
+      return tx.retailPriceList.findFirst({ where: { id, restaurantId } });
+    });
+    res.json(list);
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Payload de lista invalido', details: e.errors });
+    if (e.code === 'P2002') return res.status(409).json({ error: 'Ya existe una lista con ese nombre' });
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
 router.delete('/catalog/price-lists/:id', requireRole(...ADMIN_ROLES), async (req, res) => {
   try {
     const restaurantId = restaurantIdFrom(req);
@@ -863,6 +917,42 @@ router.put('/catalog/price-list-items', requireRole(...ADMIN_ROLES), async (req,
     res.json(item);
   } catch (e) {
     if (e instanceof z.ZodError) return res.status(400).json({ error: 'Payload de precio invalido', details: e.errors });
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Escribe muchos precios de una lista en UNA transacción: o entra la tarifa
+// completa o no entra nada. Un fallo a media captura dejaría a un contratista
+// con la mitad del catálogo a precio de público.
+router.put('/catalog/price-list-items/bulk', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const data = priceListBulkSchema.parse(req.body);
+    await assertOwnedPriceList(restaurantId, data.priceListId);
+
+    // Último gana: dos filas del mismo SKU en el payload es una corrección, no
+    // un error — y así el upsert no compite consigo mismo dentro de la tx.
+    const bySku = new Map(data.items.map((i) => [i.skuId, i.price]));
+
+    // Propiedad de TODOS los SKUs en una sola consulta: 500 assertOwnedSku
+    // secuenciales serían 500 round-trips.
+    const owned = await prisma.retailSku.findMany({
+      where: { restaurantId, id: { in: [...bySku.keys()] } },
+      select: { id: true },
+    });
+    if (owned.length !== bySku.size) return res.status(404).json({ error: 'Algun SKU no pertenece a este restaurante' });
+
+    await prisma.$transaction(
+      [...bySku].map(([skuId, price]) => prisma.retailPriceListItem.upsert({
+        where: { priceListId_skuId: { priceListId: data.priceListId, skuId } },
+        update: { price },
+        create: { restaurantId, priceListId: data.priceListId, skuId, price },
+      })),
+    );
+    res.json({ ok: true, count: bySku.size });
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Payload de precios invalido', details: e.errors });
     res.status(e.status || 500).json({ error: e.message });
   }
 });
