@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useMemo, createContext, useContext } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from "react";
 import * as Retail from "@/lib/retail";
 import { getApiUrl, setApiUrl } from "@/lib/config";
 import { getTenant, setTenant, getGiro } from "@/lib/tenant";
@@ -190,13 +190,24 @@ const PERM_LABEL = { apply_discount:"Aplicar descuento", override_price:"Cambiar
 const PermCtx = createContext(null);
 function usePerm(){ return useContext(PermCtx); }
 
+// Solo pantallas que leen datos REALES. Fuera del menú (el código sigue en el
+// archivo, con sus rutas, para retomarlas cuando tengan backend):
+//   · Clientes    — array CLIENTS fijo, con niveles Platino/Oro/Plata inventados.
+//   · Inventario  — maqueta sobre PRODUCTS[0], y encima una matriz talla×color
+//                   que no significa nada fuera de ropa. El stock real ya está
+//                   en Catálogo.
+//   · Apartados   — no existe modelo de apartados en la BD: no hay nada que leer.
+//   · Reportes    — cifras fijas sobre PRODUCTS.
+// Se pintaban como funciones del producto y se alcanzaban con una tecla; en una
+// ferretería enseñaban ropa.
 const NAV = [
-  ["venta","Venta","cart"],["catalogo","Catálogo","tag"],["clientes","Clientes","users"],
-  ["inventario","Inventario","box"],["apartados","Apartados","bookmark"],["devoluciones","Devoluciones","return"],
-  ["caja","Caja","wallet"],["reportes","Reportes","chart"],["config","Configuración","gear"],
+  ["venta","Venta","cart"],["catalogo","Catálogo","tag"],
+  ["devoluciones","Devoluciones","return"],
+  ["caja","Caja","wallet"],["config","Configuración","gear"],
 ];
+// Sin F6 "Apartar": llevaba a la maqueta de apartados, que no tiene backend.
 const SHORTCUTS = [["F1","Nueva venta","plus"],["F2","Buscar","search"],["F5","Cobrar","card"],
-  ["F6","Apartar","bookmark"],["F7","Devolución","return"],["F8","Abrir cajón","wallet"]];
+  ["F7","Devolución","return"],["F8","Abrir cajón","wallet"]];
 
 /* ---------------- shell ---------------- */
 function TitleBar({ screen }) {
@@ -291,7 +302,7 @@ function BottomBar({ go, onCobrar, onNewTicket }) {
   return (
     <footer className="flex items-center gap-2 px-3 lg:px-4 h-[58px] lg:h-[60px] bg-card border-t border-line overflow-x-auto">
       {SHORTCUTS.map(([k,label,icon])=>(
-        <button key={k} onClick={()=>{ if(k==="F5")onCobrar(); else if(k==="F7")go("devoluciones"); else if(k==="F8")go("caja"); else if(k==="F6")go("apartados"); else if(k==="F1")onNewTicket(); else document.getElementById("globalsearch")?.focus(); }}
+        <button key={k} onClick={()=>{ if(k==="F5")onCobrar(); else if(k==="F7")go("devoluciones"); else if(k==="F8")go("caja"); else if(k==="F1")onNewTicket(); else document.getElementById("globalsearch")?.focus(); }}
           className="shrink-0 min-w-[92px] lg:min-w-0 lg:flex-1 flex items-center justify-center gap-2 h-11 px-3 rounded-xl border border-line hover:bg-surf text-ink-700 text-[12px] lg:text-[13px] font-medium">
           <Icon n={icon} s={17} cls="text-ink-400"/>{label}
           <span className="hidden lg:inline tnum text-[10px] text-ink-400 border border-line rounded px-1">{k}</span>
@@ -1352,48 +1363,126 @@ function ClientsScreen({ go }) {
     </div>
   );
 }
+/**
+ * Devoluciones — contra el backend real (POST /sales/:id/return).
+ *
+ * Antes era una maqueta: un ticket fijo de "María Fernanda López", casillas por
+ * artículo y tipos "Cambio por talla / Nota de crédito". Nada de eso existe:
+ * `reverseRetailSale` revierte la venta COMPLETA (COMPLETED → RETURNED) y repone
+ * el stock de todas sus líneas. No hay devolución parcial, ni cambios, ni notas
+ * de crédito. Ofrecerlos era prometer lo que el servidor no puede cumplir, y el
+ * botón además no llamaba a nada.
+ *
+ * Lo que sí hace el backend y esta pantalla respeta:
+ *  · Un solo tiro: el flip de estado es condicional ⇒ el 2º intento da 409 en
+ *    vez de reponer stock dos veces. Por eso el error de 409 se muestra tal cual.
+ *  · Exige rol de administrador ⇒ un cajero recibe 403; se dice, no se esconde.
+ */
 function ReturnsScreen() {
-  const ticket={folio:"VTA-000012339",date:"18/05/2024",client:"María Fernanda López",items:[PRODUCTS[0],PRODUCTS[4],PRODUCTS[6]]};
-  const [sel,setSel]=useState({}); const [tipo,setTipo]=useState("Cambio por talla"); const [motivo,setMotivo]=useState("Talla incorrecta");
-  const toggle=(id)=>setSel(s=>({...s,[id]:!s[id]}));
-  const chosen=ticket.items.filter(p=>sel[p.id]);
-  const monto=chosen.reduce((a,p)=>a+p.price,0);
-  const esCambio=tipo.startsWith("Cambio");
-  return (<div className="h-full overflow-y-auto"><ScreenHead icon="return" title="Devoluciones y cambios" folio="DEV nueva"/>
-    <Card className="p-4 mb-4"><div className="flex gap-3 items-center"><label className="flex items-center gap-3 h-12 px-4 rounded-xl bg-surf border border-line flex-1 max-w-2xl"><Icon n="search" s={18} cls="text-ink-400"/><input defaultValue={ticket.folio} placeholder="Buscar ticket por folio, cliente o código" className="flex-1 bg-transparent outline-none text-sm"/><Icon n="scan" s={18} cls="text-ink-400"/></label><GhostBtn>Buscar ticket</GhostBtn></div></Card>
+  const [sales,setSales]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [err,setErr]=useState("");
+  const [q,setQ]=useState("");
+  const [selId,setSelId]=useState(null);
+  const [notes,setNotes]=useState("");
+  const [busy,setBusy]=useState(false);
+
+  const load=useCallback(async()=>{
+    setLoading(true); setErr("");
+    try{ const r=await Retail.fetchSales(40); setSales(Array.isArray(r)?r:[]); }
+    catch(e){ setErr(e?.message||"No se pudieron cargar las ventas."); setSales([]); }
+    finally{ setLoading(false); }
+  },[]);
+  useEffect(()=>{ load(); },[load]);
+
+  const list=sales.filter(s=>!q||[s.folio,s.customerName].filter(Boolean).join(" ").toLowerCase().includes(q.trim().toLowerCase()));
+  const sel=sales.find(s=>s.id===selId)||null;
+  const puede=sel?.status==="COMPLETED";
+
+  async function doReturn(){
+    if(!sel||!puede) return;
+    const n=sel.lines?.length||0;
+    if(!confirm(`¿Devolver COMPLETA la venta ${sel.folio} por ${mx(Number(sel.total))}?\n\nEl backend no hace devoluciones parciales: se revierte entera y se repone el stock de sus ${n} línea(s). No se puede deshacer.`)) return;
+    setBusy(true); setErr("");
+    try{
+      await Retail.returnSale(sel.id, notes.trim()||undefined);
+      setNotes(""); setSelId(null);
+      await load();
+    }catch(e){
+      setErr(
+        e?.status===409 ? `La venta ${sel.folio} ya fue devuelta o cancelada.` :
+        e?.status===403 ? "Tu usuario no puede devolver ventas: hace falta un administrador." :
+        (e?.message||"No se pudo devolver la venta.")
+      );
+    }finally{ setBusy(false); }
+  }
+
+  const badge=(st)=>st==="RETURNED"?["Devuelta","bg-amber-100 text-amber-700"]
+    :st==="CANCELLED"?["Cancelada","bg-red-100 text-red-600"]
+    :["Cobrada","bg-brand-100 text-brand-700"];
+
+  return (<div className="h-full overflow-y-auto"><ScreenHead icon="return" title="Devoluciones"
+    right={<GhostBtn onClick={load}>{loading?"Cargando…":"Actualizar"}</GhostBtn>}/>
+    <Card className="p-4 mb-4"><label className="flex items-center gap-3 h-12 px-4 rounded-xl bg-surf border border-line max-w-2xl">
+      <Icon n="search" s={18} cls="text-ink-400"/>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por folio o cliente" className="flex-1 bg-transparent outline-none text-sm"/>
+    </label></Card>
+
+    {err&&<Card className="p-3 mb-4 border-red-200 bg-red-50"><div className="text-[13px] text-red-600">{err}</div></Card>}
+
     <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-4">
-      <div className="space-y-4">
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-3"><div className="font-semibold text-ink-900">Ticket {ticket.folio}</div><div className="text-[12px] text-ink-400">{ticket.client} · {ticket.date}</div></div>
-          {ticket.items.map(p=>{const on=sel[p.id];return(<label key={p.id} className={"flex items-center gap-3 py-3 border-t border-line first:border-0 cursor-pointer "+(on?"":"")}>
-            <input type="checkbox" checked={!!on} onChange={()=>toggle(p.id)} className="w-4 h-4 accent-brand-600"/><Thumb p={p}/>
-            <div className="flex-1"><div className="text-[13px] font-medium text-ink-900">{p.name}</div><div className="tnum text-[11px] text-ink-400">{p.sku} · {p.color} / {p.size}</div></div>
-            <div className="tnum text-[13px] font-semibold">{mx(p.price)}</div></label>);})}
-        </Card>
-        <Card className="overflow-hidden">
-          <div className="px-5 py-3 font-semibold text-ink-900 border-b border-line">Historial de devoluciones</div>
-          <table className="w-full text-[12px]"><thead><tr className="bg-surf text-ink-400 uppercase text-[10px]">{["Folio","Fecha","Cliente","Producto","Tipo","Estatus","Monto"].map(h=><th key={h} className="text-left py-2.5 px-3 font-semibold">{h}</th>)}</tr></thead>
-            <tbody>{RETURNS.map(([f,d,cl,p,t,st,m])=>(<tr key={f} className="border-t border-line"><td className="tnum px-3 py-2.5 text-ink-700">{f}</td><td className="tnum px-3 text-ink-500">{d}</td><td className="px-3 text-ink-700">{cl}</td><td className="px-3 text-ink-700">{p.name}</td><td className="px-3 text-ink-500">{t}</td><td className="px-3"><span className="text-[11px] bg-brand-100 text-brand-700 px-2 py-0.5 rounded">{st}</span></td><td className={"tnum px-3 font-medium "+(m<0?"text-red-500":"text-ink-500")}>{m===0?"—":mx(m)}</td></tr>))}</tbody></table>
-        </Card>
-      </div>
-      <div className="space-y-4">
-        <Card className="p-5"><div className="font-semibold text-ink-900 mb-3">Tipo de devolución</div>
-          {[["Cambio por talla","swap"],["Cambio por color","swap"],["Devolución de dinero","cash"],["Nota de crédito","file"]].map(([t,ic])=>{const on=tipo===t;return(
-            <button key={t} onClick={()=>setTipo(t)} className={"w-full flex items-center gap-3 p-3 rounded-xl border mb-2 text-left "+(on?"border-brand-500 bg-brand-50":"border-line hover:bg-surf")}>
-              <Icon n={ic} s={18} cls={on?"text-brand-600":"text-ink-400"}/><span className="text-[13px] text-ink-900">{t}</span>{on&&<Icon n="check" s={16} cls="text-brand-600 ml-auto"/>}</button>);})}
-        </Card>
-        <Card className="p-5">
-          <Fld label="Motivo"><select value={motivo} onChange={e=>setMotivo(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-line text-sm outline-none focus:border-brand-500">
-            {["Talla incorrecta","Color no deseado","Defecto de fábrica","No le gustó","Otro"].map(o=><option key={o}>{o}</option>)}</select></Fld>
-          {esCambio&&<Fld label="Nueva variante"><Sel v="Seleccionar color y talla"/></Fld>}
-          <div className="rounded-xl bg-surf border border-line p-3 mt-1 space-y-1.5 text-[13px]">
-            <div className="flex justify-between"><span className="text-ink-500">Artículos</span><span className="tnum">{chosen.length}</span></div>
-            <div className="flex justify-between"><span className="text-ink-500">Monto</span><span className="tnum">{mx(monto)}</span></div>
-            <div className="flex justify-between pt-1.5 border-t border-line"><span className="font-medium text-ink-900">{esCambio?"Diferencia a cobrar":"A devolver"}</span><span className={"tnum font-bold "+(esCambio?"text-ink-900":"text-red-500")}>{esCambio?mx(0):"- "+mx(monto)}</span></div>
+      <Card className="overflow-hidden">
+        <div className="px-5 py-3 font-semibold text-ink-900 border-b border-line">Ventas recientes</div>
+        {loading?<div className="py-10 text-center text-[13px] text-ink-400">Cargando ventas…</div>
+        :list.length===0?<div className="py-10 text-center text-[13px] text-ink-400">{sales.length===0?"Aún no hay ventas registradas.":"Ninguna venta coincide."}</div>
+        :<table className="w-full text-[12px]"><thead><tr className="bg-surf text-ink-400 uppercase text-[10px]">
+          {["Folio","Fecha","Cliente","Artículos","Estado","Total"].map(h=><th key={h} className="text-left py-2.5 px-3 font-semibold">{h}</th>)}</tr></thead>
+          <tbody>{list.map(s=>{const [lbl,cls]=badge(s.status);const on=s.id===selId;return(
+            <tr key={s.id} onClick={()=>setSelId(s.id)} className={"border-t border-line cursor-pointer "+(on?"bg-brand-50":"hover:bg-surf")}>
+              <td className="tnum px-3 py-2.5 text-ink-700">{s.folio}</td>
+              <td className="tnum px-3 text-ink-500">{new Date(s.createdAt).toLocaleDateString()}</td>
+              <td className="px-3 text-ink-700">{s.customerName||"Mostrador"}</td>
+              <td className="tnum px-3 text-ink-500">{s.lines?.length||0}</td>
+              <td className="px-3"><span className={"text-[11px] px-2 py-0.5 rounded "+cls}>{lbl}</span></td>
+              <td className="tnum px-3 font-medium text-ink-900">{mx(Number(s.total))}</td>
+            </tr>);})}</tbody></table>}
+      </Card>
+
+      <Card className="p-5 self-start">
+        {!sel?<div className="py-8 text-center text-[13px] text-ink-400">Elige una venta de la lista para devolverla.</div>:<>
+          <div className="font-semibold text-ink-900">Venta {sel.folio}</div>
+          <div className="text-[12px] text-ink-400 mb-3">{new Date(sel.createdAt).toLocaleString()}</div>
+          <div className="max-h-52 overflow-y-auto -mx-1 px-1">
+            {(sel.lines||[]).map(l=>(<div key={l.id} className="flex items-start gap-2 py-2 border-t border-line first:border-0">
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] text-ink-900 truncate">{l.productName}</div>
+                <div className="tnum text-[11px] text-ink-400">{l.skuCode} · {Number(l.quantity)} × {mx(Number(l.unitPrice))}</div>
+              </div>
+              <div className="tnum text-[13px] font-semibold shrink-0">{mx(Number(l.subtotal))}</div>
+            </div>))}
           </div>
-          <GateBtn className="w-full mt-3" perm={tipo==="Devolución de dinero"?"refund_cash":"process_return"} onClick={()=>{}}>{esCambio?"Procesar cambio":"Procesar devolución"}</GateBtn>
-        </Card>
-      </div>
+          <div className="flex justify-between pt-2 mt-1 border-t border-line text-[13px]">
+            <span className="font-medium text-ink-900">A devolver</span>
+            <span className="tnum font-bold text-red-500">- {mx(Number(sel.total))}</span>
+          </div>
+          {puede?<>
+            <div className="mt-3"><Fld label="Motivo (opcional)">
+              <input value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Producto defectuoso"
+                className="w-full h-10 px-3 rounded-lg border border-line text-sm outline-none focus:border-brand-500"/>
+            </Fld></div>
+            <div className="rounded-xl bg-surf border border-line p-3 text-[12px] text-ink-500 mb-3">
+              Se devuelve la venta <b className="text-ink-900">completa</b> y su stock vuelve al inventario.
+            </div>
+            {/* GateBtn pide PIN de supervisor si el cajero no tiene el permiso;
+                el backend igual exige administrador y responde 403 si no. */}
+            <GateBtn className="w-full" perm="process_return" onClick={busy?()=>{}:doReturn}>
+              {busy?"Devolviendo…":"Devolver venta completa"}
+            </GateBtn>
+          </>:<div className="mt-3 rounded-xl bg-surf border border-line p-3 text-[12px] text-ink-500">
+            Esta venta ya está <b className="text-ink-900">{sel.status==="RETURNED"?"devuelta":"cancelada"}</b>. Solo se puede revertir una venta cobrada.
+          </div>}
+        </>}
+      </Card>
     </div></div>);
 }
 function Toggle({on,set}){return(<button onClick={()=>set(!on)} className={"w-11 h-6 rounded-full transition-colors relative "+(on?"bg-brand-600":"bg-line")}>
@@ -1875,7 +1964,6 @@ function App() {
     else if(e.key==="F2"){e.preventDefault();document.getElementById("globalsearch")?.focus();}
     else if(e.key==="F3"){e.preventDefault();setScreen("clientes");}
     else if(e.key==="F5"){e.preventDefault();cobrar();}
-    else if(e.key==="F6"){e.preventDefault();setScreen("apartados");}
     else if(e.key==="F7"){e.preventDefault();setScreen("devoluciones");}
     else if(e.key==="F8"){e.preventDefault();setScreen("caja");}
     else if(e.key==="Escape"&&["checkout","success"].includes(screen)){setScreen("venta");}
