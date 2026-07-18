@@ -210,7 +210,7 @@ function TitleBar({ screen }) {
   const data=useData();
   return (
     <div className="hidden lg:flex items-center justify-between h-9 px-3 bg-titlebar border-b border-line select-none">
-      <div className="text-[12px] text-ink-500 font-medium">MODA+ <span className="text-ink-400">•</span> {screen}</div>
+      <div className="text-[12px] text-ink-500 font-medium">MRTPV Retail <span className="text-ink-400">•</span> {screen}</div>
       <div className="flex items-center gap-2 text-ink-400">
         <span className={"flex items-center gap-1.5 text-[11px] px-2 h-6 rounded-full border "+(data.online?"border-brand-200 text-brand-700 bg-brand-50":"border-line text-ink-400")} title={data.online?"Conectado al backend":"Sin conexión · modo demo"}>
           <span className="w-1.5 h-1.5 rounded-full" style={{background:data.online?"#16a34a":"#cbd5cf"}}/>{data.online?(data.session?.name||"En línea"):"Demo"}</span>
@@ -231,7 +231,7 @@ function TopBar({ query, setQuery, theme, setTheme, setNavOpen }) {
     <header className="flex items-center gap-2 lg:gap-4 px-3 lg:px-5 h-[60px] lg:h-[68px] bg-card border-b border-line">
       <button onClick={()=>setNavOpen&&setNavOpen(true)} aria-label="Menú" className="lg:hidden w-10 h-10 grid place-items-center rounded-lg hover:bg-surf text-ink-600 shrink-0"><Icon n="menu" s={20}/></button>
       <div className="flex items-baseline gap-2 lg:w-[200px] shrink-0">
-        <span className="text-xl lg:text-2xl font-bold tracking-tight text-ink-900">MODA<span className="text-brand-600">+</span></span>
+        <span className="text-xl lg:text-2xl font-bold tracking-tight text-ink-900">MRT<span className="text-brand-600">PV</span> Retail</span>
         <span className="hidden xl:inline text-[9px] font-semibold tracking-[0.2em] text-ink-400 uppercase">Smart retail flow</span>
       </div>
       <label className="hidden md:flex flex-1 max-w-[640px] items-center gap-3 h-11 px-4 rounded-xl bg-surf border border-line focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
@@ -268,7 +268,7 @@ function Sidebar({ screen, go, navOpen, setNavOpen }) {
     {navOpen && <div className="fixed inset-0 bg-black/40 z-40 lg:hidden" onClick={close}/>}
     <aside className={"bg-card border-r border-line flex-col w-[264px] shrink-0 fixed inset-y-0 left-0 z-50 lg:static lg:w-[224px] lg:z-auto "+(navOpen?"flex":"hidden lg:flex")}>
       <div className="lg:hidden flex items-center justify-between px-4 h-14 border-b border-line">
-        <span className="text-lg font-bold tracking-tight text-ink-900">MODA<span className="text-brand-600">+</span></span>
+        <span className="text-lg font-bold tracking-tight text-ink-900">MRT<span className="text-brand-600">PV</span> Retail</span>
         <button onClick={close} aria-label="Cerrar" className="w-9 h-9 grid place-items-center rounded-lg hover:bg-surf text-ink-500"><Icon n="x" s={18}/></button>
       </div>
       <nav className="p-3 space-y-1 flex-1 overflow-y-auto">
@@ -422,7 +422,7 @@ function ReceiptModal({ sale, onClose }) {
     <div className="flex gap-6 items-start">
       <div className="mx-auto w-[290px] bg-card border border-line rounded-md px-5 py-5 font-mono text-[11px] text-ink-900 leading-relaxed shadow-sm">
         <div className="text-center">
-          <div className="text-[16px] font-bold tracking-tight">MODA+</div>
+          <div className="text-[16px] font-bold tracking-tight">MRTPV Retail</div>
           <div className="text-[8px] tracking-[0.22em] text-ink-500">SMART RETAIL FLOW</div>
           <div className="text-[10px] text-ink-500 mt-1.5">Av. Masaryk 100, Polanco</div>
           <div className="text-[10px] text-ink-500">RFC MPL230114AB1 · Tel 55 1234 0000</div>
@@ -1493,7 +1493,7 @@ function SettingsScreen({ theme, setTheme }) {
   const [tg,setTg]=useState({drawer:true,scan:true,dark:false,sound:true,cfdi:true,pin:true,iva:true,msi:true});
   const t=(k)=>setTg(s=>({...s,[k]:!s[k]}));
   const panels={
-    0:<><SectionTitle t="Datos de tienda"/><SetRow label="Nombre comercial"><TInput v="MODA+ Boutique"/></SetRow><SetRow label="Razón social"><TInput v="Moda Plus S.A. de C.V."/></SetRow><SetRow label="RFC"><TInput v="MPL230114AB1"/></SetRow><SetRow label="Teléfono"><TInput v="55 1234 0000"/></SetRow><SetRow label="Dirección"><TInput v="Av. Presidente Masaryk 100, Polanco"/></SetRow></>,
+    0:<><SectionTitle t="Datos de tienda"/><SetRow label="Nombre comercial"><TInput v="Mi Tienda"/></SetRow><SetRow label="Razón social"><TInput v="Mi Empresa S.A. de C.V."/></SetRow><SetRow label="RFC"><TInput v="XAXX010101000"/></SetRow><SetRow label="Teléfono"><TInput v="55 1234 0000"/></SetRow><SetRow label="Dirección"><TInput v="Av. Principal 100, Centro"/></SetRow></>,
     3:<><SectionTitle t="Impresora térmica"/><SetRow label="Impresora" sub="Conectada por USB"><span className="text-[12px] text-brand-600 font-medium">EPSON TM-T20III ●</span></SetRow><SetRow label="Ancho de papel"><span className="text-[13px] text-ink-700 border border-line rounded-lg px-3 py-1.5">80 mm ⌄</span></SetRow><SetRow label="Imprimir automáticamente" sub="Al completar la venta"><Toggle on={tg.sound} set={()=>t("sound")}/></SetRow><SetRow label="Copias por ticket"><span className="text-[13px] text-ink-700 border border-line rounded-lg px-3 py-1.5">1 ⌄</span></SetRow><GhostBtn className="mt-4"><Icon n="printer" s={16}/>Imprimir página de prueba</GhostBtn></>,
     4:<><SectionTitle t="Cajón de dinero"/><SetRow label="Cajón conectado" sub="Pulso por impresora"><Toggle on={tg.drawer} set={()=>t("drawer")}/></SetRow><SetRow label="Abrir al cobrar en efectivo"><Toggle on={tg.drawer} set={()=>t("drawer")}/></SetRow><SetRow label="Requiere PIN para abrir manualmente"><Toggle on={tg.pin} set={()=>t("pin")}/></SetRow><GhostBtn className="mt-4"><Icon n="wallet" s={16}/>Probar apertura</GhostBtn></>,
     5:<><SectionTitle t="Lector de código de barras"/><SetRow label="Lector habilitado" sub="Modo teclado (HID)"><Toggle on={tg.scan} set={()=>t("scan")}/></SetRow><SetRow label="Prefijo de escaneo"><TInput v="(ninguno)"/></SetRow><SetRow label="Sonido al escanear"><Toggle on={tg.sound} set={()=>t("sound")}/></SetRow><div className="mt-4 p-3 rounded-xl bg-surf border border-line text-[12px] text-ink-500">Escanea cualquier código para probar la lectura…</div></>,
@@ -1534,7 +1534,7 @@ function AboutPanel(){
         <div className="h-12 w-12 shrink-0 grid place-items-center rounded-xl bg-surf border border-line text-[10px] font-bold text-ink-300 select-none">mrtpv</div>
         {/* ▲▲ fin placeholder logo ▲▲ */}
         <div>
-          <div className="text-[15px] font-bold tracking-tight text-ink-900">MODA<span className="text-brand-600">+</span> <span className="text-ink-500 font-semibold">Retail</span></div>
+          <div className="text-[15px] font-bold tracking-tight text-ink-900">MRT<span className="text-brand-600">PV</span> <span className="text-ink-500 font-semibold">Retail</span></div>
           <div className="text-[12px] text-ink-400 tnum">Versión {APP_VERSION}</div>
         </div>
       </div>
@@ -1594,7 +1594,7 @@ function resolveSkuId(p, color, size){
 function BootSplash(){
   return (<div className="h-full grid place-items-center bg-body">
     <div className="text-center">
-      <div className="text-2xl font-bold tracking-tight text-ink-900">MODA<span className="text-brand-600">+</span></div>
+      <div className="text-2xl font-bold tracking-tight text-ink-900">MRT<span className="text-brand-600">PV</span> Retail</div>
       <div className="text-[10px] tracking-[0.28em] text-ink-400 mt-1">SMART RETAIL FLOW</div>
       <div className="mt-5 w-6 h-6 mx-auto rounded-full border-2 border-line border-t-brand-500 animate-spin"/>
     </div></div>);
@@ -1622,7 +1622,7 @@ function VersionBadge({ ota }){
           className="h-5 opacity-70" />  (el PNG va en apps/moda/public/). ▼▼ */}
       <div className="text-[13px] font-bold tracking-tight text-ink-300 select-none" aria-label="mrtpvrest">mrtpvrest</div>
       {/* ▲▲ fin placeholder logo ▲▲ */}
-      <div className="text-[11px] text-ink-400 tnum">MODA+ v{APP_VERSION}</div>
+      <div className="text-[11px] text-ink-400 tnum">MRTPV Retail v{APP_VERSION}</div>
       {s && (
         <div className="flex items-center gap-1.5 text-[11px] text-ink-400">
           <span className={"w-1.5 h-1.5 rounded-full "+(s.pulse?"animate-pulse":"")} style={{ background:s.dot }}/>
@@ -1674,7 +1674,7 @@ function SetupScreen({ ota, onLinked, onDemo }){
   return (<div className="h-full grid place-items-center bg-body p-6 overflow-y-auto">
     <div className="w-full max-w-[400px] py-6">
       <div className="text-center mb-6">
-        <div className="text-3xl font-bold tracking-tight text-ink-900">MODA<span className="text-brand-600">+</span></div>
+        <div className="text-3xl font-bold tracking-tight text-ink-900">MRT<span className="text-brand-600">PV</span> Retail</div>
         <div className="text-[10px] tracking-[0.28em] text-ink-400 mt-1">SMART RETAIL FLOW</div>
       </div>
       <div className="bg-card border border-line rounded-2xl shadow-sm p-6">
@@ -1759,7 +1759,7 @@ function LoginScreen({ ota, onLogin, onDemo, onRelink }){
   return (<div className="h-full grid place-items-center bg-body p-6">
     <div className="w-full max-w-[380px]">
       <div className="text-center mb-6">
-        <div className="text-3xl font-bold tracking-tight text-ink-900">MODA<span className="text-brand-600">+</span></div>
+        <div className="text-3xl font-bold tracking-tight text-ink-900">MRT<span className="text-brand-600">PV</span> Retail</div>
         <div className="text-[10px] tracking-[0.28em] text-ink-400 mt-1">SMART RETAIL FLOW</div>
       </div>
       <div className="bg-card border border-line rounded-2xl shadow-sm p-6">

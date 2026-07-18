@@ -34,7 +34,7 @@ export default function AdminLoginPage() {
       if (data.user?.restaurantId) localStorage.setItem(ADMIN_KEYS.restaurantId, data.user.restaurantId);
 
       if (!data.user?.restaurantId) {
-        setError("Esta cuenta no tiene una tienda asociada. Crea tu tienda desde la app MODA+ primero.");
+        setError("Esta cuenta no tiene una tienda asociada. Crea tu tienda desde la app MRTPV Retail primero.");
         setLoading(false);
         return;
       }
@@ -74,7 +74,7 @@ export default function AdminLoginPage() {
             className="mt-4 text-2xl font-black tracking-tight text-[var(--tx-hi)]"
             style={{ fontFamily: "var(--font-syne), Syne, sans-serif" }}
           >
-            MODA<span className="text-[var(--brand-primary)]">+</span> Admin
+            MRT<span className="text-[var(--brand-primary)]">PV</span> Retail · Admin
           </h1>
           <p className="mt-1 text-sm text-[var(--tx-mut)]">Catálogo, stock y ventas de tu tienda</p>
         </div>

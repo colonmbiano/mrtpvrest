@@ -1,4 +1,4 @@
-// Identidad del tenant para MODA+ (restaurantId = cuenta retail, locationId = sucursal/caja).
+// Identidad del tenant para MRTPV Retail (restaurantId = cuenta retail, locationId = sucursal/caja).
 // El JWT del empleado ya lleva ambos horneados, pero los persistimos para mandar
 // x-restaurant-id / x-location-id en cada request (y para el login por PIN, que
 // scope-a por sucursal vía x-location-id antes de tener token).

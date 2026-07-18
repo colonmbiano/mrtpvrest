@@ -301,7 +301,7 @@ export default function VentasPage() {
 
       <DataCard title="Órdenes de venta" className="mt-4">
         {!loading && sales.length === 0 ? (
-          <EmptyState icon={ShoppingBag} title="Sin ventas registradas" hint="Las ventas cobradas en la caja MODA+ aparecerán aquí." />
+          <EmptyState icon={ShoppingBag} title="Sin ventas registradas" hint="Las ventas cobradas en la caja MRTPV Retail aparecerán aquí." />
         ) : (
           <>
             <div className="overflow-x-auto">
