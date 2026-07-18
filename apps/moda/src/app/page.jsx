@@ -161,11 +161,6 @@ const CLIENTS = [
     note:"Prefiere recibir avisos de nueva colección.", prefs:["Talla L","Vestidos","Satén"],
     history:[["VTA-000012310","08/05/2024",2,2680],["VTA-000011890","18/04/2024",1,1890]] },
 ];
-const RETURNS = [
-  ["DEV-000231","19/05/2024","María Fernanda López",PRODUCTS[0],"Cambio de talla","Procesada",0],
-  ["DEV-000230","18/05/2024","Andrea Torres",PRODUCTS[7],"Devolución de dinero","Procesada",-799],
-  ["DEV-000229","16/05/2024","Mostrador",PRODUCTS[6],"Nota de crédito","Procesada",-399],
-];
 
 // Roles con acceso total (dueño/encargado). El enforcement REAL de las mutaciones
 // sensibles vive en el backend; aquí el gate es de UI sobre el empleado logueado.
