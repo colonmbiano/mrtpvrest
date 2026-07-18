@@ -6,6 +6,7 @@ import { getTenant, setTenant, getGiro } from "@/lib/tenant";
 import { DEFAULT_GIRO, giroConfig, sizesFor, attrLabel, isBulkUnit, canEnterByPackage, packagesToBase, baseToPackages, round3 } from "@/lib/giro";
 import { getToken } from "@/lib/token-vault";
 import { buildReceipt, buildLabel, printEscpos, getPrinterConfig, setPrinterIp } from "@/lib/printer";
+import { APP_VERSION } from "@/lib/version";
 
 /* ---------------- icons (lucide paths) ---------------- */
 function Icon({ n, s = 18, c = "currentColor", sw = 1.9, cls = "" }) {
@@ -1487,7 +1488,7 @@ function SetRow({label,sub,children}){return(<div className="flex items-center j
 function TInput({v}){return <input defaultValue={v} className="h-9 px-3 rounded-lg border border-line text-[13px] outline-none focus:border-brand-500 min-w-[200px]"/>;}
 
 function SettingsScreen({ theme, setTheme }) {
-  const groups=[["Datos de tienda","store"],["Sucursales","store"],["Cajeros y roles","users"],["Impresora térmica","printer"],["Cajón de dinero","wallet"],["Lector de código","scan"],["Impuestos","file"],["Métodos de pago","card"],["Ticket y logo","tag"],["Apariencia","gear"],["Seguridad con PIN","gear"]];
+  const groups=[["Datos de tienda","store"],["Sucursales","store"],["Cajeros y roles","users"],["Impresora térmica","printer"],["Cajón de dinero","wallet"],["Lector de código","scan"],["Impuestos","file"],["Métodos de pago","card"],["Ticket y logo","tag"],["Apariencia","gear"],["Seguridad con PIN","gear"],["Acerca de","info"]];
   const [sel,setSel]=useState(0);
   const [tg,setTg]=useState({drawer:true,scan:true,dark:false,sound:true,cfdi:true,pin:true,iva:true,msi:true});
   const t=(k)=>setTg(s=>({...s,[k]:!s[k]}));
@@ -1500,6 +1501,7 @@ function SettingsScreen({ theme, setTheme }) {
     7:<><SectionTitle t="Métodos de pago"/>{[["Efectivo","cash",true],["Tarjeta (terminal)","card",true],["QR / Pago","qr",true],["Transferencia SPEI","swap",true],["Meses sin intereses","card",tg.msi]].map(([m,ic,on])=>(<SetRow key={m} label={<span className="flex items-center gap-2"><Icon n={ic} s={16} cls="text-ink-400"/>{m}</span>}><Toggle on={m==="Meses sin intereses"?tg.msi:true} set={()=>m==="Meses sin intereses"&&t("msi")}/></SetRow>))}</>,
     9:<><SectionTitle t="Apariencia"/><SetRow label="Tema oscuro" sub="Cambia toda la interfaz"><Toggle on={theme==="dark"} set={()=>setTheme(theme==="dark"?"light":"dark")}/></SetRow><SetRow label="Color de acento"><div className="flex gap-2">{["#3c7d5d","#2563eb","#7c3aed","#dc2626"].map(c=><span key={c} style={{background:c}} className={"w-7 h-7 rounded-full border-2 "+(c==="#3c7d5d"?"border-ink-900":"border-transparent")}/>)}</div></SetRow><SetRow label="Densidad de la interfaz"><span className="text-[13px] text-ink-700 border border-line rounded-lg px-3 py-1.5">Cómoda ⌄</span></SetRow></>,
     10:<><SectionTitle t="Seguridad con PIN"/><SetRow label="Requiere PIN al iniciar" ><Toggle on={tg.pin} set={()=>t("pin")}/></SetRow><SetRow label="PIN para descuentos > 20%"><Toggle on={tg.pin} set={()=>t("pin")}/></SetRow><SetRow label="PIN para cancelaciones"><Toggle on={tg.pin} set={()=>t("pin")}/></SetRow><SetRow label="Cerrar sesión por inactividad"><span className="text-[13px] text-ink-700 border border-line rounded-lg px-3 py-1.5">10 min ⌄</span></SetRow></>,
+    11:<AboutPanel/>,
   };
   const generic=(name)=><><SectionTitle t={name}/><div className="py-10 text-center text-ink-400 text-sm">Configuración de <span className="font-medium text-ink-600">{name}</span> · panel de demo.</div></>;
   return (<div className="grid grid-cols-[280px_minmax(0,1fr)] gap-4 h-full">
@@ -1507,10 +1509,62 @@ function SettingsScreen({ theme, setTheme }) {
       <Icon n={ic} s={18}/>{g}</button>))}</Card>
     <div className="overflow-y-auto"><ScreenHead icon="gear" title="Configuración"/>
       <Card className="p-6 max-w-3xl">{panels[sel]||generic(groups[sel][0])}
-        <div className="flex gap-2 mt-6 pt-4 border-t border-line"><PrimaryBtn>Guardar cambios</PrimaryBtn><GhostBtn>Cancelar</GhostBtn></div></Card></div>
+        {/* "Acerca de" es de solo lectura: no lleva Guardar/Cancelar. */}
+        {sel!==11 && <div className="flex gap-2 mt-6 pt-4 border-t border-line"><PrimaryBtn>Guardar cambios</PrimaryBtn><GhostBtn>Cancelar</GhostBtn></div>}</Card></div>
   </div>);
 }
 function SectionTitle({t}){return <div className="text-base font-semibold text-ink-900 mb-2">{t}</div>;}
+
+// Panel "Acerca de" de Configuración: verificar la versión y forzar una búsqueda
+// de actualización a mano, sin esperar al chequeo automático del arranque.
+function AboutPanel(){
+  const { ota, checkOta }=useData();
+  const s=OTA_UI[ota?.status];
+  const busy=ota?.status==="checking"||ota?.status==="downloading";
+  // En web/APK/demo no hay updater de escritorio (ni checkOta en el contexto del
+  // modo demo): se muestra la versión, pero no el botón que no haría nada.
+  const canUpdate=typeof checkOta==="function" && ota?.status!=="unsupported";
+  return (
+    <>
+      <SectionTitle t="Acerca de"/>
+      <div className="flex items-center gap-4 py-2">
+        {/* ▼▼ LOGO mrtpvrest — placeholder temporal. Sustituir por
+            <img src="/mrtpvrest-logo.png" alt="mrtpvrest" className="h-9" /> cuando
+            llegue el logo definitivo (PNG en apps/moda/public/). ▼▼ */}
+        <div className="h-12 w-12 shrink-0 grid place-items-center rounded-xl bg-surf border border-line text-[10px] font-bold text-ink-300 select-none">mrtpv</div>
+        {/* ▲▲ fin placeholder logo ▲▲ */}
+        <div>
+          <div className="text-[15px] font-bold tracking-tight text-ink-900">MODA<span className="text-brand-600">+</span> <span className="text-ink-500 font-semibold">Retail</span></div>
+          <div className="text-[12px] text-ink-400 tnum">Versión {APP_VERSION}</div>
+        </div>
+      </div>
+
+      {s && (
+        <div className="flex items-center gap-2 mt-2 text-[13px] text-ink-600">
+          <span className={"w-2 h-2 rounded-full "+(s.pulse?"animate-pulse":"")} style={{ background:s.dot }}/>
+          {s.label}
+        </div>
+      )}
+      {ota?.status==="error" && ota?.error && (
+        <div className="mt-1 text-[11px] text-ink-400">{ota.error}</div>
+      )}
+
+      <div className="mt-5 pt-4 border-t border-line">
+        {canUpdate ? (
+          <GhostBtn onClick={busy?undefined:checkOta} className={busy?"opacity-60 pointer-events-none":""}>
+            {busy
+              ? <><span className="w-4 h-4 rounded-full border-2 border-ink-300 border-t-brand-500 animate-spin"/>{ota.status==="downloading"?"Instalando…":"Buscando…"}</>
+              : <><Icon n="info" s={16}/>Buscar actualización</>}
+          </GhostBtn>
+        ) : (
+          <div className="text-[12px] text-ink-400">
+            Las actualizaciones automáticas solo están disponibles en la app de escritorio.
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
 
 /* ============================== DATA LAYER (backend real) ============================== */
 const DataCtx = createContext(null);
@@ -1546,8 +1600,41 @@ function BootSplash(){
     </div></div>);
 }
 
+// Estado del auto-updater OTA en texto + color. `unsupported` (web/APK) y `idle`
+// no pintan línea: ahí no hay updater de escritorio que reportar.
+const OTA_UI = {
+  checking:    { label:"Buscando actualización…",     dot:"var(--warn, #f59e0b)", pulse:true  },
+  downloading: { label:"Instalando actualización…",   dot:"var(--brand-600, #ea580c)", pulse:true  },
+  uptodate:    { label:"Estás en la última versión",  dot:"#22c55e", pulse:false },
+  error:       { label:"Sin conexión para actualizar", dot:"#94a3b8", pulse:false },
+};
+
+// Pie de las pantallas de acceso: logo mrtpvrest + versión + estado del updater.
+// Sirve para verificar en pantalla —sin abrir nada— en qué versión está la caja y
+// si ya tomó la última. En web/APK muestra solo la versión (el updater de
+// escritorio no aplica ahí).
+function VersionBadge({ ota }){
+  const s = OTA_UI[ota?.status];
+  return (
+    <div className="mt-5 flex flex-col items-center gap-2">
+      {/* ▼▼ LOGO mrtpvrest — placeholder temporal. Cuando llegue el logo definitivo:
+          reemplazar este bloque por  <img src="/mrtpvrest-logo.png" alt="mrtpvrest"
+          className="h-5 opacity-70" />  (el PNG va en apps/moda/public/). ▼▼ */}
+      <div className="text-[13px] font-bold tracking-tight text-ink-300 select-none" aria-label="mrtpvrest">mrtpvrest</div>
+      {/* ▲▲ fin placeholder logo ▲▲ */}
+      <div className="text-[11px] text-ink-400 tnum">MODA+ v{APP_VERSION}</div>
+      {s && (
+        <div className="flex items-center gap-1.5 text-[11px] text-ink-400">
+          <span className={"w-1.5 h-1.5 rounded-full "+(s.pulse?"animate-pulse":"")} style={{ background:s.dot }}/>
+          {s.label}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Setup de dispositivo (estilo TPV): login admin → elegir sucursal → vincular.
-function SetupScreen({ onLinked, onDemo }){
+function SetupScreen({ ota, onLinked, onDemo }){
   const [step,setStep]=useState("login");
   const [email,setEmail]=useState(""); const [password,setPassword]=useState("");
   const [rName,setRName]=useState(""); const [oName,setOName]=useState("");
@@ -1644,11 +1731,12 @@ function SetupScreen({ onLinked, onDemo }){
         </>)}
       </div>
       <button onClick={onDemo} className="w-full mt-4 text-[12px] text-ink-400 hover:text-brand-600 transition-colors">Explorar en modo demostración →</button>
+      <VersionBadge ota={ota}/>
     </div>
   </div>);
 }
 
-function LoginScreen({ onLogin, onDemo, onRelink }){
+function LoginScreen({ ota, onLogin, onDemo, onRelink }){
   const [pin,setPin]=useState("");
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState("");
@@ -1694,6 +1782,7 @@ function LoginScreen({ onLogin, onDemo, onRelink }){
         <button onClick={onRelink} className="w-full mt-4 text-[11px] text-ink-400 hover:text-ink-700 flex items-center justify-center gap-1.5"><Icon n="store" s={13}/>Cambiar sucursal</button>
       </div>
       <button onClick={onDemo} className="w-full mt-4 text-[12px] text-ink-400 hover:text-brand-600 transition-colors">Explorar en modo demostración →</button>
+      <VersionBadge ota={ota}/>
     </div>
   </div>);
 }
@@ -1711,6 +1800,11 @@ function Root(){
   // Listas de precio (tipo de cliente) y la seleccionada para la venta en curso.
   const [priceLists,setPriceLists]=useState([]);
   const [priceListId,setPriceListId]=useState(null);
+  // Estado del auto-updater (OTA de escritorio). Antes el updater corría mudo;
+  // ahora su estado se pinta en el badge de la pantalla de acceso y en Ajustes,
+  // para poder verificar en pantalla que la caja está en la última versión.
+  //   status: "idle" | "checking" | "downloading" | "uptodate" | "error" | "unsupported"
+  const [ota,setOta]=useState({ status:"idle", version:null, error:null });
 
   const loadCatalog=async()=>{
     try{
@@ -1760,31 +1854,49 @@ function Root(){
   })(); },[]);
 
   // OTA de escritorio (Tauri): busca un instalador firmado más nuevo en GitHub
-  // Releases, lo descarga, instala y relanza. Solo corre dentro de la app Tauri.
-  useEffect(()=>{ (async()=>{
-    if(!(typeof window!=="undefined" && (window.__TAURI__ || window.__TAURI_INTERNALS__))) return;
+  // Releases, lo descarga, instala y relanza. Solo aplica dentro de la app Tauri;
+  // en web/APK no hay updater de escritorio (el APK usa Capgo, arriba).
+  //
+  // Reutilizable: el arranque la llama sola, y el botón "Buscar actualización" de
+  // Ajustes la vuelve a llamar. Va publicando su estado en `ota` para que el badge
+  // y el panel muestren qué está pasando en vez de actualizar a escondidas.
+  const checkOta=useCallback(async()=>{
+    if(!(typeof window!=="undefined" && (window.__TAURI__ || window.__TAURI_INTERNALS__))){
+      setOta({ status:"unsupported", version:null, error:null });
+      return;
+    }
+    setOta({ status:"checking", version:null, error:null });
     try{
       const { check }=await import("@tauri-apps/plugin-updater");
       const update=await check();
       if(update){
+        // La app se reinicia al final de downloadAndInstall→relaunch: el estado
+        // "downloading" es lo último que se ve antes de que arranque la versión nueva.
+        setOta({ status:"downloading", version:update.version||null, error:null });
         await update.downloadAndInstall();
         const { relaunch }=await import("@tauri-apps/plugin-process");
         await relaunch();
+      }else{
+        setOta({ status:"uptodate", version:null, error:null });
       }
-    }catch{ /* sin red / sin release / fuera de Tauri */ }
-  })(); },[]);
+    }catch(e){
+      // Sin red / sin release / fuera de Tauri: no es fatal, la caja sigue operando.
+      setOta({ status:"error", version:null, error:e?.message||"No se pudo buscar la actualización." });
+    }
+  },[]);
+  useEffect(()=>{ checkOta(); },[checkOta]);
 
   if(!ready) return <div className="h-screen"><BootSplash/></div>;
   if(!demo && !linked){
-    return <div className="h-screen"><SetupScreen onDemo={()=>setDemo(true)} onLinked={()=>setLinked(true)}/></div>;
+    return <div className="h-screen"><SetupScreen ota={ota} onDemo={()=>setDemo(true)} onLinked={()=>setLinked(true)}/></div>;
   }
   if(!demo && !session){
-    return <div className="h-screen"><LoginScreen onDemo={()=>setDemo(true)}
+    return <div className="h-screen"><LoginScreen ota={ota} onDemo={()=>setDemo(true)}
       onLogin={async(emp)=>{ setSession(emp); await loadCatalog(); }}
       onRelink={()=>{ Retail.unlink(); setSession(null); setLinked(false); }}/></div>;
   }
   const value={ products, online, demo, session, giro, priceLists, priceListId, setPriceListId,
-    refreshCatalog:loadCatalog,
+    refreshCatalog:loadCatalog, ota, checkOta,
     logout:()=>{ Retail.logout(); setSession(null); setDemo(false); setOnline(false); setProducts([]); } };
   return (<DataCtx.Provider value={value}><App/></DataCtx.Provider>);
 }
