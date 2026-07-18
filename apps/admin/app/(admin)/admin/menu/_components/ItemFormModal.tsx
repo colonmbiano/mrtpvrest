@@ -487,6 +487,26 @@ export function ItemFormModal({
                   );
                 })}
               </div>
+              {/* Ventana horaria PROPIA de esta promo (override del corte global
+                  del restaurante). Vacío = hereda el horario general. */}
+              <div>
+                <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-[.14em] text-tx-mut">Horario de la promo (opcional)</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="mb-1 block text-[10px] text-tx-mut">Desde</span>
+                    <Input type="time" value={form.promoStartTime}
+                      onChange={e => setForm(p => ({ ...p, promoStartTime: e.target.value }))}
+                      className="font-mono" />
+                  </div>
+                  <div>
+                    <span className="mb-1 block text-[10px] text-tx-mut">Hasta</span>
+                    <Input type="time" value={form.promoEndTime}
+                      onChange={e => setForm(p => ({ ...p, promoEndTime: e.target.value }))}
+                      className="font-mono" />
+                  </div>
+                </div>
+                <p className="mt-1 text-[10px] text-tx-mut">Vacío = usa el horario general de promociones del restaurante. Para que esta promo corra <b>todo el día</b> en sus días activos (ignorando el corte general), pon <b>Desde 00:00</b> y deja Hasta vacío.</p>
+              </div>
             </div>
           )}
         </div>

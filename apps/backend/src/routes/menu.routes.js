@@ -3,7 +3,7 @@ const prisma   = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const { pick } = require('../lib/validate')
 const { PromoPriceValidationError, resolvePromoPricing } = require('../lib/promo-price')
-const { isPromoWindowOpen } = require('../lib/promo-window')
+const { itemPromoWindowOpen, loadPromoWindowConfig, normalizePromoWindowTime } = require('../lib/promo-window')
 const router   = express.Router()
 
 // ── Helper: resuelve restaurantId del request o devuelve 400 explícito ─────
@@ -231,10 +231,13 @@ router.get('/items', async (req, res) => {
     const todayDay = getTodayDay()
     let filtered = adminMode ? items : items.filter(item => isMenuItemActiveToday(item, todayDay))
 
-    // Ventana horaria de promos (config del restaurante): fuera del horario,
-    // los platillos promo se ocultan del catálogo (igual que activeDays).
-    if (!adminMode && !(await isPromoWindowOpen(prisma, restaurantId))) {
-      filtered = filtered.filter(item => !item.isPromo)
+    // Ventana horaria de promos: fuera del horario, los platillos promo se
+    // ocultan del catálogo (igual que activeDays). Se evalúa POR ITEM: cada
+    // promo usa su ventana propia (promoStartTime/promoEndTime) o, si no la
+    // define, el corte global del restaurante.
+    if (!adminMode) {
+      const promoCfg = await loadPromoWindowConfig(prisma, restaurantId)
+      filtered = filtered.filter(item => !item.isPromo || itemPromoWindowOpen(item, promoCfg))
     }
 
     res.json(filtered)
@@ -294,7 +297,7 @@ router.get('/items/:id', async (req, res) => {
 
 router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isCombo, soldByWeight, saleUnit, unit } = req.body
+    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, promoPrice, activeDays, promoStartTime, promoEndTime, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isCombo, soldByWeight, saleUnit, unit } = req.body
     if (!categoryId || !name || price === undefined) return res.status(400).json({ error: 'Faltan campos requeridos' })
     // Unidad de venta (comportamiento) normalizada; soldByWeight deriva de ella.
     const sUnit = normalizeSaleUnit(saleUnit, soldByWeight)
@@ -322,6 +325,10 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
         isPromo: promo.isPromo,
         promoPrice: promo.promoPrice,
         activeDays: activeDays || [],
+        // Ventana horaria propia de la promo (override del corte global). Solo
+        // tiene sentido si el item es promo; si no, se guarda null.
+        promoStartTime: promo.isPromo ? normalizePromoWindowTime(promoStartTime) : null,
+        promoEndTime: promo.isPromo ? normalizePromoWindowTime(promoEndTime) : null,
         variantMultiSelect: !!variantMultiSelect,
         variantMinSelection: Math.max(0, parseInt(variantMinSelection, 10) || 0),
         variantMaxSelection: Math.max(0, parseInt(variantMaxSelection, 10) || 0),
@@ -344,7 +351,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
 router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId
-    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, promoPrice, activeDays, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isCombo, soldByWeight, saleUnit, unit } = req.body
+    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, promoPrice, activeDays, promoStartTime, promoEndTime, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isCombo, soldByWeight, saleUnit, unit } = req.body
     const existingItem = await prisma.menuItem.findFirst({
       where: { id: req.params.id, restaurantId },
       select: { price: true, isPromo: true, promoPrice: true },
@@ -380,6 +387,15 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
         isPromo: promo.isPromo,
         promoPrice: promo.promoPrice,
         ...(activeDays !== undefined && { activeDays }),
+        // Ventana horaria propia (override del corte global). Si el item deja de
+        // ser promo, se limpia; si sigue siendo promo, solo se sobrescriben los
+        // campos que llegaron en el body (PUT parcial conserva lo existente).
+        ...(promo.isPromo
+          ? {
+              ...(promoStartTime !== undefined && { promoStartTime: normalizePromoWindowTime(promoStartTime) }),
+              ...(promoEndTime !== undefined && { promoEndTime: normalizePromoWindowTime(promoEndTime) }),
+            }
+          : { promoStartTime: null, promoEndTime: null }),
         ...(variantMultiSelect !== undefined && { variantMultiSelect: !!variantMultiSelect }),
         ...(variantMinSelection !== undefined && { variantMinSelection: Math.max(0, parseInt(variantMinSelection, 10) || 0) }),
         ...(variantMaxSelection !== undefined && { variantMaxSelection: Math.max(0, parseInt(variantMaxSelection, 10) || 0) }),
@@ -1023,6 +1039,7 @@ router.get('/public/:slug/menu', async (req, res) => {
             id: true, name: true, description: true,
             price: true, promoPrice: true, imageUrl: true, imageFit: true,
             isPopular: true, isPromo: true, activeDays: true,
+            promoStartTime: true, promoEndTime: true,
             complements: {
               where: { isAvailable: true },
               select: { id: true, name: true, price: true, sortOrder: true },
@@ -1034,12 +1051,13 @@ router.get('/public/:slug/menu', async (req, res) => {
     })
 
     // Filtrar promos inactivas hoy de cada categoría. La ventana horaria de
-    // promos también aplica: fuera de ella los platillos promo se ocultan.
-    const promoOpen = await isPromoWindowOpen(prisma, restaurant.id)
+    // promos también aplica (por item: override propio o corte global): fuera
+    // de ella los platillos promo se ocultan.
+    const promoCfg = await loadPromoWindowConfig(prisma, restaurant.id)
     const filtered = categories
       .map(cat => ({
         ...cat,
-        items: cat.items.filter(item => isMenuItemActiveToday(item, todayDay) && (promoOpen || !item.isPromo))
+        items: cat.items.filter(item => isMenuItemActiveToday(item, todayDay) && (!item.isPromo || itemPromoWindowOpen(item, promoCfg)))
       }))
       .filter(cat => cat.items.length > 0)
 
