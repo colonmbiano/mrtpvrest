@@ -652,6 +652,13 @@ model MenuItem {
   promoPrice      Float?
   barcode         String?
   activeDays      String[]
+  // Ventana horaria PROPIA de la promo ("HH:mm", hora local del restaurante).
+  // Si se define alguno de los dos, gana sobre la ventana global del
+  // restaurante (RestaurantConfig.promoStartTime/promoEndTime): permite, p.ej.,
+  // que un combo de fin de semana corra toda la noche aunque las promos de
+  // entre semana corten a las 21:00. Ambos vacíos → hereda la ventana global.
+  promoStartTime  String?
+  promoEndTime    String?
   hasVariants     Boolean  @default(false)
   // Unidad de venta del producto: "PIECE" (por pieza, default), "WEIGHT"
   // (por kilo / báscula) u "ORDER" (por orden/ración). PIECE y ORDER son

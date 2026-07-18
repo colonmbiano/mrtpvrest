@@ -25,7 +25,7 @@ const {
 const { toWhatsappNumber } = require('@mrtpvrest/config/phone');
 // Cálculo de envío: fuente única compartida con el chatbot de WhatsApp.
 const { resolveComboSelection } = require('../lib/money');
-const { isPromoWindowOpen } = require('../lib/promo-window');
+const { loadPromoWindowConfig, itemPromoWindowOpen } = require('../lib/promo-window');
 const { computeDeliveryFee } = require('../lib/delivery-fee');
 const { filterLiveBanners } = require('../lib/banner-schedule');
 const { nextOrderNumber } = require('../lib/order-number');
@@ -306,7 +306,7 @@ router.get('/menu', async (req, res) => {
   const { restaurant } = store;
 
   try {
-    const [categories, rawItems, promoOpen] = await Promise.all([
+    const [categories, rawItems, promoCfg] = await Promise.all([
       prisma.category.findMany({
         where: { restaurantId: restaurant.id, isActive: true },
         orderBy: { sortOrder: 'asc' },
@@ -317,6 +317,7 @@ router.get('/menu', async (req, res) => {
         select: {
           id: true, name: true, description: true, price: true,
           isPromo: true, promoPrice: true, imageUrl: true,
+          promoStartTime: true, promoEndTime: true,
           categoryId: true, isCombo: true,
           _count: { select: { reactions: true } }, // "me gusta" del platillo
           variants: {
@@ -357,12 +358,13 @@ router.get('/menu', async (req, res) => {
           },
         },
       }),
-      isPromoWindowOpen(prisma, restaurant.id),
+      loadPromoWindowConfig(prisma, restaurant.id),
     ]);
 
-    // Ventana horaria de promos: fuera del horario, los platillos promo se
-    // ocultan de la tienda/kiosko (mismo criterio que el catálogo del TPV).
-    const visible = promoOpen ? rawItems : rawItems.filter(i => !i.isPromo);
+    // Ventana horaria de promos (por item: override propio o corte global):
+    // fuera del horario, el platillo promo se oculta de la tienda/kiosko
+    // (mismo criterio que el catálogo del TPV).
+    const visible = rawItems.filter(i => !i.isPromo || itemPromoWindowOpen(i, promoCfg));
     // Aplanamos el _count de reacciones a un simple reactionCount.
     const items = visible.map(({ _count, ...i }) => ({ ...i, reactionCount: _count?.reactions ?? 0 }));
 
@@ -854,9 +856,10 @@ router.post('/orders', async (req, res) => {
   }
 
   try {
-    // Ventana horaria de promos: fuera de ella los precios promocionales no
-    // aplican (el catálogo ya los oculta; esto es el respaldo en el cobro).
-    const promoWindowIsOpen = await isPromoWindowOpen(prisma, restaurant.id);
+    // Ventana horaria de promos (por item: override propio o corte global):
+    // fuera de ella los precios promocionales no aplican (el catálogo ya los
+    // oculta; esto es el respaldo en el cobro).
+    const promoCfg = await loadPromoWindowConfig(prisma, restaurant.id);
     // Verificar y calcular items desde la BD (nunca confiar en precios del cliente)
     const itemsData = await Promise.all(
       items.map(async ({ menuItemId, variantId, quantity = 1, notes: itemNotes, modifierIds, comboSelections }) => {
@@ -880,7 +883,7 @@ router.post('/orders', async (req, res) => {
         });
         if (!menuItem) throw new Error(`Producto ${menuItemId} no disponible.`);
 
-        let basePrice = promoWindowIsOpen && menuItem.isPromo && menuItem.promoPrice ? menuItem.promoPrice : menuItem.price;
+        let basePrice = menuItem.isPromo && menuItem.promoPrice && itemPromoWindowOpen(menuItem, promoCfg) ? menuItem.promoPrice : menuItem.price;
         let variantName = null;
 
         if (variantId) {
