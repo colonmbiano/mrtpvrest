@@ -14,9 +14,12 @@ export default function AdminRootLayout({ children }: { children: React.ReactNod
           --surf:var(--surf-1); --surf2:var(--surf-2);
           --tx-hi:#0f172a; --tx:#0f172a; --tx-mid:#334155; --tx-mut:#64748b; --tx-dim:#94a3b8;
           --text:var(--tx-hi); --muted:var(--tx-mut);
-          --iris-400:#4ade80; --iris-500:#22c55e; --iris-600:#16a34a;
-          --iris-soft:#dcfce7; --iris-glow:rgba(34,197,94,.22);
-          --brand-primary:#22c55e; --brand-secondary:#4ade80; --brand-dark:#16a34a;
+          /* Acento de marca NARANJA (logo MRTPV Retail). iris-* es el acento
+             decorativo (chips activos, glows); brand-* el acento primario. */
+          --iris-400:#fb923c; --iris-500:#f97316; --iris-600:#ea580c;
+          --iris-soft:#ffedd5; --iris-glow:rgba(249,115,22,.22);
+          --brand-primary:#f97316; --brand-secondary:#fb923c; --brand-dark:#ea580c;
+          /* --ok es ÉXITO/stock disponible: se queda VERDE a propósito, no es marca. */
           --ok:#16a34a; --ok-soft:#dcfce7;
           --warn:#b45309; --warn-soft:#fef3c7;
           --err:#dc2626; --err-soft:#fee2e2;

@@ -87,7 +87,7 @@ export default function AdminSidebar({ onNavigate }: { onNavigate?: () => void }
           const active = href === "/admin" ? path === "/admin" : path.startsWith(href);
           return (
             <Link key={href} href={href} onClick={onNavigate} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-semibold transition-colors"
-              style={{ background: active ? "rgba(34,197,94,.16)" : "transparent", color: active ? "#4ade80" : "#cbd5e1" }}>
+              style={{ background: active ? "rgba(249,115,22,.16)" : "transparent", color: active ? "#fb923c" : "#cbd5e1" }}>
               <Icon size={18} strokeWidth={active ? 2.3 : 1.9} />
               <span>{label}</span>
             </Link>
