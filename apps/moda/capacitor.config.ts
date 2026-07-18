@@ -4,14 +4,14 @@ import type { CapacitorConfig } from "@capacitor/cli";
 // el bundle web local; en release auto-actualiza desde api.mrtpvrest.com.
 const otaDisabled = process.env.CAPACITOR_OTA_DISABLED === "true";
 
-// APK Android de MODA+ (TPV retail). Mismo patrón que apps/meseros-lite.
+// APK Android de MRTPV Retail (TPV retail). Mismo patrón que apps/meseros-lite.
 // webDir "out" = export estático de Next (CAPACITOR_BUILD=true → output:'export').
 // cleartext/allowMixedContent quedan ON para que el build debug pueda apuntar a un
 // backend http:// local/LAN durante pruebas; para release https-only, quitarlos y
 // usar un overlay debug en android/app/src/debug/AndroidManifest.xml (ver TPV).
 const config: CapacitorConfig = {
   appId: "com.mrtpvrest.moda",
-  appName: "MODA+ Retail",
+  appName: "MRTPV Retail",
   webDir: "out",
   server: {
     androidScheme: "https",

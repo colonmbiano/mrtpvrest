@@ -1,4 +1,4 @@
-name: MODA+ Windows Release
+name: MRTPV Retail Windows Release
 
 # Build firmado del instalador de escritorio (Tauri) + GitHub Release con
 # latest.json para el auto-updater. Versión = la de apps/moda/src-tauri/tauri.conf.json
@@ -65,8 +65,8 @@ jobs:
         with:
           projectPath: apps/moda
           tagName: moda-v${{ steps.ver.outputs.version }}
-          releaseName: 'MODA+ Retail v${{ steps.ver.outputs.version }} (Windows)'
-          releaseBody: ${{ github.event.inputs.notes || 'Actualización automática de MODA+ Retail para Windows.' }}
+          releaseName: 'MRTPV Retail v${{ steps.ver.outputs.version }} (Windows)'
+          releaseBody: ${{ github.event.inputs.notes || 'Actualización automática de MRTPV Retail para Windows.' }}
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
