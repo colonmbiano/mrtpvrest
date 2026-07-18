@@ -43,7 +43,22 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 const num = (v: number | string | null | undefined) => Number(v || 0);
-const dayKey = (iso: string) => (iso || "").slice(0, 10);
+// Día natural (YYYY-MM-DD) en hora de México, NO el slice(0,10) del ISO (que es
+// UTC). Una venta de las 19:00 en México cae a las 01:00 UTC del día siguiente:
+// con el slice UTC se agrupaba en "mañana" y "ventas de hoy" perdía la tarde.
+// formatToParts (no toLocaleDateString ni en-CA) para no depender del orden que
+// el locale imponga a los componentes. Mismo enfoque que dayRange.js del backend.
+const MX_DATE = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit",
+});
+const dayKey = (iso: string) => {
+  if (!iso) return "";
+  try {
+    const p: Record<string, string> = {};
+    for (const { type, value } of MX_DATE.formatToParts(new Date(iso))) p[type] = value;
+    return `${p.year}-${p.month}-${p.day}`;
+  } catch { return (iso || "").slice(0, 10); }
+};
 const fmtDate = (iso: string) => {
   if (!iso) return "—";
   try {
@@ -189,7 +204,10 @@ export default function VentasPage() {
   // ── Derivados (todo de ventas reales) ──────────────────────────────────────
   const d = useMemo(() => {
     const completed = sales.filter((s) => s.status === "COMPLETED");
-    const today = new Date().toISOString().slice(0, 10);
+    // "hoy" en hora de México, con el mismo dayKey que agrupa las ventas — antes
+    // era toISOString().slice(0,10), es decir el día UTC, que no coincide con el
+    // día local y desfasaba "ventas de hoy" contra la serie diaria.
+    const today = dayKey(new Date().toISOString());
 
     const ventasHoy = completed.filter((s) => dayKey(s.createdAt) === today).reduce((n, s) => n + num(s.total), 0);
     const ventasPeriodo = completed.reduce((n, s) => n + num(s.total), 0);
