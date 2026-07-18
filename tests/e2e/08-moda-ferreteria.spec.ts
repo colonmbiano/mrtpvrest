@@ -128,16 +128,18 @@ async function readTotal(page: Page): Promise<number> {
 /**
  * Cobra la venta completa en efectivo.
  *
- * El checkout arranca con `lines` vacío ⇒ remaining = total ⇒ el botón de
- * cobrar queda con pointer-events-none. Hay que "Agregar pago" primero: con el
- * monto vacío aplica el restante completo.
+ * Un solo clic en el checkout: con el importe vacío el botón principal toma el
+ * restante completo y cobra. Antes hacían falta dos pasos ("Agregar pago" y
+ * luego "Cobrar"); ese botón intermedio ahora solo aparece cuando el importe
+ * capturado es MENOR al restante, es decir en un pago parcial.
  */
 async function cobrarEnEfectivo(page: Page) {
   // Por testid y no por texto: "Cobrar" casa también el atajo F5 de la barra
   // inferior, y el del checkout cambia de texto según el restante.
   await page.getByTestId('btn-cobrar').click();
-  await page.getByRole('button', { name: /Agregar pago/i }).click();
-  await page.getByTestId('btn-confirmar-cobro').click();
+  const confirmar = page.getByTestId('btn-confirmar-cobro');
+  await expect(confirmar).toBeEnabled();
+  await confirmar.click();
   await expect(page.getByTestId('sale-success-total')).toBeVisible({ timeout: 25_000 });
 }
 
