@@ -311,8 +311,12 @@ function BottomBar({ go, onCobrar, onNewTicket }) {
 
 /* ---------------- generic UI ---------------- */
 function Card({ className="", children }) { return <div className={"bg-card border border-line rounded-2xl "+className}>{children}</div>; }
-function PrimaryBtn({ children, onClick, className="", testid }) {
-  return <button onClick={onClick} data-testid={testid} className={"inline-flex items-center justify-center gap-2 h-12 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm transition-colors active:scale-[.99] "+className}>{children}</button>;
+/* `disabled` es un atributo real, no solo opacidad: el checkout deshabilitaba el
+   botón de cobrar con `pointer-events-none`, que apaga el mouse pero deja el
+   botón enfocable y activable con Enter/espacio desde el teclado. */
+function PrimaryBtn({ children, onClick, className="", testid, disabled=false, title }) {
+  return <button onClick={onClick} data-testid={testid} disabled={disabled} title={title} aria-disabled={disabled}
+    className={"inline-flex items-center justify-center gap-2 h-12 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm transition-colors active:scale-[.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:hover:bg-brand-600 "+className}>{children}</button>;
 }
 function GhostBtn({ children, onClick, className="" }) {
   return <button onClick={onClick} className={"inline-flex items-center justify-center gap-2 h-11 px-4 rounded-xl border border-line hover:bg-surf text-ink-700 font-medium text-[13px] "+className}>{children}</button>;
@@ -764,95 +768,310 @@ function Acc({title,body}){const[o,setO]=useState(true);return(<div className="b
   {o&&<p className="text-[12px] text-ink-500 mt-2 leading-relaxed">{body}</p>}</div>);}
 
 /* ===================================================== CHECKOUT ===================================================== */
-function CheckoutScreen({ cart, go, onApprove }) {
+/** Denominaciones sugeridas para el efectivo.
+ *
+ *  Antes los botones eran `+$100 / +$200 / …` y SUMABAN al importe ya escrito,
+ *  que es como funciona una calculadora, no como paga un cliente: el cajero
+ *  recibe UN billete y quiere teclearlo, no acumular. Ahora cada botón es la
+ *  cantidad que el cliente entrega, calculada desde el restante: el primero es
+ *  el importe exacto y los demás son los billetes reales que le siguen. */
+function cashSuggestions(remaining) {
+  const BILLS = [20, 50, 100, 200, 500, 1000];
+  const exact = Math.round(remaining * 100) / 100;
+  if (exact <= 0) return [];
+  const out = [exact];
+  // Redondeo "hacia arriba" a la siguiente decena/centena útil (p. ej. 265 → 300).
+  for (const step of [50, 100, 500]) {
+    const up = Math.ceil(exact / step) * step;
+    if (up > exact && !out.includes(up)) out.push(up);
+  }
+  // Billetes sueltos que ya cubren el total (p. ej. 265 → 500, 1000).
+  for (const bill of BILLS) if (bill > exact && !out.includes(bill)) out.push(bill);
+  return out.sort((a, b) => a - b).slice(0, 4);
+}
+
+function CheckoutScreen({ cart, setCart, go, onApprove }) {
   const [method,setMethod]=useState("Efectivo");
   const [amt,setAmt]=useState("");
   const [lines,setLines]=useState([]);
-  const [changeDue,setChangeDue]=useState(0);
   const [rcpt,setRcpt]=useState(false);
-  const { priceListId }=useData();
+  const [busy,setBusy]=useState(false);
+  const [confirmClear,setConfirmClear]=useState(false);
+  const amtRef=useRef(null);
+  // Guard de doble cobro. Va en un ref y no solo en el estado porque dos clics
+  // en el mismo tick de React leen el MISMO valor de `busy` (el re-render aún
+  // no ocurrió) y ambos pasarían el if. El ref se escribe de inmediato.
+  const inFlight=useRef(false);
+  const { priceListId, priceLists, setPriceListId }=useData();
   const subtotal=cartTotal(cart,priceListId);
   const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
   const total=Math.round((subtotal-desc)*100)/100;
   const iva=Math.round((total-total/1.16)*100)/100; // IVA incluido (informativo)
-  const methods=[["Tarjeta","Débito o crédito","card"],["Efectivo","Paga con efectivo","cash"],["QR / Pago","Escanea y paga","qr"],["Transferencia","SPEI / Transferencia bancaria","swap"],["Meses sin intereses","Paga a meses sin intereses","card"]];
+  const methods=[["Efectivo","Billetes y monedas","cash"],["Tarjeta","Débito o crédito","card"],["Transferencia","SPEI o depósito","swap"],["QR / Pago","Escanea y paga","qr"],["Meses sin intereses","Pago diferido","card"]];
   const paid=Math.round(lines.reduce((s,l)=>s+l.amount,0)*100)/100;
   const remaining=Math.max(0,Math.round((total-paid)*100)/100);
   const amtNum=Number(amt||0);
-  const liveChange=method==="Efectivo"?Math.max(0,Math.round((amtNum-remaining)*100)/100):0;
-  const addPay=()=>{ if(remaining<=0)return; const want=amtNum>0?amtNum:remaining; const applied=Math.min(want,remaining); if(applied<=0)return;
-    if(method==="Efectivo"&&want>remaining) setChangeDue(c=>Math.round((c+(want-remaining))*100)/100);
-    setLines(l=>[...l,{method,amount:Math.round(applied*100)/100}]); setAmt(""); };
-  const removePay=(i)=>{ setLines(l=>l.filter((_,j)=>j!==i)); setChangeDue(0); };
+  const isCash=method==="Efectivo";
+  // Importe vacío = "el resto": el cajero que cobra exacto no tiene que teclear.
+  const given=amtNum>0?amtNum:remaining;
+  const isPartial=amtNum>0&&amtNum<remaining;
+  const liveChange=isCash?Math.max(0,Math.round((given-remaining)*100)/100):0;
+  // El cambio se DERIVA de los pagos aplicados, no se acumula en un estado
+  // aparte: el `changeDue` anterior se ponía en 0 al quitar cualquier pago, así
+  // que quitar el segundo pago de una mixta borraba el cambio del primero.
+  const changeDue=Math.round(lines.reduce((s,l)=>s+(l.change||0),0)*100)/100;
   const payLabel=lines.length>1?"Pago mixto":(lines[0]?lines[0].method:method);
+
+  const buildPayment=()=>{
+    const applied=Math.min(given,remaining);
+    if(applied<=0) return null;
+    return { method, amount:Math.round(applied*100)/100, change:isCash?Math.max(0,Math.round((given-remaining)*100)/100):0 };
+  };
+  const addPay=()=>{ const p=buildPayment(); if(!p)return; setLines(l=>[...l,p]); setAmt(""); amtRef.current?.focus(); };
+  const removePay=(i)=>{ setLines(l=>l.filter((_,j)=>j!==i)); };
+
+  /* Acción principal. Resuelve el pago que falta y cobra en UNA sola pulsación:
+     antes había que "Agregar pago" y luego "Cobrar", dos clics para la venta más
+     común (efectivo exacto). Un pago PARCIAL sí se queda en la pantalla, porque
+     todavía falta cobrar el resto. */
+  const submit=async()=>{
+    if(inFlight.current||!cart.length) return;
+    if(isPartial){ addPay(); return; }
+    const pending=remaining>0?buildPayment():null;
+    if(remaining>0&&!pending) return;
+    const allLines=pending?[...lines,pending]:lines;
+    if(!allLines.length) return;
+    inFlight.current=true; setBusy(true);
+    try{
+      const change=Math.round(allLines.reduce((s,l)=>s+(l.change||0),0)*100)/100;
+      await onApprove(total,allLines.length>1?"Pago mixto":allLines[0].method,allLines,change);
+    } finally {
+      // Si la venta salió bien la pantalla ya se desmontó; si falló hay que
+      // volver a habilitar el botón para que el cajero reintente.
+      inFlight.current=false; setBusy(false);
+    }
+  };
+
+  // F5 aquí y no solo en App: el botón anuncia el atajo, pero `cobrar()` de App
+  // únicamente navega a esta pantalla, así que en el checkout la tecla no hacía
+  // nada. Se registra en captura para ganarle al handler global.
+  useEffect(()=>{
+    const h=(e)=>{
+      if(e.key==="F5"){ e.preventDefault(); e.stopPropagation(); submit(); }
+      else if(e.key==="F4"){ e.preventDefault(); const i=methods.findIndex(m=>m[0]===method); setMethod(methods[(i+1)%methods.length][0]); setAmt(""); }
+    };
+    window.addEventListener("keydown",h,true);
+    return ()=>window.removeEventListener("keydown",h,true);
+  });
+  useEffect(()=>{ if(isCash) amtRef.current?.focus(); },[isCash,method]);
+
+  const primary=(()=>{
+    if(busy) return { label:"Procesando venta…", disabled:true };
+    if(!cart.length) return { label:"Carrito vacío", disabled:true };
+    if(remaining<=0) return { label:"Finalizar venta", disabled:false };
+    if(isPartial) return { label:"Aplicar "+mx(amtNum), disabled:false };
+    if(isCash&&given<remaining) return { label:"Captura el importe recibido", disabled:true };
+    return { label:"Cobrar "+mx(total), disabled:false };
+  })();
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px_minmax(0,1fr)] gap-4 h-auto lg:h-full">
-      <Card className="flex flex-col overflow-hidden">
-        <div className="px-5 h-14 flex items-center border-b border-line font-semibold text-ink-900">Carrito de compra ({cart.length})</div>
-        <div className="flex-1 overflow-y-auto p-3 space-y-1">
-          {cart.map(l=>(<div key={l.key} className="flex items-center gap-3 p-2 rounded-xl hover:bg-surf">
-            <Thumb p={l} size={48}/>
-            <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold text-ink-900 truncate">{l.name}</div>
-              <div className="tnum text-[11px] text-ink-400">{l.sku}</div><div className="text-[11px] text-ink-400">{l.color} / {l.size}</div></div>
-            <div className="text-right"><div className="tnum text-[13px] font-semibold text-ink-900">{mx(l.price)}</div>
-              <div className="inline-flex items-center gap-1.5 mt-1"><button className="w-6 h-6 grid place-items-center rounded border border-line text-ink-400"><Icon n="minus" s={12}/></button><span className="tnum text-xs w-4 text-center">{l.qty}</span><button className="w-6 h-6 grid place-items-center rounded border border-line text-ink-400"><Icon n="plus" s={12}/></button></div></div>
-          </div>))}
+    /* Tres zonas reales: carrito | pago | resumen. Antes la tercera columna se
+       partía otra vez en dos y los métodos quedaban en ~170px con scroll propio
+       (en 1366 "Meses sin intereses" no se alcanzaba a ver), más una cuarta
+       fila a lo ancho que repetía el total. */
+    /* Escalones: <1024 una columna (globals.css apila los grid de pantalla),
+       1024–1279 dos columnas con el carrito alto a la izquierda y pago+resumen
+       apilados a la derecha, ≥1280 las tres zonas lado a lado. */
+    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.95fr)_minmax(300px,0.82fr)] gap-4 h-auto lg:h-full lg:min-h-0">
+
+      {/* ---------- ZONA 1 · CARRITO ---------- */}
+      <Card className="flex flex-col overflow-hidden min-h-0 lg:row-span-2 xl:row-span-1">
+        <div className="px-5 h-14 flex items-center justify-between border-b border-line shrink-0">
+          <span className="font-semibold text-ink-900">Carrito de compra</span>
+          <span className="text-[12px] text-ink-400 tnum">{cart.reduce((s,l)=>s+(Number(l.qty)||0),0)} art.</span>
         </div>
-        <div className="p-3 border-t border-line"><GhostBtn onClick={()=>go("venta")} className="w-full"><Icon n="trash" s={16}/>Vaciar carrito</GhostBtn></div>
+        <div className="flex-1 overflow-y-auto p-3 space-y-1 min-h-0">
+          {cart.map(l=>{
+            const unit=linePrice(l,priceListId);
+            const many=(Number(l.qty)||0)>1;
+            return (<div key={l.key} data-testid="checkout-row" className="flex items-center gap-3 p-2 rounded-xl hover:bg-surf">
+              <Thumb p={l} size={44}/>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold text-ink-900 truncate">{l.name}</div>
+                <div className="tnum text-[11px] text-ink-400 truncate">{l.sku}</div>
+                {/* Precio unitario × cantidad: con lista de precios o escalón de
+                    mayoreo el unitario NO es l.price, y antes esta columna
+                    mostraba el de catálogo — el cajero veía un precio y se
+                    cobraba otro. */}
+                {many&&<div className="tnum text-[11px] text-ink-500 mt-0.5">{l.qty} × {mx(unit)}</div>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="inline-flex items-center gap-1">
+                  <button onClick={()=>setCart(c=>c.map(x=>x.key===l.key?{...x,qty:Math.max(1,(Number(x.qty)||1)-1)}:x))}
+                    aria-label={`Quitar una unidad de ${l.name}`}
+                    className="w-10 h-10 grid place-items-center rounded-lg border border-line text-ink-500 hover:bg-surf focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"><Icon n="minus" s={14}/></button>
+                  <span className="tnum text-[13px] w-8 text-center" aria-label={`Cantidad: ${l.qty}`}>{l.qty}</span>
+                  <button onClick={()=>setCart(c=>c.map(x=>x.key===l.key?{...x,qty:(Number(x.qty)||0)+1}:x))}
+                    aria-label={`Agregar una unidad de ${l.name}`}
+                    className="w-10 h-10 grid place-items-center rounded-lg border border-line text-ink-500 hover:bg-surf focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"><Icon n="plus" s={14}/></button>
+                </span>
+                <div className="tnum text-[14px] font-semibold text-ink-900 w-24 text-right">{mx(lineTotal(l,priceListId))}</div>
+              </div>
+            </div>);
+          })}
+          {cart.length===0&&<div className="py-16 px-6 text-center">
+            <div className="text-ink-400 text-sm">Aún no hay productos en la venta.</div>
+            <GhostBtn className="mt-4 mx-auto" onClick={()=>go("venta")}><Icon n="scan" s={16}/>Volver a la venta</GhostBtn>
+          </div>}
+        </div>
+        <div className="p-3 border-t border-line flex gap-2 shrink-0">
+          <GhostBtn onClick={()=>go("venta")} className="flex-1"><Icon n="chev" s={16} cls="rotate-180"/>Seguir agregando</GhostBtn>
+          <GhostBtn onClick={()=>setConfirmClear(true)} className="text-ink-500"><Icon n="trash" s={16}/>Vaciar</GhostBtn>
+        </div>
       </Card>
 
+      {/* ---------- ZONA 2 · PAGO ---------- */}
       <div className="flex flex-col gap-4 min-h-0">
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-4"><span className="font-semibold text-ink-900">Cliente</span><button className="text-[12px] text-brand-600 font-medium">Editar</button></div>
-          <div className="flex items-center gap-3"><div className="w-12 h-12 rounded-full bg-brand-100 grid place-items-center text-brand-700 font-semibold">MF</div>
-            <div><div className="text-[14px] font-semibold text-ink-900">{CUSTOMER.name}</div><span className="inline-block mt-1 text-[10px] font-semibold text-brand-700 bg-brand-100 px-2 py-0.5 rounded">CLIENTE FRECUENTE</span></div></div>
-          <div className="text-[12px] text-ink-500 mt-3 space-y-0.5"><div>{CUSTOMER.email}</div><div className="tnum">+52 {CUSTOMER.phone}</div></div>
-          <div className="flex items-center justify-between mt-4 pt-3 border-t border-line text-[13px]"><span className="flex items-center gap-1.5 text-ink-500"><Icon n="star" s={15} cls="text-brand-600"/>Puntos acumulados:</span><span className="tnum font-semibold text-ink-900">{CUSTOMER.pts} pts</span></div>
+        <Card className="p-4 shrink-0">
+          <div className="font-semibold text-ink-900 mb-3">Método de pago <span className="text-[11px] font-normal text-ink-400 ml-1">F4</span></div>
+          {/* Cuadrícula de 2 columnas: entran los 5 métodos sin scroll interno. */}
+          <div role="radiogroup" aria-label="Método de pago" className="grid grid-cols-2 gap-2">
+            {methods.map(([m,sub,icon])=>{const a=method===m;return(
+              <button key={m} role="radio" aria-checked={a} onClick={()=>{setMethod(m);setAmt("");}}
+                className={"flex items-center gap-2.5 p-3 rounded-xl border-2 text-left min-h-[60px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 "+(a?"border-brand-500 bg-brand-50":"border-line hover:bg-surf")}>
+                <div className={"w-9 h-9 rounded-lg grid place-items-center shrink-0 "+(a?"bg-brand-100 text-brand-600":"bg-surf text-ink-400")}><Icon n={icon} s={18}/></div>
+                <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold text-ink-900 truncate">{m}</div><div className="text-[11px] text-ink-400 truncate">{sub}</div></div>
+                {a&&<Icon n="check" s={16} cls="text-brand-600 shrink-0"/>}</button>);})}
+          </div>
         </Card>
-        <Card className="p-5 flex-1">
+
+        <Card className="p-5 flex flex-col min-h-0 overflow-y-auto">
+          <label htmlFor="pay-amount" className="text-[13px] font-medium text-ink-700">{isCash?"Importe recibido":"Monto a cobrar"}</label>
+          <input id="pay-amount" ref={amtRef} value={amt}
+            onChange={(e)=>setAmt(e.target.value.replace(/[^\d.]/g,"").replace(/(\..*)\./g,"$1"))}
+            onFocus={(e)=>e.target.select()} onWheel={(e)=>e.currentTarget.blur()}
+            inputMode="decimal" autoComplete="off" placeholder={mx(remaining)}
+            className="h-14 mt-2 rounded-xl bg-surf border border-line text-right px-4 tnum text-2xl font-bold text-ink-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 placeholder:text-ink-400 placeholder:font-semibold"/>
+
+          {isCash&&<>
+            {/* Botones separados con la cantidad que entrega el cliente. La
+                rejilla se ajusta al número de sugerencias: un total redondo
+                genera menos opciones y con `grid-cols-4` fijo quedaba un hueco. */}
+            {(()=>{const sug=cashSuggestions(remaining);return(
+              <div className={"grid gap-2 mt-3 "+(sug.length>=4?"grid-cols-4":sug.length===3?"grid-cols-3":"grid-cols-2")}>
+                {sug.map((v,i)=>(
+                  <button key={v} type="button" onClick={()=>{setAmt(String(v));amtRef.current?.focus();}}
+                    className={"h-12 rounded-lg border tnum text-[12px] font-semibold leading-tight hover:bg-surf focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 "+(i===0?"border-brand-200 text-brand-700 bg-brand-50/60":"border-line text-ink-700")}>
+                    {i===0?<><span className="block text-[10px] font-medium opacity-70">Exacto</span>{mx(v).replace(/\.00$/,"")}</>
+                          :mx(v).replace(/\.00$/,"")}
+                  </button>))}
+              </div>);})()}
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-line">
+              <span className="text-[13px] text-ink-500">Cambio</span>
+              {/* aria-live: el cajero que usa lector necesita oír el cambio al
+                  teclear, no descubrirlo al final. */}
+              <span aria-live="polite" className={"tnum text-xl font-bold "+(liveChange>0?"text-brand-600":"text-ink-400")}>{mx(liveChange)}</span>
+            </div>
+          </>}
+
+          {!isCash&&<p className="text-[12px] text-ink-500 mt-3 leading-relaxed">
+            {/* Honestidad sobre lo que el sistema NO hace: no hay integración de
+                terminal ni de proveedor QR, el pago se REGISTRA manualmente. */}
+            Se registra el cobro de forma manual. MRTPV Retail no está conectado a la
+            terminal ni al proveedor, así que confirma en tu dispositivo antes de continuar.
+          </p>}
+
+          {isPartial&&<button type="button" onClick={addPay} data-testid="btn-aplicar-pago"
+            className="h-11 mt-4 rounded-xl border-2 border-brand-200 text-brand-700 font-semibold text-sm hover:bg-brand-50 inline-flex items-center justify-center gap-2 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+            <Icon n="plus" s={16}/>Aplicar {mx(amtNum)} y seguir cobrando</button>}
+
+          {lines.length>0&&<div className="mt-4 pt-3 border-t border-line shrink-0">
+            <div className="text-[12px] font-medium text-ink-500 mb-2">Pagos aplicados</div>
+            <div className="space-y-1.5">{lines.map((l,i)=>(
+              <div key={i} className="flex items-center justify-between text-[12px] bg-surf rounded-lg px-3 py-2">
+                <span className="text-ink-700">{l.method}{l.change>0&&<span className="text-ink-400"> · cambio {mx(l.change)}</span>}</span>
+                <span className="flex items-center gap-2"><span className="tnum font-semibold text-ink-900">{mx(l.amount)}</span>
+                  <button onClick={()=>removePay(i)} aria-label={`Quitar pago de ${mx(l.amount)}`} className="text-ink-400 hover:text-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded"><Icon n="x" s={14}/></button></span>
+              </div>))}</div>
+          </div>}
+        </Card>
+      </div>
+
+      {/* ---------- ZONA 3 · RESUMEN + ACCIÓN ----------
+          El bloque de acción vive FUERA del área que scrollea: en 1024×768 el
+          alto no alcanza para cliente + totales + botón, y con todo junto el
+          botón de cobrar quedaba recortado bajo el borde (main es
+          overflow-hidden desde lg, así que la página tampoco scrolleaba y el
+          cajero simplemente no podía cobrar). */}
+      <div className="flex flex-col gap-4 min-h-0">
+        <div className="flex flex-col gap-4 min-h-0 lg:overflow-y-auto">
+        <Card className="p-4 shrink-0">
+          {/* Antes aquí vivía una tarjeta de cliente con datos DEMO fijos
+              (nombre, correo, teléfono y puntos inventados) que se pintaba
+              igual en una venta real. El backend ni siquiera acepta cliente en
+              POST /sales, así que se sustituye por lo que sí es real y sí
+              cambia el precio: la lista con la que se está cotizando. */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[13px] font-semibold text-ink-900">Venta al público</span>
+            <Icon n="users" s={16} cls="text-ink-400"/>
+          </div>
+          <label htmlFor="pl-checkout" className="text-[11px] text-ink-500">Lista de precios</label>
+          <select id="pl-checkout" data-testid="price-list-select-checkout" value={priceListId||""}
+            onChange={(e)=>setPriceListId&&setPriceListId(e.target.value||null)}
+            className="w-full h-11 mt-1 rounded-lg border border-line bg-surf px-2 text-[13px] text-ink-900 outline-none focus:border-brand-500">
+            <option value="">Precio de catálogo</option>
+            {(priceLists||[]).map(pl=><option key={pl.id} value={pl.id}>{pl.name}</option>)}
+          </select>
+        </Card>
+
+        <Card className="p-5 flex flex-col shrink-0">
           <TotRow k="Subtotal" v={mx(subtotal)}/>
-          {desc>0 && <><div className="my-2"/><TotRow k="Descuento" v={<span className="text-brand-600">-{mx(desc)}</span>}/></>}
           <div className="my-2"/><TotRow k="IVA 16% incluido" v={mx(iva)}/>
-          <div className="flex items-center justify-between pt-4 mt-4 border-t border-line"><span className="text-xl font-bold text-ink-900">Total</span><span className="tnum text-3xl font-bold text-ink-900">{mx(total)}</span></div>
+          {desc>0&&<><div className="my-2"/><TotRow k="Descuento" v={<span className="text-brand-600">-{mx(desc)}</span>}/></>}
+          <div className="flex items-baseline justify-between pt-4 mt-3 border-t border-line">
+            <span className="text-base font-bold text-ink-900">Total</span>
+            <span data-testid="checkout-total" className="tnum text-[38px] leading-none font-bold text-ink-900">{mx(total)}</span>
+          </div>
+          <div className="mt-4 pt-3 border-t border-line space-y-2">
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="text-ink-500">Pagado</span>
+              <span className={"tnum font-semibold "+(paid>0?"text-emerald-600":"text-ink-400")}>{mx(paid)}</span>
+            </div>
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="text-ink-500">{remaining>0?"Restante":"Cambio a entregar"}</span>
+              <span aria-live="polite" className={"tnum text-lg font-bold "+(remaining>0?"text-brand-600":"text-ink-900")}>
+                {remaining>0?mx(remaining):mx(changeDue)}</span>
+            </div>
+          </div>
         </Card>
-      </div>
+        </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 min-h-0">
-        <Card className="p-3 overflow-y-auto">
-          <div className="px-2 py-2 font-semibold text-ink-900">Método de pago</div>
-          <div className="space-y-2">{methods.map(([m,sub,icon])=>{const a=method===m;return(
-            <button key={m} onClick={()=>{setMethod(m);setAmt("");}} className={"w-full flex items-center gap-3 p-2.5 rounded-xl border text-left "+(a?"border-brand-500 bg-brand-50 ring-1 ring-brand-100":"border-line hover:bg-surf")}>
-              <div className={"w-9 h-9 rounded-lg grid place-items-center "+(a?"bg-brand-100 text-brand-600":"bg-surf text-ink-400")}><Icon n={icon} s={18}/></div>
-              <div className="flex-1"><div className="text-[13px] font-semibold text-ink-900">{m}</div><div className="text-[11px] text-ink-400">{sub}</div></div>
-              {a&&<Icon n="check" s={18} cls="text-brand-600"/>}</button>);})}</div>
-        </Card>
-        <Card className="p-5 flex flex-col overflow-y-auto">
-          <div className="flex items-center justify-between"><span className="font-semibold text-ink-900">Cobrar con {method.toLowerCase()}</span>
-            <span className="text-[12px] text-ink-400">Restante <span className="tnum font-semibold text-ink-900">{mx(remaining)}</span></span></div>
-          <div className="text-[12px] text-ink-500 mt-4 mb-1">{method==="Efectivo"?"Importe recibido":"Monto"}</div>
-          <input value={amt} onChange={(e)=>setAmt(e.target.value.replace(/[^\d.]/g,""))} inputMode="decimal" placeholder={String(remaining)}
-            className="h-12 rounded-xl bg-surf border border-line text-right px-4 tnum text-lg font-semibold outline-none focus:border-brand-500"/>
-          {method==="Efectivo"&&<>
-            <div className="grid grid-cols-4 gap-2 mt-3">{[100,200,500,1000].map(v=><button key={v} type="button" onClick={()=>setAmt(String(Number(amt||0)+v))} className="h-9 rounded-lg border border-line hover:bg-surf tnum text-[12px]">+${v}</button>)}</div>
-            <button type="button" onClick={()=>setAmt(String(remaining))} className="w-full h-9 mt-2 rounded-lg border border-line hover:bg-surf text-[12px]">Importe exacto {mx(remaining)}</button>
-            <div className="flex items-center justify-between mt-3 text-[13px]"><span className="text-ink-500">Cambio</span><span className="tnum font-semibold text-brand-600">{mx(liveChange)}</span></div></>}
-          {method==="Tarjeta"&&<div className="flex items-center justify-between mt-3 text-[12px]"><span className="text-ink-500">Terminal</span><span className="text-ink-700 border border-line rounded-lg px-2 py-1 tnum">BBVA - 1234 ⌄</span></div>}
-          <button type="button" onClick={addPay} disabled={remaining<=0} className="h-11 mt-4 rounded-xl border-2 border-brand-200 text-brand-700 font-semibold text-sm hover:bg-brand-50 disabled:opacity-40 inline-flex items-center justify-center gap-2"><Icon n="plus" s={16}/>Agregar pago</button>
-          {lines.length>0&&<div className="mt-3 space-y-1.5">{lines.map((l,i)=>(<div key={i} className="flex items-center justify-between text-[12px] bg-surf rounded-lg px-3 py-2">
-            <span className="text-ink-700">{l.method}</span><span className="flex items-center gap-2"><span className="tnum font-medium text-ink-900">{mx(l.amount)}</span><button onClick={()=>removePay(i)} className="text-ink-400 hover:text-red-500"><Icon n="x" s={14}/></button></span></div>))}</div>}
-        </Card>
-      </div>
-
-      <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px_minmax(0,1fr)] gap-4">
-        <Card className="p-4"><div className="text-[12px] text-ink-500 mb-1">Pagado</div><div className="h-12 rounded-xl bg-surf border border-line flex items-center justify-end px-4 tnum text-xl font-bold text-ink-900">{mx(paid)}</div></Card>
-        <Card className="p-4"><div className="text-[12px] text-ink-500 mb-1">{remaining>0?"Restante":"Cambio"}</div>
-          <div className={"h-12 rounded-xl border flex items-center justify-end px-4 tnum text-xl font-bold "+(remaining>0?"bg-amber-50 border-amber-100 text-amber-700":"bg-brand-50 border-brand-100 text-brand-700")}>{remaining>0?mx(remaining):mx(changeDue)}</div></Card>
-        <div className="flex gap-3 items-end">
-          <PrimaryBtn testid="btn-confirmar-cobro" onClick={()=>{ if(remaining<=0) onApprove(total,payLabel,lines.length?lines:[{method:payLabel,amount:total}]); }} className={"flex-1 h-14 text-base "+(remaining>0?"opacity-50 pointer-events-none":"")}><Icon n="check" s={20}/>{remaining>0?"Falta "+mx(remaining):"Cobrar "+mx(total)} <span className="tnum opacity-80">(F5)</span></PrimaryBtn>
-          <GhostBtn className="h-14" onClick={()=>setRcpt(true)}><Icon n="printer" s={18}/>Imprimir ticket</GhostBtn>
+        <div className="flex flex-col gap-2 mt-auto shrink-0">
+          <PrimaryBtn testid="btn-confirmar-cobro" onClick={submit} disabled={primary.disabled}
+            className="w-full h-16 text-base disabled:opacity-50 disabled:cursor-not-allowed">
+            {busy
+              ? <span className="w-5 h-5 rounded-full border-2 border-white/40 border-t-white animate-spin motion-reduce:animate-none" aria-hidden="true"/>
+              : <Icon n="check" s={20}/>}
+            {primary.label}
+            {!primary.disabled&&<span className="tnum opacity-80 text-[12px]">F5</span>}
+          </PrimaryBtn>
+          {/* Imprimir queda bloqueado hasta que la venta exista: antes abría un
+              ticket con folio inventado ("VTA-000012346") para una venta que no
+              se había cobrado. El ticket real se imprime en la pantalla de éxito. */}
+          <GhostBtn className="w-full opacity-50 cursor-not-allowed" onClick={()=>{}}
+            title="Disponible al finalizar la venta"><Icon n="printer" s={18}/>Imprimir ticket al finalizar</GhostBtn>
         </div>
       </div>
-      {rcpt && <ReceiptModal sale={{items:cart,subtotal,desc,total,method:payLabel,folio:"VTA-000012346"}} onClose={()=>setRcpt(false)}/>}
+
+      {confirmClear&&<Modal title="¿Vaciar la venta?" onClose={()=>setConfirmClear(false)}>
+        <p className="text-[13px] text-ink-500">Se quitarán los {cart.reduce((s,l)=>s+(Number(l.qty)||0),0)} artículo(s) del carrito. Esta acción no se puede deshacer.</p>
+        <div className="flex gap-2 mt-5">
+          <GhostBtn className="flex-1" onClick={()=>setConfirmClear(false)}>Cancelar</GhostBtn>
+          <button onClick={()=>{setCart([]);setConfirmClear(false);go("venta");}}
+            className="flex-1 h-11 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold text-sm inline-flex items-center justify-center gap-2"><Icon n="trash" s={16}/>Vaciar venta</button>
+        </div>
+      </Modal>}
+      {rcpt && <ReceiptModal sale={{items:cart,subtotal,desc,total,method:payLabel,folio:"—"}} onClose={()=>setRcpt(false)}/>}
     </div>
   );
 }
@@ -866,8 +1085,16 @@ function SuccessScreen({ sale, go, newSale }) {
         <div className="w-20 h-20 rounded-full border-4 border-brand-500 grid place-items-center text-brand-600 mb-4"><Icon n="check" s={40} sw={2.4}/></div>
         <h1 className="text-2xl font-bold text-ink-900">¡Pago aprobado!</h1>
         <p className="text-ink-500 mt-1">La venta ha sido completada correctamente.</p>
-        <div className="grid grid-cols-3 gap-px bg-line rounded-2xl overflow-hidden mt-6 w-full max-w-xl border border-line">
-          {[["Total pagado",mx(sale.total),"sale-success-total"],["Método de pago",sale.method],["Folio de venta",sale.folio||"—","sale-success-folio"]].map(([k,v,tid])=>(
+        {/* El cambio se muestra aquí y no solo en el checkout: es el número que
+            el cajero necesita LEER mientras cuenta el dinero, y al cobrar la
+            pantalla anterior ya desapareció. */}
+        {sale.change>0&&<div className="mt-5 px-6 py-3 rounded-2xl bg-brand-50 border border-brand-200 flex items-center gap-3">
+          <Icon n="cash" s={22} cls="text-brand-600"/>
+          <span className="text-[13px] text-ink-700">Cambio a entregar</span>
+          <span data-testid="sale-success-change" className="tnum text-2xl font-bold text-brand-700">{mx(sale.change)}</span>
+        </div>}
+        <div className={"grid gap-px bg-line rounded-2xl overflow-hidden mt-6 w-full max-w-xl border border-line "+(sale.change>0?"grid-cols-4":"grid-cols-3")}>
+          {[["Total pagado",mx(sale.total),"sale-success-total"],["Método de pago",sale.method],...(sale.change>0?[["Cambio",mx(sale.change)]]:[]),["Folio de venta",sale.folio||"—","sale-success-folio"]].map(([k,v,tid])=>(
             <div key={k} className="bg-card p-4 text-center"><div className="text-[11px] text-ink-400 mb-1">{k}</div><div data-testid={tid} className="tnum font-semibold text-ink-900 text-sm">{v}</div></div>))}
         </div>
         <div className="grid grid-cols-5 gap-3 mt-6 w-full max-w-xl">
@@ -2005,7 +2232,16 @@ function App() {
   const titles={venta:"Venta activa",catalogo:"Catálogo de productos",clientes:"Clientes frecuentes",inventario:"Inventario por talla y color",apartados:"Apartados y cliente frecuente",devoluciones:"Devoluciones y cambios",caja:"Caja / corte de caja",reportes:"Reportes",config:"Configuración",checkout:"Checkout y métodos de pago",success:"Venta completada"};
 
   const cobrar=()=>{ if(cart.length) setScreen("checkout"); };
-  const approve=async(total,method,payLines)=>{
+  /* Llave de idempotencia del intento de cobro. Se deriva del ticket + su
+     contenido, así que un reintento tras un timeout de red manda la MISMA
+     llave y el backend devuelve la venta ya creada (`idempotent:true`) en vez
+     de cobrar otra vez; cambiar el carrito genera una llave nueva. */
+  const attemptKey=useMemo(()=>{
+    const sig=cart.map(l=>`${l.skuId||l.id}:${l.qty}`).join("|");
+    let h=0; for(let i=0;i<sig.length;i++){ h=(h*31+sig.charCodeAt(i))|0; }
+    return `moda-${activeId}-${(h>>>0).toString(36)}`;
+  },[cart,activeId]);
+  const approve=async(total,method,payLines,changeGiven=0)=>{
     // La cantidad de granel se captura a mano y puede quedar vacía o en 0 mientras
     // el cajero teclea; el backend la rechaza con 400. Se normaliza aquí y se
     // aborta antes de cobrar en vez de mandar una venta que va a fallar.
@@ -2028,8 +2264,8 @@ function App() {
         // tax:0 → el precio de catálogo ya incluye IVA; el backend cobra Σ precio − descuento.
         // priceListId viaja para que el backend resuelva la MISMA lista que se
         // cotizó; él recalcula y rechaza si su total no cuadra con los pagos.
-        const r=await Retail.createSale({ lines:cart.map(l=>({skuId:l.skuId,quantity:qtyOf(l)})), payments, discount:desc, tax:0, priceListId:data.priceListId });
-        setSale({ total:Number(r.sale.total), method, items:cart, subtotal, desc, folio:r.sale.folio, priceListId:data.priceListId });
+        const r=await Retail.createSale({ lines:cart.map(l=>({skuId:l.skuId,quantity:qtyOf(l)})), payments, discount:desc, tax:0, priceListId:data.priceListId, clientSaleId:attemptKey });
+        setSale({ total:Number(r.sale.total), method, items:cart, subtotal, desc, folio:r.sale.folio, priceListId:data.priceListId, change:changeGiven });
         closeTicket(activeId); // la venta ya se cobró → descartar el ticket de inmediato
         setScreen("success");
         if(data.refreshCatalog) data.refreshCatalog();
@@ -2041,7 +2277,7 @@ function App() {
       return;
     }
     // Demo / sin catálogo en vivo: venta local (NO persiste en backend).
-    setSale({ total:totalCobro, method, items:cart, subtotal, desc, folio:"DEMO-"+String(Date.now()).slice(-6), priceListId:data.priceListId });
+    setSale({ total:totalCobro, method, items:cart, subtotal, desc, folio:"DEMO-"+String(Date.now()).slice(-6), priceListId:data.priceListId, change:changeGiven });
     closeTicket(activeId); // venta demo completada → descartar el ticket
     setScreen("success");
   };
@@ -2087,7 +2323,7 @@ function App() {
         <main className="flex-1 min-w-0 p-3 lg:p-4 overflow-y-auto lg:overflow-hidden">
           {screen==="venta"&&<SaleScreen cart={cart} setCart={setCart} sel={sel} setSel={setSel} go={setScreen}
             tickets={tickets} activeId={activeId} ticketIndex={ticketIndex} onSwitch={switchTicket} onAddTicket={addTicket} onCloseTicket={requestCloseTicket}/>}
-          {screen==="checkout"&&<CheckoutScreen cart={cart} go={setScreen} onApprove={approve}/>}
+          {screen==="checkout"&&<CheckoutScreen cart={cart} setCart={setCart} go={setScreen} onApprove={approve}/>}
           {screen==="success"&&sale&&<SuccessScreen sale={sale} go={setScreen} newSale={finishSale}/>}
           {screen==="catalogo"&&<CatalogScreen setSel={setSel} go={setScreen}/>}
           {screen==="inventario"&&<InventoryScreen/>}
