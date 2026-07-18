@@ -1,6 +1,7 @@
 const express = require('express');
 const { z } = require('zod');
 const { prisma } = require('@mrtpvrest/database');
+const { localDayRange } = require('../utils/dayRange');
 const { authenticate, requireTenantAccess, requireRole, userHasPermission, hasValidOverride } = require('../middleware/auth.middleware');
 const { sendCashCutEmail } = require('../lib/cash-cut-mailer');
 
@@ -1184,11 +1185,35 @@ router.get('/sales', async (req, res) => {
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
     const where = { restaurantId };
     if (locationId) where.locationId = locationId;
+
+    // Filtro por día NATURAL en hora local (America/Mexico_City), no UTC. Sin
+    // esto el dashboard calculaba "hoy" con new Date().toISOString(): después de
+    // las 18:00 de México el día UTC ya saltó, así que la venta de la tarde caía
+    // en "mañana" y desaparecía de "Ventas del día". `day=today` o `day=YYYY-MM-DD`.
+    // El cliente ya NO filtra ni suma una lista truncada — el corte del día lo
+    // hace la BD, que es la única forma de no perder ventas cuando pasan de 200.
+    // Solo 'today' o 'YYYY-MM-DD'. Cualquier otra cosa se ignora en vez de
+    // reventar: localDayRange('basura') hace new Date('basura') → Invalid Date y
+    // formatToParts tira RangeError. Validar aquí evita un 500 por un query param
+    // malformado (y que un fuzz de la URL tumbe el listado).
+    let dayFilter = false;
+    const dayParam = req.query.day === 'today' ? undefined
+      : /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.day || '')) ? String(req.query.day)
+      : null; // marca "param presente pero inválido"
+    if (req.query.day && dayParam !== null) {
+      const { from, to } = localDayRange(dayParam);
+      where.createdAt = { gte: from, lte: to };
+      dayFilter = true;
+    }
+
     const sales = await prisma.retailSale.findMany({
       where,
       include: { lines: true, payments: true, location: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'desc' },
-      take: Math.min(Number(req.query.limit) || 80, 200),
+      // Con filtro de día el universo ya está acotado a un día ⇒ tope alto para no
+      // truncar el total (el bug de "solo las primeras 40" de "Ventas del día").
+      // Sin filtro (p. ej. la pantalla de devoluciones) sigue el tope conservador.
+      take: dayFilter ? 2000 : Math.min(Number(req.query.limit) || 80, 200),
     });
     res.json(sales);
   } catch (e) {

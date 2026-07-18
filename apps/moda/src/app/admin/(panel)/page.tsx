@@ -28,9 +28,14 @@ export default function DashboardPage() {
     const locationId = typeof window !== "undefined" ? localStorage.getItem(ADMIN_KEYS.locationId) : "";
     const q = locationId ? `?locationId=${encodeURIComponent(locationId)}` : "";
     try {
+      // day=today: el backend corta el día en hora de México y trae TODAS las
+      // ventas del día (no las primeras 40). Antes se pedía limit=40 y se sumaba
+      // en el cliente filtrando por fecha UTC — dos bugs a la vez: el total del
+      // día se truncaba a 40 ventas, y "hoy" saltaba a las 18:00 hora local.
+      const salesQ = `${q ? `${q}&` : "?"}day=today`;
       const [stk, sal] = await Promise.all([
         api.get<StockRow[]>(`/api/retail/v1/stock${q}`),
-        api.get<Sale[]>(`/api/retail/v1/sales${q ? `${q}&limit=40` : "?limit=40"}`),
+        api.get<Sale[]>(`/api/retail/v1/sales${salesQ}`),
       ]);
       setStock(Array.isArray(stk.data) ? stk.data : []);
       setSales(Array.isArray(sal.data) ? sal.data : []);
@@ -48,9 +53,11 @@ export default function DashboardPage() {
     return () => window.removeEventListener("locationChanged", refresh);
   }, [load]);
 
+  // `sales` YA viene acotado a hoy (hora de México) desde el backend: aquí solo
+  // se separa por estado. No se re-filtra por fecha en el cliente — hacerlo con
+  // new Date().toISOString() reintroduciría el corte en UTC que se acaba de quitar.
   const kpi = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const todays = sales.filter((s) => s.status === "COMPLETED" && s.createdAt?.slice(0, 10) === today);
+    const todays = sales.filter((s) => s.status === "COMPLETED");
     const revenue = todays.reduce((n, s) => n + Number(s.total || 0), 0);
     const low = stock.filter((r) => Number(r.minQty) > 0 && Number(r.qty) <= Number(r.minQty));
     const out = stock.filter((r) => Number(r.qty) <= 0);
@@ -74,9 +81,15 @@ export default function DashboardPage() {
   // comparativa contra ayer (antes la curva entera era una constante que subía
   // hasta $12,540 sin importar el tenant).
   const series = useMemo(() => {
+    // La hora se lee en zona de México, no con getHours() (que usaría la TZ de
+    // la PC): así la curva coincide con el corte de día que hizo el backend. Si
+    // la caja estuviera en otra zona, getHours() metería ventas en la hora
+    // equivocada o incluso fuera del rango [0..23] del eje.
+    const mxHour = new Intl.DateTimeFormat("en-US", { timeZone: "America/Mexico_City", hour: "2-digit", hour12: false });
+    const hourOf = (iso: string) => { const h = parseInt(mxHour.format(new Date(iso)), 10); return h === 24 ? 0 : h; };
     const byHour = new Map<number, number>();
     for (const s of kpi.todays) {
-      const h = new Date(s.createdAt).getHours();
+      const h = hourOf(s.createdAt);
       byHour.set(h, (byHour.get(h) || 0) + Number(s.total || 0));
     }
     const hours = [...byHour.keys()].sort((a, b) => a - b);
@@ -90,14 +103,13 @@ export default function DashboardPage() {
     return out;
   }, [kpi.todays]);
 
-  // Top real desde las líneas de venta. Sobre la ventana consultada (no solo hoy):
-  // una tienda sin ventas hoy vería la tarjeta vacía, y el dato útil es qué se
-  // vende. Antes eran 5 prendas fijas — "Camiseta Oversize Negra", "Jean Slim
-  // Fit"— que se pintaban igual en una ferretería.
+  // Top de HOY desde las líneas de venta (sales ya viene acotado al día). Antes
+  // eran 5 prendas fijas — "Camiseta Oversize Negra", "Jean Slim Fit"— que se
+  // pintaban igual en una ferretería. En un día sin ventas la tarjeta muestra su
+  // estado vacío, coherente con que el resto del panel también es "de hoy".
   const top = useMemo(() => {
     const by = new Map<string, { name: string; sku: string; units: number; total: number }>();
-    for (const s of sales) {
-      if (s.status !== "COMPLETED") continue;
+    for (const s of kpi.todays) {
       for (const l of s.lines || []) {
         const k = l.skuId || l.skuCode;
         const cur = by.get(k) || { name: l.productName, sku: l.skuCode, units: 0, total: 0 };
@@ -107,7 +119,7 @@ export default function DashboardPage() {
       }
     }
     return [...by.values()].sort((a, b) => b.units - a.units).slice(0, 5);
-  }, [sales]);
+  }, [kpi.todays]);
 
   return (
     <div className="mx-auto w-full max-w-[1320px]">
