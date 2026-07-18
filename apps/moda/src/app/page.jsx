@@ -1528,13 +1528,12 @@ function AboutPanel(){
     <>
       <SectionTitle t="Acerca de"/>
       <div className="flex items-center gap-4 py-2">
-        {/* ▼▼ LOGO mrtpvrest — placeholder temporal. Sustituir por
-            <img src="/mrtpvrest-logo.png" alt="mrtpvrest" className="h-9" /> cuando
-            llegue el logo definitivo (PNG en apps/moda/public/). ▼▼ */}
-        <div className="h-12 w-12 shrink-0 grid place-items-center rounded-xl bg-surf border border-line text-[10px] font-bold text-ink-300 select-none">mrtpv</div>
-        {/* ▲▲ fin placeholder logo ▲▲ */}
+        {/* Logo en pildora oscura (el PNG trae su fondo negro). */}
+        <div className="shrink-0 rounded-xl px-3 py-2.5" style={{ background:"#0a090a" }}>
+          <img src="/mrtpv-logo.png" alt="MRTPV Retail" className="h-8 w-auto block"/>
+        </div>
         <div>
-          <div className="text-[15px] font-bold tracking-tight text-ink-900">MRT<span className="text-brand-600">PV</span> <span className="text-ink-500 font-semibold">Retail</span></div>
+          <div className="text-[13px] font-semibold text-ink-500">Punto de venta</div>
           <div className="text-[12px] text-ink-400 tnum">Versión {APP_VERSION}</div>
         </div>
       </div>
@@ -1617,11 +1616,12 @@ function VersionBadge({ ota }){
   const s = OTA_UI[ota?.status];
   return (
     <div className="mt-5 flex flex-col items-center gap-2">
-      {/* ▼▼ LOGO mrtpvrest — placeholder temporal. Cuando llegue el logo definitivo:
-          reemplazar este bloque por  <img src="/mrtpvrest-logo.png" alt="mrtpvrest"
-          className="h-5 opacity-70" />  (el PNG va en apps/moda/public/). ▼▼ */}
-      <div className="text-[13px] font-bold tracking-tight text-ink-300 select-none" aria-label="mrtpvrest">mrtpvrest</div>
-      {/* ▲▲ fin placeholder logo ▲▲ */}
+      {/* Logo sobre pildora oscura: el PNG trae fondo negro propio, asi que la
+          pildora del mismo tono lo enmarca sin bordes duros sobre el fondo claro
+          — coherente con el sidebar oscuro del admin. */}
+      <div className="rounded-xl px-2.5 py-1.5" style={{ background:"#0a090a" }}>
+        <img src="/mrtpv-logo.png" alt="MRTPV Retail" className="h-6 w-auto block"/>
+      </div>
       <div className="text-[11px] text-ink-400 tnum">MRTPV Retail v{APP_VERSION}</div>
       {s && (
         <div className="flex items-center gap-1.5 text-[11px] text-ink-400">
