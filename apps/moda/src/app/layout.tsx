@@ -2,7 +2,7 @@ import "./globals.css";
 import type { ReactNode } from "react";
 
 export const metadata = {
-  title: "MODA+ · Smart Retail Flow",
+  title: "MRTPV Retail · Smart Retail Flow",
   description: "TPV retail para tiendas de ropa",
 };
 

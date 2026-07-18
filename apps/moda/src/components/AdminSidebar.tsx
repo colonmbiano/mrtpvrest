@@ -65,7 +65,7 @@ export default function AdminSidebar({ onNavigate }: { onNavigate?: () => void }
       <div className="flex items-center gap-3 px-5 py-5">
         <span className="grid h-10 w-10 place-items-center rounded-xl text-white" style={{ background: "var(--brand-primary)" }}><ShoppingBag size={20} strokeWidth={2.2} /></span>
         <span>
-          <span className="block text-[17px] font-extrabold leading-none tracking-tight" style={{ fontFamily: "var(--font-syne), Syne, sans-serif" }}>MODA<span style={{ color: "var(--brand-primary)" }}>+</span></span>
+          <span className="block text-[17px] font-extrabold leading-none tracking-tight" style={{ fontFamily: "var(--font-syne), Syne, sans-serif" }}>MRT<span style={{ color: "var(--brand-primary)" }}>PV</span></span>
           <span className="mt-0.5 block text-[11px] font-semibold text-[#94a3b8]">Admin <span className="text-[#cbd5e1]">Retail</span></span>
         </span>
       </div>

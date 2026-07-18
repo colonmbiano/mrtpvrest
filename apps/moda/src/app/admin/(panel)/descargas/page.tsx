@@ -23,7 +23,7 @@ const DEVICES = [
 export default function DescargasPage() {
   return (
     <div className="mx-auto w-full max-w-[1100px]">
-      <AdminTopbar title="Descargar caja" subtitle="Instala MODA+ en tu computadora o dispositivo móvil para comenzar a vender." />
+      <AdminTopbar title="Descargar caja" subtitle="Instala MRTPV Retail en tu computadora o dispositivo móvil para comenzar a vender." />
 
       <div className="grid gap-4 md:grid-cols-2">
         {DOWNLOADS.map((d) => {

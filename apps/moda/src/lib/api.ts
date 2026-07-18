@@ -1,4 +1,4 @@
-// Cliente HTTP de MODA+. Adjunta Authorization (JWT del empleado) + cabeceras de
+// Cliente HTTP de MRTPV Retail. Adjunta Authorization (JWT del empleado) + cabeceras de
 // tenant en cada request, y normaliza errores (status + payload) para la UI.
 
 import { getApiUrl } from "./config";

@@ -1,4 +1,4 @@
-// Capa de dominio retail de MODA+: habla con /api/retail/v1 y /api/employees/login,
+// Capa de dominio retail de MRTPV Retail: habla con /api/retail/v1 y /api/employees/login,
 // y traduce el catálogo del backend a la forma de producto que consume la UI.
 
 import { apiFetch } from "./api";
@@ -344,7 +344,7 @@ export function linkLocation(w: Workspace): void {
   clearToken();
 }
 
-// Registro self-serve de una tienda nueva desde MODA+. Crea cuenta (tenant +
+// Registro self-serve de una tienda nueva desde MRTPV Retail. Crea cuenta (tenant +
 // restaurante + sucursal "Principal" + admin con PIN 1234), la marca RETAIL y
 // liga el dispositivo. El cajero entra luego con PIN 1234 (cambiable en Ajustes).
 export async function registerTenant(input: {
@@ -470,7 +470,7 @@ export async function createSale(input: {
       discount: input.discount,
       tax: input.tax,
       priceListId: input.priceListId || undefined,
-      device: { deviceKey: getDeviceKey(), platform: "WINDOWS", name: "Caja MODA+" },
+      device: { deviceKey: getDeviceKey(), platform: "WINDOWS", name: "Caja MRTPV Retail" },
     }),
   });
 }

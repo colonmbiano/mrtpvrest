@@ -1,4 +1,4 @@
-// Resolución de la URL del backend para MODA+.
+// Resolución de la URL del backend para MRTPV Retail.
 // Orden: override en localStorage (configurado en /login) → NEXT_PUBLIC_API_URL
 // (horneado en build) → fallback producción. Mismo criterio https-only del TPV:
 // http solo se permite contra hosts privados (dev / LAN); todo lo demás se fuerza a https.

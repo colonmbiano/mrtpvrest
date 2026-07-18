@@ -1,4 +1,4 @@
-// Layout raíz del admin (dueño) en /admin. Define los tokens verdes MODA+ en un
+// Layout raíz del admin (dueño) en /admin. Define los tokens verdes de MRTPV Retail en un
 // scope `.moda-admin` (la app de caja usa otra paleta) y NO mete guard — el guard
 // y el shell viven en el layout del grupo (panel) para que /admin/login quede
 // fuera de la protección.
@@ -8,7 +8,7 @@ export default function AdminRootLayout({ children }: { children: React.ReactNod
     <div className="moda-admin min-h-screen">
       <style>{`
         .moda-admin {
-          /* Tema CLARO premium "retail" (Shopify/Stripe/Linear) — acento verde MODA+. */
+          /* Tema CLARO premium "retail" (Shopify/Stripe/Linear) — acento verde de MRTPV Retail. */
           --bg:#f6f8fa; --surf-1:#ffffff; --surf-2:#f1f5f9; --surf-3:#e9eef3;
           --bd-1:#e2e8f0; --bd-2:#cbd5e1; --border:var(--bd-1);
           --surf:var(--surf-1); --surf2:var(--surf-2);

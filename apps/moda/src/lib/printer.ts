@@ -1,4 +1,4 @@
-// Impresión térmica ESC/POS de MODA+ (recibo 80mm + etiqueta de SKU con código
+// Impresión térmica ESC/POS de MRTPV Retail (recibo 80mm + etiqueta de SKU con código
 // de barras CODE128). Despacha por plataforma:
 //   · Windows (Tauri) → comando Rust `print_escpos` (TCP puerto 9100).
 //   · Android (Capacitor) → plugin capacitor-tcp-socket (TCP 9100).
