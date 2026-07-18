@@ -475,6 +475,45 @@ export async function createSale(input: {
   });
 }
 
+// ── Devoluciones ─────────────────────────────────────────────────────────────
+export interface SaleLine {
+  id: string; skuId: string; skuCode: string; productName: string;
+  variantLabel?: string | null;
+  quantity: number | string; unitPrice: number | string; subtotal: number | string;
+}
+export interface SaleRow {
+  id: string; folio: string; total: number | string; status: string; createdAt: string;
+  customerName?: string | null;
+  lines?: SaleLine[];
+  payments?: { method: string; amount: number | string }[];
+}
+
+/** Ventas recientes de la sucursal, con sus líneas. El backend topa en 200. */
+export function fetchSales(limit = 40): Promise<SaleRow[]> {
+  const { locationId } = getTenant();
+  const qs = new URLSearchParams();
+  if (locationId) qs.set("locationId", locationId);
+  qs.set("limit", String(limit));
+  return apiFetch(`/api/retail/v1/sales?${qs.toString()}`);
+}
+
+/**
+ * Devuelve una venta COMPLETA. El backend NO hace devolución por línea: pasa la
+ * venta de COMPLETED a RETURNED y repone el stock de todas sus líneas
+ * (`reverseRetailSale` en retail.routes.js). Ofrecer "devolver estos 2 de 5
+ * artículos" en la UI sería prometer algo que el servidor no puede cumplir.
+ *
+ * Es de un solo tiro: el flip de estado es condicional, así que un segundo
+ * intento (doble clic, reintento) recibe 409 en vez de reponer stock dos veces.
+ * Exige rol de administrador.
+ */
+export function returnSale(saleId: string, notes?: string): Promise<{ sale: SaleRow }> {
+  return apiFetch(`/api/retail/v1/sales/${saleId}/return`, {
+    method: "POST",
+    body: JSON.stringify({ notes }),
+  });
+}
+
 // Mapeo del método de pago de la UI (español) al enum del backend.
 export function toPaymentMethod(label: string): SalePaymentInput["method"] {
   const l = (label || "").toLowerCase();
