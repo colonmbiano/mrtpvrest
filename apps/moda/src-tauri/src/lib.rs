@@ -1,4 +1,4 @@
-// Punto de entrada de la app de escritorio (Windows) de MODA+.
+// Punto de entrada de la app de escritorio (Windows) de MRTPV Retail.
 
 use std::io::Write;
 use std::net::TcpStream;
@@ -31,5 +31,5 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![print_escpos])
         .run(tauri::generate_context!())
-        .expect("error al ejecutar MODA+ Retail");
+        .expect("error al ejecutar MRTPV Retail");
 }

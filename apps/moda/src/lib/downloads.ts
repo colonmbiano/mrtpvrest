@@ -40,8 +40,10 @@ export const DOWNLOADS: DownloadTarget[] = [
     label: "Windows (PC / caja)",
     version: WINDOWS_VERSION,
     size: "~3.6 MB",
-    // El asset lleva la versión en el nombre y el "+" va escapado (%2B).
-    url: `${REPO}/moda-v${WINDOWS_VERSION}/MODA%2B.Retail_${WINDOWS_VERSION}_x64-setup.exe`,
+    // El asset lo nombra tauri-action con el productName ("MRTPV Retail"); GitHub
+    // reemplaza el espacio por un punto al subirlo → "MRTPV.Retail_<ver>_x64-setup.exe".
+    // (Antes era "MODA+.Retail…" con el "+" escapado; el rebrand quitó el "+").
+    url: `${REPO}/moda-v${WINDOWS_VERSION}/MRTPV.Retail_${WINDOWS_VERSION}_x64-setup.exe`,
     hint: "Instalador .exe. Doble clic y listo. Se actualiza sola.",
   },
   {
