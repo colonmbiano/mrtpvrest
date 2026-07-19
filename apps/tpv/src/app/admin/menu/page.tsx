@@ -103,6 +103,9 @@ type ProductForm = {
 type Section = "products" | "categories" | "variants";
 type EditorTab = "basic" | "variants" | "extras" | "modifiers";
 
+// Id sintético para las variantes/extras que aún no existen en el servidor.
+const PENDING_OPTION_PREFIX = "pending:";
+
 const emptyForm: ProductForm = {
   name: "",
   description: "",
@@ -155,6 +158,16 @@ export default function MenuEditorPage() {
   const [newOption, setNewOption] = useState({ name: "", price: "" });
   const [newVariant, setNewVariant] = useState({ name: "", price: "" });
   const [newComplement, setNewComplement] = useState({ name: "", price: "" });
+  // Grupos de variantes aplicados al abrir el editor. Decide si el guardado debe
+  // re-sincronizar plantillas: el backend borra TODAS las variantes cada vez que
+  // variantTemplateIds viaja en el body, así que solo lo mandamos cuando el
+  // producto usa grupos (ahora o antes) y las directas sobreviven al guardar.
+  const [initialTemplateIds, setInitialTemplateIds] = useState<string[]>([]);
+  // Variantes/extras capturados ANTES de que el producto exista: sus endpoints
+  // necesitan un menuItemId, así que se quedan en memoria y se crean justo
+  // después del POST del producto.
+  const [pendingVariants, setPendingVariants] = useState<Array<{ name: string; price: number }>>([]);
+  const [pendingComplements, setPendingComplements] = useState<Array<{ name: string; price: number }>>([]);
   const [scanState, setScanState] = useState<{ active: boolean; label: string; error?: string }>({
     active: false,
     label: "",
@@ -230,6 +243,10 @@ export default function MenuEditorPage() {
     setEditingItem(item || null);
     setEditorTab("basic");
     setImageFile(null);
+    setPendingVariants([]);
+    setPendingComplements([]);
+    setNewVariant({ name: "", price: "" });
+    setNewComplement({ name: "", price: "" });
     if (item) {
       setForm({
         name: item.name || "",
@@ -249,15 +266,19 @@ export default function MenuEditorPage() {
         variantMinSelection: item.variantMinSelection ?? 0,
         variantMaxSelection: item.variantMaxSelection ?? 0,
       });
+      setInitialTemplateIds(item.variantTemplates?.map((tpl) => tpl.id) || []);
       api.get(`/api/menu/items/${item.id}`).then(({ data }) => {
         setEditingItem(data);
+        const tplIds: string[] = data.variantTemplates?.map((tpl: { id: string }) => tpl.id) || [];
         setForm((prev) => ({
           ...prev,
-          variantTemplateIds: data.variantTemplates?.map((tpl: { id: string }) => tpl.id) || prev.variantTemplateIds,
+          variantTemplateIds: data.variantTemplates ? tplIds : prev.variantTemplateIds,
         }));
+        if (data.variantTemplates) setInitialTemplateIds(tplIds);
       }).catch(() => undefined);
     } else {
       setForm({ ...emptyForm, categoryId: categories[0]?.id || "" });
+      setInitialTemplateIds([]);
     }
     setEditorOpen(true);
   }
@@ -274,8 +295,15 @@ export default function MenuEditorPage() {
     setSaving(true);
     try {
       const imageUrl = imageFile ? await uploadMenuImage(imageFile) : form.imageUrl.trim();
+      // El backend re-sincroniza (borra y recrea) TODAS las variantes a partir de
+      // variantTemplateIds cada vez que el campo viaja en el body. Si el producto
+      // no usa grupos (ni ahora ni antes), lo omitimos para no disparar ese
+      // borrado: las variantes directas viven en sus propios endpoints.
+      const { variantTemplateIds, ...restForm } = form;
+      const usesTemplates = variantTemplateIds.length > 0 || initialTemplateIds.length > 0;
       const payload = {
-        ...form,
+        ...restForm,
+        ...(usesTemplates ? { variantTemplateIds } : {}),
         name: form.name.trim(),
         description: form.description.trim(),
         imageUrl,
@@ -286,9 +314,23 @@ export default function MenuEditorPage() {
         await api.put(`/api/menu/items/${editingItem.id}`, payload);
         toast.success("Producto actualizado");
       } else {
-        await api.post("/api/menu/items", payload);
-        toast.success("Producto creado");
+        const { data: created } = await api.post("/api/menu/items", payload);
+        // Lo capturado antes de existir el producto se crea ahora. Las variantes
+        // van después del sync de plantillas para que ese sync no las pise.
+        for (const variant of pendingVariants) {
+          await api.post(`/api/menu/${created.id}/variants`, variant);
+        }
+        for (const complement of pendingComplements) {
+          await api.post(`/api/menu/items/${created.id}/complements`, complement);
+        }
+        const extras = [
+          pendingVariants.length ? `${pendingVariants.length} variante(s)` : "",
+          pendingComplements.length ? `${pendingComplements.length} extra(s)` : "",
+        ].filter(Boolean);
+        toast.success(extras.length ? `Producto creado con ${extras.join(" y ")}` : "Producto creado");
       }
+      setPendingVariants([]);
+      setPendingComplements([]);
       setEditorOpen(false);
       setEditingItem(null);
       await fetchData();
@@ -429,33 +471,49 @@ export default function MenuEditorPage() {
   }
 
   async function addVariant() {
-    if (!editingItem?.id) return toast.error("Guarda el producto primero");
     if (!newVariant.name.trim()) return;
-    const { data } = await api.post(`/api/menu/${editingItem.id}/variants`, {
-      name: newVariant.name.trim(),
-      price: parseFloat(newVariant.price) || 0,
-    });
+    const variant = { name: newVariant.name.trim(), price: parseFloat(newVariant.price) || 0 };
+    // Producto todavía sin id: se acumulan y se crean al guardar (ver saveProduct).
+    if (!editingItem?.id) {
+      setPendingVariants((prev) => [...prev, variant]);
+      setNewVariant({ name: "", price: "" });
+      return;
+    }
+    const { data } = await api.post(`/api/menu/${editingItem.id}/variants`, variant);
     setEditingItem((prev) => prev ? { ...prev, variants: [...(prev.variants || []), data] } : prev);
     setNewVariant({ name: "", price: "" });
   }
 
   async function deleteVariant(id: string) {
+    if (id.startsWith(PENDING_OPTION_PREFIX)) {
+      const index = Number(id.slice(PENDING_OPTION_PREFIX.length));
+      setPendingVariants((prev) => prev.filter((_, i) => i !== index));
+      return;
+    }
     await api.delete(`/api/menu/variants/${id}`);
     setEditingItem((prev) => prev ? { ...prev, variants: prev.variants?.filter((variant) => variant.id !== id) } : prev);
   }
 
   async function addComplement() {
-    if (!editingItem?.id) return toast.error("Guarda el producto primero");
     if (!newComplement.name.trim()) return;
-    const { data } = await api.post(`/api/menu/items/${editingItem.id}/complements`, {
-      name: newComplement.name.trim(),
-      price: parseFloat(newComplement.price) || 0,
-    });
+    const complement = { name: newComplement.name.trim(), price: parseFloat(newComplement.price) || 0 };
+    // Producto todavía sin id: se acumulan y se crean al guardar (ver saveProduct).
+    if (!editingItem?.id) {
+      setPendingComplements((prev) => [...prev, complement]);
+      setNewComplement({ name: "", price: "" });
+      return;
+    }
+    const { data } = await api.post(`/api/menu/items/${editingItem.id}/complements`, complement);
     setEditingItem((prev) => prev ? { ...prev, complements: [...(prev.complements || []), data] } : prev);
     setNewComplement({ name: "", price: "" });
   }
 
   async function deleteComplement(id: string) {
+    if (id.startsWith(PENDING_OPTION_PREFIX)) {
+      const index = Number(id.slice(PENDING_OPTION_PREFIX.length));
+      setPendingComplements((prev) => prev.filter((_, i) => i !== index));
+      return;
+    }
     await api.delete(`/api/menu/items/complements/${id}`);
     setEditingItem((prev) => prev ? { ...prev, complements: prev.complements?.filter((comp) => comp.id !== id) } : prev);
   }
@@ -817,8 +875,16 @@ export default function MenuEditorPage() {
                   </div>
                   <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-4">
                     <PanelTitle title="Variantes directas" desc="Opciones puntuales para este producto." />
-                    <InlineAdder name={newVariant.name} price={newVariant.price} setValue={setNewVariant} onAdd={addVariant} disabled={!editingItem?.id} />
-                    <ItemOptionList options={editingItem?.variants || []} onDelete={deleteVariant} />
+                    <InlineAdder name={newVariant.name} price={newVariant.price} setValue={setNewVariant} onAdd={addVariant} />
+                    <ItemOptionList
+                      options={editingItem?.id
+                        ? (editingItem.variants || [])
+                        : pendingVariants.map((variant, i) => ({ ...variant, id: `${PENDING_OPTION_PREFIX}${i}` }))}
+                      onDelete={deleteVariant}
+                    />
+                    {!editingItem?.id && pendingVariants.length > 0 && (
+                      <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Se crearan al guardar el producto</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -826,8 +892,16 @@ export default function MenuEditorPage() {
               {editorTab === "extras" && (
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <PanelTitle title="Extras y toppings" desc="Adicionales con precio extra seleccionables al vender." />
-                  <InlineAdder name={newComplement.name} price={newComplement.price} setValue={setNewComplement} onAdd={addComplement} disabled={!editingItem?.id} />
-                  <ItemOptionList options={editingItem?.complements || []} onDelete={deleteComplement} />
+                  <InlineAdder name={newComplement.name} price={newComplement.price} setValue={setNewComplement} onAdd={addComplement} />
+                  <ItemOptionList
+                    options={editingItem?.id
+                      ? (editingItem.complements || [])
+                      : pendingComplements.map((complement, i) => ({ ...complement, id: `${PENDING_OPTION_PREFIX}${i}` }))}
+                    onDelete={deleteComplement}
+                  />
+                  {!editingItem?.id && pendingComplements.length > 0 && (
+                    <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Se crearan al guardar el producto</p>
+                  )}
                 </div>
               )}
 
@@ -1073,18 +1147,17 @@ function PanelTitle({ title, desc }: { title: string; desc: string }) {
   );
 }
 
-function InlineAdder({ name, price, setValue, onAdd, disabled }: {
+function InlineAdder({ name, price, setValue, onAdd }: {
   name: string;
   price: string;
   setValue: (value: { name: string; price: string }) => void;
   onAdd: () => void;
-  disabled?: boolean;
 }) {
   return (
     <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_110px_auto]">
-      <input value={name} onChange={(e) => setValue({ name: e.target.value, price })} placeholder={disabled ? "Guarda primero" : "Nombre"} disabled={disabled} className="h-12 rounded-2xl border border-white/10 bg-[var(--bg)] px-4 text-sm font-bold outline-none disabled:opacity-40" />
-      <input value={price} onChange={(e) => setValue({ name, price: e.target.value })} type="number" placeholder="$0" disabled={disabled} className="h-12 rounded-2xl border border-white/10 bg-[var(--bg)] px-4 text-sm font-bold outline-none disabled:opacity-40" />
-      <button type="button" onClick={onAdd} disabled={disabled || !name.trim()} className="h-12 rounded-2xl bg-iris-500 px-5 text-xs font-black uppercase text-iris-fg disabled:opacity-40">Agregar</button>
+      <input value={name} onChange={(e) => setValue({ name: e.target.value, price })} placeholder="Nombre" className="h-12 rounded-2xl border border-white/10 bg-[var(--bg)] px-4 text-sm font-bold outline-none" />
+      <input value={price} onChange={(e) => setValue({ name, price: e.target.value })} type="number" placeholder="$0" className="h-12 rounded-2xl border border-white/10 bg-[var(--bg)] px-4 text-sm font-bold outline-none" />
+      <button type="button" onClick={onAdd} disabled={!name.trim()} className="h-12 rounded-2xl bg-iris-500 px-5 text-xs font-black uppercase text-iris-fg disabled:opacity-40">Agregar</button>
     </div>
   );
 }
