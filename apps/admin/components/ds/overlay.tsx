@@ -55,11 +55,16 @@ function Overlay({ onClose, children }: { onClose: () => void; children: ReactNo
    */
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-      <button
-        type="button"
-        aria-label="Cerrar"
-        onClick={onClose}
-        className="absolute inset-0 cursor-default"
+      {/*
+       * Backdrop inerte a proposito: casi todos los modales del panel son
+       * formularios y un click fuera accidental borraba lo capturado. Para
+       * cerrar quedan la X del encabezado y Escape. Es un <div aria-hidden>
+       * y no un boton porque un control con nombre accesible "Cerrar" que no
+       * cierra nada seria mentirle al lector de pantalla.
+       */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0"
         style={{ background: "rgba(11,18,32,.55)", backdropFilter: "blur(2px)" }}
       />
       {children}
