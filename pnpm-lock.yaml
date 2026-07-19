@@ -91,10 +91,10 @@ importers:
         version: 19.2.3(@types/react@19.2.17)
       eslint:
         specifier: ^9.21.0
-        version: 9.39.4(jiti@1.21.7)
+        version: 9.39.4(jiti@2.7.0)
       eslint-config-next:
         specifier: 16.2.9
-        version: 16.2.9(@typescript-eslint/parser@8.61.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
+        version: 16.2.9(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)
       postcss:
         specifier: 8.5.10
         version: 8.5.10
@@ -628,6 +628,12 @@ importers:
       cross-env:
         specifier: ^10.1.0
         version: 10.1.0
+      eslint:
+        specifier: ^9.21.0
+        version: 9.39.4(jiti@1.21.7)
+      eslint-config-next:
+        specifier: 16.2.9
+        version: 16.2.9(@typescript-eslint/parser@8.61.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
       postcss:
         specifier: 8.5.10
         version: 8.5.10

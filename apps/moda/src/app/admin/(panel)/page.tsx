@@ -10,8 +10,6 @@ import { ADMIN_KEYS } from "@/lib/admin-auth";
 import { money, num } from "@/lib/admin-format";
 import { StatCard, DataCard, ActionTile, SalesAreaChart } from "@/components/admin/atoms";
 import AdminTopbar from "@/components/admin/AdminTopbar";
-type Sku = { stockBalances?: { qty: number }[] };
-type Product = { skus: Sku[] };
 type StockRow = { id: string; qty: number; minQty: number; sku: { product: { name: string } } };
 // `lines` viene en GET /sales (include: { lines: true }) con productName y skuCode
 // ya desnormalizados — el top de productos sale de ahí, sin pedir el catálogo.

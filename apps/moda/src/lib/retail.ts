@@ -458,8 +458,17 @@ export async function createSale(input: {
   /** Lista de precios con la que se cotizó. El backend la re-resuelve y rechaza
    *  la venta si su total no coincide con los pagos. */
   priceListId?: string | null;
+  /** Llave de idempotencia del INTENTO de cobro. El backend dedupea por
+   *  (restaurantId, clientSaleId) y devuelve la venta existente con
+   *  `idempotent:true`. Pasarla desde el checkout — estable mientras no cambie
+   *  el carrito — hace que un reintento tras un timeout de red no cobre dos
+   *  veces: sin ella se minaba un uuid nuevo por llamada y el dedupe del
+   *  backend nunca podía dispararse. */
+  clientSaleId?: string;
 }): Promise<{ sale: { id: string; folio: string; total: number | string }; idempotent: boolean }> {
-  const clientSaleId = `moda-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+  const clientSaleId =
+    input.clientSaleId ||
+    `moda-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
   return apiFetch("/api/retail/v1/sales", {
     method: "POST",
     body: JSON.stringify({
