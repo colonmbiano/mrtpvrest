@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from "react";
 import * as Retail from "@/lib/retail";
+import * as Outbox from "@/lib/outbox";
 import { getApiUrl, setApiUrl } from "@/lib/config";
 import { getTenant, setTenant, getGiro } from "@/lib/tenant";
 import { DEFAULT_GIRO, giroConfig, sizesFor, attrLabel, isBulkUnit, canEnterByPackage, packagesToBase, baseToPackages, round3 } from "@/lib/giro";
@@ -65,7 +66,7 @@ function Icon({ n, s = 18, c = "currentColor", sw = 1.9, cls = "" }) {
   );
 }
 
-/* ---------------- helpers + demo data ---------------- */
+/* ---------------- helpers ---------------- */
 const mx = (n) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n || 0);
 // Precio unitario de una línea (lista del cliente + escalón por cantidad) y su
 // importe. El POS DEBE cotizar lo mismo que cobra el backend: POST /sales
@@ -96,72 +97,9 @@ const GIROS_UI = {
 };
 const swatch = { Beige:"#d8c4ab", Blanco:"#f1f1ee", "Verde Olivo":"#5a6b3e", Negro:"#23262a", Gris:"#9aa0a3", "Azul Claro":"#9db7d4", Camel:"#b08456", Perla:"#e8e3d8", Canela:"#9a5b33" };
 
-const PRODUCTS = [
-  { id:"p1", name:"Camisa Lino Oversize", sku:"SKU-CAM-LIN-001", cat:"Mujer", price:899, cost:360, season:"Primavera", prov:"Textiles del Valle",
-    desc:"Camisa oversize de lino con cuello clásico, manga larga con puño y botón. Corte relajado.", detail:"100% Lino · Hecho en México",
-    colors:["Beige","Blanco","Verde Olivo","Negro"], color:"Beige", size:"M", tone:"#efe7da",
-    matrix:{ Beige:[6,12,24,18,8], Blanco:[4,8,16,12,6], "Verde Olivo":[3,6,12,8,4], Negro:[2,4,8,6,3] } },
-  { id:"p2", name:"Pantalón Sastre Recto", sku:"SKU-PAN-SAS-002", cat:"Mujer", price:1199, cost:520, season:"Primavera", prov:"Atelier MX",
-    desc:"Pantalón de vestir corte recto, pinzas frontales y caída fluida.", detail:"Poliéster-viscosa · Hecho en México",
-    colors:["Negro","Gris","Beige"], color:"Negro", size:"32", tone:"#e7e8ea",
-    matrix:{ Negro:[5,9,11,7,3], Gris:[4,7,9,6,2], Beige:[2,5,6,4,1] } },
-  { id:"p3", name:"Bláser Cruzado", sku:"SKU-BLA-CRU-003", cat:"Mujer", price:1599, cost:740, season:"Otoño", prov:"Atelier MX",
-    desc:"Bláser cruzado estructurado con solapa de pico y botones forrados.", detail:"Lana-mezcla · Forro satinado",
-    colors:["Gris","Negro","Camel"], color:"Gris", size:"L", tone:"#e9eaec",
-    matrix:{ Gris:[3,6,9,7,2], Negro:[2,5,8,6,3], Camel:[1,3,5,4,2] } },
-  { id:"p4", name:"Vestido Midi Satén", sku:"SKU-VES-MID-004", cat:"Mujer", price:1890, cost:820, season:"Verano", prov:"Seda & Co.",
-    desc:"Vestido midi de satén con tirantes ajustables y abertura lateral.", detail:"Satén de poliéster · Hecho en México",
-    colors:["Beige","Negro","Verde Olivo"], color:"Beige", size:"M", tone:"#efe6d8",
-    matrix:{ Beige:[4,7,10,6,3], Negro:[3,6,9,5,2], "Verde Olivo":[2,4,6,4,1] } },
-  { id:"p5", name:"Jeans Straight Fit", sku:"SKU-JEA-STR-036", cat:"Mujer", price:1450, cost:560, season:"Continua", prov:"Denim House",
-    desc:"Jeans de mezclilla rígida, corte recto y tiro medio.", detail:"98% Algodón · 2% Elastano",
-    colors:["Azul Claro","Negro"], color:"Azul Claro", size:"36", tone:"#dde6f0",
-    matrix:{ "Azul Claro":[5,8,12,9,4], Negro:[3,6,10,7,3] } },
-  { id:"p6", name:"Bolso Piel Luxe", sku:"SKU-BOL-PIE-002", cat:"Accesorios", price:2650, cost:1180, season:"Continua", prov:"Marroquinería Fina",
-    desc:"Bolso estructurado de piel genuina con asa superior y bandolera.", detail:"Piel vacuna · Herrajes dorados",
-    colors:["Camel","Negro"], color:"Camel", size:"Única", tone:"#e9d8c2",
-    matrix:{ Camel:[14], Negro:[9] } },
-  { id:"p7", name:"Top Tirantes Satinado", sku:"SKU-TOP-SAT-005", cat:"Mujer", price:399, cost:150, season:"Verano", prov:"Seda & Co.",
-    desc:"Top de tirantes en satén con escote en V.", detail:"Satén · Hecho en México",
-    colors:["Perla","Negro"], color:"Perla", size:"M", tone:"#efece2",
-    matrix:{ Perla:[8,12,15,9,5], Negro:[6,10,12,8,4] } },
-  { id:"p8", name:"Sandalia Tiras Finas", sku:"SKU-SAN-TIR-006", cat:"Calzado", price:799, cost:320, season:"Verano", prov:"Calzado Premium",
-    desc:"Sandalia de tacón medio con tiras finas.", detail:"Piel sintética · Tacón 6cm",
-    colors:["Beige","Negro"], color:"Beige", size:"25", tone:"#efe6d6",
-    matrix:{ Beige:[5,7,9,6,2], Negro:[4,6,8,5,2] } },
-  { id:"p9", name:"Cinturón Piel Canela", sku:"SKU-CIN-PIE-007", cat:"Accesorios", price:399, cost:140, season:"Continua", prov:"Marroquinería Fina",
-    desc:"Cinturón de piel con hebilla metálica.", detail:"Piel genuina",
-    colors:["Canela","Negro"], color:"Canela", size:"Única", tone:"#e6cdb2",
-    matrix:{ Canela:[20], Negro:[16] } },
-  { id:"p10", name:"Suéter Tejido Perla", sku:"SKU-SUE-TEJ-008", cat:"Mujer", price:1099, cost:430, season:"Otoño", prov:"Tejidos del Norte",
-    desc:"Suéter de punto fino, cuello redondo y manga caída.", detail:"Algodón-acrílico",
-    colors:["Perla","Gris"], color:"Perla", size:"M", tone:"#eeebe2",
-    matrix:{ Perla:[6,9,12,8,4], Gris:[5,8,10,7,3] } },
-];
 const totalStock = (p) => Object.values(p.matrix).reduce((a,r)=>a+r.reduce((x,y)=>x+y,0),0);
 
-const CUSTOMER = { name:"María Fernanda López", phone:"55 1234 5678", email:"maria.lopez@email.com",
-  since:"14/01/2023", pts:1280, level:"Oro", total:18450, count:23, avg:802.17, last:"10/05/2024",
-  note:"Prefiere tonos neutros y telas naturales. Interesada en nuevas colecciones de lino." };
 
-const CLIENTS = [
-  { name:CUSTOMER.name, init:"MF", phone:CUSTOMER.phone, email:CUSTOMER.email, since:CUSTOMER.since, pts:CUSTOMER.pts,
-    level:"Oro", total:CUSTOMER.total, count:CUSTOMER.count, avg:CUSTOMER.avg, last:CUSTOMER.last, note:CUSTOMER.note,
-    prefs:["Tallas M / S","Tonos neutros","Lino y algodón"],
-    history:[["VTA-000012345","10/05/2024",2,3327],["VTA-000011980","22/04/2024",1,899],["VTA-000011455","03/04/2024",4,5210]] },
-  { name:"Isabella Mendoza", init:"IM", phone:"55 2233 4455", email:"isa.mendoza@email.com", since:"08/03/2022",
-    pts:3140, level:"Platino", total:42300, count:51, avg:829.41, last:"12/05/2024",
-    note:"VIP. Compra colecciones completas cada temporada.", prefs:["Talla S","Negro y camel","Sastrería"],
-    history:[["VTA-000012402","12/05/2024",3,4890],["VTA-000012100","28/04/2024",5,8200],["VTA-000011700","10/04/2024",2,3100]] },
-  { name:"Valentina Ruiz", init:"VR", phone:"55 9988 7766", email:"vale.ruiz@email.com", since:"19/11/2023",
-    pts:480, level:"Plata", total:6200, count:9, avg:688.88, last:"02/05/2024",
-    note:"Cliente nueva, interesada en calzado.", prefs:["Talla 25","Sandalias","Verano"],
-    history:[["VTA-000012050","02/05/2024",2,1598]] },
-  { name:"Andrea Torres", init:"AT", phone:"55 4455 6677", email:"andrea.t@email.com", since:"14/07/2023",
-    pts:1620, level:"Oro", total:21800, count:27, avg:807.40, last:"08/05/2024",
-    note:"Prefiere recibir avisos de nueva colección.", prefs:["Talla L","Vestidos","Satén"],
-    history:[["VTA-000012310","08/05/2024",2,2680],["VTA-000011890","18/04/2024",1,1890]] },
-];
 
 // Roles con acceso total (dueño/encargado). El enforcement REAL de las mutaciones
 // sensibles vive en el backend; aquí el gate es de UI sobre el empleado logueado.
@@ -186,22 +124,17 @@ const PERM_LABEL = { apply_discount:"Aplicar descuento", override_price:"Cambiar
 const PermCtx = createContext(null);
 function usePerm(){ return useContext(PermCtx); }
 
-// Solo pantallas que leen datos REALES. Fuera del menú (el código sigue en el
-// archivo, con sus rutas, para retomarlas cuando tengan backend):
-//   · Clientes    — array CLIENTS fijo, con niveles Platino/Oro/Plata inventados.
-//   · Inventario  — maqueta sobre PRODUCTS[0], y encima una matriz talla×color
-//                   que no significa nada fuera de ropa. El stock real ya está
-//                   en Catálogo.
-//   · Apartados   — no existe modelo de apartados en la BD: no hay nada que leer.
-//   · Reportes    — cifras fijas sobre PRODUCTS.
-// Se pintaban como funciones del producto y se alcanzaban con una tecla; en una
-// ferretería enseñaban ropa.
+// Solo pantallas que leen datos REALES. Las maquetas que vivían aquí (Clientes,
+// Inventario, Apartados, Reportes) se BORRARON junto con el modo demostración:
+// corrían sobre arrays inventados —clientes con niveles Platino/Oro, cifras de
+// venta fijas, una matriz talla×color que no significa nada fuera de ropa— y a
+// un tenant real le enseñaban datos que no eran suyos. Cuando alguna tenga
+// backend se reescribe contra él; no se "reactiva".
 const NAV = [
   ["venta","Venta","cart"],["catalogo","Catálogo","tag"],
   ["devoluciones","Devoluciones","return"],
   ["caja","Caja","wallet"],["config","Configuración","gear"],
 ];
-// Sin F6 "Apartar": llevaba a la maqueta de apartados, que no tiene backend.
 const SHORTCUTS = [["F1","Nueva venta","plus"],["F2","Buscar","search"],["F5","Cobrar","card"],
   ["F7","Devolución","return"],["F8","Abrir cajón","wallet"]];
 
@@ -212,9 +145,18 @@ function TitleBar({ screen }) {
     <div className="hidden lg:flex items-center justify-between h-9 px-3 bg-titlebar border-b border-line select-none">
       <div className="text-[12px] text-ink-500 font-medium">MRTPV Retail <span className="text-ink-400">•</span> {screen}</div>
       <div className="flex items-center gap-2 text-ink-400">
-        <span className={"flex items-center gap-1.5 text-[11px] px-2 h-6 rounded-full border "+(data.online?"border-brand-200 text-brand-700 bg-brand-50":"border-line text-ink-400")} title={data.online?"Conectado al backend":"Sin conexión · modo demo"}>
-          <span className="w-1.5 h-1.5 rounded-full" style={{background:data.online?"#16a34a":"#cbd5cf"}}/>{data.online?(data.session?.name||"En línea"):"Demo"}</span>
-        {(data.session||data.demo)&&<button onClick={()=>data.logout&&data.logout()} title="Cerrar sesión" className="text-[11px] px-2 h-6 rounded-full border border-line hover:bg-black/5 text-ink-500">Salir</button>}
+        <span className={"flex items-center gap-1.5 text-[11px] px-2 h-6 rounded-full border "+(data.online?"border-brand-200 text-brand-700 bg-brand-50":"border-line text-ink-400")} title={data.online?"Conectado al backend":"Sin conexión con el servidor"}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{background:data.online?"#16a34a":"#cbd5cf"}}/>{data.online?(data.session?.name||"En línea"):"Sin conexión"}</span>
+        {/* Ventas cobradas que aún no llegan al servidor. Se muestra siempre que
+            haya alguna: es dinero que el corte del backend todavía no conoce. */}
+        {data.outbox?.pending>0&&<button onClick={()=>data.flushOutbox&&data.flushOutbox()}
+          title="Ventas cobradas pendientes de enviar. Clic para reintentar ahora."
+          className="flex items-center gap-1.5 text-[11px] px-2 h-6 rounded-full border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100">
+          <Icon n="clock" s={12}/><span className="tnum font-semibold">{data.outbox.pending}</span> por enviar</button>}
+        {data.outbox?.rejected>0&&<span title="El servidor rechazó estas ventas. Requieren revisión manual."
+          className="flex items-center gap-1.5 text-[11px] px-2 h-6 rounded-full border border-red-300 bg-red-50 text-red-700">
+          <Icon n="alert" s={12}/><span className="tnum font-semibold">{data.outbox.rejected}</span> rechazada(s)</span>}
+        {data.session&&<button onClick={()=>data.logout&&data.logout()} title="Cerrar sesión" className="text-[11px] px-2 h-6 rounded-full border border-line hover:bg-black/5 text-ink-500">Salir</button>}
         <button className="w-7 h-7 grid place-items-center rounded hover:bg-black/5"><Icon n="min" s={14}/></button>
         <button className="w-7 h-7 grid place-items-center rounded hover:bg-black/5"><Icon n="max" s={12}/></button>
         <button className="w-7 h-7 grid place-items-center rounded hover:bg-red-500 hover:text-white"><Icon n="x" s={14}/></button>
@@ -224,7 +166,7 @@ function TitleBar({ screen }) {
 }
 function TopBar({ query, setQuery, theme, setTheme, setNavOpen }) {
   const data=useData();
-  const name=data.session?.name || (data.demo?"Demostración":"Invitado");
+  const name=data.session?.name || "Invitado";
   const initials=((name.match(/\b\w/g)||[]).join("").slice(0,2)||"··").toUpperCase();
   const [t]=useState("11:36 AM");
   return (
@@ -247,7 +189,7 @@ function TopBar({ query, setQuery, theme, setTheme, setNavOpen }) {
           <div className="w-9 h-9 rounded-full bg-brand-100 grid place-items-center text-brand-700 font-semibold text-sm">{initials}</div>
           <div className="leading-tight">
             <div className="text-[13px] font-semibold text-ink-900">{name}</div>
-            <div className="text-[11px] text-ink-400">{data.session?.role?roleEs(data.session.role):(data.demo?"Demo":"")}</div>
+            <div className="text-[11px] text-ink-400">{data.session?.role?roleEs(data.session.role):""}</div>
           </div>
         </div>
         <div className="hidden xl:block text-[13px] font-medium text-ink-500 tnum">{t}</div>
@@ -284,10 +226,10 @@ function Sidebar({ screen, go, navOpen, setNavOpen }) {
         })}
       </nav>
       <div className="p-4 border-t border-line space-y-2.5 text-[12px]">
-        <Row k="Tienda" v={Retail.getLinkedName().location || (data.demo?"Demostración":"—")} icon="store"/>
+        <Row k="Tienda" v={Retail.getLinkedName().location || "—"} icon="store"/>
         {data.session?.name && <Row k="Cajero" v={data.session.name} icon="users"/>}
-        <div className="flex items-center gap-2 text-ink-400"><Icon n="wifi" s={14}/><span>Conexión: <span className={data.online?"text-brand-600 font-medium":"text-ink-500 font-medium"}>{data.online?"Online":(data.demo?"Demo":"Sin conexión")}</span></span></div>
-        {(data.session||data.demo) && <button onClick={()=>{ close(); data.logout&&data.logout(); }} className="w-full mt-1 h-9 rounded-lg border border-line hover:bg-surf text-ink-600 text-[12px] font-medium inline-flex items-center justify-center gap-2"><Icon n="lock" s={14}/>Cerrar sesión</button>}
+        <div className="flex items-center gap-2 text-ink-400"><Icon n="wifi" s={14}/><span>Conexión: <span className={data.online?"text-brand-600 font-medium":"text-ink-500 font-medium"}>{data.online?"Online":"Sin conexión"}</span></span></div>
+        {data.session && <button onClick={()=>{ close(); data.logout&&data.logout(); }} className="w-full mt-1 h-9 rounded-lg border border-line hover:bg-surf text-ink-600 text-[12px] font-medium inline-flex items-center justify-center gap-2"><Icon n="lock" s={14}/>Cerrar sesión</button>}
       </div>
     </aside>
   </>);
@@ -311,8 +253,12 @@ function BottomBar({ go, onCobrar, onNewTicket }) {
 
 /* ---------------- generic UI ---------------- */
 function Card({ className="", children }) { return <div className={"bg-card border border-line rounded-2xl "+className}>{children}</div>; }
-function PrimaryBtn({ children, onClick, className="", testid }) {
-  return <button onClick={onClick} data-testid={testid} className={"inline-flex items-center justify-center gap-2 h-12 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm transition-colors active:scale-[.99] "+className}>{children}</button>;
+/* `disabled` es un atributo real, no solo opacidad: el checkout deshabilitaba el
+   botón de cobrar con `pointer-events-none`, que apaga el mouse pero deja el
+   botón enfocable y activable con Enter/espacio desde el teclado. */
+function PrimaryBtn({ children, onClick, className="", testid, disabled=false, title }) {
+  return <button onClick={onClick} data-testid={testid} disabled={disabled} title={title} aria-disabled={disabled}
+    className={"inline-flex items-center justify-center gap-2 h-12 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm transition-colors active:scale-[.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:hover:bg-brand-600 "+className}>{children}</button>;
 }
 function GhostBtn({ children, onClick, className="" }) {
   return <button onClick={onClick} className={"inline-flex items-center justify-center gap-2 h-11 px-4 rounded-xl border border-line hover:bg-surf text-ink-700 font-medium text-[13px] "+className}>{children}</button>;
@@ -351,11 +297,9 @@ function GateBtn({ perm, onClick, children, className="", ghost=false }) {
    El acceso se deriva del empleado logueado (RBAC real). */
 
 function OverrideModal({ perm, onClose, onOk }) {
-  const data=useData();
   const [pin,setPin]=useState(""); const [err,setErr]=useState(""); const [busy,setBusy]=useState(false);
   const submit=async()=>{
     if(pin.length<4){ setErr("Ingresa el PIN de 4 dígitos."); return; }
-    if(data.demo){ onOk("Supervisor (demo)"); return; } // demo: sin backend
     setBusy(true); setErr("");
     try{
       const r=await Retail.verifyPermission(pin, CANON_PERM[perm]||perm);
@@ -398,7 +342,7 @@ function Toast({ msg, onClose }) {
 
 function Barcode({ value, height=44, width=1.7, className="" }) {
   const ref = useRef(null);
-  useEffect(()=>{ if(ref.current && window.JsBarcode){ try{ window.JsBarcode(ref.current, String(value||" "), {format:"CODE128", height, width, displayValue:false, margin:0, background:"transparent", lineColor:"#1b2520"}); }catch(e){} } }, [value, height, width]);
+  useEffect(()=>{ if(ref.current && window.JsBarcode){ try{ window.JsBarcode(ref.current, String(value||" "), {format:"CODE128", height, width, displayValue:false, margin:0, background:"transparent", lineColor:"#1b2520"}); }catch{} } }, [value, height, width]);
   return <svg ref={ref} className={className}></svg>;
 }
 function Dash(){ return <div className="border-t border-dashed border-ink-400 my-2"/>; }
@@ -632,7 +576,6 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
           </div>
           <div className="flex gap-2 px-5 py-3 border-t border-line">
             <GhostBtn onClick={()=>go("catalogo")}><Icon n="plus" s={16}/>Agregar producto</GhostBtn>
-            <GhostBtn onClick={()=>go("clientes")}><Icon n="users" s={16}/>Buscar cliente</GhostBtn>
             <GateBtn ghost perm="apply_discount"><Icon n="tag" s={16}/>Aplicar descuento</GateBtn>
             <GhostBtn><Icon n="file" s={16}/>Agregar nota</GhostBtn>
           </div>
@@ -731,8 +674,7 @@ function ProductDetailPanel({ p, onAdd }) {
                 className={"flex-1 h-10 rounded-xl border text-[13px] font-medium "+(size===s?"border-brand-600 bg-brand-100 text-brand-700":"border-line text-ink-700 hover:bg-surf")}>{s}</button>))}</div>
           </div>
           <div className="mt-5">
-            <div className="flex items-center justify-between mb-2"><div className="flex items-center gap-1.5 text-[12px] text-ink-700 font-medium"><Icon n="box" s={15} cls="text-brand-600"/>Stock por {(attrLabel(giro,"size")||"talla").toLowerCase()}</div>
-              <button className="text-[12px] text-brand-600 font-medium">Ver inventario completo</button></div>
+            <div className="flex items-center justify-between mb-2"><div className="flex items-center gap-1.5 text-[12px] text-ink-700 font-medium"><Icon n="box" s={15} cls="text-brand-600"/>Stock por {(attrLabel(giro,"size")||"talla").toLowerCase()}</div></div>
             <div className="grid rounded-xl border border-line overflow-hidden text-center" style={{gridTemplateColumns:`repeat(${sizes.length||1}, minmax(0, 1fr))`}}>
               {sizes.map((s,i)=>(<div key={s} className="border-r border-line last:border-0 py-2"><div className="text-[11px] text-ink-400">{s}</div>
                 <div className={"tnum text-sm font-semibold "+(s===size?"text-brand-600":"text-ink-900")}>{row[i]??0}</div></div>))}</div>
@@ -764,95 +706,310 @@ function Acc({title,body}){const[o,setO]=useState(true);return(<div className="b
   {o&&<p className="text-[12px] text-ink-500 mt-2 leading-relaxed">{body}</p>}</div>);}
 
 /* ===================================================== CHECKOUT ===================================================== */
-function CheckoutScreen({ cart, go, onApprove }) {
+/** Denominaciones sugeridas para el efectivo.
+ *
+ *  Antes los botones eran `+$100 / +$200 / …` y SUMABAN al importe ya escrito,
+ *  que es como funciona una calculadora, no como paga un cliente: el cajero
+ *  recibe UN billete y quiere teclearlo, no acumular. Ahora cada botón es la
+ *  cantidad que el cliente entrega, calculada desde el restante: el primero es
+ *  el importe exacto y los demás son los billetes reales que le siguen. */
+function cashSuggestions(remaining) {
+  const BILLS = [20, 50, 100, 200, 500, 1000];
+  const exact = Math.round(remaining * 100) / 100;
+  if (exact <= 0) return [];
+  const out = [exact];
+  // Redondeo "hacia arriba" a la siguiente decena/centena útil (p. ej. 265 → 300).
+  for (const step of [50, 100, 500]) {
+    const up = Math.ceil(exact / step) * step;
+    if (up > exact && !out.includes(up)) out.push(up);
+  }
+  // Billetes sueltos que ya cubren el total (p. ej. 265 → 500, 1000).
+  for (const bill of BILLS) if (bill > exact && !out.includes(bill)) out.push(bill);
+  return out.sort((a, b) => a - b).slice(0, 4);
+}
+
+function CheckoutScreen({ cart, setCart, go, onApprove }) {
   const [method,setMethod]=useState("Efectivo");
   const [amt,setAmt]=useState("");
   const [lines,setLines]=useState([]);
-  const [changeDue,setChangeDue]=useState(0);
   const [rcpt,setRcpt]=useState(false);
-  const { priceListId }=useData();
+  const [busy,setBusy]=useState(false);
+  const [confirmClear,setConfirmClear]=useState(false);
+  const amtRef=useRef(null);
+  // Guard de doble cobro. Va en un ref y no solo en el estado porque dos clics
+  // en el mismo tick de React leen el MISMO valor de `busy` (el re-render aún
+  // no ocurrió) y ambos pasarían el if. El ref se escribe de inmediato.
+  const inFlight=useRef(false);
+  const { priceListId, priceLists, setPriceListId }=useData();
   const subtotal=cartTotal(cart,priceListId);
   const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
   const total=Math.round((subtotal-desc)*100)/100;
   const iva=Math.round((total-total/1.16)*100)/100; // IVA incluido (informativo)
-  const methods=[["Tarjeta","Débito o crédito","card"],["Efectivo","Paga con efectivo","cash"],["QR / Pago","Escanea y paga","qr"],["Transferencia","SPEI / Transferencia bancaria","swap"],["Meses sin intereses","Paga a meses sin intereses","card"]];
+  const methods=[["Efectivo","Billetes y monedas","cash"],["Tarjeta","Débito o crédito","card"],["Transferencia","SPEI o depósito","swap"],["QR / Pago","Escanea y paga","qr"],["Meses sin intereses","Pago diferido","card"]];
   const paid=Math.round(lines.reduce((s,l)=>s+l.amount,0)*100)/100;
   const remaining=Math.max(0,Math.round((total-paid)*100)/100);
   const amtNum=Number(amt||0);
-  const liveChange=method==="Efectivo"?Math.max(0,Math.round((amtNum-remaining)*100)/100):0;
-  const addPay=()=>{ if(remaining<=0)return; const want=amtNum>0?amtNum:remaining; const applied=Math.min(want,remaining); if(applied<=0)return;
-    if(method==="Efectivo"&&want>remaining) setChangeDue(c=>Math.round((c+(want-remaining))*100)/100);
-    setLines(l=>[...l,{method,amount:Math.round(applied*100)/100}]); setAmt(""); };
-  const removePay=(i)=>{ setLines(l=>l.filter((_,j)=>j!==i)); setChangeDue(0); };
+  const isCash=method==="Efectivo";
+  // Importe vacío = "el resto": el cajero que cobra exacto no tiene que teclear.
+  const given=amtNum>0?amtNum:remaining;
+  const isPartial=amtNum>0&&amtNum<remaining;
+  const liveChange=isCash?Math.max(0,Math.round((given-remaining)*100)/100):0;
+  // El cambio se DERIVA de los pagos aplicados, no se acumula en un estado
+  // aparte: el `changeDue` anterior se ponía en 0 al quitar cualquier pago, así
+  // que quitar el segundo pago de una mixta borraba el cambio del primero.
+  const changeDue=Math.round(lines.reduce((s,l)=>s+(l.change||0),0)*100)/100;
   const payLabel=lines.length>1?"Pago mixto":(lines[0]?lines[0].method:method);
+
+  const buildPayment=()=>{
+    const applied=Math.min(given,remaining);
+    if(applied<=0) return null;
+    return { method, amount:Math.round(applied*100)/100, change:isCash?Math.max(0,Math.round((given-remaining)*100)/100):0 };
+  };
+  const addPay=()=>{ const p=buildPayment(); if(!p)return; setLines(l=>[...l,p]); setAmt(""); amtRef.current?.focus(); };
+  const removePay=(i)=>{ setLines(l=>l.filter((_,j)=>j!==i)); };
+
+  /* Acción principal. Resuelve el pago que falta y cobra en UNA sola pulsación:
+     antes había que "Agregar pago" y luego "Cobrar", dos clics para la venta más
+     común (efectivo exacto). Un pago PARCIAL sí se queda en la pantalla, porque
+     todavía falta cobrar el resto. */
+  const submit=async()=>{
+    if(inFlight.current||!cart.length) return;
+    if(isPartial){ addPay(); return; }
+    const pending=remaining>0?buildPayment():null;
+    if(remaining>0&&!pending) return;
+    const allLines=pending?[...lines,pending]:lines;
+    if(!allLines.length) return;
+    inFlight.current=true; setBusy(true);
+    try{
+      const change=Math.round(allLines.reduce((s,l)=>s+(l.change||0),0)*100)/100;
+      await onApprove(total,allLines.length>1?"Pago mixto":allLines[0].method,allLines,change);
+    } finally {
+      // Si la venta salió bien la pantalla ya se desmontó; si falló hay que
+      // volver a habilitar el botón para que el cajero reintente.
+      inFlight.current=false; setBusy(false);
+    }
+  };
+
+  // F5 aquí y no solo en App: el botón anuncia el atajo, pero `cobrar()` de App
+  // únicamente navega a esta pantalla, así que en el checkout la tecla no hacía
+  // nada. Se registra en captura para ganarle al handler global.
+  useEffect(()=>{
+    const h=(e)=>{
+      if(e.key==="F5"){ e.preventDefault(); e.stopPropagation(); submit(); }
+      else if(e.key==="F4"){ e.preventDefault(); const i=methods.findIndex(m=>m[0]===method); setMethod(methods[(i+1)%methods.length][0]); setAmt(""); }
+    };
+    window.addEventListener("keydown",h,true);
+    return ()=>window.removeEventListener("keydown",h,true);
+  });
+  useEffect(()=>{ if(isCash) amtRef.current?.focus(); },[isCash,method]);
+
+  const primary=(()=>{
+    if(busy) return { label:"Procesando venta…", disabled:true };
+    if(!cart.length) return { label:"Carrito vacío", disabled:true };
+    if(remaining<=0) return { label:"Finalizar venta", disabled:false };
+    if(isPartial) return { label:"Aplicar "+mx(amtNum), disabled:false };
+    if(isCash&&given<remaining) return { label:"Captura el importe recibido", disabled:true };
+    return { label:"Cobrar "+mx(total), disabled:false };
+  })();
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px_minmax(0,1fr)] gap-4 h-auto lg:h-full">
-      <Card className="flex flex-col overflow-hidden">
-        <div className="px-5 h-14 flex items-center border-b border-line font-semibold text-ink-900">Carrito de compra ({cart.length})</div>
-        <div className="flex-1 overflow-y-auto p-3 space-y-1">
-          {cart.map(l=>(<div key={l.key} className="flex items-center gap-3 p-2 rounded-xl hover:bg-surf">
-            <Thumb p={l} size={48}/>
-            <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold text-ink-900 truncate">{l.name}</div>
-              <div className="tnum text-[11px] text-ink-400">{l.sku}</div><div className="text-[11px] text-ink-400">{l.color} / {l.size}</div></div>
-            <div className="text-right"><div className="tnum text-[13px] font-semibold text-ink-900">{mx(l.price)}</div>
-              <div className="inline-flex items-center gap-1.5 mt-1"><button className="w-6 h-6 grid place-items-center rounded border border-line text-ink-400"><Icon n="minus" s={12}/></button><span className="tnum text-xs w-4 text-center">{l.qty}</span><button className="w-6 h-6 grid place-items-center rounded border border-line text-ink-400"><Icon n="plus" s={12}/></button></div></div>
-          </div>))}
+    /* Tres zonas reales: carrito | pago | resumen. Antes la tercera columna se
+       partía otra vez en dos y los métodos quedaban en ~170px con scroll propio
+       (en 1366 "Meses sin intereses" no se alcanzaba a ver), más una cuarta
+       fila a lo ancho que repetía el total. */
+    /* Escalones: <1024 una columna (globals.css apila los grid de pantalla),
+       1024–1279 dos columnas con el carrito alto a la izquierda y pago+resumen
+       apilados a la derecha, ≥1280 las tres zonas lado a lado. */
+    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.95fr)_minmax(300px,0.82fr)] gap-4 h-auto lg:h-full lg:min-h-0">
+
+      {/* ---------- ZONA 1 · CARRITO ---------- */}
+      <Card className="flex flex-col overflow-hidden min-h-0 lg:row-span-2 xl:row-span-1">
+        <div className="px-5 h-14 flex items-center justify-between border-b border-line shrink-0">
+          <span className="font-semibold text-ink-900">Carrito de compra</span>
+          <span className="text-[12px] text-ink-400 tnum">{cart.reduce((s,l)=>s+(Number(l.qty)||0),0)} art.</span>
         </div>
-        <div className="p-3 border-t border-line"><GhostBtn onClick={()=>go("venta")} className="w-full"><Icon n="trash" s={16}/>Vaciar carrito</GhostBtn></div>
+        <div className="flex-1 overflow-y-auto p-3 space-y-1 min-h-0">
+          {cart.map(l=>{
+            const unit=linePrice(l,priceListId);
+            const many=(Number(l.qty)||0)>1;
+            return (<div key={l.key} data-testid="checkout-row" className="flex items-center gap-3 p-2 rounded-xl hover:bg-surf">
+              <Thumb p={l} size={44}/>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold text-ink-900 truncate">{l.name}</div>
+                <div className="tnum text-[11px] text-ink-400 truncate">{l.sku}</div>
+                {/* Precio unitario × cantidad: con lista de precios o escalón de
+                    mayoreo el unitario NO es l.price, y antes esta columna
+                    mostraba el de catálogo — el cajero veía un precio y se
+                    cobraba otro. */}
+                {many&&<div className="tnum text-[11px] text-ink-500 mt-0.5">{l.qty} × {mx(unit)}</div>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="inline-flex items-center gap-1">
+                  <button onClick={()=>setCart(c=>c.map(x=>x.key===l.key?{...x,qty:Math.max(1,(Number(x.qty)||1)-1)}:x))}
+                    aria-label={`Quitar una unidad de ${l.name}`}
+                    className="w-10 h-10 grid place-items-center rounded-lg border border-line text-ink-500 hover:bg-surf focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"><Icon n="minus" s={14}/></button>
+                  <span className="tnum text-[13px] w-8 text-center" aria-label={`Cantidad: ${l.qty}`}>{l.qty}</span>
+                  <button onClick={()=>setCart(c=>c.map(x=>x.key===l.key?{...x,qty:(Number(x.qty)||0)+1}:x))}
+                    aria-label={`Agregar una unidad de ${l.name}`}
+                    className="w-10 h-10 grid place-items-center rounded-lg border border-line text-ink-500 hover:bg-surf focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"><Icon n="plus" s={14}/></button>
+                </span>
+                <div className="tnum text-[14px] font-semibold text-ink-900 w-24 text-right">{mx(lineTotal(l,priceListId))}</div>
+              </div>
+            </div>);
+          })}
+          {cart.length===0&&<div className="py-16 px-6 text-center">
+            <div className="text-ink-400 text-sm">Aún no hay productos en la venta.</div>
+            <GhostBtn className="mt-4 mx-auto" onClick={()=>go("venta")}><Icon n="scan" s={16}/>Volver a la venta</GhostBtn>
+          </div>}
+        </div>
+        <div className="p-3 border-t border-line flex gap-2 shrink-0">
+          <GhostBtn onClick={()=>go("venta")} className="flex-1"><Icon n="chev" s={16} cls="rotate-180"/>Seguir agregando</GhostBtn>
+          <GhostBtn onClick={()=>setConfirmClear(true)} className="text-ink-500"><Icon n="trash" s={16}/>Vaciar</GhostBtn>
+        </div>
       </Card>
 
+      {/* ---------- ZONA 2 · PAGO ---------- */}
       <div className="flex flex-col gap-4 min-h-0">
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-4"><span className="font-semibold text-ink-900">Cliente</span><button className="text-[12px] text-brand-600 font-medium">Editar</button></div>
-          <div className="flex items-center gap-3"><div className="w-12 h-12 rounded-full bg-brand-100 grid place-items-center text-brand-700 font-semibold">MF</div>
-            <div><div className="text-[14px] font-semibold text-ink-900">{CUSTOMER.name}</div><span className="inline-block mt-1 text-[10px] font-semibold text-brand-700 bg-brand-100 px-2 py-0.5 rounded">CLIENTE FRECUENTE</span></div></div>
-          <div className="text-[12px] text-ink-500 mt-3 space-y-0.5"><div>{CUSTOMER.email}</div><div className="tnum">+52 {CUSTOMER.phone}</div></div>
-          <div className="flex items-center justify-between mt-4 pt-3 border-t border-line text-[13px]"><span className="flex items-center gap-1.5 text-ink-500"><Icon n="star" s={15} cls="text-brand-600"/>Puntos acumulados:</span><span className="tnum font-semibold text-ink-900">{CUSTOMER.pts} pts</span></div>
+        <Card className="p-4 shrink-0">
+          <div className="font-semibold text-ink-900 mb-3">Método de pago <span className="text-[11px] font-normal text-ink-400 ml-1">F4</span></div>
+          {/* Cuadrícula de 2 columnas: entran los 5 métodos sin scroll interno. */}
+          <div role="radiogroup" aria-label="Método de pago" className="grid grid-cols-2 gap-2">
+            {methods.map(([m,sub,icon])=>{const a=method===m;return(
+              <button key={m} role="radio" aria-checked={a} onClick={()=>{setMethod(m);setAmt("");}}
+                className={"flex items-center gap-2.5 p-3 rounded-xl border-2 text-left min-h-[60px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 "+(a?"border-brand-500 bg-brand-50":"border-line hover:bg-surf")}>
+                <div className={"w-9 h-9 rounded-lg grid place-items-center shrink-0 "+(a?"bg-brand-100 text-brand-600":"bg-surf text-ink-400")}><Icon n={icon} s={18}/></div>
+                <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold text-ink-900 truncate">{m}</div><div className="text-[11px] text-ink-400 truncate">{sub}</div></div>
+                {a&&<Icon n="check" s={16} cls="text-brand-600 shrink-0"/>}</button>);})}
+          </div>
         </Card>
-        <Card className="p-5 flex-1">
+
+        <Card className="p-5 flex flex-col min-h-0 overflow-y-auto">
+          <label htmlFor="pay-amount" className="text-[13px] font-medium text-ink-700">{isCash?"Importe recibido":"Monto a cobrar"}</label>
+          <input id="pay-amount" ref={amtRef} value={amt}
+            onChange={(e)=>setAmt(e.target.value.replace(/[^\d.]/g,"").replace(/(\..*)\./g,"$1"))}
+            onFocus={(e)=>e.target.select()} onWheel={(e)=>e.currentTarget.blur()}
+            inputMode="decimal" autoComplete="off" placeholder={mx(remaining)}
+            className="h-14 mt-2 rounded-xl bg-surf border border-line text-right px-4 tnum text-2xl font-bold text-ink-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 placeholder:text-ink-400 placeholder:font-semibold"/>
+
+          {isCash&&<>
+            {/* Botones separados con la cantidad que entrega el cliente. La
+                rejilla se ajusta al número de sugerencias: un total redondo
+                genera menos opciones y con `grid-cols-4` fijo quedaba un hueco. */}
+            {(()=>{const sug=cashSuggestions(remaining);return(
+              <div className={"grid gap-2 mt-3 "+(sug.length>=4?"grid-cols-4":sug.length===3?"grid-cols-3":"grid-cols-2")}>
+                {sug.map((v,i)=>(
+                  <button key={v} type="button" onClick={()=>{setAmt(String(v));amtRef.current?.focus();}}
+                    className={"h-12 rounded-lg border tnum text-[12px] font-semibold leading-tight hover:bg-surf focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 "+(i===0?"border-brand-200 text-brand-700 bg-brand-50/60":"border-line text-ink-700")}>
+                    {i===0?<><span className="block text-[10px] font-medium opacity-70">Exacto</span>{mx(v).replace(/\.00$/,"")}</>
+                          :mx(v).replace(/\.00$/,"")}
+                  </button>))}
+              </div>);})()}
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-line">
+              <span className="text-[13px] text-ink-500">Cambio</span>
+              {/* aria-live: el cajero que usa lector necesita oír el cambio al
+                  teclear, no descubrirlo al final. */}
+              <span aria-live="polite" className={"tnum text-xl font-bold "+(liveChange>0?"text-brand-600":"text-ink-400")}>{mx(liveChange)}</span>
+            </div>
+          </>}
+
+          {!isCash&&<p className="text-[12px] text-ink-500 mt-3 leading-relaxed">
+            {/* Honestidad sobre lo que el sistema NO hace: no hay integración de
+                terminal ni de proveedor QR, el pago se REGISTRA manualmente. */}
+            Se registra el cobro de forma manual. MRTPV Retail no está conectado a la
+            terminal ni al proveedor, así que confirma en tu dispositivo antes de continuar.
+          </p>}
+
+          {isPartial&&<button type="button" onClick={addPay} data-testid="btn-aplicar-pago"
+            className="h-11 mt-4 rounded-xl border-2 border-brand-200 text-brand-700 font-semibold text-sm hover:bg-brand-50 inline-flex items-center justify-center gap-2 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+            <Icon n="plus" s={16}/>Aplicar {mx(amtNum)} y seguir cobrando</button>}
+
+          {lines.length>0&&<div className="mt-4 pt-3 border-t border-line shrink-0">
+            <div className="text-[12px] font-medium text-ink-500 mb-2">Pagos aplicados</div>
+            <div className="space-y-1.5">{lines.map((l,i)=>(
+              <div key={i} className="flex items-center justify-between text-[12px] bg-surf rounded-lg px-3 py-2">
+                <span className="text-ink-700">{l.method}{l.change>0&&<span className="text-ink-400"> · cambio {mx(l.change)}</span>}</span>
+                <span className="flex items-center gap-2"><span className="tnum font-semibold text-ink-900">{mx(l.amount)}</span>
+                  <button onClick={()=>removePay(i)} aria-label={`Quitar pago de ${mx(l.amount)}`} className="text-ink-400 hover:text-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded"><Icon n="x" s={14}/></button></span>
+              </div>))}</div>
+          </div>}
+        </Card>
+      </div>
+
+      {/* ---------- ZONA 3 · RESUMEN + ACCIÓN ----------
+          El bloque de acción vive FUERA del área que scrollea: en 1024×768 el
+          alto no alcanza para cliente + totales + botón, y con todo junto el
+          botón de cobrar quedaba recortado bajo el borde (main es
+          overflow-hidden desde lg, así que la página tampoco scrolleaba y el
+          cajero simplemente no podía cobrar). */}
+      <div className="flex flex-col gap-4 min-h-0">
+        <div className="flex flex-col gap-4 min-h-0 lg:overflow-y-auto">
+        <Card className="p-4 shrink-0">
+          {/* Antes aquí vivía una tarjeta de cliente con datos DEMO fijos
+              (nombre, correo, teléfono y puntos inventados) que se pintaba
+              igual en una venta real. El backend ni siquiera acepta cliente en
+              POST /sales, así que se sustituye por lo que sí es real y sí
+              cambia el precio: la lista con la que se está cotizando. */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[13px] font-semibold text-ink-900">Venta al público</span>
+            <Icon n="users" s={16} cls="text-ink-400"/>
+          </div>
+          <label htmlFor="pl-checkout" className="text-[11px] text-ink-500">Lista de precios</label>
+          <select id="pl-checkout" data-testid="price-list-select-checkout" value={priceListId||""}
+            onChange={(e)=>setPriceListId&&setPriceListId(e.target.value||null)}
+            className="w-full h-11 mt-1 rounded-lg border border-line bg-surf px-2 text-[13px] text-ink-900 outline-none focus:border-brand-500">
+            <option value="">Precio de catálogo</option>
+            {(priceLists||[]).map(pl=><option key={pl.id} value={pl.id}>{pl.name}</option>)}
+          </select>
+        </Card>
+
+        <Card className="p-5 flex flex-col shrink-0">
           <TotRow k="Subtotal" v={mx(subtotal)}/>
-          {desc>0 && <><div className="my-2"/><TotRow k="Descuento" v={<span className="text-brand-600">-{mx(desc)}</span>}/></>}
           <div className="my-2"/><TotRow k="IVA 16% incluido" v={mx(iva)}/>
-          <div className="flex items-center justify-between pt-4 mt-4 border-t border-line"><span className="text-xl font-bold text-ink-900">Total</span><span className="tnum text-3xl font-bold text-ink-900">{mx(total)}</span></div>
+          {desc>0&&<><div className="my-2"/><TotRow k="Descuento" v={<span className="text-brand-600">-{mx(desc)}</span>}/></>}
+          <div className="flex items-baseline justify-between pt-4 mt-3 border-t border-line">
+            <span className="text-base font-bold text-ink-900">Total</span>
+            <span data-testid="checkout-total" className="tnum text-[38px] leading-none font-bold text-ink-900">{mx(total)}</span>
+          </div>
+          <div className="mt-4 pt-3 border-t border-line space-y-2">
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="text-ink-500">Pagado</span>
+              <span className={"tnum font-semibold "+(paid>0?"text-emerald-600":"text-ink-400")}>{mx(paid)}</span>
+            </div>
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="text-ink-500">{remaining>0?"Restante":"Cambio a entregar"}</span>
+              <span aria-live="polite" className={"tnum text-lg font-bold "+(remaining>0?"text-brand-600":"text-ink-900")}>
+                {remaining>0?mx(remaining):mx(changeDue)}</span>
+            </div>
+          </div>
         </Card>
-      </div>
+        </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 min-h-0">
-        <Card className="p-3 overflow-y-auto">
-          <div className="px-2 py-2 font-semibold text-ink-900">Método de pago</div>
-          <div className="space-y-2">{methods.map(([m,sub,icon])=>{const a=method===m;return(
-            <button key={m} onClick={()=>{setMethod(m);setAmt("");}} className={"w-full flex items-center gap-3 p-2.5 rounded-xl border text-left "+(a?"border-brand-500 bg-brand-50 ring-1 ring-brand-100":"border-line hover:bg-surf")}>
-              <div className={"w-9 h-9 rounded-lg grid place-items-center "+(a?"bg-brand-100 text-brand-600":"bg-surf text-ink-400")}><Icon n={icon} s={18}/></div>
-              <div className="flex-1"><div className="text-[13px] font-semibold text-ink-900">{m}</div><div className="text-[11px] text-ink-400">{sub}</div></div>
-              {a&&<Icon n="check" s={18} cls="text-brand-600"/>}</button>);})}</div>
-        </Card>
-        <Card className="p-5 flex flex-col overflow-y-auto">
-          <div className="flex items-center justify-between"><span className="font-semibold text-ink-900">Cobrar con {method.toLowerCase()}</span>
-            <span className="text-[12px] text-ink-400">Restante <span className="tnum font-semibold text-ink-900">{mx(remaining)}</span></span></div>
-          <div className="text-[12px] text-ink-500 mt-4 mb-1">{method==="Efectivo"?"Importe recibido":"Monto"}</div>
-          <input value={amt} onChange={(e)=>setAmt(e.target.value.replace(/[^\d.]/g,""))} inputMode="decimal" placeholder={String(remaining)}
-            className="h-12 rounded-xl bg-surf border border-line text-right px-4 tnum text-lg font-semibold outline-none focus:border-brand-500"/>
-          {method==="Efectivo"&&<>
-            <div className="grid grid-cols-4 gap-2 mt-3">{[100,200,500,1000].map(v=><button key={v} type="button" onClick={()=>setAmt(String(Number(amt||0)+v))} className="h-9 rounded-lg border border-line hover:bg-surf tnum text-[12px]">+${v}</button>)}</div>
-            <button type="button" onClick={()=>setAmt(String(remaining))} className="w-full h-9 mt-2 rounded-lg border border-line hover:bg-surf text-[12px]">Importe exacto {mx(remaining)}</button>
-            <div className="flex items-center justify-between mt-3 text-[13px]"><span className="text-ink-500">Cambio</span><span className="tnum font-semibold text-brand-600">{mx(liveChange)}</span></div></>}
-          {method==="Tarjeta"&&<div className="flex items-center justify-between mt-3 text-[12px]"><span className="text-ink-500">Terminal</span><span className="text-ink-700 border border-line rounded-lg px-2 py-1 tnum">BBVA - 1234 ⌄</span></div>}
-          <button type="button" onClick={addPay} disabled={remaining<=0} className="h-11 mt-4 rounded-xl border-2 border-brand-200 text-brand-700 font-semibold text-sm hover:bg-brand-50 disabled:opacity-40 inline-flex items-center justify-center gap-2"><Icon n="plus" s={16}/>Agregar pago</button>
-          {lines.length>0&&<div className="mt-3 space-y-1.5">{lines.map((l,i)=>(<div key={i} className="flex items-center justify-between text-[12px] bg-surf rounded-lg px-3 py-2">
-            <span className="text-ink-700">{l.method}</span><span className="flex items-center gap-2"><span className="tnum font-medium text-ink-900">{mx(l.amount)}</span><button onClick={()=>removePay(i)} className="text-ink-400 hover:text-red-500"><Icon n="x" s={14}/></button></span></div>))}</div>}
-        </Card>
-      </div>
-
-      <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px_minmax(0,1fr)] gap-4">
-        <Card className="p-4"><div className="text-[12px] text-ink-500 mb-1">Pagado</div><div className="h-12 rounded-xl bg-surf border border-line flex items-center justify-end px-4 tnum text-xl font-bold text-ink-900">{mx(paid)}</div></Card>
-        <Card className="p-4"><div className="text-[12px] text-ink-500 mb-1">{remaining>0?"Restante":"Cambio"}</div>
-          <div className={"h-12 rounded-xl border flex items-center justify-end px-4 tnum text-xl font-bold "+(remaining>0?"bg-amber-50 border-amber-100 text-amber-700":"bg-brand-50 border-brand-100 text-brand-700")}>{remaining>0?mx(remaining):mx(changeDue)}</div></Card>
-        <div className="flex gap-3 items-end">
-          <PrimaryBtn testid="btn-confirmar-cobro" onClick={()=>{ if(remaining<=0) onApprove(total,payLabel,lines.length?lines:[{method:payLabel,amount:total}]); }} className={"flex-1 h-14 text-base "+(remaining>0?"opacity-50 pointer-events-none":"")}><Icon n="check" s={20}/>{remaining>0?"Falta "+mx(remaining):"Cobrar "+mx(total)} <span className="tnum opacity-80">(F5)</span></PrimaryBtn>
-          <GhostBtn className="h-14" onClick={()=>setRcpt(true)}><Icon n="printer" s={18}/>Imprimir ticket</GhostBtn>
+        <div className="flex flex-col gap-2 mt-auto shrink-0">
+          <PrimaryBtn testid="btn-confirmar-cobro" onClick={submit} disabled={primary.disabled}
+            className="w-full h-16 text-base disabled:opacity-50 disabled:cursor-not-allowed">
+            {busy
+              ? <span className="w-5 h-5 rounded-full border-2 border-white/40 border-t-white animate-spin motion-reduce:animate-none" aria-hidden="true"/>
+              : <Icon n="check" s={20}/>}
+            {primary.label}
+            {!primary.disabled&&<span className="tnum opacity-80 text-[12px]">F5</span>}
+          </PrimaryBtn>
+          {/* Imprimir queda bloqueado hasta que la venta exista: antes abría un
+              ticket con folio inventado ("VTA-000012346") para una venta que no
+              se había cobrado. El ticket real se imprime en la pantalla de éxito. */}
+          <GhostBtn className="w-full opacity-50 cursor-not-allowed" onClick={()=>{}}
+            title="Disponible al finalizar la venta"><Icon n="printer" s={18}/>Imprimir ticket al finalizar</GhostBtn>
         </div>
       </div>
-      {rcpt && <ReceiptModal sale={{items:cart,subtotal,desc,total,method:payLabel,folio:"VTA-000012346"}} onClose={()=>setRcpt(false)}/>}
+
+      {confirmClear&&<Modal title="¿Vaciar la venta?" onClose={()=>setConfirmClear(false)}>
+        <p className="text-[13px] text-ink-500">Se quitarán los {cart.reduce((s,l)=>s+(Number(l.qty)||0),0)} artículo(s) del carrito. Esta acción no se puede deshacer.</p>
+        <div className="flex gap-2 mt-5">
+          <GhostBtn className="flex-1" onClick={()=>setConfirmClear(false)}>Cancelar</GhostBtn>
+          <button onClick={()=>{setCart([]);setConfirmClear(false);go("venta");}}
+            className="flex-1 h-11 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold text-sm inline-flex items-center justify-center gap-2"><Icon n="trash" s={16}/>Vaciar venta</button>
+        </div>
+      </Modal>}
+      {rcpt && <ReceiptModal sale={{items:cart,subtotal,desc,total,method:payLabel,folio:"—"}} onClose={()=>setRcpt(false)}/>}
     </div>
   );
 }
@@ -863,11 +1020,24 @@ function SuccessScreen({ sale, go, newSale }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-4 h-full">
       <Card className="p-8 flex flex-col items-center justify-center text-center">
-        <div className="w-20 h-20 rounded-full border-4 border-brand-500 grid place-items-center text-brand-600 mb-4"><Icon n="check" s={40} sw={2.4}/></div>
-        <h1 className="text-2xl font-bold text-ink-900">¡Pago aprobado!</h1>
-        <p className="text-ink-500 mt-1">La venta ha sido completada correctamente.</p>
-        <div className="grid grid-cols-3 gap-px bg-line rounded-2xl overflow-hidden mt-6 w-full max-w-xl border border-line">
-          {[["Total pagado",mx(sale.total),"sale-success-total"],["Método de pago",sale.method],["Folio de venta",sale.folio||"—","sale-success-folio"]].map(([k,v,tid])=>(
+        <div className={"w-20 h-20 rounded-full border-4 grid place-items-center mb-4 "+(sale.pending?"border-amber-400 text-amber-600":"border-brand-500 text-brand-600")}>
+          <Icon n={sale.pending?"clock":"check"} s={40} sw={2.4}/></div>
+        <h1 className="text-2xl font-bold text-ink-900">{sale.pending?"Venta guardada":"¡Pago aprobado!"}</h1>
+        {/* Sin red la venta NO está en el servidor todavía. Decir "completada" a
+            secas sería el mismo engaño del folio inventado que había antes. */}
+        <p className="text-ink-500 mt-1">{sale.pending
+          ? "Se cobró y quedó guardada en esta caja. Se enviará sola en cuanto vuelva la conexión."
+          : "La venta ha sido completada correctamente."}</p>
+        {/* El cambio se muestra aquí y no solo en el checkout: es el número que
+            el cajero necesita LEER mientras cuenta el dinero, y al cobrar la
+            pantalla anterior ya desapareció. */}
+        {sale.change>0&&<div className="mt-5 px-6 py-3 rounded-2xl bg-brand-50 border border-brand-200 flex items-center gap-3">
+          <Icon n="cash" s={22} cls="text-brand-600"/>
+          <span className="text-[13px] text-ink-700">Cambio a entregar</span>
+          <span data-testid="sale-success-change" className="tnum text-2xl font-bold text-brand-700">{mx(sale.change)}</span>
+        </div>}
+        <div className={"grid gap-px bg-line rounded-2xl overflow-hidden mt-6 w-full max-w-xl border border-line "+(sale.change>0?"grid-cols-4":"grid-cols-3")}>
+          {[["Total pagado",mx(sale.total),"sale-success-total"],["Método de pago",sale.method],...(sale.change>0?[["Cambio",mx(sale.change)]]:[]),[sale.pending?"Folio":"Folio de venta",sale.pending?"al sincronizar":(sale.folio||"—"),"sale-success-folio"]].map(([k,v,tid])=>(
             <div key={k} className="bg-card p-4 text-center"><div className="text-[11px] text-ink-400 mb-1">{k}</div><div data-testid={tid} className="tnum font-semibold text-ink-900 text-sm">{v}</div></div>))}
         </div>
         <div className="grid grid-cols-5 gap-3 mt-6 w-full max-w-xl">
@@ -901,143 +1071,8 @@ function SuccessScreen({ sale, go, newSale }) {
   );
 }
 
-/* ===================================================== INVENTORY ===================================================== */
-// NOTA: pantalla de maqueta — corre sobre PRODUCTS[0] (datos demo) y cifras
-// hardcodeadas, no sobre el catálogo live. El eje se deriva del giro igual, para
-// no dejar vivo el último hardcode de tallas de ropa.
-function InventoryScreen() {
-  const p=PRODUCTS[0];
-  const giro=useGiro();
-  const sizes=sizesFor(giro);
-  const [color,setColor]=useState("Beige");
-  const cell=(v)=>{const cls=v===0?"text-red-500 font-semibold":v<5?"bg-red-50 text-red-600":v<=10?"bg-amber-50 text-amber-700":v>20?"bg-brand-50 text-brand-700":"text-ink-700";
-    return <td className={"tnum text-center py-2.5 text-sm "+cls}>{v}</td>;};
-  const colTotal=(i)=>p.colors.reduce((a,c)=>a+(p.matrix[c][i]||0),0);
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-4 h-full">
-      <div className="overflow-y-auto pr-1">
-        <ScreenHead icon="box" title="Inventario por talla y color" folio="INV-2024-00012345"/>
-        <Card className="p-5">
-          <div className="grid grid-cols-[200px_1fr_repeat(3,150px)] gap-4 items-start">
-            <div style={{background:p.tone}} className="h-44 rounded-2xl grid place-items-center border border-black/5"><Icon n="tag" s={52} cls="text-black/15"/></div>
-            <div>
-              <h2 className="text-lg font-semibold text-ink-900">{p.name}</h2>
-              <div className="tnum text-[12px] text-ink-400">{p.sku}</div>
-              <div className="tnum text-xl font-bold text-ink-900 mt-2">{mx(p.price)}</div>
-              <div className="text-[12px] text-brand-600 font-medium">En stock: 24 pzas.</div>
-              <p className="text-[12px] text-ink-500 mt-2 leading-relaxed">{p.desc}</p>
-              <div className="text-[12px] text-ink-500 mt-3">Color: <span className="font-medium text-ink-900">{color}</span></div>
-              <div className="flex gap-2 mt-2">{p.colors.map(c=><button key={c} onClick={()=>setColor(c)} style={{background:swatch[c]}} className={"w-8 h-8 rounded-full border-2 "+(color===c?"border-brand-600":"border-black/10")}/>)}</div>
-            </div>
-            <Stat icon="box" label="Total disponible" val="128" sub="pzas." money="$115,072.00"/>
-            <Stat icon="bookmark" label="Reservado" val="15" sub="pzas." money="$13,485.00"/>
-            <Stat icon="truck" label="En tránsito" val="8" sub="pzas." money="$7,192.00"/>
-          </div>
-          <table className="w-full mt-6 border border-line rounded-xl overflow-hidden">
-            <thead><tr className="bg-surf text-[11px] text-ink-400 uppercase">
-              <th className="text-left py-2.5 px-4 font-semibold">{attrLabel(giro,"size")||"Talla"} / {attrLabel(giro,"color")||"Color"}</th>{sizes.map(s=><th key={s} className="font-semibold">{s}</th>)}<th className="font-semibold">Total</th></tr></thead>
-            <tbody>{p.colors.map(c=>(<tr key={c} className="border-t border-line">
-              <td className="py-2.5 px-4 text-[13px] text-ink-700 flex items-center gap-2"><span style={{background:swatch[c]}} className="w-4 h-4 rounded-full border border-black/10"/>{c}</td>
-              {p.matrix[c].map((v,i)=>cell(v))}<td className="tnum text-center font-semibold text-ink-900">{p.matrix[c].reduce((a,b)=>a+b,0)}</td></tr>))}
-              <tr className="border-t border-line bg-surf/50"><td className="py-2.5 px-4 text-[13px] font-semibold text-ink-900">Total</td>
-              {sizes.map((s,i)=><td key={s} className="tnum text-center font-semibold text-ink-900">{colTotal(i)}</td>)}
-              <td className="tnum text-center font-bold text-ink-900">{p.colors.reduce((a,c)=>a+p.matrix[c].reduce((x,y)=>x+y,0),0)}</td></tr></tbody>
-          </table>
-          <div className="flex gap-5 mt-3 text-[11px]">
-            <Leg c="bg-brand-100" t="Alto inventario (>20 pzas.)"/><Leg c="bg-amber-100" t="Stock bajo (5-10 pzas.)"/><Leg c="bg-red-100" t="Crítico (<5 pzas.)"/></div>
-        </Card>
-        <Card className="p-5 mt-4">
-          <div className="font-semibold text-ink-900 mb-3">Alertas de inventario</div>
-          {[["Stock crítico en variaciones","2 variantes con menos de 5 pzas.","alert","text-red-500"],["Stock bajo en variaciones","5 variantes con menos de 10 pzas.","alert","text-amber-500"],["Reabastecimiento sugerido","3 variantes sin stock disponible.","info","text-brand-600"]].map(([t,s,ic,col])=>(
-            <div key={t} className="flex items-center gap-3 py-2.5 border-t border-line first:border-0">
-              <Icon n={ic} s={18} cls={col}/><div className="flex-1"><div className="text-[13px] text-ink-900">{t}</div><div className="text-[11px] text-ink-400">{s}</div></div>
-              <button className="text-[12px] text-brand-600 font-medium">Ver detalle</button></div>))}
-        </Card>
-      </div>
-      <div className="space-y-4 overflow-y-auto">
-        <Card className="p-5"><div className="flex items-center gap-2 font-semibold text-ink-900 mb-4"><Icon n="swap" s={18} cls="text-brand-600"/>Transferir entre sucursales</div>
-          <Fld label="Desde"><Sel v="Tienda Polanco (Actual)"/></Fld><Fld label="Hacia"><Sel v="Seleccionar sucursal"/></Fld>
-          <Fld label="Variantes"><Sel v="Seleccionar color y talla"/></Fld>
-          <Fld label="Cantidad"><Stepper/></Fld>
-          <GateBtn className="w-full mt-2" perm="manage_transfers">Preparar transferencia</GateBtn></Card>
-        <Card className="p-5"><div className="flex items-center gap-2 font-semibold text-ink-900 mb-4"><Icon n="bookmark" s={18} cls="text-brand-600"/>Apartado de mercancía</div>
-          <Fld label="Cliente (opcional)"><Sel v="Buscar cliente"/></Fld><Fld label="Variantes"><Sel v="Seleccionar color y talla"/></Fld>
-          <div className="grid grid-cols-2 gap-3"><Fld label="Cantidad"><Stepper/></Fld><Fld label="Tiempo de reserva"><Sel v="24 horas"/></Fld></div>
-          <Fld label="Nota (opcional)"><input placeholder="Agregar nota" className="w-full h-10 px-3 rounded-lg border border-line text-sm outline-none focus:border-brand-500"/></Fld>
-          <PrimaryBtn className="w-full mt-2">Apartar mercancía</PrimaryBtn></Card>
-      </div>
-    </div>
-  );
-}
-function Stat({icon,label,val,sub,money}){return(<Card className="p-3"><div className="flex items-center gap-1.5 text-[11px] text-ink-400"><Icon n={icon} s={14} cls="text-brand-600"/>{label}</div>
-  <div className="tnum text-2xl font-bold text-ink-900 mt-1">{val} <span className="text-[11px] font-normal text-ink-400">{sub}</span></div>
-  <div className="tnum text-[11px] text-ink-400 mt-1">{money}</div></Card>);}
-function Leg({c,t}){return(<span className="flex items-center gap-1.5 text-ink-500"><span className={"w-3 h-3 rounded "+c}/>{t}</span>);}
+/* ---------------- campo de formulario compartido ---------------- */
 function Fld({label,children}){return(<label className="block mb-3"><span className="text-[12px] text-ink-500 mb-1 block">{label}</span>{children}</label>);}
-function Sel({v}){return(<div className="w-full h-10 px-3 rounded-lg border border-line text-sm text-ink-600 flex items-center justify-between">{v}<Icon n="chev" s={15} cls="text-ink-400"/></div>);}
-function Stepper(){const[n,setN]=useState(0);return(<div className="flex items-center justify-between h-10 px-2 rounded-lg border border-line"><button onClick={()=>setN(Math.max(0,n-1))} className="w-7 h-7 grid place-items-center text-ink-400"><Icon n="minus" s={14}/></button><span className="tnum">{n}</span><button onClick={()=>setN(n+1)} className="w-7 h-7 grid place-items-center text-brand-600"><Icon n="plus" s={14}/></button></div>);}
-
-/* ===================================================== HOLDS / APARTADOS ===================================================== */
-function HoldsScreen() {
-  const { can, gate } = usePerm();
-  const holds=[["APT-000124","15/05/2024",PRODUCTS[0],"M","Beige",300,599,"29/05/2024","14 días","Activo"],
-    ["APT-000123","10/05/2024",PRODUCTS[1],"32","Negro",500,699,"24/05/2024","9 días","Activo"],
-    ["APT-000118","02/05/2024",PRODUCTS[2],"L","Gris",400,1199,"16/05/2024","1 día","Por vencer"]];
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-4 h-full overflow-hidden">
-      <div className="overflow-y-auto pr-1">
-        <ScreenHead icon="bookmark" title="Apartados y cliente frecuente"/>
-        <Card className="p-5">
-          <div className="grid grid-cols-[auto_1fr_auto_auto] gap-6 items-center">
-            <div className="w-16 h-16 rounded-full bg-brand-100 grid place-items-center text-brand-700 font-bold text-xl">MF</div>
-            <div><div className="text-base font-semibold text-ink-900">{CUSTOMER.name}</div>
-              <span className="inline-block my-1 text-[10px] font-semibold text-brand-700 bg-brand-100 px-2 py-0.5 rounded">Cliente frecuente</span>
-              <div className="text-[12px] text-ink-500 space-y-0.5 mt-1"><div className="tnum">{CUSTOMER.phone}</div><div>{CUSTOMER.email}</div><div>Cliente desde: {CUSTOMER.since}</div></div></div>
-            <div className="text-center px-6 border-l border-line"><div className="text-[11px] text-ink-400">Puntos acumulados</div>
-              <div className="tnum text-2xl font-bold text-brand-600 mt-1">{CUSTOMER.pts} <span className="text-[12px] font-normal">pts</span></div>
-              <div className="text-[11px] text-ink-500 mt-1">Nivel: {CUSTOMER.level} ●</div><button className="text-[12px] text-brand-600 font-medium mt-1">Ver beneficios</button></div>
-            <div className="px-6 border-l border-line text-[12px]"><div className="font-semibold text-ink-900 mb-2">Resumen de compras</div>
-              {[["Compras totales",mx(CUSTOMER.total)],["Número de compras",CUSTOMER.count],["Ticket promedio",mx(CUSTOMER.avg)],["Última compra",CUSTOMER.last]].map(([k,v])=>(
-                <div key={k} className="flex justify-between gap-8 py-0.5"><span className="text-ink-400">{k}</span><span className="tnum text-ink-700">{v}</span></div>))}</div>
-          </div>
-        </Card>
-        <div className="font-semibold text-ink-900 mt-5 mb-2">Apartados activos</div>
-        <Card className="overflow-hidden">
-          <table className="w-full text-[12px]">
-            <thead><tr className="bg-surf text-ink-400 uppercase text-[10px]">{["Folio","Producto","Talla","Color","Anticipo","Saldo pendiente","Fecha límite","Estatus",""].map(h=><th key={h} className="text-left py-2.5 px-3 font-semibold">{h}</th>)}</tr></thead>
-            <tbody>{holds.map(([f,d,p,sz,col,ant,saldo,lim,dias,st])=>(<tr key={f} className="border-t border-line">
-              <td className="px-3 py-3"><div className="tnum font-medium text-ink-900">{f}</div><div className="tnum text-ink-400">{d}</div></td>
-              <td className="px-3"><div className="flex items-center gap-2"><Thumb p={p} size={34}/><div><div className="font-medium text-ink-900">{p.name}</div><div className="tnum text-ink-400">{p.sku}</div></div></div></td>
-              <td className="px-3 text-ink-700">{sz}</td><td className="px-3"><span style={{background:swatch[col]}} className="w-4 h-4 rounded-full border border-black/10 inline-block"/></td>
-              <td className="px-3 tnum text-ink-900">{mx(ant)}</td><td className="px-3 tnum text-ink-900">{mx(saldo)}</td>
-              <td className="px-3"><div className="tnum text-ink-700">{lim}</div><div className={"text-[10px] "+(st==="Por vencer"?"text-amber-600":"text-ink-400")}>{dias}</div></td>
-              <td className="px-3"><span className={"text-[11px] font-medium px-2 py-0.5 rounded "+(st==="Activo"?"bg-brand-100 text-brand-700":"bg-amber-100 text-amber-700")}>{st}</span></td>
-              <td className="px-3 text-ink-400">⋮</td></tr>))}
-              <tr className="border-t border-line bg-surf/50 text-[12px]"><td colSpan={4} className="px-3 py-3"><span className="text-ink-400">Anticipo total </span><span className="tnum font-semibold">{mx(1200)}</span></td>
-                <td colSpan={3} className="px-3"><span className="text-ink-400">Saldo pendiente total </span><span className="tnum font-semibold">{mx(2497)}</span></td>
-                <td colSpan={2} className="px-3"><span className="text-ink-400">Activos </span><span className="tnum font-semibold">3</span></td></tr></tbody>
-          </table>
-        </Card>
-        <div className="flex gap-3 mt-4">
-          <button className="flex-1 h-11 rounded-xl border-2 border-brand-200 text-brand-700 font-medium inline-flex items-center justify-center gap-2"><Icon n="card" s={16}/>Cobrar anticipo</button>
-          <GhostBtn className="flex-1"><Icon n="dollar" s={16}/>Abonar</GhostBtn>
-          <GhostBtn className="flex-1"><Icon n="box" s={16}/>Entregar</GhostBtn>
-          <button onClick={()=>gate("cancel_hold",()=>{})} className="flex-1 h-11 rounded-xl border border-red-200 text-red-500 font-medium inline-flex items-center justify-center gap-2">{!can("cancel_hold")&&<Icon n="lock" s={15}/>}<Icon n="x" s={16}/>Cancelar apartado</button>
-        </div>
-      </div>
-      <div className="space-y-4 overflow-y-auto">
-        <Card className="p-5"><div className="flex items-center justify-between mb-3"><span className="font-semibold text-ink-900">Notas del cliente</span><button className="text-[12px] text-brand-600">Editar</button></div>
-          <div className="p-3 rounded-xl bg-brand-50 border border-brand-100 text-[12px] text-ink-700 leading-relaxed">{CUSTOMER.note}</div>
-          <button className="flex items-center gap-1.5 text-[12px] text-brand-600 font-medium mt-3"><Icon n="plus" s={14}/>Agregar nota</button></Card>
-        <Card className="p-5"><div className="font-semibold text-ink-900 mb-3">Productos recomendados</div>
-          {[PRODUCTS[3],PRODUCTS[6],PRODUCTS[7]].map(p=>(<div key={p.id} className="flex items-center gap-3 py-2 border-t border-line first:border-0">
-            <Thumb p={p} size={40}/><div className="flex-1 min-w-0"><div className="text-[12px] font-medium text-ink-900 truncate">{p.name}</div><div className="tnum text-[11px] text-ink-400">{mx(p.price)}</div></div>
-            <button className="w-8 h-8 grid place-items-center rounded-lg border border-line text-brand-600"><Icon n="plus" s={15}/></button></div>))}
-          <button className="text-[12px] text-brand-600 font-medium mt-3 w-full text-center">Ver más productos</button></Card>
-      </div>
-    </div>
-  );
-}
 
 /* ===================================================== CATALOG ===================================================== */
 function CatalogScreen({ setSel, go }) {
@@ -1126,7 +1161,7 @@ function CashScreen() {
     }catch(e){ setMsg("No se pudo cargar la caja: "+(e?.message||e)); }
     finally{ setLoading(false); }
   };
-  useEffect(()=>{ load(); /* eslint-disable-next-line */ },[data.online]);
+  useEffect(()=>{ load(); },[data.online]);
 
   const doOpen=async()=>{ setBusy(true); setMsg("");
     try{ await Retail.openShift(num(openFloat), blind); setOpenFloat(""); setBlind(false); await load(); }
@@ -1147,7 +1182,7 @@ function CashScreen() {
 
   const Banner=()=> msg ? <div className="text-[12px] text-ink-700 bg-surf border border-line rounded-lg px-3 py-2 mb-3 text-center">{msg}</div> : null;
 
-  // Modo demostración / sin backend: la caja necesita conexión real.
+  // Sin backend no hay caja: el turno y el corte son datos del servidor.
   if(!data.online){
     return (<div className="h-full overflow-y-auto"><ScreenHead icon="wallet" title="Caja / corte de caja"/>
       <Card className="flex flex-col items-center justify-center text-center py-20">
@@ -1254,111 +1289,7 @@ function MovementModal({ type, busy, onClose, onOk }){
   </Modal>);
 }
 
-/* ===================================================== REPORTS ===================================================== */
-function ReportsScreen() {
-  const [range,setRange]=useState("Hoy");
-  const kpis=[["Ventas del día","$42,580.00","+12% vs ayer","chart"],["Tickets","53","+5","cart"],["Ticket promedio","$803.40","+3%","dollar"],["Utilidad estimada","$18,940.00","44% margen","tag"]];
-  const top=[[PRODUCTS[0],18,16182],[PRODUCTS[3],11,20790],[PRODUCTS[2],9,14391],[PRODUCTS[4],8,11600],[PRODUCTS[9],7,7693]];
-  const hours=[3,5,8,12,18,22,28,24,19,14,9,5];
-  const pays=[["Tarjeta",24320,"card","bg-brand-500"],["Efectivo",12450,"cash","bg-emerald-400"],["QR / Pago",4310,"qr","bg-teal-400"],["Transferencia",1500,"swap","bg-lime-400"]];
-  const payTotal=pays.reduce((a,p)=>a+p[1],0);
-  const cats=[["Mujer",62,28400],["Accesorios",18,8200],["Calzado",12,3980],["Hombre",8,2000]];
-  const cajeros=[["Carla Méndez",53,42580],["Luis Ortega",37,29100],["Diana Sosa",24,18650]];
-  const low=[[PRODUCTS[2],"Gris / XL",2],[PRODUCTS[4],"Azul Claro / 34",3],[PRODUCTS[0],"Negro / XS",2],[PRODUCTS[7],"Negro / 27",1]];
-  return (<div className="h-full overflow-y-auto">
-    <ScreenHead icon="chart" title="Reportes de ventas" right={<div className="flex gap-2 items-center">
-      <div className="flex gap-1 p-1 rounded-xl bg-surf border border-line">{["Hoy","Semana","Mes"].map(r=><button key={r} onClick={()=>setRange(r)} className={"h-8 px-3 rounded-lg text-[12px] font-medium "+(range===r?"bg-card shadow-sm text-ink-900":"text-ink-500")}>{r}</button>)}</div>
-      <GhostBtn><Icon n="file" s={16}/>Exportar CSV</GhostBtn><GhostBtn><Icon n="printer" s={16}/>Imprimir</GhostBtn></div>}/>
-    <div className="grid grid-cols-4 gap-4 mb-4">{kpis.map(([k,v,d,ic])=>(<Card key={k} className="p-4">
-      <div className="flex items-center gap-1.5 text-[12px] text-ink-400"><Icon n={ic} s={14} cls="text-brand-600"/>{k}</div>
-      <div className="tnum text-2xl font-bold text-ink-900 mt-1">{v}</div><div className="text-[12px] text-brand-600 font-medium mt-1">{d}</div></Card>))}</div>
-    <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-4 mb-4">
-      <Card className="p-5"><div className="font-semibold text-ink-900 mb-4">Ventas por hora</div>
-        <div className="flex items-end gap-2 h-48">{hours.map((h,i)=>(<div key={i} className="flex-1 flex flex-col items-center gap-1 group">
-          <span className="tnum text-[9px] text-ink-400 opacity-0 group-hover:opacity-100">{h}</span>
-          <div style={{height:(h/28*100)+"%"}} className="w-full rounded-t-lg bg-brand-500/80 hover:bg-brand-600 min-h-[4px] transition-colors"/><span className="tnum text-[9px] text-ink-400">{9+i}h</span></div>))}</div></Card>
-      <Card className="p-5"><div className="font-semibold text-ink-900 mb-4">Ventas por método de pago</div>
-        {pays.map(([m,v,ic,bar])=>{const pct=Math.round(v/payTotal*100);return(<div key={m} className="mb-3">
-          <div className="flex items-center justify-between text-[12px] mb-1"><span className="flex items-center gap-1.5 text-ink-600"><Icon n={ic} s={14} cls="text-ink-400"/>{m}</span><span className="tnum text-ink-900 font-medium">{mx(v)} <span className="text-ink-400">· {pct}%</span></span></div>
-          <div className="h-2 rounded-full bg-surf overflow-hidden"><div style={{width:pct+"%"}} className={"h-full rounded-full "+bar}/></div></div>);})}</Card>
-    </div>
-    <div className="grid grid-cols-3 gap-4">
-      <Card className="p-5"><div className="font-semibold text-ink-900 mb-3">Productos más vendidos</div>
-        {top.map(([p,u,t])=>(<div key={p.id} className="flex items-center gap-3 py-2 border-t border-line first:border-0"><Thumb p={p} size={36}/>
-          <div className="flex-1 min-w-0"><div className="text-[12px] font-medium text-ink-900 truncate">{p.name}</div><div className="tnum text-[11px] text-ink-400">{u} pzas.</div></div>
-          <div className="tnum text-[12px] font-semibold text-ink-900">{mx(t)}</div></div>))}</Card>
-      <div className="space-y-4">
-        <Card className="p-5"><div className="font-semibold text-ink-900 mb-3">Top categorías</div>
-          {cats.map(([c,pct,v])=>(<div key={c} className="mb-2.5"><div className="flex justify-between text-[12px] mb-1"><span className="text-ink-600">{c}</span><span className="tnum text-ink-900">{mx(v)}</span></div>
-            <div className="h-2 rounded-full bg-surf overflow-hidden"><div style={{width:pct+"%"}} className="h-full rounded-full bg-brand-500"/></div></div>))}</Card>
-        <Card className="p-5"><div className="font-semibold text-ink-900 mb-3">Ventas por cajero</div>
-          {cajeros.map(([n,t,v])=>(<div key={n} className="flex items-center gap-3 py-1.5 text-[12px]"><div className="w-7 h-7 rounded-full bg-brand-100 grid place-items-center text-brand-700 text-[10px] font-semibold">{n.split(" ").map(x=>x[0]).join("")}</div>
-            <span className="flex-1 text-ink-700">{n}</span><span className="tnum text-ink-400">{t} tk</span><span className="tnum font-semibold text-ink-900 w-20 text-right">{mx(v)}</span></div>))}</Card>
-      </div>
-      <Card className="p-5"><div className="flex items-center gap-1.5 font-semibold text-ink-900 mb-3"><Icon n="alert" s={16} cls="text-amber-500"/>Stock bajo</div>
-        {low.map(([p,v,n])=>(<div key={p.id+v} className="flex items-center gap-3 py-2 border-t border-line first:border-0"><Thumb p={p} size={34}/>
-          <div className="flex-1 min-w-0"><div className="text-[12px] font-medium text-ink-900 truncate">{p.name}</div><div className="text-[11px] text-ink-400">{v}</div></div>
-          <span className={"tnum text-[12px] font-semibold px-2 py-0.5 rounded "+(n<3?"bg-red-100 text-red-600":"bg-amber-100 text-amber-700")}>{n} pz</span></div>))}
-        <GhostBtn className="w-full mt-3 text-[12px]">Generar orden de reabasto</GhostBtn></Card>
-    </div>
-  </div>);
-}
-
 /* ===================================================== SIMPLE SCREENS ===================================================== */
-function ClientsScreen({ go }) {
-  const [q,setQ]=useState(""); const [idx,setIdx]=useState(0);
-  const list=CLIENTS.filter(c=>!q||(c.name+c.phone).toLowerCase().includes(q.toLowerCase()));
-  const c=list[idx]||CLIENTS[0];
-  const lvlColor={Platino:"bg-slate-100 text-slate-700",Oro:"bg-amber-100 text-amber-700",Plata:"bg-zinc-100 text-zinc-600"};
-  return (
-    <div className="grid grid-cols-[320px_minmax(0,1fr)] gap-4 h-full">
-      <Card className="flex flex-col overflow-hidden">
-        <div className="p-3 border-b border-line">
-          <label className="flex items-center gap-2 h-10 px-3 rounded-xl bg-surf border border-line"><Icon n="search" s={16} cls="text-ink-400"/>
-            <input value={q} onChange={e=>{setQ(e.target.value);setIdx(0);}} placeholder="Buscar por nombre o teléfono" className="flex-1 bg-transparent outline-none text-[13px]"/></label>
-        </div>
-        <div className="flex-1 overflow-y-auto p-2">
-          {list.map((cl,i)=>(<button key={cl.name} onClick={()=>setIdx(i)} className={"w-full flex items-center gap-3 p-2.5 rounded-xl text-left mb-1 "+(i===idx?"bg-brand-100":"hover:bg-surf")}>
-            <div className="w-10 h-10 rounded-full bg-brand-100 grid place-items-center text-brand-700 font-semibold text-[13px]">{cl.init}</div>
-            <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold text-ink-900 truncate">{cl.name}</div><div className="tnum text-[11px] text-ink-400">{cl.phone}</div></div>
-            <span className={"text-[10px] font-medium px-2 py-0.5 rounded "+(lvlColor[cl.level]||"bg-surf text-ink-500")}>{cl.level}</span></button>))}
-        </div>
-        <div className="p-3 border-t border-line"><GhostBtn className="w-full"><Icon n="plus" s={16}/>Nuevo cliente</GhostBtn></div>
-      </Card>
-      <div className="overflow-y-auto pr-1 space-y-4">
-        <ScreenHead icon="users" title="Clientes frecuentes"/>
-        <Card className="p-5">
-          <div className="flex items-start gap-4">
-            <div className="w-16 h-16 rounded-full bg-brand-100 grid place-items-center text-brand-700 font-bold text-xl">{c.init}</div>
-            <div className="flex-1"><div className="flex items-center gap-2"><h2 className="text-lg font-semibold text-ink-900">{c.name}</h2>
-              <span className={"text-[11px] font-medium px-2 py-0.5 rounded "+(lvlColor[c.level]||"bg-surf")}>Nivel {c.level}</span></div>
-              <div className="text-[12px] text-ink-500 mt-1 space-y-0.5"><div className="tnum">{c.phone} · {c.email}</div><div>Cliente desde: {c.since}</div></div></div>
-            <div className="flex gap-2"><button onClick={()=>go("venta")} className="h-10 px-4 rounded-xl bg-brand-600 text-white text-[13px] font-medium">Iniciar venta</button>
-              <GhostBtn className="h-10"><Icon n="tag" s={15}/>Descuento VIP</GhostBtn></div>
-          </div>
-          <div className="grid grid-cols-4 gap-3 mt-5">
-            {[["Compras totales",mx(c.total)],["N° de compras",c.count],["Ticket promedio",mx(c.avg)],["Puntos de lealtad",c.pts+" pts"]].map(([k,v])=>(
-              <div key={k} className="p-3 rounded-xl bg-surf"><div className="text-[11px] text-ink-400">{k}</div><div className="tnum text-lg font-bold text-ink-900 mt-0.5">{v}</div></div>))}
-          </div>
-        </Card>
-        <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-4">
-          <Card className="p-5">
-            <div className="font-semibold text-ink-900 mb-3">Historial de compras</div>
-            <table className="w-full text-[12px]"><thead><tr className="text-ink-400 uppercase text-[10px] border-b border-line">
-              <th className="text-left py-2 font-semibold">Folio</th><th className="text-left font-semibold">Fecha</th><th className="text-center font-semibold">Artículos</th><th className="text-right font-semibold">Total</th></tr></thead>
-              <tbody>{c.history.map(([f,d,n,t])=>(<tr key={f} className="border-b border-line/70"><td className="tnum py-2.5 text-ink-700">{f}</td><td className="tnum text-ink-500">{d}</td><td className="tnum text-center text-ink-700">{n}</td><td className="tnum text-right font-semibold text-ink-900">{mx(t)}</td></tr>))}</tbody></table>
-          </Card>
-          <div className="space-y-4">
-            <Card className="p-5"><div className="font-semibold text-ink-900 mb-3">Preferencias</div>
-              <div className="flex flex-wrap gap-2">{c.prefs.map(p=><span key={p} className="text-[12px] text-brand-700 bg-brand-50 border border-brand-100 px-2.5 py-1 rounded-lg">{p}</span>)}</div></Card>
-            <Card className="p-5"><div className="flex items-center justify-between mb-2"><span className="font-semibold text-ink-900">Notas del vendedor</span><button className="text-[12px] text-brand-600">Editar</button></div>
-              <p className="text-[12px] text-ink-600 leading-relaxed">{c.note}</p></Card>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 /**
  * Devoluciones — contra el backend real (POST /sales/:id/return).
  *
@@ -1498,12 +1429,12 @@ function SettingsScreen({ theme, setTheme }) {
     4:<><SectionTitle t="Cajón de dinero"/><SetRow label="Cajón conectado" sub="Pulso por impresora"><Toggle on={tg.drawer} set={()=>t("drawer")}/></SetRow><SetRow label="Abrir al cobrar en efectivo"><Toggle on={tg.drawer} set={()=>t("drawer")}/></SetRow><SetRow label="Requiere PIN para abrir manualmente"><Toggle on={tg.pin} set={()=>t("pin")}/></SetRow><GhostBtn className="mt-4"><Icon n="wallet" s={16}/>Probar apertura</GhostBtn></>,
     5:<><SectionTitle t="Lector de código de barras"/><SetRow label="Lector habilitado" sub="Modo teclado (HID)"><Toggle on={tg.scan} set={()=>t("scan")}/></SetRow><SetRow label="Prefijo de escaneo"><TInput v="(ninguno)"/></SetRow><SetRow label="Sonido al escanear"><Toggle on={tg.sound} set={()=>t("sound")}/></SetRow><div className="mt-4 p-3 rounded-xl bg-surf border border-line text-[12px] text-ink-500">Escanea cualquier código para probar la lectura…</div></>,
     6:<><SectionTitle t="Impuestos"/><SetRow label="IVA habilitado" sub="16% general"><Toggle on={tg.iva} set={()=>t("iva")}/></SetRow><SetRow label="Tasa de IVA"><TInput v="16%"/></SetRow><SetRow label="Precios incluyen IVA"><Toggle on={tg.iva} set={()=>t("iva")}/></SetRow><SetRow label="Facturación CFDI 4.0"><Toggle on={tg.cfdi} set={()=>t("cfdi")}/></SetRow></>,
-    7:<><SectionTitle t="Métodos de pago"/>{[["Efectivo","cash",true],["Tarjeta (terminal)","card",true],["QR / Pago","qr",true],["Transferencia SPEI","swap",true],["Meses sin intereses","card",tg.msi]].map(([m,ic,on])=>(<SetRow key={m} label={<span className="flex items-center gap-2"><Icon n={ic} s={16} cls="text-ink-400"/>{m}</span>}><Toggle on={m==="Meses sin intereses"?tg.msi:true} set={()=>m==="Meses sin intereses"&&t("msi")}/></SetRow>))}</>,
+    7:<><SectionTitle t="Métodos de pago"/>{[["Efectivo","cash",true],["Tarjeta (terminal)","card",true],["QR / Pago","qr",true],["Transferencia SPEI","swap",true],["Meses sin intereses","card",tg.msi]].map(([m,ic])=>(<SetRow key={m} label={<span className="flex items-center gap-2"><Icon n={ic} s={16} cls="text-ink-400"/>{m}</span>}><Toggle on={m==="Meses sin intereses"?tg.msi:true} set={()=>m==="Meses sin intereses"&&t("msi")}/></SetRow>))}</>,
     9:<><SectionTitle t="Apariencia"/><SetRow label="Tema oscuro" sub="Cambia toda la interfaz"><Toggle on={theme==="dark"} set={()=>setTheme(theme==="dark"?"light":"dark")}/></SetRow><SetRow label="Color de acento"><div className="flex gap-2">{["#f97316","#2563eb","#7c3aed","#dc2626"].map(c=><span key={c} style={{background:c}} className={"w-7 h-7 rounded-full border-2 "+(c==="#f97316"?"border-ink-900":"border-transparent")}/>)}</div></SetRow><SetRow label="Densidad de la interfaz"><span className="text-[13px] text-ink-700 border border-line rounded-lg px-3 py-1.5">Cómoda ⌄</span></SetRow></>,
     10:<><SectionTitle t="Seguridad con PIN"/><SetRow label="Requiere PIN al iniciar" ><Toggle on={tg.pin} set={()=>t("pin")}/></SetRow><SetRow label="PIN para descuentos > 20%"><Toggle on={tg.pin} set={()=>t("pin")}/></SetRow><SetRow label="PIN para cancelaciones"><Toggle on={tg.pin} set={()=>t("pin")}/></SetRow><SetRow label="Cerrar sesión por inactividad"><span className="text-[13px] text-ink-700 border border-line rounded-lg px-3 py-1.5">10 min ⌄</span></SetRow></>,
     11:<AboutPanel/>,
   };
-  const generic=(name)=><><SectionTitle t={name}/><div className="py-10 text-center text-ink-400 text-sm">Configuración de <span className="font-medium text-ink-600">{name}</span> · panel de demo.</div></>;
+  const generic=(name)=><><SectionTitle t={name}/><div className="py-10 text-center text-ink-400 text-sm">Configuración de <span className="font-medium text-ink-600">{name}</span> · pendiente.</div></>;
   return (<div className="grid grid-cols-[280px_minmax(0,1fr)] gap-4 h-full">
     <Card className="p-2 overflow-y-auto">{groups.map(([g,ic],i)=>(<button key={g} onClick={()=>setSel(i)} className={"w-full flex items-center gap-3 h-11 px-3 rounded-xl text-left text-[13px] font-medium mb-0.5 "+(sel===i?"bg-brand-100 text-brand-700":"text-ink-600 hover:bg-surf")}>
       <Icon n={ic} s={18}/>{g}</button>))}</Card>
@@ -1521,8 +1452,8 @@ function AboutPanel(){
   const { ota, checkOta }=useData();
   const s=OTA_UI[ota?.status];
   const busy=ota?.status==="checking"||ota?.status==="downloading";
-  // En web/APK/demo no hay updater de escritorio (ni checkOta en el contexto del
-  // modo demo): se muestra la versión, pero no el botón que no haría nada.
+  // En web/APK no hay updater de escritorio: se muestra la versión, pero no el
+  // botón que no haría nada.
   const canUpdate=typeof checkOta==="function" && ota?.status!=="unsupported";
   return (
     <>
@@ -1567,24 +1498,21 @@ function AboutPanel(){
 
 /* ============================== DATA LAYER (backend real) ============================== */
 const DataCtx = createContext(null);
-function useData(){ return useContext(DataCtx) || { products:[], online:false, demo:true, session:null, giro:DEFAULT_GIRO }; }
-// Catálogo en vivo si existe; si no (sin login / sin productos retail), cae al demo.
-// PRODUCTS es el catálogo del MODO DEMOSTRACIÓN, no un fallback de emergencia.
-// Servirlo cuando una tienda REAL se queda sin catálogo (fetch fallido, o
-// catálogo vacío) es peor que no mostrar nada: el cajero ve camisas de lino con
-// "En stock: 68 pzas." que no existen, y en una ferretería encima con etiquetas
-// de ferretería sobre productos de ropa. Tienda real sin productos ⇒ lista vacía.
+function useData(){ return useContext(DataCtx) || { products:[], online:false, session:null, giro:DEFAULT_GIRO }; }
+// El catálogo es el que manda el backend, y punto. Sin productos ⇒ lista vacía:
+// no hay catálogo de relleno. Inventarse uno cuando una tienda real se queda sin
+// datos (fetch fallido o catálogo vacío) es peor que no mostrar nada — el cajero
+// veía camisas de lino con "En stock: 68 pzas." que no existen.
 // Constante a nivel de módulo, no un `[]` literal: `useProducts` alimenta un
 // efecto con dependencia [products], y un array nuevo por render lo dispararía
-// en cada uno. Hoy no cicla sólo porque setSel(null) sobre null no re-renderiza
-// — eso es suerte, no diseño.
+// en cada uno.
 const NO_PRODUCTS = [];
 function useProducts(){
   const d=useContext(DataCtx);
   if(d && d.products && d.products.length) return d.products;
-  return d && d.demo ? PRODUCTS : NO_PRODUCTS;
+  return NO_PRODUCTS;
 }
-// Resuelve el skuId real de una variante color/talla; undefined en productos demo.
+// Resuelve el skuId real de una variante color/talla.
 function resolveSkuId(p, color, size){
   if(!p || !p.live || !p.skuByVariant) return undefined;
   return p.skuByVariant[color+"::"+size] || Object.values(p.skuByVariant)[0] || undefined;
@@ -1634,7 +1562,7 @@ function VersionBadge({ ota }){
 }
 
 // Setup de dispositivo (estilo TPV): login admin → elegir sucursal → vincular.
-function SetupScreen({ ota, onLinked, onDemo }){
+function SetupScreen({ ota, onLinked }){
   const [step,setStep]=useState("login");
   const [email,setEmail]=useState(""); const [password,setPassword]=useState("");
   const [rName,setRName]=useState(""); const [oName,setOName]=useState("");
@@ -1730,13 +1658,12 @@ function SetupScreen({ ota, onLinked, onDemo }){
           <button onClick={()=>setStep("login")} className="w-full mt-4 text-[11px] text-ink-400 hover:text-ink-700">← Volver</button>
         </>)}
       </div>
-      <button onClick={onDemo} className="w-full mt-4 text-[12px] text-ink-400 hover:text-brand-600 transition-colors">Explorar en modo demostración →</button>
       <VersionBadge ota={ota}/>
     </div>
   </div>);
 }
 
-function LoginScreen({ ota, onLogin, onDemo, onRelink }){
+function LoginScreen({ ota, onLogin, onRelink }){
   const [pin,setPin]=useState("");
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState("");
@@ -1781,7 +1708,6 @@ function LoginScreen({ ota, onLogin, onDemo, onRelink }){
         </div>
         <button onClick={onRelink} className="w-full mt-4 text-[11px] text-ink-400 hover:text-ink-700 flex items-center justify-center gap-1.5"><Icon n="store" s={13}/>Cambiar sucursal</button>
       </div>
-      <button onClick={onDemo} className="w-full mt-4 text-[12px] text-ink-400 hover:text-brand-600 transition-colors">Explorar en modo demostración →</button>
       <VersionBadge ota={ota}/>
     </div>
   </div>);
@@ -1791,7 +1717,6 @@ function Root(){
   const [products,setProducts]=useState([]);
   const [online,setOnline]=useState(false);
   const [session,setSession]=useState(null);
-  const [demo,setDemo]=useState(false);
   const [linked,setLinked]=useState(false);
   const [ready,setReady]=useState(false);
   // Arranca en el default para que SSR e hidratación coincidan; el valor real
@@ -1886,18 +1811,53 @@ function Root(){
   },[]);
   useEffect(()=>{ checkOta(); },[checkOta]);
 
+  /* ---- Cola de ventas offline ----
+     Una venta cobrada sin red se guarda en disco y sale sola al reconectar. El
+     drenado se dispara por tres vías porque ninguna basta: el evento `online`
+     del navegador miente a menudo (dice "hay red" con el router sin internet),
+     y el intervalo solo no reacciona rápido cuando la red vuelve. */
+  const [outbox,setOutbox]=useState({ pending:0, rejected:0 });
+  const refreshOutbox=useCallback(()=>{
+    setOutbox({ pending:Outbox.pendingCount(), rejected:Outbox.rejectedCount() });
+  },[]);
+  const flushing=useRef(false);
+  const doFlush=useCallback(async()=>{
+    // Un solo drenado a la vez: si el intervalo dispara mientras el evento
+    // `online` ya estaba drenando, el segundo pase reenviaría ventas que el
+    // primero tiene en vuelo. El backend las dedupea por clientSaleId, pero el
+    // reintento igual es tráfico inútil sobre una red que apenas volvió.
+    if(flushing.current) return;
+    if(Outbox.pendingCount()===0){ refreshOutbox(); return; }
+    flushing.current=true;
+    try{
+      const r=await Outbox.flushOutbox();
+      setOutbox({ pending:r.pending, rejected:r.rejected });
+      if(r.sent>0 && loadCatalog) loadCatalog(); // el stock cambió en el servidor
+    } finally { flushing.current=false; }
+  },[refreshOutbox,loadCatalog]);
+  useEffect(()=>{ refreshOutbox(); },[refreshOutbox]);
+  useEffect(()=>{
+    if(!session) return;           // sin sesión no hay token con que reenviar
+    doFlush();
+    const onOnline=()=>doFlush();
+    window.addEventListener("online",onOnline);
+    const t=setInterval(doFlush,30000);
+    return ()=>{ window.removeEventListener("online",onOnline); clearInterval(t); };
+  },[session,doFlush]);
+
   if(!ready) return <div className="h-screen"><BootSplash/></div>;
-  if(!demo && !linked){
-    return <div className="h-screen"><SetupScreen ota={ota} onDemo={()=>setDemo(true)} onLinked={()=>setLinked(true)}/></div>;
+  if(!linked){
+    return <div className="h-screen"><SetupScreen ota={ota} onLinked={()=>setLinked(true)}/></div>;
   }
-  if(!demo && !session){
-    return <div className="h-screen"><LoginScreen ota={ota} onDemo={()=>setDemo(true)}
+  if(!session){
+    return <div className="h-screen"><LoginScreen ota={ota}
       onLogin={async(emp)=>{ setSession(emp); await loadCatalog(); }}
       onRelink={()=>{ Retail.unlink(); setSession(null); setLinked(false); }}/></div>;
   }
-  const value={ products, online, demo, session, giro, priceLists, priceListId, setPriceListId,
+  const value={ products, online, session, giro, priceLists, priceListId, setPriceListId,
+    outbox, refreshOutbox, flushOutbox:doFlush,
     refreshCatalog:loadCatalog, ota, checkOta,
-    logout:()=>{ Retail.logout(); setSession(null); setDemo(false); setOnline(false); setProducts([]); } };
+    logout:()=>{ Retail.logout(); setSession(null); setOnline(false); setProducts([]); } };
   return (<DataCtx.Provider value={value}><App/></DataCtx.Provider>);
 }
 
@@ -1995,17 +1955,26 @@ function App() {
   const [theme,setTheme]=useState("light");
   const [navOpen,setNavOpen]=useState(false);
   // RBAC real: permisos del empleado logueado (backend) + rol. El override de
-  // supervisor concede temporalmente; en demo todo está desbloqueado (showcase).
+  // supervisor concede temporalmente.
   const sessionPerms=useMemo(()=> new Set(data.session?.permissions||[]), [data.session]);
   const isAdminRole=ADMIN_ROLES_UI.includes((data.session?.role||"").toUpperCase());
   useEffect(()=>{ setGrants({}); },[data.session]);
   useEffect(()=>{ document.documentElement.setAttribute("data-theme",theme); },[theme]);
-  const can=(p)=>{ if(data.demo) return true; if(isAdminRole) return true; if(grants[p]) return true; return sessionPerms.has(CANON_PERM[p]||p); };
+  const can=(p)=>{ if(isAdminRole) return true; if(grants[p]) return true; return sessionPerms.has(CANON_PERM[p]||p); };
   const gate=(perm,fn)=>{ if(can(perm)){ fn&&fn(); } else { setOv({perm,fn}); } };
-  const titles={venta:"Venta activa",catalogo:"Catálogo de productos",clientes:"Clientes frecuentes",inventario:"Inventario por talla y color",apartados:"Apartados y cliente frecuente",devoluciones:"Devoluciones y cambios",caja:"Caja / corte de caja",reportes:"Reportes",config:"Configuración",checkout:"Checkout y métodos de pago",success:"Venta completada"};
+  const titles={venta:"Venta activa",catalogo:"Catálogo de productos",devoluciones:"Devoluciones y cambios",caja:"Caja / corte de caja",config:"Configuración",checkout:"Checkout y métodos de pago",success:"Venta completada"};
 
   const cobrar=()=>{ if(cart.length) setScreen("checkout"); };
-  const approve=async(total,method,payLines)=>{
+  /* Llave de idempotencia del intento de cobro. Se deriva del ticket + su
+     contenido, así que un reintento tras un timeout de red manda la MISMA
+     llave y el backend devuelve la venta ya creada (`idempotent:true`) en vez
+     de cobrar otra vez; cambiar el carrito genera una llave nueva. */
+  const attemptKey=useMemo(()=>{
+    const sig=cart.map(l=>`${l.skuId||l.id}:${l.qty}`).join("|");
+    let h=0; for(let i=0;i<sig.length;i++){ h=(h*31+sig.charCodeAt(i))|0; }
+    return `moda-${activeId}-${(h>>>0).toString(36)}`;
+  },[cart,activeId]);
+  const approve=async(total,method,payLines,changeGiven=0)=>{
     // La cantidad de granel se captura a mano y puede quedar vacía o en 0 mientras
     // el cajero teclea; el backend la rechaza con 400. Se normaliza aquí y se
     // aborta antes de cobrar en vez de mandar una venta que va a fallar.
@@ -2018,32 +1987,49 @@ function App() {
     const subtotal=cartTotal(cart,data.priceListId);
     const desc=0; // sin descuento automático; el precio de catálogo ya incluye IVA
     const totalCobro=Math.round((subtotal-desc)*100)/100;
-    // Venta real al backend solo si hay sesión online y TODAS las líneas tienen skuId
-    // (catálogo en vivo). Demo / sin catálogo → venta local con folio temporal.
-    const canOnline=data.online && cart.length>0 && cart.every(l=>l.skuId);
-    if(canOnline){
-      try{
-        const payments=(payLines&&payLines.length?payLines:[{method,amount:totalCobro}])
-          .map(pl=>({method:Retail.toPaymentMethod(pl.method||method),amount:Math.round(pl.amount*100)/100}));
-        // tax:0 → el precio de catálogo ya incluye IVA; el backend cobra Σ precio − descuento.
-        // priceListId viaja para que el backend resuelva la MISMA lista que se
-        // cotizó; él recalcula y rechaza si su total no cuadra con los pagos.
-        const r=await Retail.createSale({ lines:cart.map(l=>({skuId:l.skuId,quantity:qtyOf(l)})), payments, discount:desc, tax:0, priceListId:data.priceListId });
-        setSale({ total:Number(r.sale.total), method, items:cart, subtotal, desc, folio:r.sale.folio, priceListId:data.priceListId });
-        closeTicket(activeId); // la venta ya se cobró → descartar el ticket de inmediato
-        setScreen("success");
-        if(data.refreshCatalog) data.refreshCatalog();
-      }catch(e){
-        // NO fabricar un éxito: una venta online fallida (stock, pagos, sesión) se avisa
-        // y deja al cajero en el cobro para reintentar — nunca "Pago aprobado" falso.
-        setToast("No se pudo cobrar: "+(e?.message||e));
-      }
+    // Sin skuId no hay nada que vender: son líneas que no existen en el catálogo
+    // del backend. Eso no se encola — nunca lo va a aceptar.
+    if(!cart.length || !cart.every(l=>l.skuId)){
+      setToast("No se puede cobrar: hay productos que no están en el catálogo. Recarga el catálogo e inténtalo de nuevo.");
       return;
     }
-    // Demo / sin catálogo en vivo: venta local (NO persiste en backend).
-    setSale({ total:totalCobro, method, items:cart, subtotal, desc, folio:"DEMO-"+String(Date.now()).slice(-6), priceListId:data.priceListId });
-    closeTicket(activeId); // venta demo completada → descartar el ticket
-    setScreen("success");
+    const payments=(payLines&&payLines.length?payLines:[{method,amount:totalCobro}])
+      .map(pl=>({method:Retail.toPaymentMethod(pl.method||method),amount:Math.round(pl.amount*100)/100}));
+    // tax:0 → el precio de catálogo ya incluye IVA; el backend cobra Σ precio − descuento.
+    // priceListId viaja para que el backend resuelva la MISMA lista que se
+    // cotizó; él recalcula y rechaza si su total no cuadra con los pagos.
+    const payload={ lines:cart.map(l=>({skuId:l.skuId,quantity:qtyOf(l)})), payments, discount:desc, tax:0, priceListId:data.priceListId };
+    const finish=(extra)=>{
+      setSale({ total:totalCobro, method, items:cart, subtotal, desc, priceListId:data.priceListId, change:changeGiven, ...extra });
+      closeTicket(activeId); // la venta ya se cobró → descartar el ticket de inmediato
+      setScreen("success");
+    };
+    // Offline conocido: ni intentarlo. Un fetch a una red caída se come los 15s
+    // del timeout con el cajero esperando, y el resultado sería el mismo.
+    if(!data.online){
+      Outbox.enqueue({ clientSaleId:attemptKey, payload, total:totalCobro, createdAt:Date.now() });
+      data.refreshOutbox&&data.refreshOutbox();
+      finish({ folio:null, pending:true });
+      return;
+    }
+    try{
+      const r=await Retail.createSale({ ...payload, clientSaleId:attemptKey });
+      finish({ total:Number(r.sale.total), folio:r.sale.folio });
+      if(data.refreshCatalog) data.refreshCatalog();
+    }catch(e){
+      if(Outbox.isTransient(e)){
+        // La red se cayó DURANTE el cobro. El dinero ya se recibió, así que la
+        // venta se guarda en disco con su llave de idempotencia y sale sola al
+        // reconectar; reintentarla no puede duplicar el cobro.
+        Outbox.enqueue({ clientSaleId:attemptKey, payload, total:totalCobro, createdAt:Date.now() });
+        data.refreshOutbox&&data.refreshOutbox();
+        finish({ folio:null, pending:true });
+        return;
+      }
+      // Rechazo de negocio (stock, totales, sesión): encolarlo sería mentir, va a
+      // fallar igual siempre. Se avisa y el cajero se queda en el cobro.
+      setToast("No se pudo cobrar: "+(e?.message||e));
+    }
   };
   // Nuevo ticket: reusa uno vacío si ya existe (no acumula vacíos) y lo activa.
   const addTicket=()=>{
@@ -2069,7 +2055,6 @@ function App() {
   useEffect(()=>{ const h=(e)=>{
     if(e.key==="F1"){e.preventDefault();addTicket();}
     else if(e.key==="F2"){e.preventDefault();document.getElementById("globalsearch")?.focus();}
-    else if(e.key==="F3"){e.preventDefault();setScreen("clientes");}
     else if(e.key==="F5"){e.preventDefault();cobrar();}
     else if(e.key==="F7"){e.preventDefault();setScreen("devoluciones");}
     else if(e.key==="F8"){e.preventDefault();setScreen("caja");}
@@ -2087,15 +2072,11 @@ function App() {
         <main className="flex-1 min-w-0 p-3 lg:p-4 overflow-y-auto lg:overflow-hidden">
           {screen==="venta"&&<SaleScreen cart={cart} setCart={setCart} sel={sel} setSel={setSel} go={setScreen}
             tickets={tickets} activeId={activeId} ticketIndex={ticketIndex} onSwitch={switchTicket} onAddTicket={addTicket} onCloseTicket={requestCloseTicket}/>}
-          {screen==="checkout"&&<CheckoutScreen cart={cart} go={setScreen} onApprove={approve}/>}
+          {screen==="checkout"&&<CheckoutScreen cart={cart} setCart={setCart} go={setScreen} onApprove={approve}/>}
           {screen==="success"&&sale&&<SuccessScreen sale={sale} go={setScreen} newSale={finishSale}/>}
           {screen==="catalogo"&&<CatalogScreen setSel={setSel} go={setScreen}/>}
-          {screen==="inventario"&&<InventoryScreen/>}
-          {screen==="apartados"&&<HoldsScreen/>}
-          {screen==="clientes"&&<ClientsScreen go={setScreen}/>}
           {screen==="devoluciones"&&<ReturnsScreen/>}
           {screen==="caja"&&<CashScreen/>}
-          {screen==="reportes"&&(can("view_reports")?<ReportsScreen/>:<LockedScreen perm="view_reports" icon="chart" title="Reportes de ventas"/>)}
           {screen==="config"&&(can("manage_settings")?<SettingsScreen theme={theme} setTheme={setTheme}/>:<LockedScreen perm="manage_settings" icon="gear" title="Configuración"/>)}
         </main>
       </div>
