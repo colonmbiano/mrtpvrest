@@ -297,7 +297,6 @@ function GateBtn({ perm, onClick, children, className="", ghost=false }) {
    El acceso se deriva del empleado logueado (RBAC real). */
 
 function OverrideModal({ perm, onClose, onOk }) {
-  const data=useData();
   const [pin,setPin]=useState(""); const [err,setErr]=useState(""); const [busy,setBusy]=useState(false);
   const submit=async()=>{
     if(pin.length<4){ setErr("Ingresa el PIN de 4 dígitos."); return; }
@@ -343,7 +342,7 @@ function Toast({ msg, onClose }) {
 
 function Barcode({ value, height=44, width=1.7, className="" }) {
   const ref = useRef(null);
-  useEffect(()=>{ if(ref.current && window.JsBarcode){ try{ window.JsBarcode(ref.current, String(value||" "), {format:"CODE128", height, width, displayValue:false, margin:0, background:"transparent", lineColor:"#1b2520"}); }catch(e){} } }, [value, height, width]);
+  useEffect(()=>{ if(ref.current && window.JsBarcode){ try{ window.JsBarcode(ref.current, String(value||" "), {format:"CODE128", height, width, displayValue:false, margin:0, background:"transparent", lineColor:"#1b2520"}); }catch{} } }, [value, height, width]);
   return <svg ref={ref} className={className}></svg>;
 }
 function Dash(){ return <div className="border-t border-dashed border-ink-400 my-2"/>; }
@@ -1162,7 +1161,7 @@ function CashScreen() {
     }catch(e){ setMsg("No se pudo cargar la caja: "+(e?.message||e)); }
     finally{ setLoading(false); }
   };
-  useEffect(()=>{ load(); /* eslint-disable-next-line */ },[data.online]);
+  useEffect(()=>{ load(); },[data.online]);
 
   const doOpen=async()=>{ setBusy(true); setMsg("");
     try{ await Retail.openShift(num(openFloat), blind); setOpenFloat(""); setBlind(false); await load(); }
@@ -1430,7 +1429,7 @@ function SettingsScreen({ theme, setTheme }) {
     4:<><SectionTitle t="Cajón de dinero"/><SetRow label="Cajón conectado" sub="Pulso por impresora"><Toggle on={tg.drawer} set={()=>t("drawer")}/></SetRow><SetRow label="Abrir al cobrar en efectivo"><Toggle on={tg.drawer} set={()=>t("drawer")}/></SetRow><SetRow label="Requiere PIN para abrir manualmente"><Toggle on={tg.pin} set={()=>t("pin")}/></SetRow><GhostBtn className="mt-4"><Icon n="wallet" s={16}/>Probar apertura</GhostBtn></>,
     5:<><SectionTitle t="Lector de código de barras"/><SetRow label="Lector habilitado" sub="Modo teclado (HID)"><Toggle on={tg.scan} set={()=>t("scan")}/></SetRow><SetRow label="Prefijo de escaneo"><TInput v="(ninguno)"/></SetRow><SetRow label="Sonido al escanear"><Toggle on={tg.sound} set={()=>t("sound")}/></SetRow><div className="mt-4 p-3 rounded-xl bg-surf border border-line text-[12px] text-ink-500">Escanea cualquier código para probar la lectura…</div></>,
     6:<><SectionTitle t="Impuestos"/><SetRow label="IVA habilitado" sub="16% general"><Toggle on={tg.iva} set={()=>t("iva")}/></SetRow><SetRow label="Tasa de IVA"><TInput v="16%"/></SetRow><SetRow label="Precios incluyen IVA"><Toggle on={tg.iva} set={()=>t("iva")}/></SetRow><SetRow label="Facturación CFDI 4.0"><Toggle on={tg.cfdi} set={()=>t("cfdi")}/></SetRow></>,
-    7:<><SectionTitle t="Métodos de pago"/>{[["Efectivo","cash",true],["Tarjeta (terminal)","card",true],["QR / Pago","qr",true],["Transferencia SPEI","swap",true],["Meses sin intereses","card",tg.msi]].map(([m,ic,on])=>(<SetRow key={m} label={<span className="flex items-center gap-2"><Icon n={ic} s={16} cls="text-ink-400"/>{m}</span>}><Toggle on={m==="Meses sin intereses"?tg.msi:true} set={()=>m==="Meses sin intereses"&&t("msi")}/></SetRow>))}</>,
+    7:<><SectionTitle t="Métodos de pago"/>{[["Efectivo","cash",true],["Tarjeta (terminal)","card",true],["QR / Pago","qr",true],["Transferencia SPEI","swap",true],["Meses sin intereses","card",tg.msi]].map(([m,ic])=>(<SetRow key={m} label={<span className="flex items-center gap-2"><Icon n={ic} s={16} cls="text-ink-400"/>{m}</span>}><Toggle on={m==="Meses sin intereses"?tg.msi:true} set={()=>m==="Meses sin intereses"&&t("msi")}/></SetRow>))}</>,
     9:<><SectionTitle t="Apariencia"/><SetRow label="Tema oscuro" sub="Cambia toda la interfaz"><Toggle on={theme==="dark"} set={()=>setTheme(theme==="dark"?"light":"dark")}/></SetRow><SetRow label="Color de acento"><div className="flex gap-2">{["#f97316","#2563eb","#7c3aed","#dc2626"].map(c=><span key={c} style={{background:c}} className={"w-7 h-7 rounded-full border-2 "+(c==="#f97316"?"border-ink-900":"border-transparent")}/>)}</div></SetRow><SetRow label="Densidad de la interfaz"><span className="text-[13px] text-ink-700 border border-line rounded-lg px-3 py-1.5">Cómoda ⌄</span></SetRow></>,
     10:<><SectionTitle t="Seguridad con PIN"/><SetRow label="Requiere PIN al iniciar" ><Toggle on={tg.pin} set={()=>t("pin")}/></SetRow><SetRow label="PIN para descuentos > 20%"><Toggle on={tg.pin} set={()=>t("pin")}/></SetRow><SetRow label="PIN para cancelaciones"><Toggle on={tg.pin} set={()=>t("pin")}/></SetRow><SetRow label="Cerrar sesión por inactividad"><span className="text-[13px] text-ink-700 border border-line rounded-lg px-3 py-1.5">10 min ⌄</span></SetRow></>,
     11:<AboutPanel/>,
