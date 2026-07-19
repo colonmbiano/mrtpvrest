@@ -149,7 +149,20 @@ Esta es la pantalla donde vive el cajero. El flujo es el mismo todos los días.
 <sub>A la izquierda el ticket, arriba el selector de lista de precio, a la derecha el detalle del producto con su existencia y ubicación.</sub>
 
 ![Cobro](img/guia/04-cobro.webp)
-<sub>El cobro: eliges la forma de pago y confirmas.</sub>
+<sub>El cobro: eliges la forma de pago y confirmas. <b>Captura tomada antes del
+rediseño de la versión 1.0.7</b> — el flujo es el mismo, pero la pantalla actual
+tiene tres zonas (carrito · pago · resumen) y el botón dice directamente
+"Cobrar $265.00".</sub>
+
+### Si se cae el internet
+
+La caja **sigue cobrando**. La venta se guarda en el equipo y se envía sola en
+cuanto vuelve la conexión; arriba aparece un contador de "pendientes por enviar".
+El ticket dirá *"Venta guardada"* y el folio queda "al sincronizar" — es normal.
+
+> [!IMPORTANT]
+> Mientras haya pendientes, esas ventas **todavía no están en el corte del
+> servidor**. Antes de cerrar el turno, revisa que el contador esté en cero.
 
 ### Atajos de teclado
 
@@ -157,9 +170,15 @@ Esta es la pantalla donde vive el cajero. El flujo es el mismo todos los días.
 |---|---|
 | `F1` | Nueva venta (otro ticket sin perder el actual) |
 | `F2` | Buscar producto |
-| `F5` | Cobrar |
+| `F4` | Cambiar forma de pago (dentro del cobro) |
+| `F5` | Cobrar · dentro del cobro, ejecuta la acción del botón |
 | `F7` | Devolución |
-| `F8` | Abrir cajón de dinero |
+| `F8` | Ir a Caja |
+
+> [!WARNING]
+> La barra inferior de la caja todavía rotula `F8` como **"Abrir cajón"**, pero
+> la tecla lleva a la pantalla de Caja; no abre el cajón de dinero. Es una
+> etiqueta equivocada en la app, pendiente de corregir.
 
 > [!NOTE]
 > **El total lo calcula el servidor.** El precio final siempre lo confirma el sistema, no la pantalla. Aunque haya listas, descuentos y mayoreo mezclados, el cobro cuadra: no se puede alterar el total desde la caja.
