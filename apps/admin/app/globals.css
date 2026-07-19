@@ -171,12 +171,18 @@ body {
 }
 .animate-pulse { animation: pulse-live 2s ease-in-out infinite; }
 
-/* Entrada suave de página */
+/* Entrada suave de página.
+   Ojo con el fill-mode: con `both` el `to { transform: translateY(0) }` se
+   queda aplicado para siempre, y un transform != none convierte al elemento en
+   el containing block de sus descendientes `position: fixed`. Como PageShell
+   lleva .ds-enter, eso anclaba modales y barras flotantes al alto del documento
+   en vez de al viewport. `backwards` anima igual (el estado final coincide con
+   el natural: opacity 1, sin desplazamiento) pero no deja transform residual. */
 @keyframes ds-enter {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.ds-enter { animation: ds-enter 320ms cubic-bezier(.22,.7,.3,1) both; }
+.ds-enter { animation: ds-enter 320ms cubic-bezier(.22,.7,.3,1) backwards; }
 
 /* Scrollbar oculto para carruseles horizontales */
 .ds-scrollbar { scrollbar-width: none; }
