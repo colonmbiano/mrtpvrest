@@ -269,6 +269,23 @@ describe("syncOfflineQueue — replay rechazado con 4xx definitivo", () => {
     expect(cfg?.timeout).toBeGreaterThan(0);
   });
 
+  it("el replay legacy tambien va acotado con timeout", async () => {
+    // Shape legacy (sin method/path): lo encolan ManagerOverrideModal y
+    // AdminPinGuardModal como tipo 'override'. Era la unica llamada HTTP del
+    // loop sin cfg, y el axios global no trae timeout propio.
+    useOfflineStore.getState().addToQueue({
+      id: "override-legacy", type: "override", timestamp: 1000, synced: false,
+      data: { permission: "reopen_table" },
+    });
+    mockApi.post.mockResolvedValue({ data: {} });
+
+    await syncOfflineQueue();
+
+    const call = mockApi.post.mock.calls.find((c) => c[0] === "/api/sync/transaction");
+    expect(call).toBeDefined();
+    expect((call![2] as { timeout?: number })?.timeout).toBeGreaterThan(0);
+  });
+
   it("un candado sin latido no bloquea el sync para siempre", async () => {
     // Simula un pase anterior que se colgó: el flag quedó en true dentro de
     // este mismo proceso y nunca hubo latido. El watchdog debe tomar el relevo.
