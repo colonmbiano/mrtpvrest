@@ -50,6 +50,23 @@ function isNetworkError(err: any): boolean {
   return false;
 }
 
+// Veredicto DEFINITIVO del backend sobre un replay: va a responder igual
+// dentro de 5 segundos y dentro de 5 días, así que reintentar es ruido.
+//   400 → orden cerrada/pagada, payload inválido
+//   403 → sin permisos
+//   409 → conflicto (mesa con cuenta abierta, dedupe)
+//   422 → validación
+// Quedan FUERA a propósito, porque el reintento SÍ puede salvarlos:
+//   401 → token vencido; el refresh lo arregla
+//   404 → ventana de deploy (/current aún no existe en Railway) o un
+//         predecesor de la cola que todavía no aterriza (la apertura de
+//         turno que crea el /current del cierre)
+//   408/429/5xx/red → transitorios
+function isPermanentReplayError(err: any): boolean {
+  const status = err?.response?.status;
+  return status === 400 || status === 403 || status === 409 || status === 422;
+}
+
 function genTxId(type: TransactionType) {
   return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -255,9 +272,27 @@ export async function syncOfflineQueue() {
         }
 
         store.markSynced(transaction.id);
-      } catch (err) {
-        console.error(`Failed to sync transaction ${transaction.id}:`, err);
-        // Keep in queue for retry — el próximo tick lo intentará.
+      } catch (err: any) {
+        if (isPermanentReplayError(err)) {
+          // El backend ya dictaminó: reintentar no la va a salvar. La
+          // congelamos con el motivo para que la UI lo muestre y alguien
+          // decida (típicamente: descartarla tras verificar el ticket).
+          const failure = {
+            status: err?.response?.status as number,
+            error:
+              err?.response?.data?.error ||
+              err?.message ||
+              'Rechazada por el servidor',
+            at: Date.now(),
+          };
+          console.error(
+            `Tx ${transaction.id} rechazada (${failure.status}): ${failure.error}`
+          );
+          store.markFailed(transaction.id, failure);
+        } else {
+          console.error(`Failed to sync transaction ${transaction.id}:`, err);
+          // Transitorio — el próximo tick lo intentará.
+        }
       }
     }
 
