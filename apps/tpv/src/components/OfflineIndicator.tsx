@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { CloudOff, RefreshCcw, CloudUpload, X, Clock } from "lucide-react";
+import { CloudOff, RefreshCcw, CloudUpload, X, Clock, AlertTriangle, Trash2 } from "lucide-react";
 import useOfflineStore, { type OfflineTransaction } from "@/store/useOfflineStore";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { syncOfflineQueue } from "@/lib/offline";
@@ -15,6 +15,10 @@ import { syncOfflineQueue } from "@/lib/offline";
 // botón "Forzar sync" (útil al volver online cuando aún no disparó el
 // siguiente tick del background sync de 5s).
 //
+// Las tx RECHAZADAS por el backend (4xx definitivo) se listan aparte con su
+// motivo y un "Descartar": ya no se reintentan solas, así que sin esa salida
+// se quedarían en el chip para siempre.
+//
 // Posicionado top-right para evitar chocar con el FAB de /pos/menu
 // (bottom-right) y con el sticky CTA de /meseros/[id] (bottom).
 export default function OfflineIndicator() {
@@ -22,10 +26,14 @@ export default function OfflineIndicator() {
   const queue = useOfflineStore((s) => s.queue);
   const syncInProgress = useOfflineStore((s) => s.syncInProgress);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const unsynced = queue.filter((tx) => !tx.synced);
+  const unsynced = queue.filter((tx) => !tx.synced && !tx.failed);
+  const failed = queue.filter((tx) => !tx.synced && tx.failed);
   const unsyncedCount = unsynced.length;
+  const failedCount = failed.length;
 
-  if (isOnline && !syncInProgress && unsyncedCount === 0) return null;
+  if (isOnline && !syncInProgress && unsyncedCount === 0 && failedCount === 0) {
+    return null;
+  }
 
   const base =
     "fixed top-3 right-3 z-[60] flex items-center gap-2 px-3.5 py-2 rounded-full border backdrop-blur-md shadow-lg text-[10px] font-black uppercase tracking-[0.2em] active:scale-95 transition-transform";
@@ -33,7 +41,9 @@ export default function OfflineIndicator() {
   const chip = !isOnline ? (
     <button
       type="button"
-      onClick={() => unsyncedCount > 0 && setDrawerOpen(true)}
+      onClick={() =>
+        (unsyncedCount > 0 || failedCount > 0) && setDrawerOpen(true)
+      }
       className={`${base} bg-red-500/15 border-red-500/40 text-red-400 animate-pulse`}
       aria-label="Estado offline"
     >
@@ -56,6 +66,18 @@ export default function OfflineIndicator() {
         <span className="tabular-nums opacity-80">· {unsyncedCount}</span>
       )}
     </button>
+  ) : failedCount > 0 && unsyncedCount === 0 ? (
+    <button
+      type="button"
+      onClick={() => setDrawerOpen(true)}
+      className={`${base} bg-[var(--danger-soft)] border-[var(--danger)] text-[var(--danger)]`}
+      aria-label="Transacciones rechazadas"
+    >
+      <AlertTriangle size={14} strokeWidth={2.5} />
+      <span>
+        {failedCount} con error
+      </span>
+    </button>
   ) : (
     <button
       type="button"
@@ -67,6 +89,11 @@ export default function OfflineIndicator() {
       <span>
         {unsyncedCount} pendiente{unsyncedCount === 1 ? "" : "s"}
       </span>
+      {failedCount > 0 && (
+        <span className="tabular-nums text-[var(--danger)]">
+          · {failedCount} error
+        </span>
+      )}
     </button>
   );
 
@@ -76,6 +103,7 @@ export default function OfflineIndicator() {
       {drawerOpen && (
         <PendingDrawer
           unsynced={unsynced}
+          failed={failed}
           isOnline={isOnline}
           syncInProgress={syncInProgress}
           onClose={() => setDrawerOpen(false)}
@@ -87,15 +115,18 @@ export default function OfflineIndicator() {
 
 function PendingDrawer({
   unsynced,
+  failed,
   isOnline,
   syncInProgress,
   onClose,
 }: {
   unsynced: OfflineTransaction[];
+  failed: OfflineTransaction[];
   isOnline: boolean;
   syncInProgress: boolean;
   onClose: () => void;
 }) {
+  const discardTransaction = useOfflineStore((s) => s.discardTransaction);
   // Snapshot al montar el drawer — Date.now() durante render es impuro
   // (react-compiler). Si el usuario deja el drawer abierto mucho rato los
   // tiempos se quedarán congelados, lo cual está bien para un panel
@@ -134,8 +165,14 @@ function PendingDrawer({
           <div>
             <h2 className="text-base font-black text-white">Cola offline</h2>
             <p className="text-[11px] text-white/40 mt-0.5">
-              {unsynced.length} pendiente{unsynced.length === 1 ? "" : "s"} ·{" "}
-              {isOnline ? "Online" : "Sin conexión"}
+              {unsynced.length} pendiente{unsynced.length === 1 ? "" : "s"}
+              {failed.length > 0 && (
+                <span className="text-[var(--danger)]">
+                  {" "}
+                  · {failed.length} con error
+                </span>
+              )}{" "}
+              · {isOnline ? "Online" : "Sin conexión"}
             </p>
           </div>
           <button
@@ -147,7 +184,7 @@ function PendingDrawer({
           </button>
         </header>
 
-        {unsynced.length === 0 ? (
+        {unsynced.length === 0 && failed.length === 0 ? (
           <p className="text-sm text-white/40 text-center py-8">Sin pendientes.</p>
         ) : (
           <ul className="flex flex-col divide-y divide-white/5 mb-4">
@@ -171,6 +208,54 @@ function PendingDrawer({
               );
             })}
           </ul>
+        )}
+
+        {failed.length > 0 && (
+          <section className="mb-4">
+            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--danger)] mb-1">
+              Rechazadas por el servidor
+            </h3>
+            <p className="text-[11px] text-white/40 mb-2">
+              Ya no se reintentan. Verifica el ticket antes de descartar.
+            </p>
+            <ul className="flex flex-col divide-y divide-white/5">
+              {failed.map((tx) => {
+                const path = (tx.data as any)?.path || "";
+                return (
+                  <li key={tx.id} className="py-3 flex items-start gap-3">
+                    <AlertTriangle
+                      size={14}
+                      className="text-[var(--danger)] mt-0.5 shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-white">
+                        {typeLabel[tx.type] || tx.type}
+                        <span className="text-[11px] text-white/40 ml-2 font-normal">
+                          {fmtAgo(tx.timestamp)}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[var(--danger)] break-words">
+                        {tx.failed?.status} · {tx.failed?.error}
+                      </div>
+                      {path && (
+                        <div className="text-[11px] text-white/40 truncate font-mono">
+                          {path}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => discardTransaction(tx.id)}
+                      className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold text-[var(--danger)] bg-[var(--danger-soft)] border border-[var(--danger)]/40 active:scale-95"
+                      aria-label={`Descartar ${typeLabel[tx.type] || tx.type}`}
+                    >
+                      <Trash2 size={12} strokeWidth={2.5} />
+                      Descartar
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
         )}
 
         <div className="flex items-center justify-end gap-2">

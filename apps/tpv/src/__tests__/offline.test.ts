@@ -172,3 +172,85 @@ describe("syncOfflineQueue — gate de orden del cierre", () => {
     expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(0);
   });
 });
+
+// Un 4xx definitivo en el replay (ej. la ronda encolada llega cuando la orden
+// ya se cobró) se reintentaba cada 5s para siempre: el chip quedaba en "1
+// pendiente" de por vida y el personal aprendía a ignorarlo.
+describe("syncOfflineQueue — replay rechazado con 4xx definitivo", () => {
+  beforeEach(() => {
+    mockApi.get.mockResolvedValue({ data: [] });
+  });
+
+  function enqueue(type: any, path: string, id: string, timestamp: number) {
+    useOfflineStore.getState().addToQueue({
+      id, type, timestamp, synced: false,
+      data: { method: "POST", path, body: {} },
+    });
+  }
+
+  it("400 congela la tx con su motivo y NO la reintenta en el siguiente tick", async () => {
+    enqueue("order", "/api/orders/OID/items", "items-1", 1000);
+    mockApi.post.mockRejectedValue({
+      response: { status: 400, data: { error: "La orden ya fue pagada" } },
+    });
+
+    await syncOfflineQueue();
+    await syncOfflineQueue();
+
+    // Un solo intento: el segundo pase ya no la considera.
+    expect(mockApi.post).toHaveBeenCalledTimes(1);
+    expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(0);
+
+    const [dead] = useOfflineStore.getState().getFailedTransactions();
+    expect(dead!.id).toBe("items-1");
+    expect(dead!.failed).toMatchObject({ status: 400, error: "La orden ya fue pagada" });
+  });
+
+  it.each([401, 404, 429, 500])(
+    "%i NO la congela — sigue en cola para reintentar",
+    async (status) => {
+      enqueue("order", "/api/orders/tpv", `tx-${status}`, 1000);
+      mockApi.post.mockRejectedValue({ response: { status, data: {} } });
+
+      await syncOfflineQueue();
+
+      expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(1);
+      expect(useOfflineStore.getState().getFailedTransactions()).toHaveLength(0);
+    }
+  );
+
+  it("una tx congelada no bloquea el cierre de turno", async () => {
+    enqueue("order", "/api/orders/OID/items", "items-2", 1000);
+    enqueue("shift-close", "/api/shifts/current/close", "close-3", 2000);
+    mockApi.post.mockImplementation((path: string) => {
+      if (path === "/api/orders/OID/items") {
+        return Promise.reject({ response: { status: 400, data: { error: "Orden cerrada" } } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    // Pase 1: la orden se congela; el cierre se pospone (aún la ve más vieja).
+    await syncOfflineQueue();
+    // Pase 2: ya no hay predecesor vivo → el cierre entra.
+    await syncOfflineQueue();
+
+    const postedPaths = mockApi.post.mock.calls.map((c) => c[0]);
+    expect(postedPaths).toContain("/api/shifts/current/close");
+    expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(0);
+    expect(useOfflineStore.getState().getFailedTransactions()).toHaveLength(1);
+  });
+
+  it("discardTransaction saca la tx congelada de la cola", async () => {
+    enqueue("order", "/api/orders/OID/items", "items-3", 1000);
+    mockApi.post.mockRejectedValue({
+      response: { status: 409, data: { error: "Conflicto" } },
+    });
+
+    await syncOfflineQueue();
+    expect(useOfflineStore.getState().getFailedTransactions()).toHaveLength(1);
+
+    useOfflineStore.getState().discardTransaction("items-3");
+
+    expect(useOfflineStore.getState().queue).toHaveLength(0);
+  });
+});
