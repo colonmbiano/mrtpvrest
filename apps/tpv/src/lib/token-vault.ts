@@ -32,6 +32,30 @@ let memoryToken: string | null = null;
 let plugin: SecurePlugin | null = null;
 let readyPromise: Promise<void> | null = null;
 
+// Tope para CUALQUIER ida al puente nativo de Capacitor. El Keystore responde
+// en milisegundos; 5s es holgadísimo y solo se alcanza si el puente se colgó.
+//
+// Por qué importa tanto: el interceptor de request de api.ts hace
+// `await getToken()`, y el `timeout` de axios NO cubre los interceptores — la
+// petición ni siquiera llega al adapter, así que un puente colgado se lleva
+// TODAS las requests de la app, no solo el sync. Peor: readyPromise está
+// memoizado, así que sin este tope un solo cuelgue deja la app muerta hasta
+// que alguien la reinicie. Al vencer caemos al camino legacy, que es el mismo
+// fallback que ya existía para "el plugin falló".
+const VAULT_TIMEOUT_MS = 5000;
+
+function withTimeout<T>(p: Promise<T>, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`token-vault: ${label} excedio ${VAULT_TIMEOUT_MS}ms`)),
+        VAULT_TIMEOUT_MS
+      )
+    ),
+  ]);
+}
+
 function readLegacy(): string | null {
   if (typeof window === "undefined") return null;
   try {
@@ -77,29 +101,37 @@ export function initTokenVault(): Promise<void> {
     if (!Capacitor.isNativePlatform()) return;
     if (!Capacitor.isPluginAvailable("SecureStoragePlugin")) return; // APK viejo
     try {
-      const mod = await import("capacitor-secure-storage-plugin");
-      plugin = mod.SecureStoragePlugin as unknown as SecurePlugin;
-
-      let secure: string | null = null;
-      try {
-        secure = (await plugin.get({ key: SECURE_KEY })).value || null;
-      } catch {
-        secure = null; // el plugin rechaza cuando la key no existe
-      }
-
-      if (secure) {
-        memoryToken = secure;
-        clearLegacy(); // un bundle viejo pudo re-escribirlas
-      } else if (memoryToken) {
-        // Migración única: el token legacy pasa al Keystore.
-        await plugin.set({ key: SECURE_KEY, value: memoryToken });
-        clearLegacy();
-      }
+      // Un solo tope para todo el bloque nativo: si el puente no contesta,
+      // esto RECHAZA en vez de colgarse y cae al catch de abajo. memoryToken
+      // ya quedó hidratado desde legacy arriba, así que la app sigue con
+      // sesión válida aunque el Keystore no responda.
+      await withTimeout(hydrateFromSecureStorage(), "hidratacion");
     } catch {
-      plugin = null; // cualquier fallo del plugin → seguimos en legacy
+      plugin = null; // cualquier fallo (o cuelgue) del plugin → seguimos en legacy
     }
   })();
   return readyPromise;
+}
+
+async function hydrateFromSecureStorage(): Promise<void> {
+  const mod = await import("capacitor-secure-storage-plugin");
+  plugin = mod.SecureStoragePlugin as unknown as SecurePlugin;
+
+  let secure: string | null = null;
+  try {
+    secure = (await plugin.get({ key: SECURE_KEY })).value || null;
+  } catch {
+    secure = null; // el plugin rechaza cuando la key no existe
+  }
+
+  if (secure) {
+    memoryToken = secure;
+    clearLegacy(); // un bundle viejo pudo re-escribirlas
+  } else if (memoryToken) {
+    // Migración única: el token legacy pasa al Keystore.
+    await plugin.set({ key: SECURE_KEY, value: memoryToken });
+    clearLegacy();
+  }
 }
 
 /** Lectura async (espera la hidratación). Úsala donde se pueda await. */
@@ -129,11 +161,13 @@ export async function setToken(token: string | null): Promise<void> {
   await initTokenVault();
   if (plugin) {
     try {
-      if (token) await plugin.set({ key: SECURE_KEY, value: token });
-      else await plugin.remove({ key: SECURE_KEY });
+      // Acotado igual que la hidratación: un puente colgado aquí dejaba
+      // pendiente para siempre a quien awaitea setToken (login, logout).
+      if (token) await withTimeout(plugin.set({ key: SECURE_KEY, value: token }), "set");
+      else await withTimeout(plugin.remove({ key: SECURE_KEY }), "remove");
       clearLegacy();
     } catch {
-      /* plugin falló en runtime → el token ya quedó en legacy */
+      /* plugin falló o se colgó → el token ya quedó en legacy */
     }
   }
 }

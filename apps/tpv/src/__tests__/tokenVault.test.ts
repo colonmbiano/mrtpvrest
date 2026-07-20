@@ -10,11 +10,36 @@ import {
   setToken,
   __resetTokenVaultForTests,
 } from "@/lib/token-vault";
+import { Capacitor } from "@capacitor/core";
+
+// Puente nativo simulado: `get` NUNCA resuelve, que es justo el modo de falla
+// que colgaba la app entera (el timeout de axios no cubre los interceptores,
+// y el interceptor de request hace await getToken()).
+const colgado = { get: jest.fn(), set: jest.fn(), remove: jest.fn() };
+jest.mock("capacitor-secure-storage-plugin", () => ({
+  get SecureStoragePlugin() {
+    return colgado;
+  },
+}));
+jest.mock("@capacitor/core", () => ({
+  Capacitor: {
+    isNativePlatform: jest.fn(() => false),
+    isPluginAvailable: jest.fn(() => false),
+  },
+}));
+
+const mockCapacitor = Capacitor as jest.Mocked<typeof Capacitor>;
 
 beforeEach(() => {
   __resetTokenVaultForTests();
   localStorage.clear();
   sessionStorage.clear();
+  // Por defecto: web/jsdom sin plugin (comportamiento legacy de siempre).
+  mockCapacitor.isNativePlatform.mockReturnValue(false);
+  mockCapacitor.isPluginAvailable.mockReturnValue(false);
+  colgado.get.mockReset();
+  colgado.set.mockReset();
+  colgado.remove.mockReset();
 });
 
 describe("token-vault (fallback web)", () => {
@@ -51,5 +76,44 @@ describe("token-vault (fallback web)", () => {
     const b = initTokenVault();
     expect(a).toBe(b);
     await a;
+  });
+});
+
+// Regresión: el puente nativo de Capacitor no tiene timeout propio, y el
+// interceptor de request de api.ts hace `await getToken()`. Un puente colgado
+// dejaba pendiente TODA request de la app — y como readyPromise está
+// memoizado, quedaba muerta hasta reiniciar. El chip "Sincronizando" no se
+// apagaba nunca porque el replay se colgaba antes de llegar al adapter.
+describe("token-vault — puente nativo colgado", () => {
+  beforeEach(() => {
+    mockCapacitor.isNativePlatform.mockReturnValue(true);
+    mockCapacitor.isPluginAvailable.mockReturnValue(true);
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("getToken resuelve por timeout en vez de colgarse, cayendo a legacy", async () => {
+    localStorage.setItem("accessToken", "jwt-legacy");
+    colgado.get.mockReturnValue(new Promise(() => {})); // nunca resuelve
+
+    const pendiente = getToken();
+    await jest.advanceTimersByTimeAsync(6000);
+
+    await expect(pendiente).resolves.toBe("jwt-legacy");
+  });
+
+  it("setToken tampoco se cuelga si el plugin no contesta", async () => {
+    colgado.get.mockRejectedValue(new Error("sin key")); // hidratación OK
+    colgado.set.mockReturnValue(new Promise(() => {})); // la escritura cuelga
+
+    const pendiente = setToken("jwt-nuevo");
+    await jest.advanceTimersByTimeAsync(12000);
+
+    await expect(pendiente).resolves.toBeUndefined();
+    // El token quedó utilizable por el camino legacy pese al cuelgue.
+    expect(getTokenSync()).toBe("jwt-nuevo");
   });
 });

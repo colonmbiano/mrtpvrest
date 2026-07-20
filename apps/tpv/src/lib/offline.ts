@@ -298,8 +298,12 @@ export async function syncOfflineQueue() {
           }
         } else {
           // Shape legacy (overrides, etc.) — sigue yendo al endpoint de
-          // auditoría que registra en accessLog server-side.
-          await api.post('/api/sync/transaction', transaction);
+          // auditoría que registra en accessLog server-side. Mismo timeout
+          // que el replay moderno: era la ÚNICA llamada HTTP del loop sin
+          // cfg, y el axios global no trae timeout propio (espera infinita).
+          await api.post('/api/sync/transaction', transaction, {
+            timeout: QUEUE_TIMEOUT_MS,
+          });
         }
 
         store.markSynced(transaction.id);
