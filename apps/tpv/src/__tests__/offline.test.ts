@@ -240,6 +240,29 @@ describe("syncOfflineQueue — replay rechazado con 4xx definitivo", () => {
     expect(useOfflineStore.getState().getFailedTransactions()).toHaveLength(1);
   });
 
+  it("un syncInProgress viejo NO congela la cola (deadlock de rehidratación)", async () => {
+    // Simula lo que pasaba en la tablet: la app murió a mitad de un replay,
+    // `syncInProgress: true` quedó en localStorage y se rehidrató al abrir.
+    // Sin el merge que lo fuerza a false, el guard de syncOfflineQueue salía
+    // temprano para siempre y la cola no volvía a drenar nunca.
+    const rehidratado = useOfflineStore.persist.getOptions().merge!(
+      { queue: [], lastSync: 0, syncInProgress: true },
+      useOfflineStore.getState()
+    ) as { syncInProgress: boolean };
+
+    expect(rehidratado.syncInProgress).toBe(false);
+  });
+
+  it("no persiste syncInProgress en localStorage", () => {
+    const persistido = useOfflineStore.persist.getOptions().partialize!({
+      ...useOfflineStore.getState(),
+      syncInProgress: true,
+    });
+
+    expect(persistido).not.toHaveProperty("syncInProgress");
+    expect(persistido).toHaveProperty("queue");
+  });
+
   it("discardTransaction saca la tx congelada de la cola", async () => {
     enqueue("order", "/api/orders/OID/items", "items-3", 1000);
     mockApi.post.mockRejectedValue({
