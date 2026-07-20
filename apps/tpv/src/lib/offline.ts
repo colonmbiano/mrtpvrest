@@ -10,6 +10,14 @@ let syncInterval: NodeJS.Timeout | null = null;
 // requests legítimamente largos (reportes/PDF).
 const QUEUE_TIMEOUT_MS = 15000;
 
+// Watchdog del candado de sync. syncHeartbeat se refresca al tomar el candado
+// y en CADA vuelta del replay, así que una cola larga (N tx × 15s) nunca
+// dispara el watchdog: solo lo hace un PASO individual colgado. Sin esto,
+// cualquier await que no resuelva deja syncInProgress en true para siempre y
+// la cola offline deja de drenar por completo en ese equipo.
+const SYNC_STALE_MS = 60000;
+let syncHeartbeat = 0;
+
 // ── apiOrQueue ─────────────────────────────────────────────────────────
 //
 // Wrapper para escrituras críticas que deben sobrevivir a un corte de
@@ -208,18 +216,38 @@ export async function syncOfflineQueue() {
   const store = useOfflineStore.getState();
   const authStore = useAuthStore.getState();
 
-  if (store.syncInProgress) return;
+  if (store.syncInProgress) {
+    // Candado viejo. El flag ya no sobrevive a un reinicio (partialize+merge
+    // en el store), así que si está en true lo puso ESTE proceso — y
+    // syncHeartbeat dice cuándo dio señales de vida por última vez. Si un
+    // paso se colgó más que SYNC_STALE_MS, damos el candado por muerto y
+    // tomamos el relevo: quedarse bloqueado para siempre es peor que un
+    // replay concurrente (el Idempotency-Key lo dedupea en el backend).
+    const stuckMs = Date.now() - syncHeartbeat;
+    if (stuckMs < SYNC_STALE_MS) return;
+    console.warn(
+      `Sync sin latido hace ${Math.round(stuckMs / 1000)}s — retomando el candado`
+    );
+  }
 
   const unsyncedTransactions = store.getUnsyncedTransactions();
   if (unsyncedTransactions.length === 0) return;
 
   store.setSyncInProgress(true);
+  syncHeartbeat = Date.now();
 
   try {
     // Sync employees primero — si volvió la red, refrescamos catálogo
     // de empleados para que PIN offline tenga datos actualizados.
+    // timeout OBLIGATORIO: el axios global no trae uno (api.ts hace
+    // axios.create() pelón = espera infinita) y esta es la PRIMERA await
+    // después de tomar el candado. Un backend que acepta la conexión pero
+    // nunca responde (cold start, portal cautivo del wifi del local) colgaba
+    // aquí con syncInProgress en true y congelaba la cola entera.
     try {
-      const { data: employees } = await api.get('/api/employees/sync');
+      const { data: employees } = await api.get('/api/employees/sync', {
+        timeout: QUEUE_TIMEOUT_MS,
+      });
       if (Array.isArray(employees)) authStore.setEmployees(employees);
     } catch {
       /* no crítico, seguimos con el replay */
@@ -231,6 +259,9 @@ export async function syncOfflineQueue() {
     // que se hubiera hecho online. Idempotencia depende del backend
     // (TODO: cliente debería mandar Idempotency-Key con tx.id).
     for (const transaction of unsyncedTransactions) {
+      // Latido: avisa al watchdog que el pase sigue avanzando. Va aquí y no
+      // fuera del loop para que una cola larga no se auto-desbloquee.
+      syncHeartbeat = Date.now();
       try {
         // Gate de orden para el CIERRE de turno: el corte se calcula en el
         // servidor leyendo las órdenes ya en la BD. Si todavía hay cualquier

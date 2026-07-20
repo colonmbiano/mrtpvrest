@@ -35,6 +35,9 @@ function setOnline(online: boolean) {
 beforeEach(() => {
   jest.clearAllMocks();
   useOfflineStore.getState().clearQueue();
+  // El candado es estado compartido del store: si un test lo deja en true,
+  // el guard de syncOfflineQueue hace salir temprano al siguiente.
+  useOfflineStore.getState().setSyncInProgress(false);
   setOnline(true);
 });
 
@@ -251,6 +254,46 @@ describe("syncOfflineQueue — replay rechazado con 4xx definitivo", () => {
     ) as { syncInProgress: boolean };
 
     expect(rehidratado.syncInProgress).toBe(false);
+  });
+
+  it("acota /employees/sync con timeout (el axios global no trae uno)", async () => {
+    useOfflineStore.getState().addToQueue({
+      id: "tx-timeout", type: "order", timestamp: 1000, synced: false,
+      data: { method: "POST", path: "/api/orders/tpv", body: {} },
+    });
+    mockApi.post.mockResolvedValue({ data: {} });
+
+    await syncOfflineQueue();
+
+    const cfg = mockApi.get.mock.calls[0]![1] as { timeout?: number };
+    expect(cfg?.timeout).toBeGreaterThan(0);
+  });
+
+  it("un candado sin latido no bloquea el sync para siempre", async () => {
+    // Simula un pase anterior que se colgó: el flag quedó en true dentro de
+    // este mismo proceso y nunca hubo latido. El watchdog debe tomar el relevo.
+    useOfflineStore.getState().addToQueue({
+      id: "tx-watchdog", type: "order", timestamp: 1000, synced: false,
+      data: { method: "POST", path: "/api/orders/tpv", body: {} },
+    });
+    useOfflineStore.getState().setSyncInProgress(true);
+    mockApi.post.mockResolvedValue({ data: {} });
+
+    // El latido vive en el módulo y los tests anteriores lo dejaron fresco.
+    // Adelantamos el reloj más allá de SYNC_STALE_MS para simular el cuelgue.
+    const nowSpy = jest.spyOn(Date, "now").mockReturnValue(Date.now() + 120_000);
+    try {
+      await syncOfflineQueue();
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    // Sin watchdog esto seria 0: el guard habria salido temprano.
+    expect(mockApi.post).toHaveBeenCalledWith(
+      "/api/orders/tpv", expect.anything(), expect.anything()
+    );
+    expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(0);
+    expect(useOfflineStore.getState().syncInProgress).toBe(false);
   });
 
   it("no persiste syncInProgress en localStorage", () => {
