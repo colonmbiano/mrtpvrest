@@ -88,6 +88,24 @@ const useOfflineStore = create<OfflineState>()(
     {
       name: 'tpv-offline-store',
       storage: createJSONStorage(() => localStorage),
+      // syncInProgress es estado de RUNTIME, no contexto que deba sobrevivir a
+      // un reinicio. Persistirlo causaba un deadlock permanente: si la app
+      // moría a mitad de un replay (Android mata el WebView cuando quiere),
+      // el `true` quedaba escrito en localStorage, se rehidrataba al abrir, y
+      // el guard `if (store.syncInProgress) return` de syncOfflineQueue salía
+      // temprano PARA SIEMPRE. Nadie lo volvía a poner en false porque eso
+      // solo pasa en el finally de un replay que ya nunca arrancaba →
+      // la cola se congelaba y el chip decía "Sincronizando" eternamente.
+      partialize: (state) => ({ queue: state.queue, lastSync: state.lastSync }),
+      // partialize solo controla lo que se ESCRIBE. Los dispositivos que ya
+      // traen el `true` envenenado de la versión anterior lo seguirían
+      // rehidratando, así que al fusionar lo forzamos a false: el arranque
+      // siempre empieza limpio y el equipo se cura solo al actualizar.
+      merge: (persisted, current) => ({
+        ...current,
+        ...(persisted as Partial<OfflineState>),
+        syncInProgress: false,
+      }),
     }
   )
 );
