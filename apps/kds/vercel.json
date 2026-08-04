@@ -1,0 +1,7 @@
+{
+  "framework": "nextjs",
+  "ignoreCommand": "npx turbo-ignore @mrtpvrest/kds",
+  "installCommand": "cd ../.. && npx pnpm@9.15.0 install --no-frozen-lockfile",
+  "buildCommand": "cd ../.. && npx pnpm@9.15.0 turbo build --filter @mrtpvrest/kds --force",
+  "outputDirectory": ".next"
+}
