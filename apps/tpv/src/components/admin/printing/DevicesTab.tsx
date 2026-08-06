@@ -13,6 +13,8 @@ import api from "@/lib/api";
 import { Monitor, Printer as PrinterIcon, Network, Usb, Bluetooth, Trash2, Edit3, Plus } from "lucide-react";
 import { printTestTicket, isValidIPv4, type PrinterStation } from "@/lib/printer-tcp";
 import { formatDisplayName } from "@/lib/formatDisplayName";
+import WebUsbPrinterCard from "./WebUsbPrinterCard";
+import { isWebUsbAvailable, hasUsablePairedPrinter, pairUsbPrinter } from "@/lib/printer-usb";
 
 interface Printer {
   id: string;
@@ -188,6 +190,30 @@ export default function DevicesTab() {
       toast.success("KDS virtual: recibe por socket, no requiere prueba TCP.");
       return;
     }
+    // USB en navegador (Chrome/Edge): imprime por WebUSB contra la térmica local.
+    // Si aún no hay una vinculada, este click (gesto del usuario) abre el diálogo
+    // para elegirla y luego imprime la prueba.
+    if (p.connectionType === "USB") {
+      if (!isWebUsbAvailable()) {
+        toast.error("La impresión USB desde navegador necesita Chrome o Edge de escritorio (WebUSB).");
+        return;
+      }
+      setTestingId(p.id);
+      try {
+        if (!(await hasUsablePairedPrinter())) {
+          await pairUsbPrinter();
+        }
+        await printTestTicket({ ip: "0.0.0.0", port: 9100 }, (p.type as PrinterStation) || "CASHIER");
+        toast.success("Prueba enviada a la impresora USB");
+      } catch (err) {
+        const e = err as { name?: string; message?: string };
+        if (e?.name === "NotFoundError") toast.message("No se seleccionó ninguna impresora.");
+        else toast.error("Error en prueba: " + (e?.message || "fallo USB"));
+      } finally {
+        setTestingId(null);
+      }
+      return;
+    }
     if (p.connectionType !== "NETWORK") {
       toast.error(`Conexión ${p.connectionType} no soportada todavía`);
       return;
@@ -219,6 +245,10 @@ export default function DevicesTab() {
 
   return (
     <div>
+      {/* Impresora local por WebUSB — solo se renderiza en navegador de escritorio
+          (Chrome/Edge). En el APK nativo la impresión sigue por TCP de red. */}
+      <WebUsbPrinterCard />
+
       <div className="flex justify-end gap-3 mb-6">
         <button
           onClick={() => openNew(true)}
