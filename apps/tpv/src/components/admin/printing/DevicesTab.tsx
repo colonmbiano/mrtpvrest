@@ -13,6 +13,7 @@ import api from "@/lib/api";
 import { Monitor, Printer as PrinterIcon, Network, Usb, Bluetooth, Trash2, Edit3, Plus } from "lucide-react";
 import { printTestTicket, isValidIPv4, type PrinterStation } from "@/lib/printer-tcp";
 import { formatDisplayName } from "@/lib/formatDisplayName";
+import WebUsbPrinterCard from "./WebUsbPrinterCard";
 
 interface Printer {
   id: string;
@@ -219,6 +220,10 @@ export default function DevicesTab() {
 
   return (
     <div>
+      {/* Impresora local por WebUSB — solo se renderiza en navegador de escritorio
+          (Chrome/Edge). En el APK nativo la impresión sigue por TCP de red. */}
+      <WebUsbPrinterCard />
+
       <div className="flex justify-end gap-3 mb-6">
         <button
           onClick={() => openNew(true)}

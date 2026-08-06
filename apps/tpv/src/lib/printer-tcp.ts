@@ -300,6 +300,65 @@ function bytesToHex(bytes: Uint8Array): string {
   return hex;
 }
 
+/**
+ * Convierte un PrintPayload a bytes crudos ESC/POS. Es la representación que
+ * consume el transporte WebUSB (transferOut espera un buffer). Reusa la misma
+ * semántica del envío TCP: los strings se normalizan a ASCII (1 byte/char) y
+ * los segmentos binarios (raster del logo) se preservan tal cual.
+ */
+export function payloadToBytes(payload: PrintPayload): Uint8Array {
+  return typeof payload === "string" ? segmentsToBytes([payload]) : segmentsToBytes(payload);
+}
+
+// ── Transporte de navegador (WebUSB, "desde Chrome") ──────────────────────
+//
+// En el APK la impresión es TCP nativo al puerto 9100 (LAN). Un navegador NO
+// puede abrir sockets TCP, así que en Chrome/Edge la impresora térmica se maneja
+// por WebUSB (ver printer-usb.ts). Detectamos la plataforma con Capacitor:
+// nativo → seguimos con TCP como siempre; web → intentamos WebUSB.
+
+let cachedIsNative: boolean | null = null;
+async function isNativePlatform(): Promise<boolean> {
+  if (cachedIsNative !== null) return cachedIsNative;
+  try {
+    // Import dinámico (mismo patrón que haptics.ts) para no inflar el bundle
+    // web ni fallar en SSR/export de Next.
+    const { Capacitor } = await import("@capacitor/core");
+    cachedIsNative = Boolean(Capacitor.isNativePlatform());
+  } catch {
+    cachedIsNative = false;
+  }
+  return cachedIsNative;
+}
+
+/**
+ * Intenta enviar el payload por WebUSB cuando corremos en navegador. Devuelve
+ * el mismo shape ok/failed de dispatchToStations, o `null` cuando NO aplica el
+ * transporte USB (estamos en el APK nativo, o el navegador no tiene WebUSB) para
+ * que el orquestador caiga al transporte TCP de siempre. Nunca lanza: los fallos
+ * se reportan en `failed` para no romper el flujo del POS.
+ */
+async function tryBrowserUsb(
+  payload: PrintPayload,
+): Promise<{ ok: number; failed: Array<{ name: string; error: string }> } | null> {
+  // APK nativo → conserva TCP 9100 (LAN). Solo los navegadores usan WebUSB.
+  if (await isNativePlatform()) return null;
+  let usb: typeof import("./printer-usb");
+  try {
+    usb = await import("./printer-usb");
+  } catch {
+    return null;
+  }
+  if (!usb.isWebUsbAvailable()) return null;
+  try {
+    await usb.sendRawUsb(payloadToBytes(payload));
+    return { ok: 1, failed: [] };
+  } catch (e) {
+    const err = e as { message?: string };
+    return { ok: 0, failed: [{ name: "Impresora USB (Chrome)", error: err?.message || "fallo USB" }] };
+  }
+}
+
 /** Un único intento de conexión + envío + desconexión. */
 async function attemptSendRawTcp(
   plugin: TCPSocketPlugin,
@@ -404,6 +463,13 @@ export async function sendRawTcp(target: PrintTarget, payload: PrintPayload): Pr
  */
 export async function printTestTicket(target: PrintTarget, station: PrinterStation): Promise<void> {
   const payload = buildTestTicket(station);
+  // Chrome/Edge (WebUSB): prueba contra la térmica USB local. Lanza en error
+  // para que el botón "Test de impresión" del admin muestre el motivo.
+  const usbRes = await tryBrowserUsb(payload);
+  if (usbRes) {
+    if (usbRes.ok > 0) return;
+    throw new Error(usbRes.failed[0]?.error || "Fallo de impresión USB");
+  }
   return sendRawTcp(target, payload);
 }
 
@@ -1658,6 +1724,9 @@ const DRAWER_KICK =
 export async function openCashDrawer(
   printers: PrinterRecord[],
 ): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
+  // Chrome/Edge (WebUSB): el pulso ESC p viaja a la térmica USB del mostrador.
+  const usbRes = await tryBrowserUsb(DRAWER_KICK);
+  if (usbRes) return usbRes;
   return dispatchToStations(printers, ["CASHIER"], DRAWER_KICK);
 }
 
@@ -1719,6 +1788,14 @@ export async function printKitchenTickets(
     ...rawInput,
     items: explodeCombosForKitchen(rawInput.items),
   };
+
+  // Chrome/Edge (WebUSB): sin acceso a impresoras de cocina en red desde el
+  // navegador, la comanda completa sale por la única térmica USB local. Es el
+  // fallback razonable de un solo dispositivo; el ruteo por Printer Groups
+  // (multi-impresora) solo aplica al APK nativo con TCP.
+  const usbRes = await tryBrowserUsb(buildKitchenTicket(input));
+  if (usbRes) return usbRes;
+
   const itemsWithGroups = input.items.filter(
     (it) => Array.isArray(it.printerGroupIds) && it.printerGroupIds.length > 0,
   );
@@ -1847,6 +1924,8 @@ export async function printCustomerReceipt(
 ): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
   const text = buildCustomerReceipt(input);
   const payload = await injectLogo(text, input);
+  const usbRes = await tryBrowserUsb(payload);
+  if (usbRes) return usbRes;
   return dispatchToStations(printers, ["CASHIER"], payload);
 }
 
@@ -1859,6 +1938,8 @@ export async function printShiftCloseTicket(
   input: ShiftCloseTicketInput
 ): Promise<{ ok: number; failed: Array<{ name: string; error: string }> }> {
   const payload = buildShiftCloseTicket(input);
+  const usbRes = await tryBrowserUsb(payload);
+  if (usbRes) return usbRes;
   return dispatchToStations(printers, ["CASHIER"], payload);
 }
 

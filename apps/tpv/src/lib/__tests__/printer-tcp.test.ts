@@ -31,6 +31,7 @@ import {
   sanitizeIp,
   sendRawTcp,
   buildShiftCloseTicket,
+  payloadToBytes,
   type ReceiptInput,
   type PrinterRecord,
   type ShiftCloseTicketInput,
@@ -84,6 +85,27 @@ describe("validación de IP", () => {
   it("sendRawTcp rechaza IP inválida con mensaje claro, sin tocar el socket", async () => {
     await expect(sendRawTcp({ ip: "EPSON-TM20", port: 9100 }, "x")).rejects.toThrow(/IP de impresora invalida/);
     expect(connect).not.toHaveBeenCalled();
+  });
+});
+
+describe("payloadToBytes (transporte WebUSB desde Chrome)", () => {
+  it("convierte texto a bytes ASCII (1 byte por carácter, sin acentos)", () => {
+    // normalizeThermalText descompone acentos y descarta lo no-ASCII, igual que
+    // el envío TCP utf8. "Café" → "Cafe" (4 bytes).
+    const bytes = payloadToBytes("Café\n");
+    expect(Array.from(bytes)).toEqual([0x43, 0x61, 0x66, 0x65, 0x0a]);
+  });
+
+  it("preserva los comandos ESC/POS crudos (ESC p = pulso de cajón)", () => {
+    // ESC p 0 25 120 — el kick del cajón; todos los bytes ≤ 0x7F sobreviven.
+    const bytes = payloadToBytes("\x1Bp\x00\x19\x78");
+    expect(Array.from(bytes)).toEqual([0x1b, 0x70, 0x00, 0x19, 0x78]);
+  });
+
+  it("preserva los segmentos binarios (raster del logo) sin corromper bytes > 0x7F", () => {
+    const raster = Uint8Array.from([0x00, 0xff, 0x80, 0x1d]);
+    const bytes = payloadToBytes(["A", raster, "B"]);
+    expect(Array.from(bytes)).toEqual([0x41, 0x00, 0xff, 0x80, 0x1d, 0x42]);
   });
 });
 
