@@ -107,6 +107,14 @@ export type Product = {
   isAvailable?: boolean;
   activeDays?: string[];
   promoPrice?: number | null;
+  // Ventana horaria de la promo (día vía activeDays + hora vía estos campos).
+  // promoWindowStart/End = ventana EFECTIVA ya resuelta por el backend (override
+  // del item o corte global); promoStartTime/End = valores crudos del item.
+  // El TPV los usa para pintar/cobrar el promoPrice solo dentro del horario.
+  promoStartTime?: string | null;
+  promoEndTime?: string | null;
+  promoWindowStart?: string | null;
+  promoWindowEnd?: string | null;
   hasVariants?: boolean;
   variantMultiSelect?: boolean;
   variantMinSelection?: number;

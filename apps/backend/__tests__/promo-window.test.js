@@ -3,11 +3,13 @@
 const {
   promoWindowOpen,
   itemPromoWindowOpen,
+  itemPromoActive,
   effectivePromoWindow,
   normalizePromoWindowTime,
 } = require('../src/lib/promo-window');
 
-// 2026-07-08T0X:XXZ — CDMX es UTC-6 (sin DST desde 2022).
+// 2026-07-08T0X:XXZ — CDMX es UTC-6 (sin DST desde 2022). En MX, 2026-07-08 es
+// MIÉRCOLES a partir de las 06:00Z (00:00 MX); antes de eso sigue siendo martes.
 const utc = (hhmm) => new Date(`2026-07-08T${hhmm}:00Z`);
 const MX = 'America/Mexico_City';
 
@@ -73,6 +75,38 @@ describe('itemPromoWindowOpen :: ventana horaria POR PRODUCTO (override)', () =>
       .toEqual({ start: '10:00', end: null });
     expect(effectivePromoWindow({ promoStartTime: null, promoEndTime: null }, globalCfg))
       .toEqual({ start: null, end: '21:00' });
+  });
+});
+
+describe('itemPromoActive :: día (activeDays) + hora, criterio del cobro', () => {
+  const cfg = { timezone: MX }; // sin corte global; manda la ventana del item
+
+  test('día correcto + dentro de la hora → aplica', () => {
+    const item = { activeDays: ['WEDNESDAY'], promoStartTime: '12:00', promoEndTime: '21:00' };
+    expect(itemPromoActive(item, cfg, utc('18:00'))).toBe(true);  // miér 12:00 MX
+    expect(itemPromoActive(item, cfg, utc('23:00'))).toBe(true);  // miér 17:00 MX
+  });
+
+  test('día correcto pero fuera de la hora → NO aplica', () => {
+    const item = { activeDays: ['WEDNESDAY'], promoStartTime: '12:00', promoEndTime: '21:00' };
+    expect(itemPromoActive(item, cfg, utc('17:30'))).toBe(false); // miér 11:30 MX (antes de la ventana)
+  });
+
+  test('hora dentro de la ventana pero DÍA equivocado → NO aplica (el hueco que se cerró)', () => {
+    const item = { activeDays: ['THURSDAY'], promoStartTime: '12:00', promoEndTime: '21:00' };
+    expect(itemPromoActive(item, cfg, utc('18:00'))).toBe(false); // es miércoles, no jueves
+  });
+
+  test('sin activeDays → cualquier día (solo manda la hora)', () => {
+    const item = { activeDays: [], promoStartTime: '12:00', promoEndTime: '21:00' };
+    expect(itemPromoActive(item, cfg, utc('18:00'))).toBe(true);
+    expect(itemPromoActive(item, cfg, utc('17:30'))).toBe(false);
+  });
+
+  test('el día se evalúa en la TZ del tenant, no en UTC (borde de medianoche)', () => {
+    const item = { activeDays: ['WEDNESDAY'] }; // sin hora → todo el día miércoles
+    expect(itemPromoActive(item, cfg, utc('05:00'))).toBe(false); // mar 23:00 MX
+    expect(itemPromoActive(item, cfg, utc('06:30'))).toBe(true);  // miér 00:30 MX
   });
 });
 

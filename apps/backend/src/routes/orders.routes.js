@@ -400,7 +400,7 @@ const { canTransition } = require('../lib/order-status');
 const { parseVariantsFromItem } = require('../lib/parse-variant');
 const { requireModule, MODULES } = require('../lib/modules');
 const { computeBulkPromoDiscount, loadActiveBulkPromos } = require('../lib/bulk-promo');
-const { loadPromoWindowConfig, itemPromoWindowOpen } = require('../lib/promo-window');
+const { loadPromoWindowConfig, itemPromoActive } = require('../lib/promo-window');
 const { nextOrderNumber } = require('../lib/order-number');
 const { releaseTableAfterPayment } = require('../services/table-lifecycle.service');
 const { claimKitchenPrint } = require('../lib/print-claim');
@@ -800,9 +800,10 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           },
         },
       });
-      // Ventana horaria por item (override propio o corte global): fuera de
-      // ella se ignora promoPrice y se cobra a precio normal.
-      if (menuItem && !itemPromoWindowOpen(menuItem, promoCfg)) menuItem.promoPrice = null;
+      // Ventana de promo por item: día (activeDays) + hora (override propio o
+      // corte global). Fuera de ella se ignora promoPrice y se cobra a precio
+      // normal — mismo criterio con que el catálogo la muestra/oculta.
+      if (menuItem && !itemPromoActive(menuItem, promoCfg)) menuItem.promoPrice = null;
 
       const variantSelection = resolveVariantSelection(menuItem, item);
       // Combo configurable: resuelve la selección (re-lee priceDelta de DB, valida
@@ -1246,9 +1247,10 @@ async function addRoundHandler(req, res) {
           },
         },
       });
-      // Ventana horaria por item (override propio o corte global): fuera de
-      // ella se ignora promoPrice y se cobra a precio normal.
-      if (menuItem && !itemPromoWindowOpen(menuItem, promoCfg)) menuItem.promoPrice = null;
+      // Ventana de promo por item: día (activeDays) + hora (override propio o
+      // corte global). Fuera de ella se ignora promoPrice y se cobra a precio
+      // normal — mismo criterio con que el catálogo la muestra/oculta.
+      if (menuItem && !itemPromoActive(menuItem, promoCfg)) menuItem.promoPrice = null;
       const variantSelection = resolveVariantSelection(menuItem, item);
       const combo = resolveComboSelection(menuItem, item);
       const modifierIds = extractIds(item.modifiers, 'modifierId');
