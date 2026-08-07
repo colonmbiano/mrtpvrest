@@ -3,7 +3,7 @@ const prisma   = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const { pick } = require('../lib/validate')
 const { PromoPriceValidationError, resolvePromoPricing } = require('../lib/promo-price')
-const { itemPromoWindowOpen, loadPromoWindowConfig, normalizePromoWindowTime } = require('../lib/promo-window')
+const { itemPromoWindowOpen, effectivePromoWindow, loadPromoWindowConfig, normalizePromoWindowTime } = require('../lib/promo-window')
 const router   = express.Router()
 
 // ── Helper: resuelve restaurantId del request o devuelve 400 explícito ─────
@@ -235,12 +235,23 @@ router.get('/items', async (req, res) => {
     // ocultan del catálogo (igual que activeDays). Se evalúa POR ITEM: cada
     // promo usa su ventana propia (promoStartTime/promoEndTime) o, si no la
     // define, el corte global del restaurante.
+    const promoCfg = await loadPromoWindowConfig(prisma, restaurantId)
     if (!adminMode) {
-      const promoCfg = await loadPromoWindowConfig(prisma, restaurantId)
       filtered = filtered.filter(item => !item.isPromo || itemPromoWindowOpen(item, promoCfg))
     }
 
-    res.json(filtered)
+    // Anexa la ventana EFECTIVA (override del item o corte global ya resuelto)
+    // a cada promo. El TPV corre en modo admin (ve todo), así que necesita estos
+    // límites para pintar/cobrar el precio de forma dinámica contra su reloj
+    // local sin re-consultar. No pisa promoStartTime/promoEndTime crudos (los
+    // usa el editor del admin), va en campos aparte.
+    const withWindows = filtered.map(item => {
+      if (!item.isPromo) return item
+      const { start, end } = effectivePromoWindow(item, promoCfg)
+      return { ...item, promoWindowStart: start, promoWindowEnd: end }
+    })
+
+    res.json(withWindows)
   } catch (e) { res.status(500).json({ error: 'Error al obtener menu' }) }
 })
 

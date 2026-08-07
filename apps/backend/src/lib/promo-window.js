@@ -75,6 +75,39 @@ function itemPromoWindowOpen(item, config, now = new Date()) {
 }
 
 /**
+ * Nombre del día ("MONDAY"…"SUNDAY") en la TZ de la tienda. Mismo criterio que
+ * el catálogo (`isMenuItemActiveToday`) pero respetando la zona del tenant en
+ * vez de asumir CDMX.
+ * @param {Date} [now]
+ * @param {string} [tz]
+ */
+function localDayName(now = new Date(), tz = 'America/Mexico_City') {
+  return new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' })
+    .format(now)
+    .toUpperCase();
+}
+
+/**
+ * ¿La promo de este platillo aplica AHORA considerando día + hora? Pura. Suma
+ * al chequeo horario (`itemPromoWindowOpen`) la agenda por días (`activeDays`):
+ * si el item tiene días configurados y hoy no está entre ellos, la promo no
+ * aplica aunque la hora caiga dentro de la ventana. Sin `activeDays` → cualquier
+ * día (solo manda la hora). Este es el criterio que debe usar el DINERO para
+ * que el cobro coincida con lo que el catálogo muestra/oculta.
+ * @param {{activeDays?:string[], promoStartTime?:string|null, promoEndTime?:string|null}|null} item
+ * @param {{promoStartTime?:string|null, promoEndTime?:string|null, timezone?:string}|null} config
+ * @param {Date} [now]
+ */
+function itemPromoActive(item, config, now = new Date()) {
+  const days = Array.isArray(item?.activeDays) ? item.activeDays : [];
+  if (days.length > 0) {
+    const tz = config?.timezone || 'America/Mexico_City';
+    if (!days.includes(localDayName(now, tz))) return false;
+  }
+  return itemPromoWindowOpen(item, config, now);
+}
+
+/**
  * Variante con I/O: lee la config del restaurante y evalúa la ventana GLOBAL.
  * Sin config (o sin restaurantId) → abierta (no rompe ningún flujo).
  * @param {import('@prisma/client').PrismaClient} prisma  Cliente o `tx`.
@@ -116,6 +149,8 @@ module.exports = {
   isPromoWindowOpen,
   effectivePromoWindow,
   itemPromoWindowOpen,
+  itemPromoActive,
+  localDayName,
   loadPromoWindowConfig,
   normalizePromoWindowTime,
   PROMO_WINDOW_SELECT,

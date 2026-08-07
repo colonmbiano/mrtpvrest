@@ -6,6 +6,7 @@ import api from "@/lib/api";
 import { formatModifierGroupName } from "@/lib/formatDisplayName";
 import { useCatalogPrefs, type CatalogDensity } from "@/store/catalogPrefsStore";
 import { hapticLight } from "@/lib/haptics";
+import { isPromoActiveNow } from "@/lib/promo-window";
 import {
   useTicketStore,
   type CartItem,
@@ -204,10 +205,31 @@ export default function CatalogPage() {
     [categories],
   );
 
+  // Precio promo DINÁMICO: fuera de su ventana (día + hora, contra el reloj del
+  // equipo) apagamos promoPrice, así el producto se pinta y se agrega a precio
+  // normal. Dentro de la ventana se respeta promoPrice. Un tick re-evalúa cada
+  // 30s para que el cambio ocurra solo al cruzar el horario, sin recargar. El
+  // cobro final igual lo re-valida el backend (server-side es lo autoritativo).
+  const [promoTick, setPromoTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setPromoTick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const gatedProducts = useMemo(() => {
+    const now = new Date();
+    void promoTick; // el tick fuerza re-evaluar la ventana contra el reloj actual
+    return products.map((p) =>
+      p.isPromo && p.promoPrice != null && !isPromoActiveNow(p, now)
+        ? { ...p, promoPrice: null }
+        : p,
+    );
+  }, [products, promoTick]);
+
   // Productos vendibles = los que NO pertenecen a una categoría oculta.
   const sellableProducts = useMemo(
-    () => products.filter((p) => !p.categoryId || !hiddenCategoryIds.has(p.categoryId)),
-    [products, hiddenCategoryIds],
+    () => gatedProducts.filter((p) => !p.categoryId || !hiddenCategoryIds.has(p.categoryId)),
+    [gatedProducts, hiddenCategoryIds],
   );
 
   const visibleCategories = useMemo(() => {
