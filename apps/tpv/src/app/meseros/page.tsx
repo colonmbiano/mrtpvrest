@@ -382,7 +382,7 @@ export default function WaiterFloorPlanPage() {
               return (
                 <Link
                   key={table.id}
-                  href={`/meseros/${table.id}`}
+                  href={`/meseros/detalle/?id=${table.id}`}
                   prefetch={false}
                   className={`group relative aspect-square min-h-[160px] rounded-[2rem] sm:rounded-[2.5rem] p-4 sm:p-5 flex flex-col items-stretch justify-between border-2 ${tone.ring} ${tone.bg} backdrop-blur-md overflow-hidden active:scale-[0.97] transition-transform`}
                 >

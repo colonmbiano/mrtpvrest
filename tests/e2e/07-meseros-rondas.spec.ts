@@ -23,12 +23,14 @@ test.describe('Meseros — rondas y cuenta', () => {
     await injectTPVDevice(page);
     await page.goto(TPV_URL);
     await enterPIN(page, WAITER_PIN);
-    // Pre-compila la ruta dinámica /meseros/[id] (placeholder "_" de
-    // generateStaticParams). En `next dev` el primer hit la compila
-    // on-demand (~7s); sin este warm-up, el tap a una mesa real corría
-    // contra esa compilación y a veces excedía el timeout del click
-    // (flake). Un goto usa el timeout de navegación (30s), no el del click.
-    await page.goto(`${TPV_URL}/meseros/_/`);
+    // Pre-compila la ruta de detalle. Es una ruta ESTÁTICA con query param
+    // (/meseros/detalle/?id=<cuid>) — antes era el segmento dinámico
+    // /meseros/[id], que en el export estático del APK solo generaba un
+    // placeholder "_" y hacía 404 al abrir una mesa real. En `next dev` el
+    // primer hit la compila on-demand (~7s); sin este warm-up, el tap a una
+    // mesa real corría contra esa compilación y a veces excedía el timeout
+    // del click (flake). Un goto usa el timeout de navegación (30s).
+    await page.goto(`${TPV_URL}/meseros/detalle/?id=_`);
     // El WAITER puede aterrizar en / (modo préstamo) o en /meseros según
     // deviceRole; navegamos explícito a la sala para no depender de eso.
     await page.goto(`${TPV_URL}/meseros`);
@@ -38,8 +40,8 @@ test.describe('Meseros — rondas y cuenta', () => {
   test('mesa libre → 2 rondas en una sola cuenta → pedir cuenta', async ({ page }) => {
     test.setTimeout(120_000);
 
-    // 1. Tomar una mesa LIBRE de la grilla (tiles = links a /meseros/[id];
-    //    la nav inferior queda fuera de <main>).
+    // 1. Tomar una mesa LIBRE de la grilla (tiles = links a
+    //    /meseros/detalle/?id=<cuid>; la nav inferior queda fuera de <main>).
     const freeTile = page
       .locator('main a[href^="/meseros/"]')
       .filter({ hasText: /libre/i })

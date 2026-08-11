@@ -186,7 +186,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
     } else {
       clearActiveOrder();
     }
-    router.push(`/meseros/${table.id}/orden`);
+    router.push(`/meseros/detalle/orden/?id=${table.id}`);
   };
 
   return (

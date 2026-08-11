@@ -372,7 +372,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
           });
       }
 
-      router.push(`/meseros/${tableId}`);
+      router.push(`/meseros/detalle/?id=${tableId}`);
     } catch (e: any) {
       toast.error("Error al enviar: " + (e?.response?.data?.error || e?.message || ""));
     } finally {
