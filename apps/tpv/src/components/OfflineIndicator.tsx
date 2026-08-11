@@ -20,7 +20,7 @@ import { syncOfflineQueue } from "@/lib/offline";
 // se quedarían en el chip para siempre.
 //
 // Posicionado top-right para evitar chocar con el FAB de /pos/menu
-// (bottom-right) y con el sticky CTA de /meseros/[id] (bottom).
+// (bottom-right) y con el sticky CTA de /meseros/detalle (bottom).
 export default function OfflineIndicator() {
   const isOnline = useOnlineStatus();
   const queue = useOfflineStore((s) => s.queue);
