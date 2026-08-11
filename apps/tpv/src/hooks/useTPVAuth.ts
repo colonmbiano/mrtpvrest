@@ -88,7 +88,20 @@ export function useTPVAuth() {
             ? localStorage.getItem("deviceRole")
             : null;
         const isWaiterDevice = deviceRole === "WAITER";
-        if (isWaiterDevice) {
+        // El redirect a /meseros es SOLO el aterrizaje post-login. Se marca en
+        // sessionStorage para que dispare una única vez por sesión: useTPVAuth
+        // se re-monta al cruzar de grupo de rutas (p.ej. el botón "Llevar"
+        // manda al mesero a /pos para un pedido para llevar) y el guard
+        // por-instancia (prevAuthRef) se reinicia en cada montaje — sin esto,
+        // toda navegación a /pos rebotaba al mesero de vuelta a /meseros. El
+        // flag se limpia al cerrar sesión (rama else de abajo).
+        const alreadyRouted =
+          typeof window !== "undefined" &&
+          sessionStorage.getItem("waiterHomeRouted") === "1";
+        if (isWaiterDevice && !alreadyRouted) {
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("waiterHomeRouted", "1");
+          }
           router.push("/meseros");
         }
       }
@@ -98,6 +111,11 @@ export function useTPVAuth() {
       // CASHIER, OWNER, ADMIN, MANAGER → no redirigimos, ya están en el POS
     } else if (!auth.isAuthenticated) {
       prevAuthRef.current = false;
+      // Al cerrar sesión limpiamos el flag para que el próximo login vuelva a
+      // aterrizar al mesero-dispositivo en /meseros.
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("waiterHomeRouted");
+      }
     }
   }, [auth.isAuthenticated, auth.employee, router]);
 
