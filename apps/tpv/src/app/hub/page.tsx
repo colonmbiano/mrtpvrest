@@ -137,6 +137,19 @@ function HubPageInner() {
     queueMicrotask(() => {
       if (cancelled) return;
 
+      // Dispositivo de MESERO: el "home" del mesero es la planta de mesas, no
+      // el panel del POS. Sin esto, cualquier llegada a /hub (botón hub del
+      // POS, etc.) mandaba al mesero al TPV normal (/pos/order-type) en vez de
+      // regresarlo a /meseros. Solo aplica a un WAITER en una tablet de mesero
+      // — un ADMIN/cajero conserva el flujo normal del POS.
+      const deviceRole = typeof window !== 'undefined'
+        ? localStorage.getItem('deviceRole')
+        : null;
+      if (deviceRole === 'WAITER' && employee?.role === 'WAITER') {
+        router.replace('/meseros');
+        return;
+      }
+
       // Terminal ya ligada a un workspace (caso normal: la sucursal se fija al
       // instalar el TPV). No mostramos el selector — pero SIEMPRE verificamos el
       // turno en vivo contra el backend para decidir la ruta. Confiar en el

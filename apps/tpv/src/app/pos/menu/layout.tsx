@@ -1724,7 +1724,18 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
                   catálogo solo se regresa al Panel con este botón. */}
               <button
                 type="button"
-                onClick={() => router.push("/pos/order-type")}
+                onClick={() => {
+                  // En una tablet de MESERO, el "inicio" del mesero es la planta
+                  // de mesas, no el panel del POS. Sin esto, tras un pedido para
+                  // llevar (botón Llevar) el mesero quedaba varado en el TPV
+                  // normal sin forma clara de volver a /meseros.
+                  const deviceRole =
+                    typeof window !== "undefined"
+                      ? localStorage.getItem("deviceRole")
+                      : null;
+                  const isWaiterDevice = isLoanMode && deviceRole === "WAITER";
+                  router.push(isWaiterDevice ? "/meseros" : "/pos/order-type");
+                }}
                 aria-label="Volver al inicio"
                 title="Inicio"
                 className="flex h-10 items-center gap-2 rounded-xl border border-bd bg-surf-2 px-3 text-tx-pri transition-all active:scale-95 hover:border-iris-500 hover:text-iris-500"
