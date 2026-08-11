@@ -91,21 +91,35 @@ jobs:
 
       - name: Resolver canal y notas
         id: meta
+        # Inputs por env (no interpolados en el shell): un subject con
+        # comillas/paréntesis rompía el parseo. notes al $GITHUB_OUTPUT con
+        # heredoc para tolerar cualquier carácter.
+        env:
+          INPUT_CHANNEL: ${{ github.event.inputs.channel }}
+          INPUT_NOTES: ${{ github.event.inputs.notes }}
         run: |
-          CHANNEL="${{ github.event.inputs.channel }}"
+          CHANNEL="$INPUT_CHANNEL"
           [ -z "$CHANNEL" ] && CHANNEL="production"
-          NOTES="${{ github.event.inputs.notes }}"
+          NOTES="$INPUT_NOTES"
           if [ -z "$NOTES" ]; then
             # En push automático, usa el subject del commit como notes.
             NOTES=$(git log -1 --pretty=%s)
           fi
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
-          echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
+          {
+            echo "notes<<__OTA_NOTES_EOF__"
+            echo "$NOTES"
+            echo "__OTA_NOTES_EOF__"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Publish a /api/ota/publish
+        # version/channel/notes por env — nunca interpolar ${{ }} en el script.
         env:
           OTA_PUBLISH_TOKEN: ${{ secrets.OTA_PUBLISH_TOKEN }}
           OTA_BUILD_SECRET: ${{ secrets.OTA_BUILD_SECRET }}
+          OTA_VERSION: ${{ steps.ver.outputs.version }}
+          OTA_CHANNEL: ${{ steps.meta.outputs.channel }}
+          OTA_NOTES: ${{ steps.meta.outputs.notes }}
         run: |
           set -o pipefail
           HEADER_NAME=""
@@ -123,9 +137,9 @@ jobs:
           curl -fsSL -X POST https://api.mrtpvrest.com/api/ota/publish \
             -H "$HEADER_NAME: $HEADER_VALUE" \
             -F "appId=com.mrtpvrest.meseroslite" \
-            -F "version=${{ steps.ver.outputs.version }}" \
-            -F "channel=${{ steps.meta.outputs.channel }}" \
-            --form-string "notes=${{ steps.meta.outputs.notes }}" \
+            -F "version=$OTA_VERSION" \
+            -F "channel=$OTA_CHANNEL" \
+            --form-string "notes=$OTA_NOTES" \
             -F "bundle=@/tmp/bundle.zip" \
             | tee /tmp/publish.json
-          echo "::notice::Publicado v${{ steps.ver.outputs.version }} en canal ${{ steps.meta.outputs.channel }}"
+          echo "::notice::Publicado v$OTA_VERSION en canal $OTA_CHANNEL"
