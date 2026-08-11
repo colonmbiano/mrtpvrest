@@ -8,6 +8,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { io, Socket } from "socket.io-client";
+import { toast } from "sonner";
 import { getApiUrl } from "@/lib/config";
 import { getTenantIds } from "@/lib/tenant";
 import { getToken } from "@/lib/token-vault";
@@ -38,7 +39,8 @@ export type NotifType =
   | "order_ready"      // Orden lista en cocina
   | "order_delivered"  // Entrega confirmada por repartidor
   | "order_paid"       // Pago confirmado
-  | "order_updated";   // Cambio de estado genérico
+  | "order_updated"    // Cambio de estado genérico
+  | "waiter_call";     // Un mesero llama a la caja desde una mesa
 
 export interface Notification {
   id: string;
@@ -208,6 +210,31 @@ export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
     fireLocalNotification("💳 Pago confirmado", body);
   }, [addNotification]);
 
+  // 🔔 Un mesero llama a la caja desde una mesa. Además de la bandeja+sonido
+  // (addNotification), mostramos un toast prominente y persistente: el cajero
+  // suele estar cobrando y no mirando la campana, así que la llamada debe
+  // saltar a la vista hasta que la descarte.
+  const handleWaiterCall = useCallback((data: any) => {
+    const mesa = data?.tableName || "una mesa";
+    const zona = data?.zoneName ? ` · ${data.zoneName}` : "";
+    const quien = data?.waiterName ? ` (${data.waiterName})` : "";
+    const body = `${mesa}${zona}${quien}`.trim();
+
+    addNotification({
+      type: "waiter_call",
+      title: "🔔 Mesa te llama",
+      body,
+    });
+
+    toast("🔔 Mesa te llama", {
+      description: body,
+      duration: 10_000,
+    });
+
+    // Bandeja nativa de Android para la tablet de caja minimizada.
+    fireLocalNotification("🔔 Mesa te llama", body);
+  }, [addNotification]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -264,6 +291,7 @@ export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
       socket.on("order:updated",           handleOrderUpdated);
       socket.on("order:paid",              handleOrderPaid);
       socket.on("order:payment:confirmed", handleOrderPaid);
+      socket.on("waiter:call",             handleWaiterCall);
     })();
 
     return () => {
@@ -275,8 +303,9 @@ export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
       socket.off("order:updated",           handleOrderUpdated);
       socket.off("order:paid",              handleOrderPaid);
       socket.off("order:payment:confirmed", handleOrderPaid);
+      socket.off("waiter:call",             handleWaiterCall);
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [handleOrderNew, handleOrderKiosk, handleOrderUpdated, handleOrderPaid]);
+  }, [handleOrderNew, handleOrderKiosk, handleOrderUpdated, handleOrderPaid, handleWaiterCall]);
 }

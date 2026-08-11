@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { useWaiterRealtime } from "@/hooks/useWaiterRealtime";
+import SplitOrderModal from "@/components/pos/SplitOrderModal";
+import MergeTableModal from "@/components/pos/MergeTableModal";
 
 interface OrderItem {
   id: string;
@@ -85,6 +87,12 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
   const [billLoading, setBillLoading] = useState(false);
   const [billRequested, setBillRequested] = useState(false);
   const [clearing, setClearing] = useState(false);
+  // Modales de acciones sobre la cuenta abierta.
+  const [showSplit, setShowSplit] = useState(false);
+  const [showMove, setShowMove] = useState(false);
+  // Llamar a la caja/TPV: estado de envío y confirmación efímera.
+  const [calling, setCalling] = useState(false);
+  const [called, setCalled] = useState(false);
 
   const loadTable = useCallback(async () => {
     try {
@@ -173,6 +181,55 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
       toast.error(e?.response?.data?.error || "No se pudo marcar la mesa");
     } finally {
       setClearing(false);
+    }
+  };
+
+  // 🔔 Llamar TPV — avisa a la caja que esta mesa necesita atención. El
+  // backend emite `waiter:call` al room de admins de la sucursal (la caja lo
+  // recibe vía useNotifications: bandeja + sonido + toast). Confirmación
+  // efímera de 8s en el botón; el backend impone un cooldown de 10s (429).
+  const handleCallTpv = async () => {
+    if (!table || calling || called) return;
+    setCalling(true);
+    try {
+      await api.post(`/api/tables/${table.id}/call`);
+      setCalled(true);
+      toast.success("Caja avisada");
+      setTimeout(() => setCalled(false), 8000);
+    } catch (e: any) {
+      if (e?.response?.status === 429) {
+        setCalled(true);
+        setTimeout(() => setCalled(false), 8000);
+        toast.message(e?.response?.data?.error || "Ya avisaste a la caja");
+      } else {
+        toast.error(e?.response?.data?.error || "No se pudo llamar a la caja");
+      }
+    } finally {
+      setCalling(false);
+    }
+  };
+
+  // ✂️ Dividir cuenta — separa los items seleccionados en una orden nueva
+  // (mismo endpoint que el TPV principal). El modal maneja la selección.
+  const handleConfirmSplit = async (itemIds: string[]) => {
+    if (!order) return;
+    try {
+      const { data } = await api.post<{ created?: { id?: string; orderNumber?: string } }>(
+        `/api/orders/${order.id}/split`,
+        { itemIds }
+      );
+      setShowSplit(false);
+      await loadTable();
+      const newNumber =
+        data?.created?.orderNumber ||
+        String(data?.created?.id || "").slice(-6).toUpperCase();
+      toast.success(`Cuenta dividida · nueva #${newNumber}`);
+    } catch (err: any) {
+      toast.error(
+        "No se pudo dividir: " +
+          (err?.response?.data?.error || err?.message || "fallo desconocido")
+      );
+      throw err;
     }
   };
 
@@ -328,15 +385,25 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
               </Button>
               <Button
                 variant="soft"
-                className="flex-col min-h-[64px] h-20 gap-2 rounded-2xl group bg-white/5 border-white/10 text-white"
+                onClick={handleCallTpv}
+                disabled={calling || called}
+                className={`flex-col min-h-[64px] h-20 gap-2 rounded-2xl group ${
+                  called
+                    ? "bg-[var(--success-soft)] border-[var(--success)] text-[var(--success)]"
+                    : "bg-white/5 border-white/10 text-white"
+                }`}
               >
-                <Bell size={20} className="group-active:scale-110 transition-transform" />
+                <Bell
+                  size={20}
+                  className={called ? "" : "group-active:scale-110 transition-transform"}
+                />
                 <span className="text-[11px] font-semibold uppercase tracking-tighter">
-                  Llamar TPV
+                  {calling ? "Llamando…" : called ? "Caja avisada" : "Llamar TPV"}
                 </span>
               </Button>
               <Button
                 variant="soft"
+                onClick={() => order && setShowSplit(true)}
                 className="flex-col min-h-[64px] h-20 gap-2 rounded-2xl group bg-white/5 border-white/10 text-white"
                 disabled={!order}
               >
@@ -347,6 +414,7 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
               </Button>
               <Button
                 variant="soft"
+                onClick={() => order && setShowMove(true)}
                 className="flex-col min-h-[64px] h-20 gap-2 rounded-2xl group bg-white/5 border-white/10 text-white"
                 disabled={!order}
               >
@@ -393,6 +461,45 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
             </button>
           )}
         </div>
+      )}
+
+      {/* MODAL · Dividir cuenta */}
+      {order && showSplit && (
+        <SplitOrderModal
+          isOpen={showSplit}
+          onClose={() => setShowSplit(false)}
+          orderNumber={order.orderNumber || String(order.id).slice(-6).toUpperCase()}
+          items={order.items.map((item) => ({
+            id: String(item.id),
+            name: item.name || "Producto",
+            quantity: Number(item.quantity ?? 1),
+            subtotal: Number(item.subtotal ?? item.price * item.quantity),
+          }))}
+          onConfirm={handleConfirmSplit}
+        />
+      )}
+
+      {/* MODAL · Cambiar mesa / fusionar cuenta */}
+      {order && table && showMove && (
+        <MergeTableModal
+          isOpen={showMove}
+          onClose={() => setShowMove(false)}
+          source={{
+            id: order.id,
+            orderNumber: order.orderNumber || String(order.id).slice(-6).toUpperCase(),
+            total: Number(order.total ?? 0),
+            customerName: order.customerName ?? null,
+            table: { id: table.id, name: table.name },
+            itemsCount: order.items.length,
+          }}
+          onSuccess={() => {
+            setShowMove(false);
+            clearActiveOrder();
+            // La cuenta se movió a otra mesa: esta queda libre. Volvemos al
+            // salón para que el mesero vea el nuevo estado real.
+            router.push("/meseros");
+          }}
+        />
       )}
     </div>
   );

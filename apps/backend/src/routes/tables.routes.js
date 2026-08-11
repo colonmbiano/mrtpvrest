@@ -37,8 +37,22 @@ router.get('/', async (req, res) => {
 
     const tables = await prisma.table.findMany({
       where: { locationId: req.locationId, isActive: true },
-      orderBy: { name: 'asc' },
-      include: { zone: { select: { id: true, name: true, icon: true, isActive: true } } },
+      include: { zone: { select: { id: true, name: true, icon: true, isActive: true, order: true } } },
+    });
+
+    // Orden por ZONA (según su `order` configurado) y luego por nombre NATURAL
+    // dentro de cada zona. Postgres solo ofrece orden lexicográfico ("Mesa 10"
+    // antes que "Mesa 2"); localeCompare con numeric:true trata los dígitos
+    // como números. Se ordena aquí (no en SQL) por eso. Las mesas sin zona van
+    // al final (order = +∞) para no intercalarse entre las zonas reales.
+    const natural = (a, b) => a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' });
+    tables.sort((a, b) => {
+      const za = a.zone?.order ?? Number.MAX_SAFE_INTEGER;
+      const zb = b.zone?.order ?? Number.MAX_SAFE_INTEGER;
+      if (za !== zb) return za - zb;
+      const byZone = natural(a.zone?.name ?? '', b.zone?.name ?? '');
+      if (byZone !== 0) return byZone;
+      return natural(a.name, b.name);
     });
 
     // La orden OPEN es la fuente de verdad. Consultamos todas las mesas para
@@ -298,6 +312,57 @@ router.post('/:id/clear', async (req, res) => {
       data: { status: 'AVAILABLE' },
     });
     res.json(table);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /:id/call: el mesero llama a la caja/TPV desde la mesa ─────────────
+//
+// Emite `waiter:call` al room de admins de la sucursal (mismo room donde la
+// caja ya escucha order:new/order:updated). No persiste nada: es una señal
+// efímera en tiempo real que la terminal de caja convierte en aviso+sonido.
+//
+// Cooldown anti-spam en memoria (10s por mesa): evita que un mesero
+// impaciente inunde la caja tocando el botón repetidamente. Best-effort por
+// instancia — suficiente para una sola caja por sucursal; no requiere Redis.
+const CALL_COOLDOWN_MS = 10_000;
+const lastCallByTable = new Map();
+
+router.post('/:id/call', async (req, res) => {
+  try {
+    if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const table = await prisma.table.findFirst({
+      where: { id: req.params.id, locationId: req.locationId, isActive: true },
+      include: { zone: { select: { name: true } } },
+    });
+    if (!table) return res.status(404).json({ error: 'Mesa no encontrada' });
+
+    const now = Date.now();
+    const last = lastCallByTable.get(table.id) || 0;
+    if (now - last < CALL_COOLDOWN_MS) {
+      return res.status(429).json({
+        error: 'Ya avisaste a la caja hace un momento',
+        retryInMs: CALL_COOLDOWN_MS - (now - last),
+      });
+    }
+    lastCallByTable.set(table.id, now);
+
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const payload = {
+      tableId: table.id,
+      tableName: table.name,
+      zoneName: table.zone?.name || null,
+      waiterName: req.user?.name || req.user?.fullName || null,
+      at: new Date(now).toISOString(),
+    };
+
+    const io = req.app.get('io');
+    if (io && restaurantId) {
+      io.to(`restaurant:${restaurantId}:location:${req.locationId}:admins`)
+        .emit('waiter:call', payload);
+    }
+
+    res.json({ ok: true, ...payload });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
