@@ -50,16 +50,9 @@ type CartLine = {
 };
 
 // Dos taps al mismo producto con la misma configuración suman cantidad en
-// vez de duplicar línea (mismo criterio que el TPV principal). El asiento y
-// el tiempo (coursing) forman parte de la clave: una línea ya asignada a un
-// asiento NO se fusiona con un tap nuevo sin asiento — de lo contrario el
-// coursing mezclaría comensales silenciosamente.
-const lineKey = (
-  l: Pick<CartLine, "menuItemId" | "variantId" | "modifiers" | "notes" | "seatNumber" | "course">
-) =>
-  `${l.menuItemId}|${l.variantId ?? ""}|${modifierKey(l.modifiers)}|${l.notes ?? ""}|${
-    l.seatNumber ?? ""
-  }|${l.course ?? ""}`;
+// vez de duplicar línea (mismo criterio que el TPV principal).
+const lineKey = (l: Pick<CartLine, "menuItemId" | "variantId" | "modifiers" | "notes">) =>
+  `${l.menuItemId}|${l.variantId ?? ""}|${modifierKey(l.modifiers)}|${l.notes ?? ""}`;
 
 // Items previamente enviados a la orden. Se muestran solo-lectura: el
 // mesero los ve para contexto pero no puede cancelarlos ni modificarlos

@@ -116,21 +116,11 @@ export default function ProductConfigSheet({
       >
         {/* HEADER */}
         <div className="p-4 border-b border-white/5 flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            {product.imageUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={product.imageUrl}
-                alt={product.name}
-                className="w-12 h-12 rounded-2xl object-cover border border-white/10 shrink-0"
-              />
-            )}
-            <div className="min-w-0">
-              <div className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
-                Configurar producto
-              </div>
-              <div className="text-[16px] font-black truncate">{product.name}</div>
+          <div className="min-w-0">
+            <div className="text-[10px] font-black tracking-[0.25em] text-white/40 uppercase">
+              Configurar producto
             </div>
+            <div className="text-[16px] font-black truncate">{product.name}</div>
           </div>
           <button
             type="button"
