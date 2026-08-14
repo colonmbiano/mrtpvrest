@@ -19,6 +19,7 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
+const { OPEN_TABLE_STATUSES } = require('../lib/table-status');
 const router = express.Router();
 
 const VALID_STATUS = ['AVAILABLE', 'OCCUPIED', 'DIRTY'];
@@ -55,15 +56,17 @@ router.get('/', async (req, res) => {
       return natural(a.name, b.name);
     });
 
-    // La orden OPEN es la fuente de verdad. Consultamos todas las mesas para
+    // La orden viva es la fuente de verdad. Consultamos todas las mesas para
     // tolerar un status AVAILABLE desfasado y evitar que Meseros Lite muestre
-    // una mesa con cuenta como libre o con cero articulos.
+    // una mesa con cuenta como libre o con cero articulos. El set canónico
+    // (lib/table-status) cubre la cuenta que cocina ya avanzó a
+    // CONFIRMED/PREPARING/READY y el pedido del QR de mesa aún en PENDING.
     const tableIds = tables.map(t => t.id);
     const activeOrders = tableIds.length
       ? await prisma.order.findMany({
           where: {
             tableId: { in: tableIds },
-            status: 'OPEN',
+            status: { in: OPEN_TABLE_STATUSES },
             paymentStatus: { not: 'PAID' },
           },
           select: {
@@ -104,37 +107,38 @@ router.get('/:id', async (req, res) => {
     });
     if (!table) return res.status(404).json({ error: 'Mesa no encontrada' });
 
-    let activeOrder = null;
-    if (table.status === 'OCCUPIED') {
-      activeOrder = await prisma.order.findFirst({
-        where: {
-          tableId: table.id,
-          status: 'OPEN',
-          paymentStatus: { not: 'PAID' },
+    // Igual que el listado: la orden viva manda sobre el status denormalizado.
+    // Antes se consultaba solo si table.status === 'OCCUPIED' y solo por 'OPEN',
+    // así que una mesa con status desfasado (o con pedido de QR en PENDING)
+    // salía sin cuenta en la pantalla del mesero.
+    const activeOrder = await prisma.order.findFirst({
+      where: {
+        tableId: table.id,
+        status: { in: OPEN_TABLE_STATUSES },
+        paymentStatus: { not: 'PAID' },
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        total: true,
+        subtotal: true,
+        discount: true,
+        customerName: true,
+        createdAt: true,
+        // roundId + rounds: la pantalla de meseros agrupa la comanda por
+        // ronda ("Ronda 2 · 21:14") para distinguir lo recién enviado.
+        items: {
+          select: { id: true, name: true, price: true, quantity: true, subtotal: true, roundId: true },
+          orderBy: { id: 'asc' },
         },
-        select: {
-          id: true,
-          orderNumber: true,
-          total: true,
-          subtotal: true,
-          discount: true,
-          customerName: true,
-          createdAt: true,
-          // roundId + rounds: la pantalla de meseros agrupa la comanda por
-          // ronda ("Ronda 2 · 21:14") para distinguir lo recién enviado.
-          items: {
-            select: { id: true, name: true, price: true, quantity: true, subtotal: true, roundId: true },
-            orderBy: { id: 'asc' },
-          },
-          rounds: {
-            select: { id: true, roundNumber: true, createdAt: true },
-            orderBy: { roundNumber: 'asc' },
-          },
+        rounds: {
+          select: { id: true, roundNumber: true, createdAt: true },
+          orderBy: { roundNumber: 'asc' },
         },
-        orderBy: { createdAt: 'desc' },
-      });
-    }
-    res.json({ ...table, activeOrder });
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ ...table, status: activeOrder ? 'OCCUPIED' : table.status, activeOrder });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -249,7 +253,11 @@ router.delete('/:id', requireRole(...MANAGE_ROLES), async (req, res) => {
     // No permitir borrar mesa con cuenta abierta — primero hay que cerrar la
     // cuenta o reasignarla manualmente.
     const openOrder = await prisma.order.findFirst({
-      where: { tableId: existing.id, status: 'OPEN' },
+      where: {
+        tableId: existing.id,
+        status: { in: OPEN_TABLE_STATUSES },
+        paymentStatus: { not: 'PAID' },
+      },
       select: { id: true },
     });
     if (openOrder) {

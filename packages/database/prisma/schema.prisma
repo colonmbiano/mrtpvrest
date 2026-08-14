@@ -1397,6 +1397,14 @@ model RestaurantConfig {
   maxOpenOrders    Int?
   saturatedMessage String?
 
+  // BARRIDO DE MESAS · minutos que un pedido de QR de mesa puede quedarse en
+  // PENDING (caja nunca lo aceptó ni lo canceló) antes de que el cron lo
+  // cancele y libere la mesa. El reloj se reinicia con cualquier actividad en
+  // la cuenta. null → usa el default global del backend (TABLE_PENDING_TTL_MIN,
+  // 180 min). 0 → barrido apagado para este restaurante.
+  // Ver apps/backend/src/jobs/staleTableOrders.job.js.
+  tablePendingTtlMin Int?
+
   // ─── HORARIO DE ATENCIÓN ───────────────────────────────────────────────
   // scheduleEnabled: si true, la apertura se calcula con el reloj local
   // (timezone) contra businessHours. isOpen sigue siendo el override "forzar

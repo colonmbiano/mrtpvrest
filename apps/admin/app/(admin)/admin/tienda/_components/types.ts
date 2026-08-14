@@ -114,6 +114,9 @@ export type TiendaConfig = {
   closedMessage: string;
   maxOpenOrders: number;
   saturatedMessage: string;
+  // Barrido de mesas con pedido de QR sin aceptar (minutos).
+  // null = usar el default del backend · 0 = barrido apagado.
+  tablePendingTtlMin: number | null;
   adminCanViewExpectedCash: boolean;
   cashCutEmailEnabled: boolean;
   cashCutEmails: string;

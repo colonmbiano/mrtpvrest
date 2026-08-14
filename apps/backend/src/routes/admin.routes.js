@@ -104,6 +104,8 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
       'minOrderAmount','estimatedDelivery','isOpen','closedMessage',
       // Freno de saturación (tope de pedidos abiertos para canales remotos)
       'maxOpenOrders','saturatedMessage',
+      // Barrido de mesas con pedido de QR sin aceptar (minutos)
+      'tablePendingTtlMin',
       'pointsPerTen','pointsValuePesos','welcomeBonusPoints','storefrontTheme','storefrontHeroUrl',
       'currency','currencyLocale',
       'centralWarehouseEnabled','adminCanViewExpectedCash','blockOnInsufficientStock','hasPackingStage',
@@ -143,6 +145,16 @@ router.put('/config', authenticate, requireTenantAccess, requireAdmin, async (re
         // Freno de saturación: entero positivo; vacío/0 → null (sin freno).
         const n = Math.floor(Number(v));
         data[k] = Number.isFinite(n) && n > 0 ? n : null;
+      } else if (k === 'tablePendingTtlMin') {
+        // Minutos antes de que el barrido cancele un pedido de QR sin aceptar y
+        // libere la mesa. Vacío/null → null = usar el default global del
+        // backend. 0 (o negativo) → apagar el barrido para este restaurante.
+        // Positivo → se topa a 15..1440 min: por debajo de 15 el barrido
+        // cancelaría pedidos que caja apenas está viendo.
+        if (v === '' || v === null || v === undefined) { data[k] = null; continue; }
+        const n = Math.floor(Number(v));
+        if (!Number.isFinite(n)) { data[k] = null; continue; }
+        data[k] = n <= 0 ? 0 : Math.min(1440, Math.max(15, n));
       } else if (k === 'welcomeBonusPoints') {
         // Bono de bienvenida: entero >= 0 (la columna es Int NOT NULL). Un
         // vacío, negativo o no-numérico se interpreta como 0 = sin bono.
