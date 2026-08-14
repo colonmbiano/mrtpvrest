@@ -352,7 +352,16 @@ export default function StoreCheckout({
         <div className="bg-white p-8 rounded-[32px] shadow-2xl max-w-sm w-full text-center">
           <div className="text-6xl mb-3">🎉</div>
           <h2 className="text-2xl font-black mb-1">¡Pedido enviado!</h2>
-          <p className="text-gray-500 mb-5 font-bold">Orden #{success.orderNumber}</p>
+          <p className="text-gray-500 mb-2 font-bold">Orden #{success.orderNumber}</p>
+          {/* Pedido de mesa: cerrar el círculo del QR — el comensal confirma a
+              qué mesa se mandó, no solo el folio. */}
+          {lockedTable && (
+            <p className="mb-5 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-black"
+              style={{ background: `${primary}14`, color: primary }}>
+              🍽 Mesa {lockedTable}
+            </p>
+          )}
+          {!lockedTable && <div className="mb-5" />}
           <div className="rounded-2xl p-4 mb-5" style={{ background: `${st.c}14` }}>
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Estado</p>
             <p className="text-lg font-black flex items-center justify-center gap-2" style={{ color: st.c }}>
