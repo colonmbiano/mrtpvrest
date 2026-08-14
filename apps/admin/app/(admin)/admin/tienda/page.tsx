@@ -12,6 +12,7 @@ import { ContactThemeCard } from "./_components/ContactThemeCard";
 import { DeliveryCard } from "./_components/DeliveryCard";
 import { RewardsSection } from "./_components/RewardsSection";
 import { CouponsSection } from "./_components/CouponsSection";
+import { TableSweepCard } from "./_components/TableSweepCard";
 import { MesasQrCard } from "./_components/MesasQrCard";
 import type { BusinessHour, TiendaConfig } from "./_components/types";
 
@@ -49,6 +50,9 @@ export default function TiendaConfigPage() {
     // 0 = sin freno. El TPV nunca se bloquea.
     maxOpenOrders: 0,
     saturatedMessage: "",
+    // Barrido de mesas: minutos que un pedido de QR puede quedarse sin aceptar
+    // antes de cancelarse y liberar la mesa. null = default del backend.
+    tablePendingTtlMin: null,
     // Corte de caja: ¿los admins ven el efectivo esperado en corte ciego?
     adminCanViewExpectedCash: true,
     // Corte de caja por correo: enviar el resumen del corte al cerrar el turno.
@@ -130,6 +134,7 @@ export default function TiendaConfigPage() {
           closedMessage: d.closedMessage ?? "",
           maxOpenOrders: d.maxOpenOrders ?? 0,
           saturatedMessage: d.saturatedMessage ?? "",
+          tablePendingTtlMin: d.tablePendingTtlMin ?? null,
           deliveryMode: d.deliveryMode === "DISTANCE" ? "DISTANCE" : d.deliveryMode === "ZONES" ? "ZONES" : "FLAT",
           whatsappOrderingEnabled: d.whatsappOrderingEnabled ?? false,
           hasWhatsappOrdersModule: d.hasWhatsappOrdersModule ?? false,
@@ -228,9 +233,13 @@ export default function TiendaConfigPage() {
 
         {/* QR por mesa (autoservicio dine-in) — el comensal escanea y su pedido entra al TPV con la mesa puesta */}
         {storeUrl && (
-          <SectionCard icon={Store} title="QR de mesas" subtitle="Autoservicio en mesa para tus comensales">
-            <MesasQrCard storeUrl={storeUrl} />
-          </SectionCard>
+          <>
+            <SectionCard icon={Store} title="QR de mesas" subtitle="Autoservicio en mesa para tus comensales">
+              <MesasQrCard storeUrl={storeUrl} />
+            </SectionCard>
+            {/* Higiene del piso: qué pasa con la mesa si nadie acepta el pedido del QR */}
+            <TableSweepCard config={config} setConfig={setConfig} />
+          </>
         )}
 
         {/* Programa de puntos */}
