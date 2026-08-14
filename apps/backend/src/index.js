@@ -368,6 +368,11 @@ startWhatsappBotReportJob()
 const { startDemoExpiryJob } = require('./jobs/demoExpiry.job')
 startDemoExpiryJob()
 
+// Libera mesas cuyo pedido de QR quedó PENDING (caja nunca lo aceptó). Recibe
+// `io` para que el TPV/KDS refresquen el mapa de piso en vivo.
+const { startStaleTableOrdersJob } = require('./jobs/staleTableOrders.job')
+startStaleTableOrdersJob(io)
+
 const PORT = process.env.PORT || 3001
 server.listen(PORT,'0.0.0.0', () => {
   console.log('┌─────────────────────────────────┐')
