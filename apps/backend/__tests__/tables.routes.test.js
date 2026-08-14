@@ -25,6 +25,7 @@ const express = require('express');
 const request = require('supertest');
 const { prisma } = require('@mrtpvrest/database');
 const tableRoutes = require('../src/routes/tables.routes');
+const { OPEN_TABLE_STATUSES } = require('../src/lib/table-status');
 
 function makeApp() {
   const app = express();
@@ -66,7 +67,7 @@ describe('GET /api/tables', () => {
       expect.objectContaining({
         where: {
           tableId: { in: ['table-7'] },
-          status: 'OPEN',
+          status: { in: OPEN_TABLE_STATUSES },
           paymentStatus: { not: 'PAID' },
         },
       }),
@@ -80,5 +81,53 @@ describe('GET /api/tables', () => {
         _count: { items: 6 },
       },
     });
+  });
+
+  test('un pedido del QR de mesa aun en PENDING ocupa la mesa', async () => {
+    prisma.table.findMany.mockResolvedValue([
+      { id: 'table-3', name: 'Mesa 3', status: 'AVAILABLE', zone: null },
+    ]);
+    prisma.order.findMany.mockResolvedValue([
+      {
+        id: 'order-qr',
+        tableId: 'table-3',
+        orderNumber: 'WEB-000012',
+        status: 'PENDING',
+        paymentStatus: 'PENDING',
+        total: 180,
+        _count: { items: 2 },
+        createdAt: new Date(),
+      },
+    ]);
+
+    const response = await request(makeApp()).get('/api/tables').expect(200);
+
+    expect(response.body[0]).toMatchObject({
+      id: 'table-3',
+      status: 'OCCUPIED',
+      activeOrder: { id: 'order-qr', total: 180 },
+    });
+  });
+
+  test('una cuenta que cocina avanzo a PREPARING sigue ocupando la mesa', async () => {
+    prisma.table.findMany.mockResolvedValue([
+      { id: 'table-9', name: 'Mesa 9', status: 'AVAILABLE', zone: null },
+    ]);
+    prisma.order.findMany.mockResolvedValue([
+      {
+        id: 'order-9',
+        tableId: 'table-9',
+        orderNumber: 'TPV-000009',
+        status: 'PREPARING',
+        paymentStatus: 'PENDING',
+        total: 95,
+        _count: { items: 1 },
+        createdAt: new Date(),
+      },
+    ]);
+
+    const response = await request(makeApp()).get('/api/tables').expect(200);
+
+    expect(response.body[0]).toMatchObject({ id: 'table-9', status: 'OCCUPIED' });
   });
 });

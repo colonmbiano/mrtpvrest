@@ -416,13 +416,9 @@ const {
 const router = express.Router();
 
 // Estados en los que una cuenta de mesa DINE_IN sigue "abierta" (con saldo por
-// cobrar). OJO: una cuenta abierta NO se queda en 'OPEN' — cocina la avanza a
-// CONFIRMED/PREPARING/READY sin que esté pagada. Filtrar solo por 'OPEN'
-// rompía de dos formas: (a) duplicaba cuentas (la mesa "ocupada" no se
-// detectaba al re-entrar) y (b) hacía inconsistente la fusión por tableId.
-// Este set + paymentStatus != PAID es la definición canónica de "mesa con
-// cuenta abierta" y debe usarse en TODO lookup de cuenta-por-mesa.
-const OPEN_TABLE_STATUSES = ['OPEN', 'CONFIRMED', 'PREPARING', 'READY'];
+// cobrar). Definición única en lib/table-status.js — incluye PENDING porque los
+// pedidos del QR de mesa entran así hasta que el cajero los acepta.
+const { OPEN_TABLE_STATUSES } = require('../lib/table-status');
 
 function extractIds(value, key) {
   return Array.isArray(value)
