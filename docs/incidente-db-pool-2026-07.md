@@ -86,7 +86,10 @@ Añadir a `model Order` en `schema.prisma`:
 Cubre el filtro `restaurantId (+locationId) + status IN (...) ORDER BY createdAt desc`
 y también beneficia `GET /table/:tableId/open`.
 **Flujo (según CLAUDE.md, prohibido `db push`):** `prisma migrate dev` local →
-`prisma migrate deploy` MANUAL contra prod coordinado con el deploy.
+commit de la migración → push a `master`; el deploy la aplica solo (el `CMD` del
+Dockerfile del backend corre `prisma migrate deploy` antes de arrancar).
+*(Corregido 2026-08: este documento decía «`migrate deploy` MANUAL contra prod»,
+que ya no aplica.)*
 
 ### 4. Recortar consumidores de sesión
 - Acelerar la Fase 2 del bot (`docs/whatsapp-bot-saas-plan.md` §9.6-C): quitarle
