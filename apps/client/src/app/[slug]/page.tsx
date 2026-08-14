@@ -8,6 +8,7 @@ import { getApiUrl } from '@/lib/config';
 import { cldImage } from '@/lib/cloudinary';
 import InstallPWABanner from '@/components/InstallPWABanner';
 import CartDeepLinkLoader from '@/components/CartDeepLinkLoader';
+import { DineInBanner } from '@/components/DineInBanner';
 
 const API = getApiUrl();
 
@@ -302,6 +303,10 @@ export default async function StorefrontPage({
       style={{ ['--color-primary' as string]: primary } as React.CSSProperties}
       className="min-h-screen bg-white"
     >
+      {/* Llegó por el QR de mesa: que se vea desde el primer pintado, no solo
+          al abrir el checkout. */}
+      {dineIn && <DineInBanner table={dineIn.table} primary={primary} />}
+
       {theme === 'MOCHI' && <MochiTheme data={data} />}
       {theme === 'MUNDIALISTA' && <MundialistaTheme data={data} />}
       {theme === 'ANTOJITOS' && <AntojitosTheme data={data} />}
