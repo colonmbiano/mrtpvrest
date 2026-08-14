@@ -10,6 +10,7 @@ jest.mock('@mrtpvrest/database', () => ({
   prisma: {
     order: { findMany: jest.fn(), updateMany: jest.fn(), findFirst: jest.fn() },
     table: { update: jest.fn() },
+    restaurantConfig: { findMany: jest.fn() },
   },
 }));
 
@@ -27,6 +28,9 @@ const {
   startStaleTableOrdersJob,
 } = require('../src/jobs/staleTableOrders.job');
 
+// Pedido con 10 h sin tocarse: vencido con cualquier TTL razonable.
+const minutesAgo = (min) => new Date(Date.now() - min * 60000);
+
 const STALE_ORDER = {
   id: 'o-vieja',
   orderNumber: 3001,
@@ -34,6 +38,7 @@ const STALE_ORDER = {
   restaurantId: 'r1',
   locationId: 'loc1',
   tableId: 't5',
+  updatedAt: minutesAgo(600),
 };
 
 beforeEach(() => {
@@ -43,6 +48,7 @@ beforeEach(() => {
   prisma.order.updateMany.mockResolvedValue({ count: 1 });
   prisma.order.findFirst.mockResolvedValue(null);
   prisma.table.update.mockResolvedValue({ id: 't5', status: 'AVAILABLE' });
+  prisma.restaurantConfig.findMany.mockResolvedValue([]); // sin ajustes por tenant
 });
 
 describe('runStaleTableOrdersJob', () => {
@@ -111,7 +117,7 @@ describe('runStaleTableOrdersJob', () => {
     expect(prisma.order.findMany).not.toHaveBeenCalled();
   });
 
-  it('TTL configurable: mueve el corte', async () => {
+  it('TTL global configurable: mueve el corte', async () => {
     process.env.TABLE_PENDING_TTL_MIN = '30';
     const before = Date.now();
 
@@ -120,6 +126,73 @@ describe('runStaleTableOrdersJob', () => {
     const cutoff = prisma.order.findMany.mock.calls[0][0].where.createdAt.lt.getTime();
     expect(cutoff).toBeLessThanOrEqual(before - 30 * 60000);
     expect(cutoff).toBeGreaterThan(before - 31 * 60000);
+  });
+
+  it('sin ajuste del tenant, el default global son 180 min', async () => {
+    const before = Date.now();
+
+    await runStaleTableOrdersJob();
+
+    const cutoff = prisma.order.findMany.mock.calls[0][0].where.createdAt.lt.getTime();
+    expect(cutoff).toBeLessThanOrEqual(before - 180 * 60000);
+    expect(cutoff).toBeGreaterThan(before - 181 * 60000);
+  });
+
+  it('el TTL del restaurante manda sobre el global', async () => {
+    // r1 barre a los 60 min: un pedido de 90 min sin tocarse ya vence, aunque
+    // el global sean 180.
+    prisma.restaurantConfig.findMany.mockResolvedValue([
+      { restaurantId: 'r1', tablePendingTtlMin: 60 },
+    ]);
+    prisma.order.findMany.mockResolvedValue([
+      { ...STALE_ORDER, updatedAt: minutesAgo(90) },
+    ]);
+    const before = Date.now();
+
+    const res = await runStaleTableOrdersJob();
+
+    // La query trae candidatos con el TTL más corto en juego (60), no con 180.
+    const cutoff = prisma.order.findMany.mock.calls[0][0].where.createdAt.lt.getTime();
+    expect(cutoff).toBeLessThanOrEqual(before - 60 * 60000);
+    expect(cutoff).toBeGreaterThan(before - 61 * 60000);
+    expect(res.cancelled).toBe(1);
+  });
+
+  it('candidato de otro tenant que aún no vence su TTL no se toca', async () => {
+    // r1 barre a los 60 min (mueve el corte de la query), pero el pedido es de
+    // r2, que usa el global de 180 y solo lleva 90 min.
+    prisma.restaurantConfig.findMany.mockResolvedValue([
+      { restaurantId: 'r1', tablePendingTtlMin: 60 },
+    ]);
+    prisma.order.findMany.mockResolvedValue([
+      { ...STALE_ORDER, restaurantId: 'r2', updatedAt: minutesAgo(90) },
+    ]);
+
+    const res = await runStaleTableOrdersJob();
+
+    expect(res.cancelled).toBe(0);
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('restaurante con el barrido apagado (0) queda fuera de la query', async () => {
+    prisma.restaurantConfig.findMany.mockResolvedValue([
+      { restaurantId: 'r-apagado', tablePendingTtlMin: 0 },
+    ]);
+
+    await runStaleTableOrdersJob();
+
+    expect(prisma.order.findMany.mock.calls[0][0].where.restaurantId).toEqual({
+      notIn: ['r-apagado'],
+    });
+  });
+
+  it('si la columna del tenant no existe aún, sigue con el TTL global', async () => {
+    prisma.restaurantConfig.findMany.mockRejectedValue(new Error('column does not exist'));
+    prisma.order.findMany.mockResolvedValue([STALE_ORDER]);
+
+    const res = await runStaleTableOrdersJob();
+
+    expect(res.cancelled).toBe(1);
   });
 
   it('emite order:updated a caja y cocina de la sucursal', async () => {

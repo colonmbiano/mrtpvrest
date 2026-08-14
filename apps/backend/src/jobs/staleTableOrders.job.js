@@ -18,8 +18,12 @@
 //   · La cancelación es un updateMany condicional sobre el estado: si caja
 //     acepta el pedido en el mismo instante, gana caja y el barrido no hace nada.
 //
-// TTL configurable con TABLE_PENDING_TTL_MIN (minutos); 0 o negativo apaga el
-// job por completo. Default 240 min (4 h) — más que una comida larga.
+// TTL en dos niveles, porque no todos los negocios rotan mesa igual:
+//   · Por restaurante: RestaurantConfig.tablePendingTtlMin (lo edita el dueño
+//     desde el panel). 0 = barrido apagado para ese restaurante.
+//   · Global de la instancia: env TABLE_PENDING_TTL_MIN, default 180 min (3 h).
+//     Aplica a los restaurantes que no configuraron el suyo (columna null).
+//     0 o negativo apaga el job entero.
 //
 // Corre sin contexto de tenant a propósito (barre todos los restaurantes): el
 // tenant-guard hace passthrough cuando no hay contexto, ver docs/TENANCY.md.
@@ -34,15 +38,43 @@ const { OPEN_TABLE_STATUSES } = require('../lib/table-status')
 // dine-in nacen en OPEN.
 const REMOTE_SOURCES = ['ONLINE', 'KIOSK', 'WHATSAPP']
 
-const DEFAULT_TTL_MIN = 240
+const DEFAULT_TTL_MIN = 180
 
 // Tope por corrida: si algo se acumuló (job apagado un tiempo, TTL recién
 // bajado), preferimos varias corridas cortas a una que muerda la BD 20 min.
 const BATCH_LIMIT = 200
 
+// TTL global de la instancia — el que aplica a los restaurantes sin ajuste
+// propio, y el interruptor maestro del job.
 function ttlMinutes() {
   const raw = Number(process.env.TABLE_PENDING_TTL_MIN)
   return Number.isFinite(raw) ? raw : DEFAULT_TTL_MIN
+}
+
+// TTL por restaurante (RestaurantConfig.tablePendingTtlMin). Devuelve:
+//   · byRestaurant: Map restaurantId → minutos (>0), los que sí barremos
+//   · disabled: ids con el barrido apagado a mano (0)
+//   · minTtl: el TTL más corto en juego, para no traer de la BD más de lo justo
+async function loadTenantTtls(defaultTtl) {
+  const result = { byRestaurant: new Map(), disabled: [], minTtl: defaultTtl }
+  let rows = []
+  try {
+    rows = await prisma.restaurantConfig.findMany({
+      where: { tablePendingTtlMin: { not: null } },
+      select: { restaurantId: true, tablePendingTtlMin: true },
+    })
+  } catch (e) {
+    // Sin la columna (migración no aplicada aún) el job sigue con el global.
+    log.error('staleTableOrders.tenantTtl.failed', { err: e && e.message })
+    return result
+  }
+  for (const row of rows) {
+    const ttl = Number(row.tablePendingTtlMin)
+    if (!Number.isFinite(ttl) || ttl <= 0) { result.disabled.push(row.restaurantId); continue }
+    result.byRestaurant.set(row.restaurantId, ttl)
+    if (ttl < result.minTtl) result.minTtl = ttl
+  }
+  return result
 }
 
 // Nota visible en el ticket/panel para que nadie se pregunte quién canceló.
@@ -52,11 +84,16 @@ function cancelNote(notes, ttl) {
 }
 
 async function runStaleTableOrdersJob(io = null) {
-  const ttl = ttlMinutes()
+  const defaultTtl = ttlMinutes()
   const result = { cancelled: 0, released: 0, skipped: 0 }
-  if (ttl <= 0) return result
+  if (defaultTtl <= 0) return result
 
-  const cutoff = new Date(Date.now() - ttl * 60000)
+  const { byRestaurant, disabled, minTtl } = await loadTenantTtls(defaultTtl)
+
+  // Traemos candidatos con el TTL MÁS CORTO en juego y afinamos por restaurante
+  // en el bucle: una sola query cubre a todos los tenants sin barrer de más.
+  const now = Date.now()
+  const widestCutoff = new Date(now - minTtl * 60000)
 
   let stale = []
   try {
@@ -67,11 +104,13 @@ async function runStaleTableOrdersJob(io = null) {
         tableId:       { not: null },
         paymentStatus: { not: 'PAID' },
         source:        { in: REMOTE_SOURCES },
-        createdAt:     { lt: cutoff },
-        updatedAt:     { lt: cutoff },
+        createdAt:     { lt: widestCutoff },
+        updatedAt:     { lt: widestCutoff },
+        // Restaurantes que apagaron el barrido a mano (tablePendingTtlMin = 0).
+        ...(disabled.length ? { restaurantId: { notIn: disabled } } : {}),
       },
       select: {
-        id: true, orderNumber: true, notes: true,
+        id: true, orderNumber: true, notes: true, updatedAt: true,
         restaurantId: true, locationId: true, tableId: true,
       },
       orderBy: { createdAt: 'asc' },
@@ -83,6 +122,9 @@ async function runStaleTableOrdersJob(io = null) {
   }
 
   for (const order of stale) {
+    // TTL efectivo del restaurante: el suyo si lo configuró, el global si no.
+    const ttl = byRestaurant.get(order.restaurantId) ?? defaultTtl
+    if (order.updatedAt.getTime() > now - ttl * 60000) continue // aún no vence
     try {
       // Condicional en el WHERE: si caja aceptó (o cobró) entre el SELECT y este
       // UPDATE, count === 0 y no tocamos nada más — ni el stock ni la mesa.
@@ -155,7 +197,9 @@ async function runStaleTableOrdersJob(io = null) {
     }
   }
 
-  if (result.cancelled || result.skipped) log.info('staleTableOrders.done', { ...result, ttlMin: ttl })
+  if (result.cancelled || result.skipped) {
+    log.info('staleTableOrders.done', { ...result, defaultTtlMin: defaultTtl, tenantOverrides: byRestaurant.size })
+  }
   return result
 }
 
@@ -166,7 +210,7 @@ function startStaleTableOrdersJob(io = null) {
     return null
   }
   const task = cron.schedule('*/15 * * * *', () => runStaleTableOrdersJob(io))
-  log.info('staleTableOrders.cron', { ttlMin: ttl, msg: 'registrado — cada 15 min' })
+  log.info('staleTableOrders.cron', { defaultTtlMin: ttl, msg: 'registrado — cada 15 min' })
   return task
 }
 
