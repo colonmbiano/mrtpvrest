@@ -818,8 +818,19 @@ router.post('/orders', async (req, res) => {
     return res.status(400).json({ error: 'La dirección de entrega es requerida.' });
   }
 
-  // Resolver sucursal final (body tiene prioridad sobre query)
-  let resolvedLocationId = location?.id || bodyLocationId || null;
+  // Resolver sucursal final. `location` ya viene validada contra el restaurante
+  // por resolveStore; `bodyLocationId` llega crudo del cliente, así que hay que
+  // validarla aquí antes de usarla: sin esto, el id de sucursal de otro tenant
+  // se colaría al pedido (y ahora también al UPDATE de estado de la mesa). Si
+  // no es válida la ignoramos y caemos a la sucursal principal de abajo.
+  let resolvedLocationId = location?.id || null;
+  if (!resolvedLocationId && bodyLocationId) {
+    const fromBody = await prisma.location.findFirst({
+      where: { id: String(bodyLocationId), restaurantId: restaurant.id, isActive: true },
+      select: { id: true },
+    });
+    if (fromBody) resolvedLocationId = fromBody.id;
+  }
 
   // Sin sucursal explícita (caso típico de WhatsApp y de tiendas con un solo
   // local que no mandan ?l): caer en la sucursal principal del restaurante. Si
@@ -1338,6 +1349,18 @@ router.post('/orders', async (req, res) => {
           items: { include: { menuItem: { select: { name: true } } } },
         },
       });
+
+      // Mesa ocupada: un pedido que entra por el QR de mesa debe pintar la mesa
+      // igual que una cuenta abierta desde caja — si no, el mapa de piso la
+      // muestra libre y el mesero abre una segunda cuenta encima. Va DENTRO de
+      // la tx: si la orden no llega a crearse, la mesa no queda ocupada por
+      // error. Se libera en releaseTableAfterPayment al cobrar.
+      if (resolvedTableId) {
+        await tx.table.update({
+          where: { id: resolvedTableId },
+          data: { status: 'OCCUPIED' },
+        });
+      }
 
       // Movimientos REDEEMED en la misma tx que el decremento de saldo: si
       // falla, el rollback también devuelve los puntos.
