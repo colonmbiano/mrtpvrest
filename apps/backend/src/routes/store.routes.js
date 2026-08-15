@@ -1021,8 +1021,17 @@ router.post('/orders', async (req, res) => {
 
     const subtotal    = itemsData.reduce((s, i) => s + i.subtotal, 0);
 
-    // Mínimo de compra (solo pedidos online; el TPV/kiosko y el staff no lo aplican).
-    if (rawSource !== 'KIOSK' && !isStaff && config?.minOrderAmount > 0 && subtotal < config.minOrderAmount) {
+    // Mínimo de compra (solo pedidos online; el TPV/kiosko y el staff no lo
+    // aplican). DINE_IN tampoco: el mínimo existe para que valga la pena
+    // preparar y mandar un pedido fuera del local, no para impedir que el
+    // comensal ya sentado pida una cerveza desde el QR de su mesa.
+    if (
+      rawSource !== 'KIOSK' &&
+      !isStaff &&
+      resolvedOrderType !== 'DINE_IN' &&
+      config?.minOrderAmount > 0 &&
+      subtotal < config.minOrderAmount
+    ) {
       return res.status(400).json({
         error: `El pedido mínimo es de $${config.minOrderAmount}.`,
         code: 'MIN_ORDER_NOT_MET',
