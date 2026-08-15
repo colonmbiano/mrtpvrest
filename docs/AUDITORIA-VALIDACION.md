@@ -56,8 +56,9 @@ qué hallazgos son reales, y el plan de remediación priorizado.
    verificados sin duplicados antes de crear). La dedupe de la app queda
    respaldada por la BD contra entregas concurrentes. La tabla `WebhookEvent`
    con UNIQUE(provider, eventId) queda como mejora opcional futura.
-   Recordatorio operativo: Railway NO aplica migraciones en deploy (solo
-   `prisma generate`); las migraciones van con `migrate deploy` manual.
+   Recordatorio operativo (actualizado 2026-08): el deploy SÍ aplica las
+   migraciones — el `CMD` de `apps/backend/Dockerfile` corre `prisma migrate
+   deploy` antes de arrancar el server. Ya no hay paso manual contra prod.
 - Nota de diseño: los kiosk webhooks no verifican firma porque las llaves son
   per-restaurant y no se almacena webhook secret por restaurante; el patrón
   actual (re-fetch del pago contra la API de la pasarela + comparar
