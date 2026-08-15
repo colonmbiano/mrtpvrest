@@ -55,7 +55,11 @@ Detalle y estado: `docs/AUDITORIA-VALIDACION.md`.
 - La impresión LAN es TCP nativo puerto 9100 (no HTTP) — los cambios de red del WebView no la afectan.
 
 **Base de datos**
-- **Prohibido `prisma db push` para cambios de schema**: causó drift (migración `20260612210000_reconcile_db_push_drift` lo reconcilió). Flujo: migración con `prisma migrate dev` → `prisma migrate deploy` MANUAL contra prod (Railway NO aplica migraciones, solo `prisma generate`) coordinado con el deploy del backend.
+- **Prohibido `prisma db push` para cambios de schema**: causó drift (migración `20260612210000_reconcile_db_push_drift` lo reconcilió). Flujo: migración con `prisma migrate dev` en local → commit de la carpeta `packages/database/prisma/migrations/<ts>_<nombre>/` → push a `master`.
+- **Las migraciones se aplican SOLAS en el deploy**: el `CMD` de `apps/backend/Dockerfile` corre `prisma migrate deploy` antes de arrancar el server, y `railway.json` usa `builder: DOCKERFILE`. O sea: mergear a `master` despliega el backend y aplica lo pendiente en el mismo arranque. NO hace falta correr `migrate deploy` a mano contra prod (`nixpacks.toml` quedó como referencia histórica; solo hace `prisma generate` y no es el builder activo).
+  - Implicación: la migración y el código que la usa viajan juntos, así que la migración debe ser **compatible hacia atrás** con la versión anterior del backend (columna nullable o con default, nada de `NOT NULL` sin default ni renombrados en un solo paso) — durante el rollout conviven ambas.
+  - Si `migrate deploy` falla, el contenedor NO arranca (van encadenados con `&&`): un error de migración tira el deploy entero, no lo deja a medias. Revisar los logs de Railway antes de reintentar.
+  - Para verificar el estado sin tocar nada: `pnpm --filter @mrtpvrest/database exec prisma migrate status` (necesita `DATABASE_URL` de prod al puerto **5432 directo**, no al 6543 del pooler: pgBouncer en modo transacción rompe el DDL).
 - Campos de dinero: NO usar `@db.Money` ni agregar `Float` nuevos; la migración a `Decimal` está planificada por etapas en `docs/plan-decimal-migration.md`.
 
 **CI/CD**
