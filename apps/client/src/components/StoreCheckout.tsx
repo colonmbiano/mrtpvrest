@@ -28,9 +28,13 @@ type StoreCheckoutProps = {
   // Si la sucursal no lo permite, el efecto de `allowed` lo corrige a uno válido.
   initialOrderType?: OrderType;
   whatsappOrder?: { enabled: boolean; number: string | null };
-  // Menú QR en mesa: cuando llega de un QR (?mesa=&l=), el pedido queda fijo en
-  // DINE_IN con esa mesa y sucursal (sin selector de tipo, mesa bloqueada).
+  // Menú QR en mesa: cuando llega de un QR, el pedido queda fijo en DINE_IN con
+  // esa mesa y sucursal (sin selector de tipo, mesa bloqueada).
+  // `lockedTable` es solo la ETIQUETA que ve el comensal; lo que ata el pedido a
+  // la mesa es `lockedTableToken` (firmado por el backend, ver lib/table-qr.js).
+  // Los QR viejos traen etiqueta sin token y el backend los resuelve por número.
   lockedTable?: string | null;
+  lockedTableToken?: string | null;
   lockedLocationId?: string | null;
 };
 
@@ -47,8 +51,11 @@ const STATUS_LABEL: Record<string, { t: string; c: string }> = {
 export default function StoreCheckout({
   open, onClose, slug, primary, locations = [], delivery, minOrderAmount = 0, onlinePayment = false,
   initialOrderType = 'DELIVERY', whatsappOrder,
-  lockedTable = null, lockedLocationId = null,
+  lockedTable = null, lockedTableToken = null, lockedLocationId = null,
 }: StoreCheckoutProps) {
+  // Llegó por QR de mesa. Con token firmado la mesa puede no tener número en el
+  // nombre ("Barra"), así que el candado NO puede depender de la etiqueta.
+  const fromTableQr = !!(lockedTable || lockedTableToken);
   const fmt = useMoney();
   const lines = useCart(s => s.lines);
   const total = useCart(s => s.total());
@@ -65,7 +72,7 @@ export default function StoreCheckout({
   const [geoStatus, setGeoStatus] = useState<'' | 'loading' | 'ok' | 'error'>('');
 
   // Tipo de pedido + sucursal
-  const [orderType, setOrderType] = useState<OrderType>(lockedTable ? 'DINE_IN' : initialOrderType);
+  const [orderType, setOrderType] = useState<OrderType>(fromTableQr ? 'DINE_IN' : initialOrderType);
   const [tableNumber, setTableNumber] = useState(lockedTable || '');
   const [locationId, setLocationId] = useState<string>(lockedLocationId || locations[0]?.id || '');
   const selectedLocation = locations.find(l => l.id === locationId) || locations[0] || null;
@@ -183,7 +190,7 @@ export default function StoreCheckout({
   }, [selectedLocation]);
 
   // Con mesa fija (QR) el tipo no se corrige: el pedido es DINE_IN sí o sí.
-  useEffect(() => { if (!lockedTable && !allowed.includes(orderType)) setOrderType(allowed[0]); }, [allowed]); // eslint-disable-line
+  useEffect(() => { if (!fromTableQr && !allowed.includes(orderType)) setOrderType(allowed[0]); }, [allowed]); // eslint-disable-line
 
   const isDelivery = orderType === 'DELIVERY';
   // Pedido en mesa: el comensal está sentado en el local. Todo lo que asume
@@ -270,7 +277,9 @@ export default function StoreCheckout({
       setError('El correo no tiene un formato válido.'); return;
     }
     if (isDelivery && !deliveryAddress.trim()) { setError('La dirección de entrega es requerida.'); return; }
-    if (orderType === 'DINE_IN' && !tableNumber.trim()) { setError('Indica el número de mesa.'); return; }
+    // Con token del QR la mesa la resuelve el backend (puede no tener número
+    // en el nombre), así que solo exigimos el campo en el dine-in manual.
+    if (orderType === 'DINE_IN' && !lockedTableToken && !tableNumber.trim()) { setError('Indica el número de mesa.'); return; }
     if (belowMin) { setError(`El pedido mínimo es de ${fmt(minOrderAmount)}.`); return; }
     if (isDelivery && preview.outOfRange) { setError('Tu ubicación está fuera del área de cobertura.'); return; }
 
@@ -288,7 +297,10 @@ export default function StoreCheckout({
           deliveryAddress: isDelivery ? deliveryAddress : undefined,
           deliveryLat: isDelivery ? (coords?.lat ?? null) : null,
           deliveryLng: isDelivery ? (coords?.lng ?? null) : null,
-          tableNumber: orderType === 'DINE_IN' ? Number(tableNumber) : undefined,
+          tableNumber: orderType === 'DINE_IN' && tableNumber ? Number(tableNumber) : undefined,
+          // Token firmado del QR: cuando viaja, el backend ignora el número y
+          // ata el pedido al tableId que trae firmado.
+          tableToken: lockedTableToken || undefined,
           locationId: locationId || selectedLocation?.id,
           paymentMethod: paymentMethod === 'ONLINE' ? 'CARD' : paymentMethod,
           tip,
@@ -443,10 +455,10 @@ export default function StoreCheckout({
             </button>
 
             {/* Tipo de pedido — oculto cuando el pedido viene de un QR de mesa */}
-            {lockedTable ? (
+            {fromTableQr ? (
               <div className="flex items-center gap-2 rounded-2xl px-4 py-3" style={{ background: `${primary}14` }}>
                 <span className="text-lg">🍽</span>
-                <span className="text-sm font-bold" style={{ color: primary }}>Pedido para la Mesa {lockedTable}</span>
+                <span className="text-sm font-bold" style={{ color: primary }}>{lockedTable ? `Pedido para la Mesa ${lockedTable}` : 'Pedido desde tu mesa'}</span>
               </div>
             ) : (
               <div>
@@ -524,7 +536,7 @@ export default function StoreCheckout({
               {/* Con QR la mesa ya viene fija y se anuncia arriba ("Pedido para
                   la Mesa N") + en la banda de la portada: repetirla en un campo
                   gris deshabilitado solo agrega ruido. Sin QR sí se pide. */}
-              {isDineIn && !lockedTable && (
+              {isDineIn && !fromTableQr && (
                 <input required placeholder="Número de mesa" type="number" min="1" className={field}
                   value={tableNumber} onChange={e => setTableNumber(e.target.value)} />
               )}

@@ -20,6 +20,7 @@ const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const { OPEN_TABLE_STATUSES } = require('../lib/table-status');
+const { signTableToken } = require('../lib/table-qr');
 const router = express.Router();
 
 const VALID_STATUS = ['AVAILABLE', 'OCCUPIED', 'DIRTY'];
@@ -89,6 +90,41 @@ router.get('/', async (req, res) => {
         ...t,
         status: activeOrder ? 'OCCUPIED' : t.status,
         activeOrder,
+      };
+    }));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /qr — Mesas con su token firmado para el QR ────────────────────────
+// El panel arma el QR con esto en vez de derivar el número del nombre: el token
+// ata el pedido al tableId real (sobrevive a renombrar la mesa, no se confunde
+// entre dos mesas con el mismo número) y va firmado, así que nadie puede pedir a
+// nombre de otra mesa editando la URL. Ver lib/table-qr.js.
+//
+// DEBE ir declarada ANTES de `/:id`, o Express la captura como un id.
+router.get('/qr', requireRole(...MANAGE_ROLES), async (req, res) => {
+  try {
+    if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
+
+    const tables = await prisma.table.findMany({
+      where: { locationId: req.locationId, isActive: true },
+      select: { id: true, name: true, locationId: true },
+    });
+    tables.sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true, sensitivity: 'base' }));
+
+    res.json(tables.map((t) => {
+      // El número sigue saliendo del nombre, pero solo como ETIQUETA para el
+      // comensal: lo que ata el pedido es el id firmado.
+      const raw = (String(t.name).match(/\d+/) || [])[0];
+      const number = raw ? parseInt(raw, 10) : null;
+      return {
+        id: t.id,
+        name: t.name,
+        locationId: t.locationId,
+        number,
+        // '' si la instancia no tiene llave configurada → el panel cae al QR
+        // legacy por número.
+        qrToken: signTableToken({ tableId: t.id, number }),
       };
     }));
   } catch (e) { res.status(500).json({ error: e.message }); }

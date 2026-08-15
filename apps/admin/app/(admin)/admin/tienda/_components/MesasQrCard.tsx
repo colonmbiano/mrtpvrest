@@ -4,7 +4,9 @@ import { createPortal } from "react-dom";
 import { QRCodeSVG } from "qrcode.react";
 import api from "@/lib/api";
 
-type Table = { id: string; name: string; locationId: string };
+// `qrToken` lo firma el backend (GET /api/tables/qr). Opcional: el listado
+// legacy (GET /api/tables) no lo trae y el enlace cae al número del nombre.
+type Table = { id: string; name: string; locationId: string; qrToken?: string };
 
 /* Hoja de impresión: al imprimir se ocultan TODOS los hermanos de <body> y solo
    queda el portal con los QR. Así «Imprimir» saca la hoja de códigos y no las
@@ -84,16 +86,27 @@ function QrPrintSheet({ tables, linkFor }: { tables: Table[]; linkFor: (t: Table
 }
 
 // QR por mesa: el comensal escanea → abre el menú en DINE_IN con su mesa fija.
-// El enlace codifica el número de mesa (extraído del nombre) + la sucursal, que
-// el storefront lee de ?mesa=&l= (ver apps/client/src/app/[slug]/page.tsx).
+//
+// El enlace lleva `?t=<token firmado>&l=<sucursal>`: el token ata el pedido al
+// tableId REAL (lo firma el backend en GET /api/tables/qr, ver lib/table-qr.js),
+// así que renombrar una mesa no reasigna el papel ya pegado y nadie puede pedir
+// a nombre de otra mesa editando la URL.
+//
+// Si la instancia no tiene llave configurada, el backend devuelve qrToken vacío
+// y caemos al esquema legacy `?mesa=<número>` — los QR ya impresos con ese
+// formato siguen funcionando, el backend acepta los dos.
 export function MesasQrCard({ storeUrl }: { storeUrl: string }) {
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
   const [printing, setPrinting] = useState(false);
   useEffect(() => {
-    api.get("/api/tables")
+    api.get("/api/tables/qr")
       .then((r) => setTables(Array.isArray(r.data) ? r.data : []))
-      .catch(() => {})
+      // Backend viejo (sin /qr desplegado aún) → caemos al listado normal y al
+      // enlace por número, en vez de dejar la tarjeta vacía.
+      .catch(() => api.get("/api/tables")
+        .then((r) => setTables(Array.isArray(r.data) ? r.data : []))
+        .catch(() => {}))
       .finally(() => setLoading(false));
   }, []);
 
@@ -117,12 +130,18 @@ export function MesasQrCard({ storeUrl }: { storeUrl: string }) {
   }, [printing]);
 
   const mesaNum = (name: string) => (String(name).match(/\d+/) || [])[0] || "";
-  const linkFor = (t: { name: string; locationId: string }) => {
-    const num = mesaNum(t.name);
-    if (!num || !storeUrl) return "";
+  const linkFor = (t: Table) => {
+    if (!storeUrl) return "";
     const sep = storeUrl.includes("?") ? "&" : "?";
-    return `${storeUrl}${sep}mesa=${encodeURIComponent(num)}&l=${encodeURIComponent(t.locationId)}`;
+    const loc = `&l=${encodeURIComponent(t.locationId)}`;
+    // Preferido: token firmado (no depende del nombre ni del número).
+    if (t.qrToken) return `${storeUrl}${sep}t=${encodeURIComponent(t.qrToken)}${loc}`;
+    // Legacy: sin llave en el backend, se sigue usando el número del nombre.
+    const num = mesaNum(t.name);
+    if (!num) return "";
+    return `${storeUrl}${sep}mesa=${encodeURIComponent(num)}${loc}`;
   };
+  // Con token, una mesa sin número en el nombre (ej. "Barra") también sirve.
   const usable = tables.filter((t) => linkFor(t));
 
   return (
@@ -145,7 +164,7 @@ export function MesasQrCard({ storeUrl }: { storeUrl: string }) {
         <p className="text-[12px] text-tx-mut">Cargando mesas…</p>
       ) : usable.length === 0 ? (
         <p className="text-[12px] text-tx-mut">
-          No hay mesas con número en esta sucursal. Crea mesas (con un número en el nombre, ej. «Mesa 1») desde el mapa del TPV.
+          No hay mesas activas en esta sucursal. Créalas desde el mapa de piso del TPV y aquí aparecerá el QR de cada una.
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">

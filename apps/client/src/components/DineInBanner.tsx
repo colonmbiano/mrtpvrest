@@ -32,8 +32,14 @@ export function DineInBanner({ table, primary }: { table: string; primary: strin
         </span>
         <div className="min-w-0">
           <p className="text-sm font-black leading-tight text-gray-900">
-            Estás pidiendo para la{' '}
-            <span style={{ color: primary }}>Mesa {table}</span>
+            {/* Con el QR firmado la mesa puede no tener número en el nombre
+                (ej. "Barra"): ahí el vínculo sigue siendo válido, solo que no
+                hay etiqueta que mostrar. */}
+            {table ? (
+              <>Estás pidiendo para la <span style={{ color: primary }}>Mesa {table}</span></>
+            ) : (
+              <>Estás pidiendo <span style={{ color: primary }}>desde tu mesa</span></>
+            )}
           </p>
           <p className="mt-0.5 text-[11px] font-bold leading-snug text-gray-500">
             Tu pedido entra a cocina con tu mesa puesta. No necesitas llamar al mesero.
