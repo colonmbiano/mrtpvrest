@@ -1,0 +1,71 @@
+name: CI — Panel admin Types & Build
+
+# GITHUB_TOKEN de solo lectura por defecto (least-privilege). Los jobs que
+# necesiten escribir lo declaran a nivel de job.
+permissions:
+  contents: read
+
+# El panel solo aparecía en e2e.yml: no tenía lint, typecheck ni build propios,
+# así que un error de tipos únicamente se veía cuando Vercel fallaba el deploy,
+# ya con el cambio en master. Este gate lo mueve al PR.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "apps/admin/**"
+      - "packages/**"
+      - ".github/workflows/ci-admin.yml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "apps/admin/**"
+      - "packages/**"
+      - ".github/workflows/ci-admin.yml"
+
+env:
+  PNPM_VERSION: "9"
+  NODE_VERSION: "20"
+
+jobs:
+  types-build:
+    name: Types + Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm ${{ env.PNPM_VERSION }}
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        # v6 lee la versión de pnpm desde "packageManager" en package.json
+        # (pnpm@9.15.0). Pasar "version" además causaría ERR_PNPM_BAD_PM_VERSION.
+
+      - name: Cache pnpm store
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      # Sin paso de lint a propósito: el script `lint` de esta app es `next lint`,
+      # que Next 16 eliminó (falla con "Invalid project directory: …/lint").
+      # Migrarlo al CLI de eslint es un cambio aparte — meterlo aquí roto solo
+      # pintaría de rojo todos los PRs sin detectar un problema real.
+      - name: Typecheck panel admin
+        run: pnpm --filter @mrtpvrest/admin run type-check
+
+      # NEXT_PUBLIC_API_URL se inlinea en build-time: sin ella el bundle
+      # quedaría apuntando al default y el build no representaría a producción.
+      - name: Build panel admin
+        run: pnpm --filter @mrtpvrest/admin run build
+        env:
+          NEXT_PUBLIC_API_URL: https://api.mrtpvrest.com
