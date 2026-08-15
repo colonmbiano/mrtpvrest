@@ -186,6 +186,16 @@ export default function StoreCheckout({
   useEffect(() => { if (!lockedTable && !allowed.includes(orderType)) setOrderType(allowed[0]); }, [allowed]); // eslint-disable-line
 
   const isDelivery = orderType === 'DELIVERY';
+  // Pedido en mesa: el comensal está sentado en el local. Todo lo que asume
+  // "el pedido va hacia el cliente" (pagar al recibir, mandar por WhatsApp,
+  // teléfono para localizarlo) sobra o confunde, así que el checkout se adapta.
+  const isDineIn = orderType === 'DINE_IN';
+  // Si el cliente eligió "pagar en línea" y luego cambia a mesa, el botón deja
+  // de mostrarse pero el método seguiría seleccionado y lo mandaría a la
+  // pasarela sin que lo vea. Cae a efectivo.
+  useEffect(() => {
+    if (isDineIn && paymentMethod === 'ONLINE') setPaymentMethod('CASH');
+  }, [isDineIn, paymentMethod]);
   // Cliente que regresa (perfil guardado) con datos completos → checkout exprés.
   // DINE_IN no aplica (necesita mesa y suele venir de un QR).
   // Para DELIVERY con envío por distancia exigimos coords guardadas: sin ellas el
@@ -198,7 +208,9 @@ export default function StoreCheckout({
   const deliveryFee = isDelivery ? (preview.outOfRange ? 0 : preview.fee) : 0;
   const discount = coupon?.discount || 0;
   const grandTotal = Math.max(0, total - discount + deliveryFee + tip);
-  const belowMin = minOrderAmount > 0 && total < minOrderAmount;
+  // El mínimo no aplica en mesa: existe para que valga la pena preparar y mandar
+  // un pedido fuera del local (espeja la regla del backend en store.routes).
+  const belowMin = !isDineIn && minOrderAmount > 0 && total < minOrderAmount;
 
   // Recalcular propina por porcentaje cuando cambia el subtotal
   useEffect(() => {
@@ -344,7 +356,9 @@ export default function StoreCheckout({
   // ── Pantalla de éxito + seguimiento ──────────────────────────────────────
   if (success) {
     const st = STATUS_LABEL[liveStatus] || STATUS_LABEL.PENDING;
-    const isWa = whatsappOrder?.enabled && !!whatsappOrder?.number;
+    // En mesa no se ofrece mandar el pedido por WhatsApp: el comensal está en el
+    // local y su pedido ya entró al TPV y a cocina con su mesa puesta.
+    const isWa = whatsappOrder?.enabled && !!whatsappOrder?.number && !isDineIn;
     const waUrl = isWa ? `https://wa.me/${whatsappOrder.number}?text=${generateWhatsAppOrderMessage(success, '')}` : '';
 
     return (
@@ -352,7 +366,16 @@ export default function StoreCheckout({
         <div className="bg-white p-8 rounded-[32px] shadow-2xl max-w-sm w-full text-center">
           <div className="text-6xl mb-3">🎉</div>
           <h2 className="text-2xl font-black mb-1">¡Pedido enviado!</h2>
-          <p className="text-gray-500 mb-5 font-bold">Orden #{success.orderNumber}</p>
+          <p className="text-gray-500 mb-2 font-bold">Orden #{success.orderNumber}</p>
+          {/* Pedido de mesa: cerrar el círculo del QR — el comensal confirma a
+              qué mesa se mandó, no solo el folio. */}
+          {lockedTable && (
+            <p className="mb-5 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-black"
+              style={{ background: `${primary}14`, color: primary }}>
+              🍽 Mesa {lockedTable}
+            </p>
+          )}
+          {!lockedTable && <div className="mb-5" />}
           <div className="rounded-2xl p-4 mb-5" style={{ background: `${st.c}14` }}>
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Estado</p>
             <p className="text-lg font-black flex items-center justify-center gap-2" style={{ color: st.c }}>
@@ -476,7 +499,7 @@ export default function StoreCheckout({
                 </div>
               )}
               <input required autoComplete="name" placeholder="Tu nombre" className={field} value={customerName} onChange={e => setCustomerName(e.target.value)} />
-              <input type="tel" inputMode="tel" autoComplete="tel" placeholder="Tu teléfono" className={field} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
+              <input type="tel" inputMode="tel" autoComplete="tel" placeholder={isDineIn ? 'Tu teléfono (opcional, para tus puntos)' : 'Tu teléfono'} className={field} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
               <input type="email" inputMode="email" autoComplete="email" placeholder="Tu correo (opcional, para tu confirmación)" className={field} value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
               {isDelivery && (
                 <>
@@ -498,11 +521,12 @@ export default function StoreCheckout({
                   {geoStatus === 'error' && <p className="text-amber-600 text-xs font-bold">No pudimos obtener tu ubicación. Revisa los permisos.</p>}
                 </>
               )}
-              {orderType === 'DINE_IN' && (
+              {/* Con QR la mesa ya viene fija y se anuncia arriba ("Pedido para
+                  la Mesa N") + en la banda de la portada: repetirla en un campo
+                  gris deshabilitado solo agrega ruido. Sin QR sí se pide. */}
+              {isDineIn && !lockedTable && (
                 <input required placeholder="Número de mesa" type="number" min="1" className={field}
-                  value={tableNumber} onChange={e => setTableNumber(e.target.value)}
-                  disabled={!!lockedTable} readOnly={!!lockedTable}
-                  style={lockedTable ? { opacity: 0.7 } : undefined} />
+                  value={tableNumber} onChange={e => setTableNumber(e.target.value)} />
               )}
 
               {/* Registro rápido: guardar datos para próximos pedidos */}
@@ -604,7 +628,7 @@ export default function StoreCheckout({
             <div>
               <p className={sectionTitle}>Pago</p>
               <div className="grid grid-cols-3 gap-2">
-                {([['CASH', '💵 Efectivo'], ['CARD', '💳 Al recibir'], ['TRANSFER', '🏦 Transfer.']] as ['CASH'|'CARD'|'TRANSFER', string][]).map(([m, label]) => (
+                {([['CASH', '💵 Efectivo'], ['CARD', isDineIn ? '💳 Tarjeta' : '💳 Al recibir'], ['TRANSFER', '🏦 Transfer.']] as ['CASH'|'CARD'|'TRANSFER', string][]).map(([m, label]) => (
                   <button key={m} type="button" onClick={() => setPaymentMethod(m)}
                     className="py-3 rounded-2xl text-xs font-bold border-2 transition-all"
                     style={{ borderColor: paymentMethod === m ? primary : '#e5e7eb', background: paymentMethod === m ? `${primary}14` : 'transparent', color: paymentMethod === m ? primary : '#6b7280' }}>
@@ -612,7 +636,11 @@ export default function StoreCheckout({
                   </button>
                 ))}
               </div>
-              {onlinePayment && (
+              {/* Pago en línea: fuera del pedido en mesa. Además de que pagar
+                  con pasarela estando sentado en el local es raro, hoy el pago
+                  dispara `releaseTableAfterPayment` en el backend y la mesa se
+                  liberaría en el mapa del TPV con el comensal todavía comiendo. */}
+              {onlinePayment && !isDineIn && (
                 <button type="button" onClick={() => setPaymentMethod('ONLINE')}
                   className="w-full mt-2 py-3 rounded-2xl text-sm font-bold border-2 transition-all flex items-center justify-center gap-2"
                   style={{ borderColor: paymentMethod === 'ONLINE' ? primary : '#e5e7eb', background: paymentMethod === 'ONLINE' ? `${primary}14` : 'transparent', color: paymentMethod === 'ONLINE' ? primary : '#374151' }}>
@@ -620,7 +648,11 @@ export default function StoreCheckout({
                 </button>
               )}
               <p className="text-[10px] text-gray-400 mt-1">
-                {paymentMethod === 'ONLINE' ? 'Te llevaremos a la pasarela segura para completar el pago.' : 'El pago se realiza al recibir o en la sucursal.'}
+                {paymentMethod === 'ONLINE'
+                  ? 'Te llevaremos a la pasarela segura para completar el pago.'
+                  : isDineIn
+                    ? 'Pagas al terminar, en tu mesa o en la caja.'
+                    : 'El pago se realiza al recibir o en la sucursal.'}
               </p>
             </div>
 
@@ -649,7 +681,7 @@ export default function StoreCheckout({
               <button disabled={isSubmitting || belowMin || (isDelivery && preview.outOfRange)} type="submit"
                 className="w-full py-4 text-white font-black rounded-2xl shadow-xl transition-all active:scale-95 disabled:opacity-50"
                 style={{ background: primary }}>
-                {isSubmitting ? 'PROCESANDO...' : `${paymentMethod === 'ONLINE' ? 'PAGAR' : (whatsappOrder?.enabled && !!whatsappOrder?.number ? 'CONFIRMAR Y ENVIAR POR WA' : 'CONFIRMAR')} · ${fmt(grandTotal)}`}
+                {isSubmitting ? 'PROCESANDO...' : `${paymentMethod === 'ONLINE' ? 'PAGAR' : isDineIn ? 'ENVIAR A COCINA' : (whatsappOrder?.enabled && !!whatsappOrder?.number ? 'CONFIRMAR Y ENVIAR POR WA' : 'CONFIRMAR')} · ${fmt(grandTotal)}`}
               </button>
             </div>
           </form>

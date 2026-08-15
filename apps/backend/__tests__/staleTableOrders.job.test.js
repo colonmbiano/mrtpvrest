@@ -123,9 +123,13 @@ describe('runStaleTableOrdersJob', () => {
 
     await runStaleTableOrdersJob();
 
+    // El job calcula el corte con su propio Date.now(), posterior a `before`:
+    // el valor cae en la ventana [before - ttl, after - ttl]. Fijarlo contra un
+    // solo instante lo vuelve flaky (falla si el reloj avanza 1 ms).
+    const after = Date.now();
     const cutoff = prisma.order.findMany.mock.calls[0][0].where.createdAt.lt.getTime();
-    expect(cutoff).toBeLessThanOrEqual(before - 30 * 60000);
-    expect(cutoff).toBeGreaterThan(before - 31 * 60000);
+    expect(cutoff).toBeGreaterThanOrEqual(before - 30 * 60000);
+    expect(cutoff).toBeLessThanOrEqual(after - 30 * 60000);
   });
 
   it('sin ajuste del tenant, el default global son 180 min', async () => {
@@ -133,9 +137,10 @@ describe('runStaleTableOrdersJob', () => {
 
     await runStaleTableOrdersJob();
 
+    const after = Date.now();
     const cutoff = prisma.order.findMany.mock.calls[0][0].where.createdAt.lt.getTime();
-    expect(cutoff).toBeLessThanOrEqual(before - 180 * 60000);
-    expect(cutoff).toBeGreaterThan(before - 181 * 60000);
+    expect(cutoff).toBeGreaterThanOrEqual(before - 180 * 60000);
+    expect(cutoff).toBeLessThanOrEqual(after - 180 * 60000);
   });
 
   it('el TTL del restaurante manda sobre el global', async () => {
@@ -152,9 +157,10 @@ describe('runStaleTableOrdersJob', () => {
     const res = await runStaleTableOrdersJob();
 
     // La query trae candidatos con el TTL más corto en juego (60), no con 180.
+    const after = Date.now();
     const cutoff = prisma.order.findMany.mock.calls[0][0].where.createdAt.lt.getTime();
-    expect(cutoff).toBeLessThanOrEqual(before - 60 * 60000);
-    expect(cutoff).toBeGreaterThan(before - 61 * 60000);
+    expect(cutoff).toBeGreaterThanOrEqual(before - 60 * 60000);
+    expect(cutoff).toBeLessThanOrEqual(after - 60 * 60000);
     expect(res.cancelled).toBe(1);
   });
 
