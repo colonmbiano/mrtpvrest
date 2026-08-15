@@ -6,7 +6,8 @@
     "dev": "next dev -p 3003 --webpack",
     "build": "next build --webpack",
     "start": "next start -p 3003",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "babel-loader": "^9.1.3",
