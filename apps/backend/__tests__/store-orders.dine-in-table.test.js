@@ -142,6 +142,35 @@ describe('POST /api/store/orders — QR de mesa', () => {
     expect(tableUpdate).not.toHaveBeenCalled();
   });
 
+  it('el pedido mínimo NO aplica en mesa', async () => {
+    // Mínimo de $500 contra un pedido de $140: en domicilio se rechaza, en mesa
+    // pasa — el mínimo es para pedidos que salen del local.
+    prisma.restaurantConfig.findUnique.mockResolvedValue({ ...CONFIG, minOrderAmount: 500 });
+    prisma.table.findMany.mockResolvedValue([{ id: 't3', name: 'Mesa 3' }]);
+    const { impl } = txMock(CREATED);
+    prisma.$transaction.mockImplementation(impl);
+
+    const res = await request(buildApp())
+      .post('/api/store/orders')
+      .set('x-restaurant-id', 'r1')
+      .send(QR_PAYLOAD);
+
+    expect(res.status).toBe(201);
+  });
+
+  it('el pedido mínimo sí aplica fuera de mesa', async () => {
+    prisma.restaurantConfig.findUnique.mockResolvedValue({ ...CONFIG, minOrderAmount: 500 });
+
+    const res = await request(buildApp())
+      .post('/api/store/orders')
+      .set('x-restaurant-id', 'r1')
+      .send({ ...QR_PAYLOAD, orderType: 'TAKEOUT', tableNumber: undefined });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('MIN_ORDER_NOT_MET');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('locationId del body que no es del restaurante → se ignora', async () => {
     // findFirst se usa dos veces: validar la sucursal del body (null = ajena) y
     // caer a la principal del restaurante.

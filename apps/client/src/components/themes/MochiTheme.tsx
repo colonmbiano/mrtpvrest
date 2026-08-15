@@ -139,7 +139,10 @@ export function MochiTheme({ data }: MochiThemeProps) {
 
   const banners = collectBanners(locations);
   const waNumber = (info.whatsappNumber || '').replace(/\D/g, '');
-  const minOrder = info.minOrderAmount || 0;
+  // Pedido en mesa (QR): el mínimo no aplica — existe para que valga la pena
+  // preparar y mandar un pedido fuera del local, no para impedir que el
+  // comensal sentado pida una cerveza. En 0 el carrito no bloquea el checkout.
+  const minOrder = info.dineIn ? 0 : (info.minOrderAmount || 0);
   const primaryLocation = locations[0] || null;
 
   const allItems = useMemo(() => categories.flatMap((c: any) => c.items || []), [categories]);

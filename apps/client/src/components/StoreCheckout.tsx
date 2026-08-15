@@ -208,7 +208,9 @@ export default function StoreCheckout({
   const deliveryFee = isDelivery ? (preview.outOfRange ? 0 : preview.fee) : 0;
   const discount = coupon?.discount || 0;
   const grandTotal = Math.max(0, total - discount + deliveryFee + tip);
-  const belowMin = minOrderAmount > 0 && total < minOrderAmount;
+  // El mínimo no aplica en mesa: existe para que valga la pena preparar y mandar
+  // un pedido fuera del local (espeja la regla del backend en store.routes).
+  const belowMin = !isDineIn && minOrderAmount > 0 && total < minOrderAmount;
 
   // Recalcular propina por porcentaje cuando cambia el subtotal
   useEffect(() => {
