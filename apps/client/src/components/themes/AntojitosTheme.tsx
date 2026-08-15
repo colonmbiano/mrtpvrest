@@ -95,7 +95,7 @@ type Info = {
   id: string; name: string; slug: string; logo: string | null; hasWebStore: boolean;
   whatsappNumber: string | null; minOrderAmount?: number; estimatedDelivery?: number;
   whatsappOrder?: { enabled: boolean; number: string | null };
-  dineIn?: { table: string; locationId: string | null } | null;
+  dineIn?: { table: string; locationId: string | null; token?: string } | null;
   isOpen?: boolean;
   onlinePayment?: boolean; delivery?: DeliveryConfig; heroImageUrl?: string | null;
   currency?: string | null; currencyLocale?: string | null;
@@ -313,7 +313,8 @@ export function AntojitosTheme({ data }: AntojitosThemeProps) {
       <StoreCheckout open={checkoutOpen} onClose={() => setCheckoutOpen(false)} slug={slug} primary={ACCENT}
         locations={locations} delivery={info.delivery} minOrderAmount={info.minOrderAmount}
         onlinePayment={info.onlinePayment} initialOrderType={info.dineIn ? 'DINE_IN' : orderMode} whatsappOrder={info.whatsappOrder}
-        lockedTable={info.dineIn?.table} lockedLocationId={info.dineIn?.locationId} />
+        lockedTable={info.dineIn?.table} lockedTableToken={info.dineIn?.token}
+        lockedLocationId={info.dineIn?.locationId} />
 
       <MyOrdersModal open={myOrdersOpen} onClose={() => setMyOrdersOpen(false)} slug={slug} primary={ACCENT}
         products={allItems} onReordered={() => setCheckoutOpen(true)}

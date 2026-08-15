@@ -29,6 +29,7 @@ const { loadPromoWindowConfig, itemPromoWindowOpen } = require('../lib/promo-win
 const { computeDeliveryFee } = require('../lib/delivery-fee');
 const { filterLiveBanners } = require('../lib/banner-schedule');
 const { nextOrderNumber } = require('../lib/order-number');
+const { verifyTableToken } = require('../lib/table-qr');
 const { sendOrderPaidEmail } = require('../lib/order-confirmation-mailer');
 const { computeOpenState } = require('../utils/storeHours');
 const { authenticate } = require('../middleware/auth.middleware');
@@ -616,6 +617,9 @@ router.post('/orders', async (req, res) => {
     locationId: bodyLocationId,
     source: rawSource,
     tableNumber: rawTableNumber,
+    // Token firmado del QR de mesa (ver lib/table-qr). Cuando viene, MANDA sobre
+    // rawTableNumber: ata el pedido al tableId real en vez de al número.
+    tableToken: rawTableToken,
     tip: rawTip,
     couponCode: rawCouponCode,
     loyaltyQrCode: rawLoyaltyQr,
@@ -647,9 +651,12 @@ router.post('/orders', async (req, res) => {
   // cajero los confirme antes de mandarlos a cocina.
   const VALID_SOURCES = ['ONLINE', 'KIOSK', 'WHATSAPP'];
   const source = VALID_SOURCES.includes(rawSource) ? rawSource : 'ONLINE';
-  const tableNumber = resolvedOrderType === 'DINE_IN' && rawTableNumber
+  // `let` porque el token firmado del QR puede sobreescribirlo con el número
+  // real de la mesa a la que apunta (más abajo, ya con la mesa leída de la BD).
+  let tableNumber = resolvedOrderType === 'DINE_IN' && rawTableNumber
     ? (Math.max(1, Math.min(999, parseInt(rawTableNumber) || 0)) || null)
     : null;
+  const tableToken = typeof rawTableToken === 'string' ? rawTableToken.trim() : '';
 
   // ── Dedupe PERSISTENTE por chat de WhatsApp ────────────────────────────────
   // El bot manda clientOrderId con forma `wa:<hash16-del-chat>:<uuid>`: el hash
@@ -1234,7 +1241,39 @@ router.post('/orders', async (req, res) => {
     // (evita mesas inexistentes desde el QR/kiosko). Sin mapa configurado no
     // bloqueamos: el negocio sin planímetro sigue usando el número plano.
     let resolvedTableId = null;
-    if (resolvedOrderType === 'DINE_IN' && tableNumber != null && resolvedLocationId) {
+
+    // QR firmado (esquema nuevo): el token trae el tableId real, así que no hay
+    // que adivinar por nombre — renombrar la mesa no reasigna el papel pegado y
+    // dos mesas con el mismo número dejan de ser ambiguas. La mesa es también la
+    // autoridad sobre la sucursal: si el `?l=` venía mal o ausente, mandaría el
+    // pedido a la caja equivocada.
+    if (resolvedOrderType === 'DINE_IN' && tableToken) {
+      const claim = verifyTableToken(tableToken);
+      if (!claim) {
+        // Token presente pero inválido: NO degradamos al número suelto — caer
+        // al esquema viejo sería justo lo que buscaría quien lo manipuló.
+        return res.status(400).json({
+          error: 'El código QR de la mesa no es válido. Pide uno nuevo al personal.',
+          code: 'INVALID_TABLE_TOKEN',
+        });
+      }
+      const table = await prisma.table.findFirst({
+        where: { id: claim.tableId, isActive: true, location: { restaurantId: restaurant.id } },
+        select: { id: true, name: true, locationId: true },
+      });
+      if (!table) {
+        return res.status(400).json({
+          error: 'Esa mesa ya no existe. Pide un código nuevo al personal.',
+          code: 'INVALID_TABLE',
+        });
+      }
+      resolvedTableId = table.id;
+      resolvedLocationId = table.locationId;
+      // Número para el ticket: el del nombre ACTUAL de la mesa (si la
+      // renombraron, el ticket dice el nuevo), con el firmado como respaldo.
+      const current = (String(table.name).match(/\d+/) || [])[0];
+      tableNumber = current ? parseInt(current, 10) : claim.number;
+    } else if (resolvedOrderType === 'DINE_IN' && tableNumber != null && resolvedLocationId) {
       const tablesAtLocation = await prisma.table.findMany({
         where: { locationId: resolvedLocationId, isActive: true },
         select: { id: true, name: true },
