@@ -1,4 +1,4 @@
-name: CI — Tienda online (client) Types & Build
+name: CI — Tienda online (client) Lint, Types & Build
 
 # GITHUB_TOKEN de solo lectura por defecto (least-privilege). Los jobs que
 # necesiten escribir lo declaran a nivel de job.
@@ -27,8 +27,8 @@ env:
   NODE_VERSION: "20"
 
 jobs:
-  types-build:
-    name: Types + Build
+  lint-types-build:
+    name: Lint + Types + Build
     runs-on: ubuntu-latest
 
     steps:
@@ -56,10 +56,12 @@ jobs:
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
 
-      # Sin paso de lint a propósito: el script `lint` de esta app es `next lint`,
-      # que Next 16 eliminó (falla con "Invalid project directory: …/lint").
-      # Migrarlo al CLI de eslint es un cambio aparte — meterlo aquí roto solo
-      # pintaría de rojo todos los PRs sin detectar un problema real.
+      # `lint` corre el CLI de eslint con flat config (eslint.config.mjs). Las
+      # reglas nuevas de react-hooks 6 están en `warn` sobre el código que ya
+      # venía, así que este paso falla por problemas NUEVOS, no por la deuda.
+      - name: Lint tienda online
+        run: pnpm --filter @mrtpvrest/client run lint
+
       - name: Typecheck tienda online
         run: pnpm --filter @mrtpvrest/client run type-check
 
