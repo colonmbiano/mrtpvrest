@@ -225,6 +225,12 @@ describe("recibo :: bloque de factura (QR)", () => {
 });
 
 describe("comanda :: título = nombre/mesa, sin 'COMANDA'", () => {
+  // Códigos ESC/POS crudos: doble ancho/alto (GS ! 0x11) y negritas (ESC E 1).
+  // Se declaran aquí para poder afirmar QUÉ línea sale en grande, no solo que
+  // el texto aparezca.
+  const DOUBLE_ON = "\x1d!\x11";
+  const BOLD_ON = "\x1bE\x01";
+
   it("imprime Mesa/cliente arriba y NO el título 'COMANDA' por defecto", () => {
     const out = buildKitchenTicket({
       orderType: "DINE_IN",
@@ -239,6 +245,19 @@ describe("comanda :: título = nombre/mesa, sin 'COMANDA'", () => {
     expect(out).toContain("Ana");
     // El nombre/mesa va ANTES del número de orden (es el título).
     expect(out.indexOf("Mesa 5")).toBeLessThan(out.indexOf("#1042"));
+    // La MESA va primero y en grande; el cliente debajo y en tamaño normal.
+    expect(out.indexOf("Mesa 5")).toBeLessThan(out.indexOf("Ana"));
+    expect(out).toContain(DOUBLE_ON + BOLD_ON + "Mesa 5\n");
+    expect(out).not.toContain(DOUBLE_ON + BOLD_ON + "Ana\n");
+  });
+
+  it("sin mesa (para llevar) el NOMBRE toma el lugar grande", () => {
+    const out = buildKitchenTicket({
+      orderType: "TAKEOUT",
+      customerName: "Ana",
+      items: [{ name: "Taco", quantity: 1, price: 20 }],
+    });
+    expect(out).toContain(DOUBLE_ON + BOLD_ON + "Ana\n");
   });
 
   it("respeta un header explícito si el negocio lo configura", () => {
