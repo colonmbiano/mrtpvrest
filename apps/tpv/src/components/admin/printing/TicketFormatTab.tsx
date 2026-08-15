@@ -321,9 +321,9 @@ export default function TicketFormatTab() {
           <>
             <Field label="Título ticket cocina"><input value={cfg.kitchenHeader} onChange={(e) => setCfg({ ...cfg, kitchenHeader: e.target.value })} className={inputCls} placeholder="COMANDA" /></Field>
 
-            {/* NOMBRE DEL TICKET — elemento principal */}
-            <SectionLabel>Nombre del ticket (Mesa / cliente)</SectionLabel>
-            <Field label="Tamaño del nombre — se imprime arriba y en grande">
+            {/* TITULAR DE LA COMANDA — la mesa manda; el cliente va debajo en normal */}
+            <SectionLabel>Titular de la comanda (mesa)</SectionLabel>
+            <Field label="Tamaño de la mesa — se imprime arriba y en grande. Sin mesa (para llevar/domicilio) el lugar lo toma el nombre del cliente.">
               <Segmented value={cfg.kitchenTicketNameSize} onChange={(v) => setCfg({ ...cfg, kitchenTicketNameSize: v })} options={NAME_SIZE_OPTS} />
             </Field>
 
@@ -741,8 +741,11 @@ function KitchenPreview({ cfg }: { cfg: TicketConfig }) {
           {cfg.kitchenShowTable && (
             <div className="font-black leading-tight text-black" style={{ fontSize: nameSizePx }}>Mesa {SAMPLE.tableNumber}</div>
           )}
+          {/* El cliente va en tamaño normal: en la comanda el titular es la mesa
+              (ver buildKitchenTicket). La vista previa debe reflejarlo o el
+              dueño configura el tamaño creyendo que aplica al nombre. */}
           {cfg.kitchenShowCustomer && (
-            <div className="font-black leading-tight text-black" style={{ fontSize: nameSizePx }}>{SAMPLE.customerName}</div>
+            <div className="font-black leading-tight text-black text-[13px]">{SAMPLE.customerName}</div>
           )}
           {cfg.kitchenShowOrderNumber && <div className="text-[13px]">#{SAMPLE.orderNumber}</div>}
           {cfg.kitchenShowTime && <div className="text-[13px]">{SAMPLE.time}</div>}

@@ -918,16 +918,17 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     d += CMD.LINE;
   }
 
-  // TÍTULO de la comanda = nombre del ticket (cliente) GRANDE arriba; la mesa va
-  // debajo en tamaño normal. Reemplaza al antiguo título fijo "COMANDA".
+  // TÍTULO de la comanda. En la cocina lo que se busca a un metro de distancia
+  // es LA MESA, no quién pidió: el cocinero arma el plato y el mesero necesita
+  // saber a dónde llevarlo. Así que la MESA va grande arriba y el nombre del
+  // cliente, si existe, debajo en tamaño normal.
   //
-  // Antes se imprimían mesa Y nombre ambos en grande. En DINE_IN sin nombre el
-  // backend deja customerName = nombre de la mesa ("Mesa 9"), así que salían dos
-  // líneas grandes "Mesa 9 / Mesa 9" (el "Mesa Mesa" reportado). Ahora:
-  //   - el NOMBRE va grande SOLO si es un nombre real (no vacío y distinto de la
-  //     mesa), cumpliendo "quiero el nombre en grande";
-  //   - la MESA se imprime una sola vez (grande si no hay nombre real; normal si
-  //     el nombre ya ocupa el lugar grande), nunca duplicada.
+  // Sin mesa (para llevar / domicilio) no hay nada que encabezar, así que ahí el
+  // NOMBRE toma el lugar grande — es el dato con el que se entrega el pedido.
+  //
+  // En DINE_IN sin nombre, el backend deja customerName = nombre de la mesa
+  // ("Mesa 9"): por eso el nombre solo se imprime si es un nombre REAL, o
+  // saldrían dos líneas "Mesa 9 / Mesa 9" (el "Mesa Mesa" que ya se reportó).
   const nameSizeOn =
     cfg.ticketNameSize === "normal" ? "" :
     cfg.ticketNameSize === "xlarge" ? CMD.TRIPLE_ON : CMD.DOUBLE_ON;
@@ -945,11 +946,13 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     rawName.toLowerCase() !== mesaLabel.toLowerCase() &&
     rawName.toLowerCase() !== String(input.tableNumber ?? "").trim().toLowerCase();
 
-  if (nameIsReal) {
-    d += nameSizeOn + CMD.BOLD_ON + rawName + "\n" + CMD.BOLD_OFF + nameSizeOff;
-    if (mesaLabel) d += CMD.BOLD_ON + mesaLabel + "\n" + CMD.BOLD_OFF;
-  } else if (mesaLabel) {
+  if (mesaLabel) {
+    // Mesa en grande (tamaño configurable en Tickets → Cocina) y el cliente
+    // debajo, en normal: informativo, sin robarle la vista a la mesa.
     d += nameSizeOn + CMD.BOLD_ON + mesaLabel + "\n" + CMD.BOLD_OFF + nameSizeOff;
+    if (nameIsReal) d += CMD.BOLD_ON + rawName + "\n" + CMD.BOLD_OFF;
+  } else if (nameIsReal) {
+    d += nameSizeOn + CMD.BOLD_ON + rawName + "\n" + CMD.BOLD_OFF + nameSizeOff;
   }
 
   // Estación destino (separateByGroup): a qué printer-group va esta comanda.
