@@ -81,6 +81,27 @@ function normalizeTheme(raw?: string | null): 'MOCHI' | 'MUNDIALISTA' | 'ANTOJIT
   return map[(raw || '').toUpperCase()] || 'MOCHI';
 }
 
+/**
+ * Número de mesa que se MUESTRA, leído del payload del token del QR.
+ *
+ * El token es `base64url("<tableId>.<número>").<firma>` (lo emite y verifica el
+ * backend, ver apps/backend/src/lib/table-qr.js). Aquí solo se decodifica para
+ * poner la etiqueta: la firma NO se valida en el cliente — no tenemos la llave
+ * ni hace falta, porque el pedido lo rechaza el backend si el token no cuadra.
+ * Lo que sí se gana es que la etiqueta y el vínculo real salen del mismo blob.
+ */
+function tableNumberFromToken(token: string): string | null {
+  try {
+    const payload = token.slice(0, token.lastIndexOf('.'));
+    if (!payload) return null;
+    const decoded = Buffer.from(payload, 'base64url').toString('utf8');
+    const number = decoded.slice(decoded.lastIndexOf('.') + 1);
+    return /^\d+$/.test(number) ? number : null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchStore(slug: string): Promise<StoreInfo | null> {
   const res = await fetch(
     `${API}/api/store/info?r=${encodeURIComponent(slug)}`,
@@ -194,7 +215,7 @@ export default async function StorefrontPage({
   // params.slug de forma síncrona devuelve undefined -> fetchStore(undefined)
   // -> 404 para CUALQUIER slug. Este era el bug que tiraba 404 en toda tienda.
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ theme?: string; mesa?: string; l?: string }>;
+  searchParams: Promise<{ theme?: string; mesa?: string; l?: string; t?: string }>;
 }) {
   const { slug } = await params;
   // Vista previa de tema: ?theme=MUNDIALISTA permite al dueño ver cualquier
@@ -202,7 +223,7 @@ export default async function StorefrontPage({
   // no cambia nada en la BD ni el pedido.
   // Menú QR en mesa: ?mesa=<n>&l=<locationId> fija el pedido a DINE_IN con esa
   // mesa/sucursal (el QR pegado en cada mesa lo genera el admin).
-  const { theme: themeOverride, mesa, l: qrLocationId } = await searchParams;
+  const { theme: themeOverride, mesa, l: qrLocationId, t: tableToken } = await searchParams;
 
   const [store, menu, locations] = await Promise.all([
     fetchStore(slug),
@@ -285,11 +306,24 @@ export default async function StorefrontPage({
     );
   }
 
-  // Menú QR en mesa: si el enlace trae ?mesa=, el checkout se fija en DINE_IN
-  // con esa mesa (y sucursal, si vino ?l=). Se pasa a los temas vía info.
-  const dineIn = mesa && String(mesa).trim()
-    ? { table: String(mesa).trim(), locationId: qrLocationId ? String(qrLocationId) : null }
-    : null;
+  // Menú QR en mesa. Dos formatos, ambos vigentes:
+  //   · ?t=<token firmado>  — el actual. El token trae el tableId real; el
+  //     backend lo verifica al crear el pedido (lib/table-qr.js).
+  //   · ?mesa=<número>      — legacy, para los QR ya impresos.
+  // El número que se MUESTRA sale del payload del token (mismo blob firmado que
+  // el backend valida), así que la etiqueta y la mesa a la que entra el pedido
+  // no pueden divergir: alterar una invalida la otra.
+  const dineIn = (() => {
+    const locationId = qrLocationId ? String(qrLocationId) : null;
+    const token = tableToken ? String(tableToken).trim() : '';
+    if (token) {
+      return { table: tableNumberFromToken(token) ?? '', locationId, token };
+    }
+    if (mesa && String(mesa).trim()) {
+      return { table: String(mesa).trim(), locationId, token: '' };
+    }
+    return null;
+  })();
 
   // Los componentes de tema tipan info.themeConfig; lo sintetizamos a partir
   // de los campos planos para mantener compatibilidad de tipos y runtime.
