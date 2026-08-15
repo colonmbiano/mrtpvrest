@@ -130,16 +130,22 @@ export function MesasQrCard({ storeUrl }: { storeUrl: string }) {
   }, [printing]);
 
   const mesaNum = (name: string) => (String(name).match(/\d+/) || [])[0] || "";
+  // Los QR apuntan al MENÚ DE MESA (/mesa), no al storefront general: ahí el
+  // comensal ve su mesa arriba y el único camino es «Enviar a cocina» — sin
+  // envío, sin tipo de pedido y sin el botón de WhatsApp, que no crea el pedido
+  // en el backend y en mesa dejaba al comensal creyendo que ya había pedido.
+  // El storefront normal sigue aceptando ?t= y ?mesa= por si queda algún enlace.
+  const mesaUrl = `${storeUrl.replace(/\/+$/, "")}/mesa`;
   const linkFor = (t: Table) => {
     if (!storeUrl) return "";
-    const sep = storeUrl.includes("?") ? "&" : "?";
+    const sep = mesaUrl.includes("?") ? "&" : "?";
     const loc = `&l=${encodeURIComponent(t.locationId)}`;
     // Preferido: token firmado (no depende del nombre ni del número).
-    if (t.qrToken) return `${storeUrl}${sep}t=${encodeURIComponent(t.qrToken)}${loc}`;
+    if (t.qrToken) return `${mesaUrl}${sep}t=${encodeURIComponent(t.qrToken)}${loc}`;
     // Legacy: sin llave en el backend, se sigue usando el número del nombre.
     const num = mesaNum(t.name);
     if (!num) return "";
-    return `${storeUrl}${sep}mesa=${encodeURIComponent(num)}${loc}`;
+    return `${mesaUrl}${sep}mesa=${encodeURIComponent(num)}${loc}`;
   };
   // Con token, una mesa sin número en el nombre (ej. "Barra") también sirve.
   const usable = tables.filter((t) => linkFor(t));

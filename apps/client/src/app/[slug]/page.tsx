@@ -4,21 +4,14 @@ import { MapPin, Phone, MessageCircle } from 'lucide-react';
 import { MochiTheme } from '@/components/themes/MochiTheme';
 import { MundialistaTheme } from '@/components/themes/MundialistaTheme';
 import { AntojitosTheme } from '@/components/themes/AntojitosTheme';
-import { getApiUrl } from '@/lib/config';
+import {
+  fetchStore, fetchMenu, fetchLocations, tableNumberFromToken,
+  type StoreInfo, type StoreLocation,
+} from '@/lib/store-data';
 import { cldImage } from '@/lib/cloudinary';
 import InstallPWABanner from '@/components/InstallPWABanner';
 import CartDeepLinkLoader from '@/components/CartDeepLinkLoader';
 import { DineInBanner } from '@/components/DineInBanner';
-
-const API = getApiUrl();
-
-// Sucursal pública (subconjunto de lo que devuelve GET /api/store/locations).
-type StoreLocation = {
-  id: string;
-  name: string;
-  address?: string | null;
-  phone?: string | null;
-};
 
 // Normaliza un número a dígitos para construir el link de wa.me.
 function waLink(number?: string | null): string | null {
@@ -27,44 +20,6 @@ function waLink(number?: string | null): string | null {
   if (!digits) return null;
   return `https://wa.me/${digits}`;
 }
-
-type DeliveryConfig = {
-  mode: 'FLAT' | 'DISTANCE';
-  flatFee: number;
-  freeFrom: number | null;
-  baseFee: number;
-  perKm: number;
-  freeRadiusKm: number | null;
-  maxKm: number | null;
-  origin: { lat: number; lng: number } | null;
-};
-
-type StoreInfo = {
-  id: string;
-  name: string;
-  slug: string;
-  logo: string | null;
-  hasWebStore: boolean;
-  whatsappNumber: string | null;
-  whatsappOrder?: { enabled: boolean; number: string | null };
-  isOpen?: boolean;
-  closedMessage?: string | null;
-  minOrderAmount?: number;
-  estimatedDelivery?: number;
-  onlinePayment?: boolean;
-  delivery?: DeliveryConfig;
-  // El backend (GET /api/store/info) devuelve estos campos planos:
-  storefrontTheme?: string | null;
-  primaryColor?: string | null;
-  heroImageUrl?: string | null;
-  currency?: string | null;
-  currencyLocale?: string | null;
-  // Retrocompat: algunas respuestas antiguas anidaban el tema aquí.
-  themeConfig?: {
-    theme?: string;
-    primaryColor?: string;
-  } | null;
-};
 
 // Temas activos: KAWAII (pastel bubble-tea, alias MOCHI), MUNDIALISTA y ANTOJITOS
 // (fonda mexicana artesanal). Cualquier otro valor (incluidos los temas retirados
@@ -79,66 +34,6 @@ function normalizeTheme(raw?: string | null): 'MOCHI' | 'MUNDIALISTA' | 'ANTOJIT
   // Cualquier tema legacy/desconocido (Kawaii/Halo/Brutalist retirados, 'DEFAULT'
   // o nulo) cae en Mochi, el tema v2 por defecto.
   return map[(raw || '').toUpperCase()] || 'MOCHI';
-}
-
-/**
- * Número de mesa que se MUESTRA, leído del payload del token del QR.
- *
- * El token es `base64url("<tableId>.<número>").<firma>` (lo emite y verifica el
- * backend, ver apps/backend/src/lib/table-qr.js). Aquí solo se decodifica para
- * poner la etiqueta: la firma NO se valida en el cliente — no tenemos la llave
- * ni hace falta, porque el pedido lo rechaza el backend si el token no cuadra.
- * Lo que sí se gana es que la etiqueta y el vínculo real salen del mismo blob.
- */
-function tableNumberFromToken(token: string): string | null {
-  try {
-    const payload = token.slice(0, token.lastIndexOf('.'));
-    if (!payload) return null;
-    const decoded = Buffer.from(payload, 'base64url').toString('utf8');
-    const number = decoded.slice(decoded.lastIndexOf('.') + 1);
-    return /^\d+$/.test(number) ? number : null;
-  } catch {
-    return null;
-  }
-}
-
-async function fetchStore(slug: string): Promise<StoreInfo | null> {
-  const res = await fetch(
-    `${API}/api/store/info?r=${encodeURIComponent(slug)}`,
-    { next: { revalidate: 0 } }
-  );
-  // 404 = la tienda no existe → notFound()/not-found.tsx. Cualquier otro fallo
-  // (red / 5xx) se PROPAGA para que lo capture error.tsx (con reintento), en vez
-  // de mostrarse como un 404 permanente ante un problema transitorio.
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`store/info respondió ${res.status}`);
-  return (await res.json()) as StoreInfo;
-}
-
-async function fetchMenu(slug: string) {
-  try {
-    const res = await fetch(
-      `${API}/api/store/menu?r=${encodeURIComponent(slug)}`,
-      { next: { revalidate: 0 } }
-    );
-    if (!res.ok) return { categories: [] };
-    return await res.json();
-  } catch {
-    return { categories: [] };
-  }
-}
-
-async function fetchLocations(slug: string) {
-  try {
-    const res = await fetch(
-      `${API}/api/store/locations?r=${encodeURIComponent(slug)}`,
-      { next: { revalidate: 0 } }
-    );
-    if (!res.ok) return [];
-    return await res.json();
-  } catch {
-    return [];
-  }
 }
 
 // Metadata dinámico por tenant: title/description/OG/favicon/canonical. Clave
