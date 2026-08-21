@@ -58,6 +58,26 @@ const tools = [
   {
     type: 'function',
     function: {
+      name: 'search_product_variants',
+      description: 'Busca las ventas de un producto específico por nombre en un periodo, desglosando las ventas por sus modificadores o variantes (ej. buscar "Envío" y ver cuántos tenían la variante "Lluvia").',
+      parameters: {
+        type: 'object',
+        properties: {
+          productName: { type: 'string', description: 'Nombre o parte del nombre del producto a buscar (ej. "Envio").' },
+          period: {
+            type: 'string',
+            enum: ['HOY', '7D', '30D', '90D', 'AÑO', 'HIST'],
+            description: 'Periodo de búsqueda.'
+          }
+        },
+        required: ['productName', 'period'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_sales_summary',
       description: 'Devuelve ingresos totales, número de pedidos y ticket promedio del período indicado, para el restaurante actual. Excluye pedidos cancelados.',
       parameters: {
@@ -311,28 +331,27 @@ async function execTool(name, args, { restaurantId, locationId }) {
   if (name === 'get_product_trends') {
     const period = String(args.period || '30D').toUpperCase();
     const now = new Date();
-    const currentFrom = new Date();
+    let currentFrom = new Date();
     currentFrom.setHours(0, 0, 0, 0);
-    
     let previousFrom = new Date();
     previousFrom.setHours(0, 0, 0, 0);
-    let previousTo = new Date(currentFrom);
+    let previousTo = new Date();
     
     if (period === '7D') {
-      currentFrom.setDate(currentFrom.getDate() - 6);
-      previousFrom.setDate(currentFrom.getDate() - 7);
+      currentFrom.setDate(now.getDate() - 6);
+      previousFrom.setDate(now.getDate() - 13);
       previousTo = new Date(currentFrom);
     } else if (period === '30D') {
-      currentFrom.setDate(currentFrom.getDate() - 29);
-      previousFrom.setDate(currentFrom.getDate() - 30);
+      currentFrom.setDate(now.getDate() - 29);
+      previousFrom.setDate(now.getDate() - 59);
       previousTo = new Date(currentFrom);
     } else if (period === '90D') {
-      currentFrom.setDate(currentFrom.getDate() - 89);
-      previousFrom.setDate(currentFrom.getDate() - 90);
+      currentFrom.setDate(now.getDate() - 89);
+      previousFrom.setDate(now.getDate() - 179);
       previousTo = new Date(currentFrom);
     } else if (period === 'AÑO' || period === 'ANIO' || period === 'ANO') {
       currentFrom.setMonth(0, 1);
-      previousFrom.setFullYear(previousFrom.getFullYear() - 1);
+      previousFrom.setFullYear(now.getFullYear() - 1);
       previousFrom.setMonth(0, 1);
       previousTo = new Date(currentFrom);
     }
@@ -395,6 +414,56 @@ async function execTool(name, args, { restaurantId, locationId }) {
     }
     
     return trends.slice(0, limit);
+  }
+
+  if (name === 'search_product_variants') {
+    const from = periodRange(args.period);
+    const productName = args.productName || '';
+    if (!productName) return { error: 'Debes proporcionar un productName' };
+
+    const items = await prisma.orderItem.findMany({
+      where: {
+        name: { contains: productName, mode: 'insensitive' },
+        order: {
+          restaurantId,
+          status: { not: 'CANCELLED' },
+          createdAt: { gte: from },
+          ...(locationId ? { locationId } : {}),
+        },
+      },
+      select: {
+        name: true,
+        quantity: true,
+        subtotal: true,
+        modifiers: {
+          select: { name: true, priceAdd: true }
+        }
+      }
+    });
+
+    const summary = {
+      productQuery: productName,
+      totalQuantity: 0,
+      totalRevenue: 0,
+      variantsAndModifiers: {}
+    };
+
+    items.forEach(item => {
+      summary.totalQuantity += item.quantity;
+      summary.totalRevenue += item.subtotal;
+      
+      const mods = item.modifiers.map(m => m.name).sort().join(', ');
+      const key = mods || 'Sin variantes/modificadores';
+      
+      if (!summary.variantsAndModifiers[key]) {
+        summary.variantsAndModifiers[key] = { quantity: 0, timesOrdered: 0 };
+      }
+      summary.variantsAndModifiers[key].quantity += item.quantity;
+      summary.variantsAndModifiers[key].timesOrdered += 1;
+    });
+
+    summary.totalRevenue = Math.round(summary.totalRevenue);
+    return summary;
   }
 
   if (name === 'get_inventory_alerts') {
