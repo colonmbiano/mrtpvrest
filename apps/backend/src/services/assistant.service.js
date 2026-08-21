@@ -18,6 +18,7 @@ Ayudas al dueño/gerente a entender su operación respondiendo en español neutr
 Reglas:
 - Usa SIEMPRE las herramientas para obtener datos actualizados antes de responder preguntas sobre ventas, productos, inventario, personal o caja de repartidores. Nunca inventes cifras.
 - Para preguntas sobre el conteo, corte o caja de un repartidor (p. ej. "revísame a Pablo de hoy"), usa get_driver_cash_report. El saldo pendiente de corte es el efectivo que el repartidor debe entregar en caja; distínguelo de los pedidos aún sin cobrar.
+- Para ver qué productos están bajando o subiendo en ventas (tendencias), usa get_product_trends.
 - Si el usuario saluda o pregunta algo fuera de alcance, responde breve sin llamar herramientas.
 - Presenta resultados claros: viñetas para listas, moneda en pesos con símbolo $ y agrupación de miles, y resalta la cifra principal con **markdown**.
 - Si una herramienta devuelve lista vacía, di honestamente "no hay datos" y sugiere la acción (p. ej. "aún no hay ventas hoy" o "ningún ingrediente por debajo del mínimo").
@@ -26,6 +27,34 @@ Reglas:
 
 // Las 4 herramientas mapeadas al formato function calling de OpenAI/Groq.
 const tools = [
+  {
+    type: 'function',
+    function: {
+      name: 'get_product_trends',
+      description: 'Compara las ventas de productos entre el periodo actual y el periodo anterior equivalente (ej. últimos 30 días vs los 30 previos). Úsalo para responder qué productos están bajando o subiendo en ventas.',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: {
+            type: 'string',
+            enum: ['7D', '30D', '90D', 'AÑO'],
+            description: 'Periodo base para la comparación.',
+          },
+          sortBy: {
+            type: 'string',
+            enum: ['DROPPING', 'RISING'],
+            description: 'DROPPING para ver los que más bajaron (ej. qué está bajando en ventas), RISING para los que más subieron.',
+          },
+          limit: {
+            type: 'integer',
+            description: 'Cantidad de productos a devolver.',
+          }
+        },
+        required: ['period', 'sortBy'],
+        additionalProperties: false,
+      },
+    },
+  },
   {
     type: 'function',
     function: {
@@ -277,6 +306,95 @@ async function execTool(name, args, { restaurantId, locationId }) {
       quantity: i._sum.quantity || 0,
       total: Math.round(i._sum.subtotal || 0),
     }));
+  }
+
+  if (name === 'get_product_trends') {
+    const period = String(args.period || '30D').toUpperCase();
+    const now = new Date();
+    const currentFrom = new Date();
+    currentFrom.setHours(0, 0, 0, 0);
+    
+    let previousFrom = new Date();
+    previousFrom.setHours(0, 0, 0, 0);
+    let previousTo = new Date(currentFrom);
+    
+    if (period === '7D') {
+      currentFrom.setDate(currentFrom.getDate() - 6);
+      previousFrom.setDate(currentFrom.getDate() - 7);
+      previousTo = new Date(currentFrom);
+    } else if (period === '30D') {
+      currentFrom.setDate(currentFrom.getDate() - 29);
+      previousFrom.setDate(currentFrom.getDate() - 30);
+      previousTo = new Date(currentFrom);
+    } else if (period === '90D') {
+      currentFrom.setDate(currentFrom.getDate() - 89);
+      previousFrom.setDate(currentFrom.getDate() - 90);
+      previousTo = new Date(currentFrom);
+    } else if (period === 'AÑO' || period === 'ANIO' || period === 'ANO') {
+      currentFrom.setMonth(0, 1);
+      previousFrom.setFullYear(previousFrom.getFullYear() - 1);
+      previousFrom.setMonth(0, 1);
+      previousTo = new Date(currentFrom);
+    }
+
+    const limit = Math.min(Math.max(parseInt(args.limit) || 10, 1), 30);
+    const sortBy = args.sortBy === 'RISING' ? 'RISING' : 'DROPPING';
+
+    const currentItems = await prisma.orderItem.groupBy({
+      by: ['name'],
+      where: {
+        order: {
+          restaurantId,
+          status: { not: 'CANCELLED' },
+          createdAt: { gte: currentFrom },
+          ...(locationId ? { locationId } : {}),
+        },
+      },
+      _sum: { quantity: true, subtotal: true },
+    });
+
+    const previousItems = await prisma.orderItem.groupBy({
+      by: ['name'],
+      where: {
+        order: {
+          restaurantId,
+          status: { not: 'CANCELLED' },
+          createdAt: { gte: previousFrom, lt: previousTo },
+          ...(locationId ? { locationId } : {}),
+        },
+      },
+      _sum: { quantity: true, subtotal: true },
+    });
+
+    const nameSet = new Set([...currentItems.map(i=>i.name), ...previousItems.map(i=>i.name)]);
+    const currMap = {};
+    const currTotalMap = {};
+    currentItems.forEach(i => { currMap[i.name] = i._sum.quantity || 0; currTotalMap[i.name] = Math.round(i._sum.subtotal || 0); });
+    const prevMap = {};
+    previousItems.forEach(i => { prevMap[i.name] = i._sum.quantity || 0; });
+
+    let trends = Array.from(nameSet).map(name => {
+      const currQty = currMap[name] || 0;
+      const prevQty = prevMap[name] || 0;
+      const diff = currQty - prevQty;
+      const percent = prevQty === 0 ? (currQty > 0 ? 100 : 0) : Math.round((diff / prevQty) * 100);
+      return {
+        name,
+        currentQuantity: currQty,
+        previousQuantity: prevQty,
+        difference: diff,
+        percentChange: percent,
+        currentTotal: currTotalMap[name] || 0
+      };
+    });
+    
+    if (sortBy === 'DROPPING') {
+      trends.sort((a, b) => a.difference - b.difference);
+    } else {
+      trends.sort((a, b) => b.difference - a.difference);
+    }
+    
+    return trends.slice(0, limit);
   }
 
   if (name === 'get_inventory_alerts') {
