@@ -59,7 +59,7 @@ const tools = [
     type: 'function',
     function: {
       name: 'search_product_variants',
-      description: 'Busca las ventas de un producto específico por nombre en un periodo, desglosando las ventas por sus modificadores o variantes (ej. buscar "Envío" y ver cuántos tenían la variante "Lluvia").',
+      description: 'Busca las ventas de un producto específico por nombre en un periodo, desglosando las ventas por sus modificadores o variantes (ej. buscar "Envío" y ver cuántos tenían "Lluvia"). También incluye qué repartidores entregaron esos pedidos.',
       parameters: {
         type: 'object',
         properties: {
@@ -435,11 +435,20 @@ async function execTool(name, args, { restaurantId, locationId }) {
         name: true,
         quantity: true,
         subtotal: true,
+        order: { select: { deliveryDriverId: true } },
         modifiers: {
           select: { name: true, priceAdd: true }
         }
       }
     });
+
+    const driverIds = Array.from(new Set(items.map(i => i.order.deliveryDriverId).filter(Boolean)));
+    const employees = await prisma.employee.findMany({
+      where: { id: { in: driverIds } },
+      select: { id: true, name: true }
+    });
+    const driverMap = {};
+    employees.forEach(e => { driverMap[e.id] = e.name; });
 
     const summary = {
       productQuery: productName,
@@ -456,10 +465,16 @@ async function execTool(name, args, { restaurantId, locationId }) {
       const key = mods || 'Sin variantes/modificadores';
       
       if (!summary.variantsAndModifiers[key]) {
-        summary.variantsAndModifiers[key] = { quantity: 0, timesOrdered: 0 };
+        summary.variantsAndModifiers[key] = { quantity: 0, timesOrdered: 0, drivers: {} };
       }
       summary.variantsAndModifiers[key].quantity += item.quantity;
       summary.variantsAndModifiers[key].timesOrdered += 1;
+      
+      const dId = item.order.deliveryDriverId;
+      if (dId) {
+        const dName = driverMap[dId] || 'Repartidor Borrado';
+        summary.variantsAndModifiers[key].drivers[dName] = (summary.variantsAndModifiers[key].drivers[dName] || 0) + 1;
+      }
     });
 
     summary.totalRevenue = Math.round(summary.totalRevenue);
