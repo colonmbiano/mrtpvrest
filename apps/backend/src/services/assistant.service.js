@@ -533,8 +533,16 @@ async function execTool(name, args, { restaurantId, locationId }) {
       summary.totalRevenue += item.subtotal;
       
       const mods = item.modifiers.map(m => m.name).sort().join(', ');
-      // Incluir el nombre real del item en la llave, por si la variante está en el nombre (ej. "Envío Lluvia")
-      const key = item.name + (mods ? ` (+ ${mods})` : '');
+      
+      let baseName = item.name;
+      // Si el producto es un envío, adjuntar el precio unitario en el nombre para diferenciar tarifas especiales (Lluvia, lejanía, etc.)
+      if (baseName.toLowerCase().includes('envio') || baseName.toLowerCase().includes('envío')) {
+        const unitPrice = item.quantity > 0 ? (item.subtotal / item.quantity) : 0;
+        baseName += ` ($${unitPrice})`;
+      }
+
+      // Incluir el nombre real del item en la llave
+      const key = baseName + (mods ? ` (+ ${mods})` : '');
       
       if (!summary.variantsAndModifiers[key]) {
         summary.variantsAndModifiers[key] = { quantity: 0, timesOrdered: 0, drivers: {} };
