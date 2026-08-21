@@ -32,14 +32,14 @@ function createClient() {
   });
   const base = new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   });
 
   // Aislamiento multi-tenant automático (ver tenant-guard.js / TENANCY.md).
   // El modo se controla con TENANT_GUARD_MODE: off | warn | enforce.
-  // Default 'warn' → no altera queries, solo observa (rollout seguro).
+  // Default 'enforce' → protege contra IDOR inyectando el restaurantId.
   return base.$extends(
-    tenantGuard({ mode: process.env.TENANT_GUARD_MODE || 'warn' })
+    tenantGuard({ mode: process.env.TENANT_GUARD_MODE || 'enforce' })
   );
 }
 

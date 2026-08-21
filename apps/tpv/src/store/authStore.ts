@@ -173,8 +173,9 @@ export const useAuthStore = create<AuthState>()(
                 loading: false,
               });
               if (typeof window !== "undefined") {
-                document.cookie = `tpv-session-active=true; path=/; SameSite=Lax`;
-                document.cookie = `tpv-role=${encodeURIComponent(employee.role)}; path=/; SameSite=Lax`;
+                const secureParam = window.location.protocol === "https:" ? "; Secure" : "";
+                document.cookie = `tpv-session-active=true; path=/; SameSite=Lax${secureParam}`;
+                document.cookie = `tpv-role=${encodeURIComponent(employee.role)}; path=/; SameSite=Lax${secureParam}`;
                 localStorage.setItem("currentEmployeeId", employee.id);
                 localStorage.setItem("currentEmployeeName", employee.name);
                 localStorage.setItem("currentEmployeeRole", employee.role);
@@ -246,9 +247,10 @@ export const useAuthStore = create<AuthState>()(
 
                 if (typeof window !== "undefined") {
                   void vaultSetToken(token);
-                  document.cookie = `tpv-session-active=true; path=/; SameSite=Lax`;
+                  const secureParam = window.location.protocol === "https:" ? "; Secure" : "";
+                  document.cookie = `tpv-session-active=true; path=/; SameSite=Lax${secureParam}`;
                   if (employee?.role) {
-                    document.cookie = `tpv-role=${encodeURIComponent(employee.role)}; path=/; SameSite=Lax`;
+                    document.cookie = `tpv-role=${encodeURIComponent(employee.role)}; path=/; SameSite=Lax${secureParam}`;
                   }
                   localStorage.setItem("currentEmployeeId", employee.id);
                   localStorage.setItem("currentEmployeeName", employee.name);
@@ -317,8 +319,9 @@ export const useAuthStore = create<AuthState>()(
           localStorage.removeItem("currentEmployeeName");
           localStorage.removeItem("currentEmployeeRole");
           localStorage.removeItem("currentEmployeePermissions");
-          document.cookie = `tpv-session-active=; path=/; max-age=0; SameSite=Lax`;
-          document.cookie = `tpv-role=; path=/; max-age=0; SameSite=Lax`;
+          const secureParam = window.location.protocol === "https:" ? "; Secure" : "";
+          document.cookie = `tpv-session-active=; path=/; max-age=0; SameSite=Lax${secureParam}`;
+          document.cookie = `tpv-role=; path=/; max-age=0; SameSite=Lax${secureParam}`;
         }
         set({
           employee: null,
