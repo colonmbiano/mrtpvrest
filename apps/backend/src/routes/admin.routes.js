@@ -795,12 +795,6 @@ router.post('/ai-key', authenticate, requireTenantAccess, requireAdmin, async (r
         code: 'WRONG_PROVIDER',
       });
     }
-    if (!/^AIza/i.test(trimmed)) {
-      return res.status(400).json({
-        error: 'API key invalida. Debe ser una key de Google AI Studio que empiece con AIza.',
-        code: 'WRONG_PROVIDER',
-      });
-    }
 
     // Validar contra Gemini (OpenAI layer) con una llamada trivial
     try {
