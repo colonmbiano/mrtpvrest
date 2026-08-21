@@ -3,7 +3,7 @@
 // 503 al cliente con un mensaje en español.
 
 const GROQ_BUSY_MESSAGE = 'Motor de respuesta rápida saturado';
-const GROQ_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/';
+const GROQ_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
 const GROQ_MODEL = 'gemini-1.5-flash';
 
 function isGroqOverload(err) {
