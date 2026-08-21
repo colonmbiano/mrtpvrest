@@ -4,7 +4,7 @@
 
 const GROQ_BUSY_MESSAGE = 'Motor de respuesta rápida saturado';
 const GROQ_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/';
-const GROQ_MODEL = 'gemini-2.5-flash';
+const GROQ_MODEL = 'gemini-1.5-flash';
 
 function isGroqOverload(err) {
   if (!err) return false;

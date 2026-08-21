@@ -464,7 +464,7 @@ router.post('/parse-order', async (req, res) => {
     const result = await runOrderDictationSmart({
       prompt: text,
       restaurantId: restaurant.id,
-      model: process.env.WA_PARSE_MODEL || process.env.ORDER_PARSE_MODEL || 'gemini-2.5-flash',
+      model: process.env.WA_PARSE_MODEL || process.env.ORDER_PARSE_MODEL || 'gemini-1.5-flash',
     });
     return res.json({
       ok: !!result.ok,

@@ -1,6 +1,6 @@
 // Resolución de API keys de IA por request. Después de la migración:
 //
-// CHAT / TEXTO (Gemini OpenAI, gemini-2.5-flash) → resolveGroqKey({ restaurantId }):
+// CHAT / TEXTO (Gemini OpenAI, gemini-1.5-flash) → resolveGroqKey({ restaurantId }):
 //   1. Si Restaurant.aiApiKey existe (BYOK del cliente) → descifrar y usar.
 //   2. Si no, y la suscripción está en TRIAL no expirado → fallback a la
 //      key de plataforma (process.env.GOOGLE_AI_API_KEY).

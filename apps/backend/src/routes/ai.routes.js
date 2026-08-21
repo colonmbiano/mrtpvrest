@@ -158,7 +158,7 @@ router.post('/order-dictation', authenticate, requireTenantAccess, requireRole('
     const result = await runOrderDictationSmart({
       prompt,
       restaurantId,
-      model: process.env.ORDER_PARSE_MODEL || 'gemini-2.5-flash',
+      model: process.env.ORDER_PARSE_MODEL || 'gemini-1.5-flash',
     });
     res.json(result);
   } catch (error) {

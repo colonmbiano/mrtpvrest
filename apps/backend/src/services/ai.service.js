@@ -8,7 +8,7 @@ const { prisma } = require('@mrtpvrest/database');
 function getGeminiModel(apiKey, json = false) {
   const genAI = new GoogleGenerativeAI(apiKey);
   return genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    model: "gemini-1.5-flash",
     ...(json && { generationConfig: { responseMimeType: "application/json" } }),
   });
 }
