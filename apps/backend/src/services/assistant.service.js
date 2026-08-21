@@ -19,6 +19,7 @@ Reglas:
 - Usa SIEMPRE las herramientas para obtener datos actualizados antes de responder preguntas sobre ventas, productos, inventario, personal o caja de repartidores. Nunca inventes cifras.
 - Para preguntas sobre el conteo, corte o caja de un repartidor (p. ej. "revísame a Pablo de hoy"), usa get_driver_cash_report. El saldo pendiente de corte es el efectivo que el repartidor debe entregar en caja; distínguelo de los pedidos aún sin cobrar.
 - Para ver qué productos están bajando o subiendo en ventas (tendencias), usa get_product_trends.
+- Para predecir ventas futuras o estimar lo que se venderá la próxima semana, usa predict_sales.
 - Si el usuario saluda o pregunta algo fuera de alcance, responde breve sin llamar herramientas.
 - Presenta resultados claros: viñetas para listas, moneda en pesos con símbolo $ y agrupación de miles, y resalta la cifra principal con **markdown**.
 - Si una herramienta devuelve lista vacía, di honestamente "no hay datos" y sugiere la acción (p. ej. "aún no hay ventas hoy" o "ningún ingrediente por debajo del mínimo").
@@ -71,6 +72,20 @@ const tools = [
           }
         },
         required: ['productName', 'period'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'predict_sales',
+      description: 'Genera una predicción de ventas (cantidad y monto esperado) para la próxima semana (próximos 7 días) de los productos más vendidos, basándose en el promedio histórico reciente.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: { type: 'integer', description: 'Cantidad de productos a predecir (ej. 5)' }
+        },
         additionalProperties: false,
       },
     },
@@ -414,6 +429,45 @@ async function execTool(name, args, { restaurantId, locationId }) {
     }
     
     return trends.slice(0, limit);
+  }
+
+  if (name === 'predict_sales') {
+    const limit = Math.min(Math.max(parseInt(args.limit) || 5, 1), 20);
+    const now = new Date();
+    // Use last 28 days for a solid 4-week average
+    const from = new Date();
+    from.setHours(0, 0, 0, 0);
+    from.setDate(now.getDate() - 28);
+    
+    const items = await prisma.orderItem.groupBy({
+      by: ['name'],
+      where: {
+        order: {
+          restaurantId,
+          status: { not: 'CANCELLED' },
+          createdAt: { gte: from },
+          ...(locationId ? { locationId } : {}),
+        },
+      },
+      _sum: { quantity: true, subtotal: true },
+      orderBy: { _sum: { quantity: 'desc' } },
+      take: limit,
+    });
+    
+    return items.map((i) => {
+      const past28Qty = i._sum.quantity || 0;
+      const past28Rev = i._sum.subtotal || 0;
+      // Promedio diario * 7 días
+      const predictedWeeklyQty = Math.round((past28Qty / 28) * 7);
+      const predictedWeeklyRev = Math.round((past28Rev / 28) * 7);
+      
+      return {
+        name: i.name,
+        historical28DaysQuantity: past28Qty,
+        predictedNext7DaysQuantity: predictedWeeklyQty,
+        predictedNext7DaysRevenue: predictedWeeklyRev
+      };
+    });
   }
 
   if (name === 'search_product_variants') {
