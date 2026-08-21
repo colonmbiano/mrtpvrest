@@ -789,20 +789,20 @@ router.post('/ai-key', authenticate, requireTenantAccess, requireAdmin, async (r
       return res.status(400).json({ error: 'API key inválida.' });
     }
     const trimmed = apiKey.trim();
-    if (/^AIza/i.test(trimmed)) {
+    if (/^gsk_/i.test(trimmed)) {
       return res.status(400).json({
-        error: 'Esta integracion usa Groq Cloud. Pega una API key que empiece con gsk_, no una key de Google AI Studio.',
+        error: 'Esta integracion ahora usa Google Gemini. Pega una API key que empiece con AIza, no una key de Groq.',
         code: 'WRONG_PROVIDER',
       });
     }
-    if (!/^gsk_/i.test(trimmed)) {
+    if (!/^AIza/i.test(trimmed)) {
       return res.status(400).json({
-        error: 'API key invalida. Debe ser una key de Groq Cloud que empiece con gsk_.',
+        error: 'API key invalida. Debe ser una key de Google AI Studio que empiece con AIza.',
         code: 'WRONG_PROVIDER',
       });
     }
 
-    // Validar contra Groq con una llamada trivial
+    // Validar contra Gemini (OpenAI layer) con una llamada trivial
     try {
       const { GROQ_BASE_URL, GROQ_MODEL } = require('../services/groq-error');
       const OpenAI = require('openai');
@@ -812,9 +812,9 @@ router.post('/ai-key', authenticate, requireTenantAccess, requireAdmin, async (r
         messages: [{ role: 'user', content: 'ping' }],
         max_tokens: 5,
       });
-      if (!result?.choices?.length) throw new Error('Respuesta vacía de Groq');
+      if (!result?.choices?.length) throw new Error('Respuesta vacía de Gemini');
     } catch (probeErr) {
-      const msg = probeErr?.message || 'La API key no fue aceptada por Groq Cloud.';
+      const msg = probeErr?.message || 'La API key no fue aceptada por Google AI Studio.';
       return res.status(422).json({ error: `No pude validar la API key: ${msg}`, code: 'KEY_INVALID' });
     }
 

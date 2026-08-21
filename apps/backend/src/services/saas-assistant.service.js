@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const OpenAI = require('openai');
 const { prisma } = require('@mrtpvrest/database');
 const { sendEmail } = require('../utils/mailer');
-const { wrapGroqError } = require('./groq-error');
+const { wrapGroqError, GROQ_BASE_URL, GROQ_MODEL } = require('./groq-error');
 const { provisionTenant, seedSampleMenu, ProvisionError } = require('../lib/tenant-provision');
 
 const MAX_ITERATIONS = 6;
@@ -18,8 +18,6 @@ const STOREFRONT_BASE = process.env.STOREFRONT_BASE || 'mrtpvrest.com';
 const ADMIN_URL       = process.env.SAAS_ADMIN_URL || 'https://admin.mrtpvrest.com';
 const storeUrlFor     = (slug) => `https://${slug}.${STOREFRONT_BASE}`;
 const genTempPassword = () => crypto.randomBytes(9).toString('base64url');
-const GROQ_MODEL = 'llama-3.3-70b-versatile'; 
-const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 
 const SYSTEM_PROMPT = `Eres el Agente de Inteligencia Superior de MRTPVREST (SaaS).
 Tu misión es ayudar al DUEÑO DE LA PLATAFORMA (Super Admin) a gestionar el negocio.
@@ -352,16 +350,13 @@ async function execTool(name, args) {
 }
 
 async function runSaaSAgent({ messages }) {
-  // El asistente SaaS es Groq-only (OpenAI SDK). NO hacer fallback a
-  // GOOGLE_AI_API_KEY: no hay path que traduzca estas tools al formato de
-  // Gemini, y mandar la key de Google al endpoint de Groq produce un 401
-  // opaco. Si falta la key de Groq, degradar a un 503 claro.
-  const apiKey = process.env.GROQ_API_KEY;
+  // El asistente SaaS usa Gemini 1.5/2.5 vía SDK de OpenAI
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) {
-    console.error('GROQ_API_KEY no está configurada en el servidor (SaaS AI Agent)');
-    const err = new Error('El servicio de IA del panel SaaS no está disponible en este momento (falta GROQ_API_KEY en el servidor).');
+    console.error('GOOGLE_AI_API_KEY no está configurada en el servidor (SaaS AI Agent)');
+    const err = new Error('El servicio de IA del panel SaaS no está disponible en este momento (falta GOOGLE_AI_API_KEY en el servidor).');
     err.status = 503;
-    err.code = 'GROQ_KEY_MISSING';
+    err.code = 'GEMINI_KEY_MISSING';
     throw err;
   }
 

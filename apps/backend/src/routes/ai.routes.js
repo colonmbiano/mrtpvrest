@@ -154,12 +154,11 @@ router.post('/order-dictation', authenticate, requireTenantAccess, requireRole('
     const { prompt } = req.body || {};
     if (!prompt?.trim()) return res.status(400).json({ error: 'prompt requerido' });
 
-    // Modelo grande (70b): acierta mucho mejor el matching contra el menú que el
-    // 8b. La latencia extra es mínima (Groq es rápido) y vale la precisión.
+    // Modelo para Gemini
     const result = await runOrderDictationSmart({
       prompt,
       restaurantId,
-      model: process.env.ORDER_PARSE_MODEL || 'llama-3.3-70b-versatile',
+      model: process.env.ORDER_PARSE_MODEL || 'gemini-2.5-flash',
     });
     res.json(result);
   } catch (error) {

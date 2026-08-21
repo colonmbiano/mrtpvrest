@@ -115,6 +115,91 @@ const tools = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_customers',
+      description: 'Busca clientes del restaurante o lista los más frecuentes. Devuelve nombre, teléfono, total gastado y cantidad de pedidos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          searchTerm: {
+            type: ['string', 'null'],
+            description: 'Nombre o teléfono parcial a buscar. Omitir para ver los clientes más frecuentes.',
+          },
+          limit: {
+            type: ['integer', 'null'],
+            description: 'Cantidad de clientes a devolver (1-50, por defecto 10).',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_orders_detail',
+      description: 'Devuelve el detalle de los pedidos recientes. Permite filtrar por estado (PENDING, CONFIRMED, PREPARING, READY, ON_THE_WAY, DELIVERED, CANCELLED) o ver los últimos N pedidos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: {
+            type: 'string',
+            enum: ['HOY', '7D', '30D', '90D', 'AÑO', 'HIST'],
+            description: 'Filtro de fecha.',
+          },
+          status: {
+            type: ['string', 'null'],
+            enum: ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'ON_THE_WAY', 'DELIVERED', 'CANCELLED', null],
+            description: 'Estado del pedido para filtrar. Omitir para todos.',
+          },
+          limit: {
+            type: ['integer', 'null'],
+            description: 'Cantidad de pedidos a devolver (1-50, por defecto 10).',
+          },
+        },
+        required: ['period'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_full_inventory',
+      description: 'Devuelve el inventario completo de la sucursal activa, incluyendo existencias actuales, precio de costo y stock mínimo.',
+      parameters: {
+        type: 'object',
+        properties: {
+          searchTerm: {
+            type: ['string', 'null'],
+            description: 'Nombre del ingrediente a buscar. Omitir para listar todos.',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_financial_expenses',
+      description: 'Devuelve los gastos operativos registrados en la sucursal activa para el período indicado. Útil para consultar sueldos, luz, agua, insumos pagados por caja, etc.',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: {
+            type: 'string',
+            enum: ['HOY', '7D', '30D', '90D', 'AÑO', 'HIST'],
+            description: 'Filtro de fecha.',
+          },
+        },
+        required: ['period'],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // Categorías de "envío" del restaurante (Envíos/Domicilio/Flete/Reparto…),
@@ -309,6 +394,107 @@ async function execTool(name, args, { restaurantId, locationId }) {
       });
     }
     return reports.length === 1 ? reports[0] : reports;
+  }
+
+  if (name === 'get_customers') {
+    const limit = Math.min(Math.max(parseInt(args.limit) || 10, 1), 50);
+    const searchTerm = (args.searchTerm || '').trim();
+    const whereClause = { restaurantId };
+    if (searchTerm) {
+      whereClause.OR = [
+        { name: { contains: searchTerm, mode: 'insensitive' } },
+        { phone: { contains: searchTerm } }
+      ];
+    }
+    const customers = await prisma.customer.findMany({
+      where: whereClause,
+      orderBy: { totalSpent: 'desc' },
+      take: limit,
+      select: { name: true, phone: true, ordersCount: true, totalSpent: true, lastOrderAt: true }
+    });
+    return customers.map(c => ({
+      name: c.name || 'Sin nombre',
+      phone: c.phone,
+      ordersCount: c.ordersCount,
+      totalSpent: Math.round(c.totalSpent),
+      lastOrderAt: c.lastOrderAt
+    }));
+  }
+
+  if (name === 'get_orders_detail') {
+    const from = periodRange(args.period);
+    const limit = Math.min(Math.max(parseInt(args.limit) || 10, 1), 50);
+    const whereClause = {
+      restaurantId,
+      createdAt: { gte: from },
+      ...(locationId ? { locationId } : {}),
+    };
+    if (args.status) {
+      whereClause.status = args.status;
+    }
+    const orders = await prisma.order.findMany({
+      where: whereClause,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: {
+        orderNumber: true, status: true, total: true, createdAt: true,
+        customerName: true, ticketName: true, paymentMethod: true,
+        items: { select: { name: true, quantity: true } }
+      }
+    });
+    return orders.map(o => ({
+      orderNumber: o.orderNumber,
+      status: o.status,
+      customer: o.customerName || o.ticketName || 'Desconocido',
+      total: Math.round(o.total || 0),
+      paymentMethod: o.paymentMethod || 'OTHER',
+      date: o.createdAt,
+      items: o.items.map(i => `${i.quantity}x ${i.name}`)
+    }));
+  }
+
+  if (name === 'get_full_inventory') {
+    if (!locationId) return { error: 'Sin sucursal activa. Pide al usuario que seleccione una.' };
+    const searchTerm = (args.searchTerm || '').trim();
+    const whereClause = { locationId };
+    if (searchTerm) {
+      whereClause.name = { contains: searchTerm, mode: 'insensitive' };
+    }
+    const items = await prisma.ingredient.findMany({
+      where: whereClause,
+      orderBy: { name: 'asc' },
+      take: 100,
+      select: { name: true, unit: true, stock: true, minStock: true, costPrice: true }
+    });
+    return items.map(i => ({
+      name: i.name,
+      stock: i.stock,
+      unit: i.unit,
+      minStock: i.minStock,
+      costPrice: i.costPrice
+    }));
+  }
+
+  if (name === 'get_financial_expenses') {
+    if (!locationId) return { error: 'Sin sucursal activa. Pide al usuario que seleccione una.' };
+    const from = periodRange(args.period);
+    const expenses = await prisma.operatingExpense.findMany({
+      where: { locationId, occurredAt: { gte: from } },
+      orderBy: { occurredAt: 'desc' },
+      select: { concept: true, amount: true, occurredAt: true, category: { select: { name: true } } },
+      take: 50
+    });
+    const total = expenses.reduce((s, e) => s + e.amount, 0);
+    return {
+      period: args.period,
+      totalExpenses: Math.round(total),
+      expenses: expenses.map(e => ({
+        description: e.concept,
+        amount: e.amount,
+        category: e.category?.name || 'General',
+        date: e.occurredAt
+      }))
+    };
   }
 
   return { error: `Herramienta desconocida: ${name}` };

@@ -1,11 +1,11 @@
 // Resolución de API keys de IA por request. Después de la migración:
 //
-// CHAT / TEXTO (Groq, llama-3.1-8b-instant) → resolveGroqKey({ restaurantId }):
+// CHAT / TEXTO (Gemini OpenAI, gemini-2.5-flash) → resolveGroqKey({ restaurantId }):
 //   1. Si Restaurant.aiApiKey existe (BYOK del cliente) → descifrar y usar.
 //   2. Si no, y la suscripción está en TRIAL no expirado → fallback a la
-//      key de plataforma (process.env.GROQ_API_KEY).
+//      key de plataforma (process.env.GOOGLE_AI_API_KEY).
 //   3. En cualquier otro caso → throw AI_KEY_REQUIRED para que el cliente
-//      capture su Groq API key en Integraciones.
+//      capture su API key en Integraciones.
 //
 // VISION (Gemini 1.5 Flash) → resolveGeminiKey():
 //   - Solo usa la key de plataforma (process.env.GOOGLE_AI_API_KEY).
@@ -13,7 +13,7 @@
 //     no requiere BYOK por parte del tenant.
 //   - Si la variable no está configurada → throw AI_KEY_REQUIRED.
 //
-// Validación al guardar BYOK: la key del cliente se prueba contra Groq con un
+// Validación al guardar BYOK: la key del cliente se prueba con un
 // chat.completions.create de ping antes de cifrarse y persistir. Esa lógica
 // vive en routes/admin.routes.js (POST /api/admin/ai-key).
 
@@ -49,7 +49,14 @@ async function resolveGroqKey({ restaurantId }) {
 
   if (restaurant.aiApiKey) {
     const plain = decryptSecret(restaurant.aiApiKey);
-    if (plain) return { apiKey: plain, source: 'customer', provider: 'groq' };
+    if (plain) {
+      if (plain.startsWith('gsk_')) {
+        const err = new Error('Tu integración anterior (Groq) ya no es compatible. Por favor, configura una nueva API key gratuita de Google Gemini en la pestaña de Integraciones.');
+        err.code = 'AI_KEY_REQUIRED';
+        throw err;
+      }
+      return { apiKey: plain, source: 'customer', provider: 'gemini' };
+    }
     const err = new Error('La API key guardada no se pudo desencriptar. Vuelve a capturarla en Integraciones.');
     err.code = 'AI_KEY_CORRUPTED';
     throw err;
@@ -61,11 +68,11 @@ async function resolveGroqKey({ restaurantId }) {
     && new Date(sub.trialEndsAt) > new Date();
 
   if (trialActive) {
-    const platformKey = process.env.GROQ_API_KEY;
-    if (platformKey) return { apiKey: platformKey, source: 'platform-trial', provider: 'groq' };
+    const platformKey = process.env.GOOGLE_AI_API_KEY;
+    if (platformKey) return { apiKey: platformKey, source: 'platform-trial', provider: 'gemini' };
   }
 
-  const err = new Error('Configura tu API key de Groq Cloud en Integraciones para usar las funciones IA.');
+  const err = new Error('Configura tu API key de Google Gemini en Integraciones para usar las funciones IA.');
   err.code = 'AI_KEY_REQUIRED';
   throw err;
 }

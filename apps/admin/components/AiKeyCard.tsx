@@ -168,17 +168,16 @@ export default function AiKeyCard() {
 
       <details style={{ marginBottom: 16 }}>
         <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#c4c4de", padding: "8px 0" }}>
-          Como obtener tu API key gratis (Groq Cloud)
+          Como obtener tu API key gratis (Google Gemini)
         </summary>
         <ol style={{ color: "#c4c4de", fontSize: 13, lineHeight: 1.8, paddingLeft: 20, marginTop: 8 }}>
-          <li>Abre <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{ color: "#7c3aed", textDecoration: "underline" }}>console.groq.com/keys</a> e inicia sesion.</li>
-          <li>Acepta los terminos si es la primera vez.</li>
-          <li>Click en <strong>&quot;Create API key&quot;</strong>.</li>
-          <li>Copia la key que empieza con <code style={{ background: "#222", padding: "1px 6px", borderRadius: 4 }}>gsk_...</code>.</li>
+          <li>Abre <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{ color: "#7c3aed", textDecoration: "underline" }}>aistudio.google.com/app/apikey</a> e inicia sesion con tu cuenta de Google.</li>
+          <li>Haz clic en <strong>&quot;Create API key&quot;</strong>.</li>
+          <li>Copia la key que empieza con <code style={{ background: "#222", padding: "1px 6px", borderRadius: 4 }}>AIza...</code>.</li>
           <li>Pegala aqui abajo y presiona <strong>Validar y guardar</strong>.</li>
         </ol>
         <p style={{ color: "#888", fontSize: 12, marginTop: 8, lineHeight: 1.6 }}>
-          Esta key es para Groq Cloud. Las keys de Google AI Studio empiezan con AIza y no sirven en este campo. La key se guarda cifrada (AES-256-GCM) en nuestra base de datos y nunca se expone al navegador.
+          Esta key es para Google AI Studio (Gemini). La key se guarda cifrada (AES-256-GCM) en nuestra base de datos y nunca se expone al navegador.
         </p>
       </details>
 
@@ -204,7 +203,7 @@ export default function AiKeyCard() {
           <div style={{ display: "flex", gap: 8, flex: 1, minWidth: 260 }}>
             <input
               type="password"
-              placeholder="gsk_..."
+              placeholder="AIza..."
               value={input}
               onChange={e => setInput(e.target.value)}
               autoFocus

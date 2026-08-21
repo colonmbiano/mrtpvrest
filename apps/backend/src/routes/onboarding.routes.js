@@ -119,9 +119,9 @@ router.post('/chat', async (req, res) => {
   }
 
   // El onboarding es un flujo de plataforma: siempre usa la key de plataforma.
-  const apiKey = process.env.GROQ_API_KEY
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) {
-    console.error('GROQ_API_KEY no está configurada en el servidor')
+    console.error('GOOGLE_AI_API_KEY no está configurada en el servidor')
     return res.status(503).json({ error: 'El servicio de IA no está disponible en este momento. Contacta soporte.' })
   }
 
