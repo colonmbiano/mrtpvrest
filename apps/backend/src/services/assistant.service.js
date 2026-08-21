@@ -67,7 +67,7 @@ const tools = [
           productName: { type: 'string', description: 'Nombre o parte del nombre del producto a buscar (ej. "Envio").' },
           period: {
             type: 'string',
-            enum: ['HOY', '7D', '30D', '90D', 'AÑO', 'HIST'],
+            enum: ['HOY', 'AYER', '7D', '30D', '90D', 'AÑO', 'HIST'],
             description: 'Periodo de búsqueda.'
           }
         },
@@ -100,8 +100,8 @@ const tools = [
         properties: {
           period: {
             type: 'string',
-            enum: ['HOY', '7D', '30D', '90D', 'AÑO', 'HIST'],
-            description: 'HOY = hoy, 7D = últimos 7 días, 30D = últimos 30 días, 90D = últimos 90 días, AÑO = año en curso, HIST = todo el historial.',
+            enum: ['HOY', 'AYER', '7D', '30D', '90D', 'AÑO', 'HIST'],
+            description: 'HOY = hoy, AYER = ayer, 7D = últimos 7 días, 30D = últimos 30 días, 90D = últimos 90 días, AÑO = año en curso, HIST = todo el historial.',
           },
         },
         required: ['period'],
@@ -119,8 +119,8 @@ const tools = [
         properties: {
           period: {
             type: 'string',
-            enum: ['HOY', '7D', '30D', '90D', 'AÑO', 'HIST'],
-            description: 'HOY = hoy, 7D = últimos 7 días, 30D = últimos 30 días, 90D = últimos 90 días, AÑO = año en curso, HIST = todo el historial.',
+            enum: ['HOY', 'AYER', '7D', '30D', '90D', 'AÑO', 'HIST'],
+            description: 'HOY = hoy, AYER = ayer, 7D = últimos 7 días, 30D = últimos 30 días, 90D = últimos 90 días, AÑO = año en curso, HIST = todo el historial.',
           },
           limit: {
             type: ['integer', 'null'],
@@ -210,7 +210,7 @@ const tools = [
         properties: {
           period: {
             type: 'string',
-            enum: ['HOY', '7D', '30D', '90D', 'AÑO', 'HIST'],
+            enum: ['HOY', 'AYER', '7D', '30D', '90D', 'AÑO', 'HIST'],
             description: 'Filtro de fecha.',
           },
           status: {
@@ -255,7 +255,7 @@ const tools = [
         properties: {
           period: {
             type: 'string',
-            enum: ['HOY', '7D', '30D', '90D', 'AÑO', 'HIST'],
+            enum: ['HOY', 'AYER', '7D', '30D', '90D', 'AÑO', 'HIST'],
             description: 'Filtro de fecha.',
           },
         },
@@ -286,26 +286,43 @@ async function shippingCategoryIds(restaurantId) {
   return new Set(cats.map((c) => c.id));
 }
 
-function periodRange(period) {
-  const from = new Date();
+function buildDateFilter(period) {
+  let from = new Date();
   from.setHours(0, 0, 0, 0);
+  let to = undefined;
   const p = String(period || 'HOY').toUpperCase();
-  if (p === '7D') from.setDate(from.getDate() - 6);
-  else if (p === '30D') from.setDate(from.getDate() - 29);
-  else if (p === '90D') from.setDate(from.getDate() - 89);
-  else if (p === 'AÑO' || p === 'ANIO' || p === 'ANO') from.setMonth(0, 1);
-  else if (p === 'HIST') return new Date(0); // Desde el principio de los tiempos
-  return from;
+  if (p === 'AYER') {
+    from.setDate(from.getDate() - 1);
+    to = new Date(from);
+    to.setDate(to.getDate() + 1);
+  } else if (p === '7D') {
+    from.setDate(from.getDate() - 6);
+  } else if (p === '30D') {
+    from.setDate(from.getDate() - 29);
+  } else if (p === '90D') {
+    from.setDate(from.getDate() - 89);
+  } else if (p === 'AÑO' || p === 'ANIO' || p === 'ANO') {
+    from.setMonth(0, 1);
+  } else if (p === 'HIST') {
+    from = new Date(0);
+  }
+  const filter = { gte: from };
+  if (to) filter.lt = to;
+  return filter;
+}
+
+function periodRange(period) {
+  return buildDateFilter(period).gte;
 }
 
 async function execTool(name, args, { restaurantId, locationId }) {
   if (name === 'get_sales_summary') {
-    const from = periodRange(args.period);
+    const dateFilter = buildDateFilter(args.period);
     const agg = await prisma.order.aggregate({
       where: {
         restaurantId,
         status: { not: 'CANCELLED' },
-        createdAt: { gte: from },
+        createdAt: dateFilter,
       },
       _sum: { total: true },
       _count: { id: true },
@@ -320,7 +337,7 @@ async function execTool(name, args, { restaurantId, locationId }) {
   }
 
   if (name === 'get_top_products') {
-    const from = periodRange(args.period);
+    const dateFilter = buildDateFilter(args.period);
     const limit = Math.min(Math.max(parseInt(args.limit) || 5, 1), 20);
     const items = await prisma.orderItem.groupBy({
       by: ['name'],
@@ -328,7 +345,7 @@ async function execTool(name, args, { restaurantId, locationId }) {
         order: {
           restaurantId,
           status: { not: 'CANCELLED' },
-          createdAt: { gte: from },
+          createdAt: dateFilter,
           ...(locationId ? { locationId } : {}),
         },
       },
@@ -471,7 +488,7 @@ async function execTool(name, args, { restaurantId, locationId }) {
   }
 
   if (name === 'search_product_variants') {
-    const from = periodRange(args.period);
+    const dateFilter = buildDateFilter(args.period);
     const productName = args.productName || '';
     if (!productName) return { error: 'Debes proporcionar un productName' };
 
@@ -481,7 +498,7 @@ async function execTool(name, args, { restaurantId, locationId }) {
         order: {
           restaurantId,
           status: { not: 'CANCELLED' },
-          createdAt: { gte: from },
+          createdAt: dateFilter,
           ...(locationId ? { locationId } : {}),
         },
       },
@@ -516,7 +533,8 @@ async function execTool(name, args, { restaurantId, locationId }) {
       summary.totalRevenue += item.subtotal;
       
       const mods = item.modifiers.map(m => m.name).sort().join(', ');
-      const key = mods || 'Sin variantes/modificadores';
+      // Incluir el nombre real del item en la llave, por si la variante está en el nombre (ej. "Envío Lluvia")
+      const key = item.name + (mods ? ` (+ ${mods})` : '');
       
       if (!summary.variantsAndModifiers[key]) {
         summary.variantsAndModifiers[key] = { quantity: 0, timesOrdered: 0, drivers: {} };
@@ -678,11 +696,11 @@ async function execTool(name, args, { restaurantId, locationId }) {
   }
 
   if (name === 'get_orders_detail') {
-    const from = periodRange(args.period);
+    const dateFilter = buildDateFilter(args.period);
     const limit = Math.min(Math.max(parseInt(args.limit) || 10, 1), 50);
     const whereClause = {
       restaurantId,
-      createdAt: { gte: from },
+      createdAt: dateFilter,
       ...(locationId ? { locationId } : {}),
     };
     if (args.status) {
@@ -733,9 +751,9 @@ async function execTool(name, args, { restaurantId, locationId }) {
 
   if (name === 'get_financial_expenses') {
     if (!locationId) return { error: 'Sin sucursal activa. Pide al usuario que seleccione una.' };
-    const from = periodRange(args.period);
+    const dateFilter = buildDateFilter(args.period);
     const expenses = await prisma.operatingExpense.findMany({
-      where: { locationId, occurredAt: { gte: from } },
+      where: { locationId, occurredAt: dateFilter },
       orderBy: { occurredAt: 'desc' },
       select: { concept: true, amount: true, occurredAt: true, category: { select: { name: true } } },
       take: 50
