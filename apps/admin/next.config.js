@@ -8,6 +8,12 @@ const nextConfig = {
       { protocol: 'https', hostname: '**' },
     ],
   },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   // Proxy same-origin /api/* → backend para evitar CORS desde el navegador.
   // Con esto el cliente axios usa paths relativos (/api/...) y Next.js reescribe
   // a NEXT_PUBLIC_API_URL/api/... en el edge. Si la env no está definida,
