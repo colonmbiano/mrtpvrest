@@ -16,9 +16,10 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { apiOrQueue } from "@/lib/offline";
 import { toast } from "sonner";
-import { printKitchenTickets, type PrinterRecord, type TicketItem } from "@/lib/printer-tcp";
-import { useKitchenConfig } from "@/hooks/usePrinters";
+import { printKitchenTickets, type TicketItem } from "@/lib/printer-tcp";
+import { useKitchenConfig, usePrinters } from "@/hooks/usePrinters";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
+import { readTablesCache } from "@/lib/tables-cache";
 import SeatCoursePicker from "@/components/pos/SeatCoursePicker";
 import ProductConfigSheet from "@/components/waiter/ProductConfigSheet";
 import {
@@ -104,38 +105,40 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
   const [configProduct, setConfigProduct] = useState<Product | null>(null);
   // Nombre real de la mesa — el param de la ruta es el id (cuid), no apto
   // para mostrarse en el header ni en el ticket de cocina.
-  const [tableName, setTableName] = useState<string | null>(null);
+  const [tableName, setTableName] = useState<string | null>(() => {
+    const cached = readTablesCache();
+    return cached?.tables.find((t) => t.id === tableId)?.name || null;
+  });
 
-  // Cache de impresoras de la sucursal — usadas para imprimir comanda
-  // local en cocina/barra desde la tablet del mesero (misma LAN). Sólo
-  // imprimimos desde cliente cuando creamos orden nueva. En modo ronda,
-  // el backend imprime los items en cocina (ver orders.routes.js:369).
-  const [printers, setPrinters] = useState<PrinterRecord[]>([]);
+  // usePrinters mantiene en memoria y en localStorage la lista de impresoras de la sucursal
+  const { printers } = usePrinters();
   const { kitchenConfig } = useKitchenConfig();
 
   useEffect(() => {
     (async () => {
       try {
-        const [catsRes, itemsRes, printersRes, tableRes] = await Promise.all([
-          api.get("/api/menu/categories"),
-          // ?admin=true: terminal de venta interna (igual que pos/menu). Sin esto
-          // el backend oculta los combos (isPromo sin activeDays). Los agotados
-          // se filtran abajo client-side (isAvailable !== false).
-          api.get("/api/menu/items?admin=true"),
-          api.get<PrinterRecord[]>("/api/printers").catch(() => ({ data: [] as PrinterRecord[] })),
-          api.get<{ name?: string }>(`/api/tables/${tableId}`).catch(() => ({ data: {} as { name?: string } })),
+        const [catsRes, itemsRes, tableRes] = await Promise.all([
+          api.get("/api/menu/categories").catch(() => null),
+          api.get("/api/menu/items?admin=true").catch(() => null),
+          api.get<{ name?: string }>(`/api/tables/${tableId}`).catch(() => null),
         ]);
-        setCategories([{ id: "all", name: "Todos" }, ...catsRes.data]);
-        setProducts(itemsRes.data);
-        setPrinters(Array.isArray(printersRes.data) ? printersRes.data : []);
-        if (tableRes.data?.name) setTableName(tableRes.data.name);
+
+        if (catsRes?.data) {
+          setCategories([{ id: "all", name: "Todos" }, ...catsRes.data]);
+        }
+        if (itemsRes?.data) {
+          setProducts(itemsRes.data);
+        }
+        if (tableRes?.data?.name) {
+          setTableName(tableRes.data.name);
+        }
       } catch {
-        toast.error("No se pudo cargar el menu");
+        // Fallback defensivo: los datos iniciales ya se hidrataron
       } finally {
         setIsLoading(false);
       }
     })();
-  }, []);
+  }, [tableId]);
 
   // Si el store tiene un orderId stale de OTRA mesa, lo limpiamos al entrar
   // — el usuario probablemente venia de otra orden y abrio una mesa distinta.
@@ -363,7 +366,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
         // así que mandamos null y la impresora pondrá un placeholder
         // visible para que cocina sepa que es prepedido.
         printKitchenTickets(printers, {
-          orderNumber: res.data?.orderNumber ?? null,
+          orderNumber: res.data?.orderNumber || (res.id ? `OFF-${res.id.slice(-4).toUpperCase()}` : null),
           orderType: "DINE_IN",
           tableNumber: tableName ?? tableId,
           items: printItems,

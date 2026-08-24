@@ -655,7 +655,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       toast.success(queued ? "Pedido en cola · se enviara al volver la red" : "Pedido enviado a cocina");
       const printItems = buildTicketItems();
       const ticketContext = {
-        orderNumber: order?.orderNumber ?? null,
+        orderNumber: order?.orderNumber || (queued ? "OFFLINE" : null),
         orderType:   ticket.type ?? null,
         tableNumber: ticket.tableName || ticket.table || null,
         customerName: ticket.name ?? null,
