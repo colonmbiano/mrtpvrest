@@ -112,10 +112,19 @@ export default function CatalogPage() {
   const density = useCatalogPrefs((s) => s.density);
   const viewMode = useCatalogPrefs((s) => s.viewMode);
 
-  const [categories, setCategories] = useState<CategoryLite[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<CategoryLite[]>(() => {
+    const cached = readCatalogCache();
+    return cached?.categories || [];
+  });
+  const [products, setProducts] = useState<Product[]>(() => {
+    const cached = readCatalogCache();
+    return cached?.products || [];
+  });
   const [activeCat, setActiveCat] = useState<string>("all");
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => {
+    const cached = readCatalogCache();
+    return !cached || cached.products.length === 0;
+  });
   const [configProduct, setConfigProduct] = useState<Product | null>(null);
   const [weightProduct, setWeightProduct] = useState<Product | null>(null);
   const [optionsProduct, setOptionsProduct] = useState<Product | null>(null);

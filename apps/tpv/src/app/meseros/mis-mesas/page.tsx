@@ -3,28 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Clock, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import Chip from "@/components/ui/Chip";
 import api from "@/lib/api";
-
-// El backend devuelve tables con activeOrder para la sucursal. El verdadero
-// "mis mesas" filtrado por mesero requiere una migración de schema (agregar
-// Order.waiterEmployeeId) — por ahora mostramos todas las mesas con orden
-// activa, que es lo que ya devuelve /api/tables.
-interface ActiveOrder {
-  id: string;
-  orderNumber: string;
-  total: number;
-  customerName: string | null;
-  createdAt: string;
-  _count: { items: number };
-}
-
-interface TableRow {
-  id: string;
-  name: string;
-  status: string;
-  capacity: number;
-  zone: { name: string } | null;
-  activeOrder: ActiveOrder | null;
-}
+import { readTablesCache, writeTablesCache, type TableRow } from "@/lib/tables-cache";
 
 function elapsedMinutes(iso: string) {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
@@ -36,8 +15,14 @@ function fmtTime(iso: string) {
 }
 
 export default function WaiterMyTablesPage() {
-  const [tables, setTables] = useState<TableRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tables, setTables] = useState<TableRow[]>(() => {
+    const cached = readTablesCache();
+    return cached?.tables || [];
+  });
+  const [loading, setLoading] = useState(() => {
+    const cached = readTablesCache();
+    return !cached || cached.tables.length === 0;
+  });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -45,12 +30,21 @@ export default function WaiterMyTablesPage() {
     api.get<TableRow[]>("/api/tables")
       .then(({ data }) => {
         if (!mounted) return;
-        setTables(Array.isArray(data) ? data : []);
+        const fetched = Array.isArray(data) ? data : [];
+        setTables(fetched);
+        const cached = readTablesCache();
+        writeTablesCache(fetched, cached?.zones || []);
         setError(null);
       })
       .catch((e) => {
         if (!mounted) return;
-        setError(e?.response?.data?.error || "Error al cargar mesas");
+        const cached = readTablesCache();
+        if (cached && cached.tables.length > 0) {
+          setTables(cached.tables);
+          setError(null);
+        } else {
+          setError(e?.response?.data?.error || "Error al cargar mesas");
+        }
       })
       .finally(() => mounted && setLoading(false));
     return () => { mounted = false; };

@@ -93,3 +93,7 @@ apps/*.pen
 *.pen
 .vercel
 open-design
+
+# Supabase CLI
+supabase/.temp/
+supabase/.branches/

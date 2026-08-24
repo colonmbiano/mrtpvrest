@@ -28,6 +28,7 @@ import {
   Layers, X, Check, ChevronDown,
 } from "lucide-react";
 import { AdminScreen, AdminHeader } from "@/components/admin/AdminScreen";
+import { readTablesCache, writeTablesCache } from "@/lib/tables-cache";
 
 type TableStatus = "AVAILABLE" | "OCCUPIED" | "DIRTY";
 
@@ -82,9 +83,18 @@ const STATUS_META: Record<TableStatus, { label: string; color: string; bg: strin
 };
 
 export default function MesasAdminPage() {
-  const [tables, setTables]   = useState<TableRow[]>([]);
-  const [zones, setZones]     = useState<Zone[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tables, setTables]   = useState<TableRow[]>(() => {
+    const cached = readTablesCache();
+    return (cached?.tables as unknown as TableRow[]) || [];
+  });
+  const [zones, setZones]     = useState<Zone[]>(() => {
+    const cached = readTablesCache();
+    return (cached?.zones as unknown as Zone[]) || [];
+  });
+  const [loading, setLoading] = useState(() => {
+    const cached = readTablesCache();
+    return !cached || cached.tables.length === 0;
+  });
 
   // Modal de mesa
   const [form, setForm]       = useState<FormState>(EMPTY_FORM);
@@ -111,11 +121,20 @@ export default function MesasAdminPage() {
         api.get<TableRow[]>("/api/tables"),
         api.get<Zone[]>("/api/zones").catch(() => ({ data: [] as Zone[] })),
       ]);
-      setTables(Array.isArray(t.data) ? t.data : []);
-      setZones(Array.isArray(z.data) ? z.data : []);
+      const fetchedTables = Array.isArray(t.data) ? t.data : [];
+      const fetchedZones = Array.isArray(z.data) ? z.data : [];
+      setTables(fetchedTables);
+      setZones(fetchedZones);
+      writeTablesCache(fetchedTables as any, fetchedZones as any);
     } catch (err) {
       console.error(err);
-      toast.error("No pudimos cargar las mesas");
+      const cached = readTablesCache();
+      if (cached && cached.tables.length > 0) {
+        setTables(cached.tables as any);
+        setZones(cached.zones as any);
+      } else {
+        toast.error("No pudimos cargar las mesas");
+      }
     } finally {
       setLoading(false);
     }

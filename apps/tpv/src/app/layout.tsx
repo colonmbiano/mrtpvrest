@@ -6,6 +6,7 @@ import OfflineIndicator from "@/components/OfflineIndicator";
 import OtaUpdater from "@/components/OtaUpdater";
 import AutoLock from "@/components/AutoLock";
 import ConsolePatch from "@/components/ConsolePatch";
+import TPVInstallPrompt from "@/components/TPVInstallPrompt";
 
 // Las fuentes se cargan con <link> en runtime en lugar de next/font/google
 // porque next/font descarga al BUILD time, y el runner de Android APK
@@ -79,6 +80,7 @@ export default function RootLayout({
         <OfflineIndicator />
         <OtaUpdater />
         <AutoLock />
+        <TPVInstallPrompt />
         <ModalRoot>{children}</ModalRoot>
       </body>
     </html>

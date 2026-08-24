@@ -6,33 +6,14 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { useWaiterRealtime } from "@/hooks/useWaiterRealtime";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
-
-type ZoneRef = { id: string; name: string; icon: string | null };
-
-interface ActiveOrderLite {
-  id: string;
-  orderNumber?: string | null;
-  status?: string | null;
-  paymentStatus?: string | null;
-  total: number;
-  customerName?: string | null;
-  createdAt?: string | null;
-  _count?: { items: number };
-}
-
-interface TableRow {
-  id: string;
-  name: string;
-  status: "AVAILABLE" | "OCCUPIED" | "DIRTY";
-  zoneId: string | null;
-  zone: ZoneRef | null;
-  activeOrder: ActiveOrderLite | null;
-}
-
-interface Zone extends ZoneRef {
-  order: number;
-  tablesCount: number;
-}
+import {
+  readTablesCache,
+  writeTablesCache,
+  type TableRow,
+  type Zone,
+  type ZoneRef,
+  type ActiveOrderLite,
+} from "@/lib/tables-cache";
 
 const NO_ZONE = "__none__";
 
@@ -122,10 +103,19 @@ function elapsedMin(iso: string | null | undefined, now: number) {
 }
 
 export default function WaiterFloorPlanPage() {
-  const [tables, setTables] = useState<TableRow[]>([]);
-  const [zones, setZones] = useState<Zone[]>([]);
+  const [tables, setTables] = useState<TableRow[]>(() => {
+    const cached = readTablesCache();
+    return cached?.tables || [];
+  });
+  const [zones, setZones] = useState<Zone[]>(() => {
+    const cached = readTablesCache();
+    return cached?.zones || [];
+  });
   const [activeZone, setActiveZone] = useState<string>("all");
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => {
+    const cached = readTablesCache();
+    return !cached || cached.tables.length === 0;
+  });
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -139,14 +129,21 @@ export default function WaiterFloorPlanPage() {
         api.get<TableRow[]>("/api/tables"),
         api.get<Zone[]>("/api/zones").catch(() => ({ data: [] as Zone[] })),
       ]);
-      setTables(t.data);
-      setZones(z.data || []);
+      const fetchedTables = Array.isArray(t.data) ? t.data : [];
+      const fetchedZones = Array.isArray(z.data) ? z.data : [];
+      setTables(fetchedTables);
+      setZones(fetchedZones);
+      writeTablesCache(fetchedTables, fetchedZones);
       setErrorMsg(null);
     } catch (error: any) {
-      // Solo mostramos error si NO tenemos datos previos. Si ya había
-      // mesas en pantalla, preferimos quedarnos con las viejas antes
-      // que vaciar la sala por un blip de red.
-      if (!silent) {
+      // Si la red falla pero tenemos datos cacheados, preservamos la sala
+      // sin mostrar pantalla de error bloqueante.
+      const cached = readTablesCache();
+      if (cached && cached.tables.length > 0) {
+        setTables(cached.tables);
+        setZones(cached.zones);
+        setErrorMsg(null);
+      } else if (!silent) {
         setErrorMsg(error?.response?.data?.error || "No se pudieron cargar las mesas");
       }
       console.error("Error loading tables:", error);
