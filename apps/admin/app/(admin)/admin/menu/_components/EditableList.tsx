@@ -20,13 +20,14 @@ export function EditableList({
 }: {
   items: any[];
   editingId: string | null;
-  editForm: { name: string; price: string };
+  editForm: any;
   onStartEdit: (item: any) => void;
   onSaveEdit: (id: string) => void;
   onCancelEdit: () => void;
   onDelete: (id: string) => void;
-  onChangeForm: (updater: (prev: { name: string; price: string }) => { name: string; price: string }) => void;
+  onChangeForm: (updater: (prev: any) => any) => void;
   addSection: ReactNode;
+  showKitchenNoteToggle?: boolean;
 }) {
   return (
     <div>
@@ -55,6 +56,16 @@ export function EditableList({
                       style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }} />
                   </div>
                   <div className="col-span-3 flex justify-end gap-1">
+                    {showKitchenNoteToggle && (
+                      <label className="flex items-center gap-1 text-[10px] text-tx-mut mr-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editForm.isKitchenNote || false}
+                          onChange={e => onChangeForm((p) => ({ ...p, isKitchenNote: e.target.checked }))}
+                        />
+                        Nota de Cocina
+                      </label>
+                    )}
                     <button type="button" onClick={() => onSaveEdit(item.id)} aria-label="Guardar"
                       className="grid h-8 w-8 place-items-center rounded-ds-sm"
                       style={{ background: "var(--brand-primary)", color: "var(--accent-contrast)" }}><Check size={14} strokeWidth={2.6} /></button>
@@ -66,9 +77,12 @@ export function EditableList({
               ) : (
                 <div className="group grid grid-cols-12 items-center gap-2 rounded-ds-md px-3 py-2 transition-all"
                   style={{ background: "var(--surf-2)" }}>
-                  <span className="col-span-6 text-sm font-medium text-tx">{item.name}</span>
+                  <span className="col-span-6 text-sm font-medium text-tx">
+                    {item.name}
+                    {item.isKitchenNote && <span className="ml-2 rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-tx bg-[var(--surf-3)] opacity-70">Nota de cocina</span>}
+                  </span>
                   <span className="col-span-3 text-right font-mono text-sm font-bold text-primary">
-                    ${item.price > 0 ? item.price : '0.00'}
+                    {item.isKitchenNote ? '---' : `$${item.price > 0 ? item.price : '0.00'}`}
                   </span>
                   <div className="col-span-3 flex justify-end gap-1">
                     <button type="button" onClick={() => onStartEdit(item)} aria-label="Editar"
@@ -91,13 +105,13 @@ export function EditableList({
 
 export type EditableCtl = {
   items: any[];
-  newItem: { name: string; price: string };
-  setNewItem: (updater: (prev: { name: string; price: string }) => { name: string; price: string }) => void;
+  newItem: any;
+  setNewItem: (updater: (prev: any) => any) => void;
   onAdd: () => void;
   saving: boolean;
   editingId: string | null;
-  editForm: { name: string; price: string };
-  setEditForm: (updater: (prev: { name: string; price: string }) => { name: string; price: string }) => void;
+  editForm: any;
+  setEditForm: (updater: (prev: any) => any) => void;
   onStartEdit: (item: any) => void;
   onSaveEdit: (id: string) => void;
   onCancelEdit: () => void;

@@ -23,40 +23,52 @@ function L({ children }: { children: React.ReactNode }) {
 }
 
 /* Fila para añadir una opción (variante / complemento). */
-function AddRow({ ctl, placeholder }: { ctl: EditableCtl; placeholder: string }) {
+function AddRow({ ctl, placeholder, showKitchenNoteToggle }: { ctl: EditableCtl; placeholder: string; showKitchenNoteToggle?: boolean }) {
   return (
-    <div className="grid grid-cols-12 items-center gap-2">
-      <input
-        value={ctl.newItem.name}
-        onChange={e => ctl.setNewItem(p => ({ ...p, name: e.target.value }))}
-        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); ctl.onAdd(); } }}
-        placeholder={placeholder}
-        className="col-span-6 rounded-ds-sm px-3 py-2 text-sm text-tx outline-none"
-        style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
-      />
-      <div className="col-span-3 flex items-center gap-1">
-        <span className="text-xs text-tx-mut">$</span>
+    <div>
+      <div className="grid grid-cols-12 items-center gap-2">
         <input
-          value={ctl.newItem.price}
-          type="number"
-          step="0.01"
-          onWheel={e => e.currentTarget.blur()}
-          onChange={e => ctl.setNewItem(p => ({ ...p, price: e.target.value }))}
+          value={ctl.newItem.name}
+          onChange={e => ctl.setNewItem(p => ({ ...p, name: e.target.value }))}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); ctl.onAdd(); } }}
-          placeholder="0"
-          className="w-full rounded-ds-sm px-2 py-2 text-right text-sm text-tx outline-none"
+          placeholder={placeholder}
+          className="col-span-6 rounded-ds-sm px-3 py-2 text-sm text-tx outline-none"
           style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
         />
+        <div className="col-span-3 flex items-center gap-1">
+          <span className="text-xs text-tx-mut">$</span>
+          <input
+            value={ctl.newItem.price}
+            type="number"
+            step="0.01"
+            onWheel={e => e.currentTarget.blur()}
+            onChange={e => ctl.setNewItem(p => ({ ...p, price: e.target.value }))}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); ctl.onAdd(); } }}
+            placeholder="0"
+            className="w-full rounded-ds-sm px-2 py-2 text-right text-sm text-tx outline-none"
+            style={{ background: "var(--surf-1)", border: "1px solid var(--bd-1)" }}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={ctl.onAdd}
+          disabled={ctl.saving || !ctl.newItem.name.trim()}
+          className="col-span-3 grid place-items-center rounded-ds-sm py-2 text-sm font-black"
+          style={{ background: "var(--brand-primary)", color: "var(--accent-contrast)", opacity: ctl.saving || !ctl.newItem.name.trim() ? 0.5 : 1 }}
+        >
+          + Agregar
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={ctl.onAdd}
-        disabled={ctl.saving || !ctl.newItem.name.trim()}
-        className="col-span-3 grid place-items-center rounded-ds-sm py-2 text-sm font-black"
-        style={{ background: "var(--brand-primary)", color: "var(--accent-contrast)", opacity: ctl.saving || !ctl.newItem.name.trim() ? 0.5 : 1 }}
-      >
-        + Agregar
-      </button>
+      {showKitchenNoteToggle && (
+        <label className="mt-2 flex items-center gap-1.5 text-xs text-tx-mut cursor-pointer">
+          <input
+            type="checkbox"
+            checked={ctl.newItem.isKitchenNote || false}
+            onChange={e => ctl.setNewItem(p => ({ ...p, isKitchenNote: e.target.checked }))}
+          />
+          Es nota de cocina (sin precio)
+        </label>
+      )}
     </div>
   );
 }
@@ -404,7 +416,8 @@ export function ItemFormModal({
               onCancelEdit={complementsCtl.onCancelEdit}
               onDelete={complementsCtl.onDelete}
               onChangeForm={complementsCtl.setEditForm}
-              addSection={<AddRow ctl={complementsCtl} placeholder="Nuevo complemento (ej. Refresco)" />}
+              showKitchenNoteToggle={true}
+              addSection={<AddRow ctl={complementsCtl} placeholder="Nuevo complemento (ej. Refresco)" showKitchenNoteToggle={true} />}
             />
           ) : (
             <p className="rounded-ds-md border border-dashed p-3 text-xs text-tx-mut">

@@ -198,6 +198,7 @@ export default function ProductConfigSheet({
                 <div className="space-y-2">
                   {group.modifiers.map((modifier) => {
                     const active = selectedIds.has(modifier.id);
+                    const isFree = modifier.isKitchenNote || modifier.priceAdd === 0;
                     return (
                       <button
                         key={modifier.id}
@@ -206,6 +207,8 @@ export default function ProductConfigSheet({
                         className={`w-full min-h-[52px] flex items-center gap-3 rounded-2xl border px-3 text-left active:scale-[0.99] transition-transform ${
                           active
                             ? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)]"
+                            : isFree
+                            ? "bg-[var(--surf-2)] border-dashed border-white/20 text-white/80"
                             : "bg-white/5 border-white/10 text-white/80"
                         }`}
                       >
@@ -216,12 +219,17 @@ export default function ProductConfigSheet({
                         >
                           {active && <Check size={14} strokeWidth={3} />}
                         </span>
-                        <span className="min-w-0 flex-1 text-[13px] font-bold truncate">
-                          {modifier.name}
+                        <span className="min-w-0 flex-1 flex items-center gap-2">
+                          <span className="text-[13px] font-bold truncate">
+                            {modifier.name}
+                          </span>
+                          {isFree && <span className="rounded bg-white/10 px-1.5 py-0.5 text-[8px] uppercase tracking-wider opacity-60">Nota</span>}
                         </span>
-                        <span className="tabular-nums text-[12px] font-black shrink-0">
-                          {modifier.priceAdd > 0 ? `+$${modifier.priceAdd.toFixed(0)}` : "$0"}
-                        </span>
+                        {!isFree && (
+                          <span className="tabular-nums text-[12px] font-black shrink-0">
+                            +${modifier.priceAdd.toFixed(0)}
+                          </span>
+                        )}
                       </button>
                     );
                   })}

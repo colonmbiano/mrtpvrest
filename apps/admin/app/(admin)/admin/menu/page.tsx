@@ -50,10 +50,10 @@ export default function MenuPage() {
 
   // Complementos
   const [complements, setComplements] = useState<any[]>([]);
-  const [newComp, setNewComp] = useState({ name: '', price: '' });
+  const [newComp, setNewComp] = useState({ name: '', price: '', isKitchenNote: false });
   const [savingComp, setSavingComp] = useState(false);
   const [editingComp, setEditingComp] = useState<string|null>(null);
-  const [editCompForm, setEditCompForm] = useState({ name: '', price: '' });
+  const [editCompForm, setEditCompForm] = useState({ name: '', price: '', isKitchenNote: false });
 
   // Variantes
   const [variants, setVariants] = useState<any[]>([]);
@@ -222,7 +222,7 @@ export default function MenuPage() {
       setVariants([]);
       setInitialTemplateIds([]);
     }
-    setNewComp({ name: '', price: '' });
+    setNewComp({ name: '', price: '', isKitchenNote: false });
     setNewVariant({ name: '', price: '' });
     setEditingComp(null);
     setEditingVariant(null);
@@ -316,10 +316,10 @@ export default function MenuPage() {
     setSavingComp(true);
     try {
       const { data } = await api.post(`/api/menu/items/${editItem.id}/complements`, {
-        name: newComp.name, price: parseFloat(newComp.price) || 0,
+        name: newComp.name, price: parseFloat(newComp.price) || 0, isKitchenNote: newComp.isKitchenNote
       });
       setComplements(p => [...p, data]);
-      setNewComp({ name: '', price: '' });
+      setNewComp({ name: '', price: '', isKitchenNote: false });
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Error al agregar');
     } finally { setSavingComp(false); }
@@ -327,15 +327,15 @@ export default function MenuPage() {
 
   function startEditComp(mod: any) {
     setEditingComp(mod.id);
-    setEditCompForm({ name: mod.name, price: String(mod.price) });
+    setEditCompForm({ name: mod.name, price: String(mod.price), isKitchenNote: mod.isKitchenNote || false });
   }
 
   async function saveEditComp(id: string) {
     try {
       await api.put(`/api/menu/items/complements/${id}`, {
-        name: editCompForm.name, price: parseFloat(editCompForm.price) || 0,
+        name: editCompForm.name, price: parseFloat(editCompForm.price) || 0, isKitchenNote: editCompForm.isKitchenNote
       });
-      setComplements(p => p.map(m => m.id === id ? { ...m, name: editCompForm.name, price: parseFloat(editCompForm.price) || 0 } : m));
+      setComplements(p => p.map(m => m.id === id ? { ...m, name: editCompForm.name, price: parseFloat(editCompForm.price) || 0, isKitchenNote: editCompForm.isKitchenNote } : m));
       setEditingComp(null);
     } catch { toast.error('Error al guardar'); }
   }

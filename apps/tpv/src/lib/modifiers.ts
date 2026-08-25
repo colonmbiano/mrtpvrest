@@ -79,11 +79,12 @@ export function buildOptionGroups(
             minSelection: 0,
             maxSelection: 0,
             freeModifiersLimit: 0,
-            modifiers: complements.map((complement) => ({
+        modifiers: complements.map((complement) => ({
               id: `${COMPLEMENT_MODIFIER_PREFIX}${complement.id}`,
               groupId: COMPLEMENTS_GROUP_ID,
               name: complement.name,
               priceAdd: Number(complement.price || 0),
+              isKitchenNote: complement.isKitchenNote,
             })),
           },
         ];

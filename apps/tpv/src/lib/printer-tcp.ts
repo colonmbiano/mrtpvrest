@@ -43,6 +43,9 @@ export const CMD = {
   DBLSTRIKE_OFF: ESC + "G" + "\x00",
   DOUBLE_ON:    GS  + "!" + "\x11",
   DOUBLE_OFF:   GS  + "!" + "\x00",
+  // Inverted text mode (blanco sobre negro)
+  INVERT_ON:    GS  + "B" + "\x01",
+  INVERT_OFF:   GS  + "B" + "\x00",
   // Tamaño triple (3x ancho, 3x alto). Algunas impresoras no soportan
   // más allá de DOUBLE — si no responde, el firmware lo ignora y queda igual.
   TRIPLE_ON:    GS  + "!" + "\x22",
@@ -1036,7 +1039,13 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
         // "Quitar ingredientes": el modificador se llama "Sin X" → lo imprimimos
         // como "SIN X" (sin el "+" que sugeriría que se agrega/cobra).
         const isRemoval = /^sin\s/i.test(m.name);
-        s += isRemoval ? `  ${m.name.replace(/^sin\s/i, "SIN ")}\n` : `  + ${m.name}\n`;
+        const nameText = isRemoval ? m.name.replace(/^sin\s/i, "SIN ") : (m.priceAdd === 0 || m.isKitchenNote ? m.name : `+ ${m.name}`);
+        
+        if (m.isKitchenNote || m.priceAdd === 0) {
+          s += `  ` + CMD.INVERT_ON + ` ${nameText} ` + CMD.INVERT_OFF + `\n`;
+        } else {
+          s += `  ${nameText}\n`;
+        }
       }
       s += itemSizeOn;
     }
@@ -1319,9 +1328,10 @@ export function buildCustomerReceipt(input: ReceiptInput): string {
       for (const m of item.modifiers || []) {
         // Subline con sangría: "+ Nombre        +monto" alineado a la derecha.
         // Los "Sin X" (quitar) se imprimen como "SIN X" sin "+" ni monto.
+        const isFree = m.isKitchenNote || m.priceAdd === 0;
         const isRemoval = /^sin\s/i.test(m.name);
         const right = showPrices && m.priceAdd ? "+" + fmtMoney(m.priceAdd) : "";
-        const left = isRemoval ? modIndent + m.name.replace(/^sin\s/i, "SIN ") : modIndent + "+ " + m.name;
+        const left = isRemoval ? modIndent + m.name.replace(/^sin\s/i, "SIN ") : (isFree ? modIndent + m.name : modIndent + "+ " + m.name);
         d += row(left, right, lw);
       }
     }

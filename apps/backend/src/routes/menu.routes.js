@@ -1,4 +1,4 @@
-﻿const express  = require('express')
+const express  = require('express')
 const prisma   = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const { pick } = require('../lib/validate')
@@ -566,10 +566,10 @@ router.post('/items/:id/complements', authenticate, requireTenantAccess, require
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     const check = await assertItemBelongsToTenant(req.params.id, restaurantId);
     if (check.error) return res.status(check.code).json({ error: check.error });
-    const { name, price } = req.body;
+    const { name, price, isKitchenNote } = req.body;
     if (!name) return res.status(400).json({ error: 'Nombre requerido' });
     const complement = await prisma.menuItemComplement.create({
-      data: { menuItemId: req.params.id, name, price: parseFloat(price) || 0 },
+      data: { menuItemId: req.params.id, name, price: parseFloat(price) || 0, isKitchenNote: !!isKitchenNote },
     });
     res.status(201).json(complement);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -577,13 +577,14 @@ router.post('/items/:id/complements', authenticate, requireTenantAccess, require
 
 router.put('/items/complements/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { name, price, isAvailable } = req.body;
+    const { name, price, isAvailable, isKitchenNote } = req.body;
     const complement = await prisma.menuItemComplement.update({
       where: { id: req.params.id },
       data: {
         ...(name !== undefined && { name }),
         ...(price !== undefined && { price: parseFloat(price) || 0 }),
         ...(isAvailable !== undefined && { isAvailable: !!isAvailable }),
+        ...(isKitchenNote !== undefined && { isKitchenNote: !!isKitchenNote }),
       },
     });
     res.json(complement);

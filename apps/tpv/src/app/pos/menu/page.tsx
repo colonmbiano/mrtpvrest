@@ -1141,6 +1141,7 @@ function QuickModifierPanel({
               <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
                 {group.modifiers.map((modifier) => {
                   const active = selectedIds.has(modifier.id);
+                  const isFree = modifier.isKitchenNote || modifier.priceAdd === 0;
                   return (
                     <button
                       key={modifier.id}
@@ -1149,16 +1150,23 @@ function QuickModifierPanel({
                       className={`flex min-h-16 items-center gap-3 rounded-lg border-2 px-3 text-left focus:outline-none focus:ring-2 focus:ring-iris-500 ${
                         active
                           ? "border-green-700 bg-green-500 text-black"
+                          : isFree
+                          ? "border-dashed border-bd-strong bg-surf-1 text-tx-pri active:bg-surf-2"
                           : "border-bd bg-surf-2 text-tx-pri active:bg-surf-3"
                       }`}
                     >
                       <span className={`flex h-6 w-6 shrink-0 items-center justify-center ${group.multiSelect ? "rounded-md" : "rounded-full"} ${active ? "bg-black text-white" : "border-2 border-bd-strong bg-surf-1"}`}>
                         {active && <Check size={15} strokeWidth={3} />}
                       </span>
-                      <span className="min-w-0 flex-1 text-[15px] font-black">{modifier.name}</span>
-                      <span className="text-[14px] font-semibold tabular-nums">
-                        {modifier.priceAdd > 0 ? `+$${modifier.priceAdd.toFixed(0)}` : "$0"}
+                      <span className="min-w-0 flex-1 flex items-center gap-2">
+                        <span className="text-[15px] font-black">{modifier.name}</span>
+                        {isFree && <span className="rounded bg-surf-3 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-tx-mut">Nota</span>}
                       </span>
+                      {!isFree && (
+                        <span className="text-[14px] font-semibold tabular-nums">
+                          +${modifier.priceAdd.toFixed(0)}
+                        </span>
+                      )}
                     </button>
                   );
                 })}

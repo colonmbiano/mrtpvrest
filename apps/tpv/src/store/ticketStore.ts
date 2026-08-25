@@ -12,6 +12,7 @@ export type Modifier = {
   name: string;
   priceAdd: number;
   isDefault?: boolean;
+  isKitchenNote?: boolean;
 };
 
 export type ModifierGroup = {
@@ -30,6 +31,7 @@ export type ModifierSelection = {
   groupId: string;
   name: string;
   priceAdd: number;
+  isKitchenNote?: boolean;
 };
 
 export type MenuItemVariant = {
@@ -46,6 +48,7 @@ export type MenuItemComplement = {
   menuItemId?: string;
   name: string;
   price: number;
+  isKitchenNote?: boolean;
   isAvailable?: boolean;
   sortOrder?: number;
 };
