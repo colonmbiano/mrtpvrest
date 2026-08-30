@@ -60,6 +60,7 @@ env_copy.txt
 .worktrees/
 .claude/worktrees/
 .claude/settings.local.json
+.codex-worktrees/
 scratch/
 
 # Logs y dumps locales

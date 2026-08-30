@@ -56,20 +56,35 @@ const isIgnored = (id = "") => {
 const trunc = (s = "", n = 140) =>
   typeof s === "string" && s.length > n ? s.slice(0, n) + "…" : s || "";
 
-// --- Limpieza de locks de Chromium (por si un arranque previo murió sucio) ---
-function cleanChromiumLocks(dir) {
+// --- Limpieza de locks y cachés pesados de Chromium ---
+// (Evita que el volumen de Railway se llene al 100% por caché y ServiceWorkers)
+function cleanChromiumState(dir) {
   try {
     for (const name of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) {
       const p = `${dir}/${name}`;
       if (fs.existsSync(p)) fs.rmSync(p, { force: true, recursive: true });
     }
-  } catch {
-    /* best-effort */
+    if (fs.existsSync(dir)) {
+      const sessions = fs.readdirSync(dir).filter(n => n.startsWith('session-'));
+      for (const session of sessions) {
+        const cacheDirs = [
+          `${dir}/${session}/Default/Cache`,
+          `${dir}/${session}/Default/Code Cache`,
+          `${dir}/${session}/Default/Service Worker/CacheStorage`,
+          `${dir}/${session}/Crashpad`
+        ];
+        for (const cDir of cacheDirs) {
+          if (fs.existsSync(cDir)) fs.rmSync(cDir, { force: true, recursive: true });
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[saas-sales-worker] Error limpiando estado de Chromium:", e);
   }
 }
 
 // --- Cliente de WhatsApp ----------------------------------------------------
-cleanChromiumLocks(WA_DATA_PATH);
+cleanChromiumState(WA_DATA_PATH);
 
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: WA_DATA_PATH }),
@@ -81,6 +96,7 @@ const client = new Client({
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--no-zygote",
+      "--disk-cache-size=1"
     ],
   },
 });
