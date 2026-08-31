@@ -16,6 +16,7 @@
 import { useEffect, useState } from "react";
 import { X, MapPin, Users, Eye, EyeOff } from "lucide-react";
 import api from "@/lib/api";
+import { get, set } from 'idb-keyval';
 
 export interface TableLite {
   id: string;
@@ -29,24 +30,23 @@ export interface TableLite {
 // últimas conocidas y se revalida en segundo plano. El estado libre/ocupado
 // puede venir un momento desfasado, pero el backend lo autocorrige al cobrar
 // (mesa ocupada → une la ronda al ticket existente).
-const TABLES_CACHE_KEY = "tpv-tables-cache-v1";
+const TABLES_CACHE_KEY = "tpv-tables-cache-lite-v2";
 
-function readTablesCache(): TableLite[] | null {
+async function readTablesCache(): Promise<TableLite[] | null> {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(TABLES_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as TableLite[]) : null;
+    const data = await get(TABLES_CACHE_KEY);
+    if (!data || !Array.isArray(data)) return null;
+    return data as TableLite[];
   } catch {
     return null;
   }
 }
 
-function writeTablesCache(data: TableLite[]): void {
+async function writeTablesCache(data: TableLite[]): Promise<void> {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(TABLES_CACHE_KEY, JSON.stringify(data));
+    await set(TABLES_CACHE_KEY, data);
   } catch {
     /* best-effort */
   }
@@ -93,17 +93,14 @@ export default function TablePickerModal({
     if (!isOpen) return;
     let cancelled = false;
     // Pinta al instante las mesas cacheadas (sin spinner) y revalida detrás.
-    const cached = readTablesCache();
-    if (cached) {
-      // Diferido a microtask: evita el set-state síncrono dentro del effect.
-      queueMicrotask(() => {
-        if (cancelled) return;
+    readTablesCache().then((cached) => {
+      if (cancelled) return;
+      if (cached) {
         setTables(cached);
         setLoading(false);
-      });
-    }
-    // Arranque diferido (ver impresoras): evita set-state-in-effect síncrono.
-    queueMicrotask(() => { if (!cancelled) fetchTables(!!cached); });
+      }
+      fetchTables(!!cached);
+    });
     return () => { cancelled = true; };
   }, [isOpen]);
 

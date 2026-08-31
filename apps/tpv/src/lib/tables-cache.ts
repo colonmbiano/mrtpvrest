@@ -2,6 +2,7 @@
 // Permite que la vista de mesas y meseros cargue de inmediato (0ms) y
 // continúe funcionando sin pantalla en blanco ante fallos de red o caídas
 // del servidor backend / base de datos.
+import { get, set } from 'idb-keyval';
 
 export interface ActiveOrderLite {
   id: string;
@@ -37,22 +38,20 @@ export interface TablesCache {
   fetchedAt: number;
 }
 
-export const TABLES_CACHE_KEY = "tpv-tables-cache-v1";
+export const TABLES_CACHE_KEY = "tpv-tables-cache-v2";
 
-export function readTablesCache(): TablesCache | null {
+export async function readTablesCache(): Promise<TablesCache | null> {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(TABLES_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed?.tables) || !Array.isArray(parsed?.zones)) return null;
-    return parsed as TablesCache;
+    const data = await get(TABLES_CACHE_KEY);
+    if (!data || !Array.isArray(data?.tables) || !Array.isArray(data?.zones)) return null;
+    return data as TablesCache;
   } catch {
     return null;
   }
 }
 
-export function writeTablesCache(tables: TableRow[], zones: Zone[]): void {
+export async function writeTablesCache(tables: TableRow[], zones: Zone[]): Promise<void> {
   if (typeof window === "undefined") return;
   try {
     const data: TablesCache = {
@@ -60,20 +59,20 @@ export function writeTablesCache(tables: TableRow[], zones: Zone[]): void {
       zones,
       fetchedAt: Date.now(),
     };
-    window.localStorage.setItem(TABLES_CACHE_KEY, JSON.stringify(data));
+    await set(TABLES_CACHE_KEY, data);
   } catch {
     /* Cuota llena / modo privado: almacenamiento best-effort */
   }
 }
 
-export function patchTablesCacheTable(
+export async function patchTablesCacheTable(
   tableId: string,
   patch: Partial<TableRow>
-): void {
-  const cache = readTablesCache();
+): Promise<void> {
+  const cache = await readTablesCache();
   if (!cache) return;
   const updatedTables = cache.tables.map((t) =>
     t.id === tableId ? { ...t, ...patch } : t
   );
-  writeTablesCache(updatedTables, cache.zones);
+  await writeTablesCache(updatedTables, cache.zones);
 }

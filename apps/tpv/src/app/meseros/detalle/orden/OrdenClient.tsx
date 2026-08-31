@@ -105,10 +105,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
   const [configProduct, setConfigProduct] = useState<Product | null>(null);
   // Nombre real de la mesa — el param de la ruta es el id (cuid), no apto
   // para mostrarse en el header ni en el ticket de cocina.
-  const [tableName, setTableName] = useState<string | null>(() => {
-    const cached = readTablesCache();
-    return cached?.tables.find((t) => t.id === tableId)?.name || null;
-  });
+  const [tableName, setTableName] = useState<string | null>(null);
 
   // usePrinters mantiene en memoria y en localStorage la lista de impresoras de la sucursal
   const { printers } = usePrinters();
@@ -117,6 +114,12 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
   useEffect(() => {
     (async () => {
       try {
+        const cached = await readTablesCache();
+        if (cached?.tables) {
+          const t = cached.tables.find((x) => x.id === tableId);
+          if (t?.name) setTableName(t.name);
+        }
+
         const [catsRes, itemsRes, tableRes] = await Promise.all([
           api.get("/api/menu/categories").catch(() => null),
           api.get("/api/menu/items?admin=true").catch(() => null),

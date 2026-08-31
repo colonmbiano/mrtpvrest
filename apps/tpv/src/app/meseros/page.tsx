@@ -103,19 +103,10 @@ function elapsedMin(iso: string | null | undefined, now: number) {
 }
 
 export default function WaiterFloorPlanPage() {
-  const [tables, setTables] = useState<TableRow[]>(() => {
-    const cached = readTablesCache();
-    return cached?.tables || [];
-  });
-  const [zones, setZones] = useState<Zone[]>(() => {
-    const cached = readTablesCache();
-    return cached?.zones || [];
-  });
+  const [tables, setTables] = useState<TableRow[]>([]);
+  const [zones, setZones] = useState<Zone[]>([]);
   const [activeZone, setActiveZone] = useState<string>("all");
-  const [isLoading, setIsLoading] = useState(() => {
-    const cached = readTablesCache();
-    return !cached || cached.tables.length === 0;
-  });
+  const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -138,7 +129,7 @@ export default function WaiterFloorPlanPage() {
     } catch (error: any) {
       // Si la red falla pero tenemos datos cacheados, preservamos la sala
       // sin mostrar pantalla de error bloqueante.
-      const cached = readTablesCache();
+      const cached = await readTablesCache();
       if (cached && cached.tables.length > 0) {
         setTables(cached.tables);
         setZones(cached.zones);
@@ -155,8 +146,15 @@ export default function WaiterFloorPlanPage() {
 
   useEffect(() => {
     let cancelled = false;
-    // Carga inicial diferida (ver impresoras): evita set-state-in-effect.
-    queueMicrotask(() => { if (!cancelled) loadTables(false); });
+    readTablesCache().then(cached => {
+      if (cancelled) return;
+      if (cached) {
+        setTables(cached.tables);
+        setZones(cached.zones);
+        if (cached.tables.length > 0) setIsLoading(false);
+      }
+      loadTables(!!cached);
+    });
     return () => { cancelled = true; };
   }, [loadTables]);
 

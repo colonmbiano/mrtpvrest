@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
+import { get, set, del } from 'idb-keyval';
 
 export type TransactionType =
   | 'order'
@@ -25,11 +26,6 @@ export interface OfflineTransaction {
   timestamp: number;
   synced: boolean;
   supervisor?: string;
-  // Replay rechazado con un 4xx que no tiene caso reintentar (ej. la orden ya
-  // se cobró y el backend no acepta más ítems). Se congela aquí en vez de
-  // reintentarse cada 5s para siempre: un pendiente fantasma permanente
-  // entrena al personal a ignorar el chip, y el día que haya una orden real
-  // atorada nadie la va a ver. Requiere que alguien la descarte a mano.
   failed?: OfflineFailure;
 }
 
@@ -44,12 +40,21 @@ interface OfflineState {
   clearQueue: () => void;
   setSyncInProgress: (inProgress: boolean) => void;
   setLastSync: (timestamp: number) => void;
-  // Pendientes REINTENTABLES. Excluye las fallidas a propósito: alimenta al
-  // loop de replay y al gate de orden del cierre de turno, y una tx muerta no
-  // debe reintentarse ni bloquear el corte para siempre.
   getUnsyncedTransactions: () => OfflineTransaction[];
   getFailedTransactions: () => OfflineTransaction[];
 }
+
+const idbStorage: StateStorage = {
+  getItem: async (name: string): Promise<string | null> => {
+    return (await get(name)) || null;
+  },
+  setItem: async (name: string, value: string): Promise<void> => {
+    await set(name, value);
+  },
+  removeItem: async (name: string): Promise<void> => {
+    await del(name);
+  },
+};
 
 const useOfflineStore = create<OfflineState>()(
   persist(
@@ -87,20 +92,8 @@ const useOfflineStore = create<OfflineState>()(
     }),
     {
       name: 'tpv-offline-store',
-      storage: createJSONStorage(() => localStorage),
-      // syncInProgress es estado de RUNTIME, no contexto que deba sobrevivir a
-      // un reinicio. Persistirlo causaba un deadlock permanente: si la app
-      // moría a mitad de un replay (Android mata el WebView cuando quiere),
-      // el `true` quedaba escrito en localStorage, se rehidrataba al abrir, y
-      // el guard `if (store.syncInProgress) return` de syncOfflineQueue salía
-      // temprano PARA SIEMPRE. Nadie lo volvía a poner en false porque eso
-      // solo pasa en el finally de un replay que ya nunca arrancaba →
-      // la cola se congelaba y el chip decía "Sincronizando" eternamente.
+      storage: createJSONStorage(() => idbStorage),
       partialize: (state) => ({ queue: state.queue, lastSync: state.lastSync }),
-      // partialize solo controla lo que se ESCRIBE. Los dispositivos que ya
-      // traen el `true` envenenado de la versión anterior lo seguirían
-      // rehidratando, así que al fusionar lo forzamos a false: el arranque
-      // siempre empieza limpio y el equipo se cura solo al actualizar.
       merge: (persisted, current) => ({
         ...current,
         ...(persisted as Partial<OfflineState>),

@@ -252,10 +252,10 @@ importers:
         version: 10.5.0(postcss@8.5.10)
       eslint:
         specifier: ^9.21.0
-        version: 9.39.4(jiti@1.21.7)
+        version: 9.39.4(jiti@2.7.0)
       eslint-config-next:
         specifier: 16.2.9
-        version: 16.2.9(@typescript-eslint/parser@8.61.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
+        version: 16.2.9(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)
       postcss:
         specifier: 8.5.10
         version: 8.5.10
@@ -752,6 +752,9 @@ importers:
       framer-motion:
         specifier: ^12.40.0
         version: 12.40.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      idb-keyval:
+        specifier: ^6.3.0
+        version: 6.3.0
       lucide-react:
         specifier: ^0.577.0
         version: 0.577.0(react@19.2.7)
@@ -818,10 +821,10 @@ importers:
         version: 10.1.0
       eslint:
         specifier: ^9.21.0
-        version: 9.39.4(jiti@2.7.0)
+        version: 9.39.4(jiti@1.21.7)
       eslint-config-next:
         specifier: 16.2.9
-        version: 16.2.9(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)
+        version: 16.2.9(@typescript-eslint/parser@8.61.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.43)
@@ -5066,6 +5069,9 @@ packages:
   iconv-lite@0.7.2:
     resolution: {integrity: sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==}
     engines: {node: '>=0.10.0'}
+
+  idb-keyval@6.3.0:
+    resolution: {integrity: sha512-um+2dgAWmYsu615EXpWVwSmapJhON0G43t3Ka/EVaohzPQXSMqKEqeDK/oIW3Ow+BXaF2PvSc+oBTFp793A5Ow==}
 
   idb@7.1.1:
     resolution: {integrity: sha512-gchesWBzyvGHRO9W8tzUWFDycow5gwjvFKfyV9FF32Y7F50yZMp7mP+T2mJIWFx49zicqyC4uefHM17o6xKIVQ==}
@@ -12771,6 +12777,8 @@ snapshots:
   iconv-lite@0.7.2:
     dependencies:
       safer-buffer: 2.1.2
+
+  idb-keyval@6.3.0: {}
 
   idb@7.1.1: {}
 

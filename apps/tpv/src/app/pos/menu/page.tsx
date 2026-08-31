@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { get, set } from 'idb-keyval';
 import { ChevronLeft, Search, X, Plus, Minus, Check, Delete } from "lucide-react";
 import ItemOptionsSheet from "@/components/pos/ItemOptionsSheet";
 import api from "@/lib/api";
@@ -43,12 +44,7 @@ const FALLBACK_CATEGORIES: CategoryLite[] = PRIORITY_CATEGORIES.map((name) => ({
 // El menú casi nunca cambia, pero antes se bajaba de la nube CADA vez que el
 // cajero entraba a tomar un pedido (2 round-trips a Railway con spinner). Ahora
 // pintamos al instante lo último cacheado y revalidamos en segundo plano.
-const CATALOG_CACHE_KEY = "tpv-catalog-cache-v1";
-
-// Evento global para forzar una re-descarga del catálogo ignorando el TTL.
-// Lo dispara el botón "Sincronizar" del header (layout) para que un producto
-// recién dado de alta en /admin/menu se vea al instante sin esperar el TTL.
-export const CATALOG_REFRESH_EVENT = "tpv-catalog-refresh";
+const CATALOG_CACHE_KEY = "tpv-catalog-cache-v2";
 
 // El catálogo casi no cambia durante un turno, pero el cajero entra/sale del
 // menú decenas de veces (una por pedido). Revalidar en CADA entrada = 2
@@ -66,23 +62,21 @@ type CatalogCache = {
   fetchedAt?: number;
 };
 
-function readCatalogCache(): CatalogCache | null {
+async function readCatalogCache(): Promise<CatalogCache | null> {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(CATALOG_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed?.categories) || !Array.isArray(parsed?.products)) return null;
-    return parsed as CatalogCache;
+    const data = await get(CATALOG_CACHE_KEY);
+    if (!data || !Array.isArray(data?.categories) || !Array.isArray(data?.products)) return null;
+    return data as CatalogCache;
   } catch {
     return null;
   }
 }
 
-function writeCatalogCache(data: CatalogCache): void {
+async function writeCatalogCache(data: CatalogCache): Promise<void> {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify(data));
+    await set(CATALOG_CACHE_KEY, data);
   } catch {
     /* cuota llena / modo privado: la caché es best-effort */
   }
@@ -92,10 +86,10 @@ function writeCatalogCache(data: CatalogCache): void {
 // tocar el resto ni `fetchedAt` (no queremos reiniciar el TTL por un toggle).
 // Así, dentro de la ventana del TTL, el siguiente montaje pinta el estado
 // correcto en vez de revertir el toggle a lo último que trajo la red.
-function patchCatalogCacheProduct(id: string, patch: Partial<Product>): void {
-  const cache = readCatalogCache();
+async function patchCatalogCacheProduct(id: string, patch: Partial<Product>): Promise<void> {
+  const cache = await readCatalogCache();
   if (!cache) return;
-  writeCatalogCache({
+  await writeCatalogCache({
     ...cache,
     products: cache.products.map((p) => (p.id === id ? { ...p, ...patch } : p)),
   });
@@ -112,19 +106,10 @@ export default function CatalogPage() {
   const density = useCatalogPrefs((s) => s.density);
   const viewMode = useCatalogPrefs((s) => s.viewMode);
 
-  const [categories, setCategories] = useState<CategoryLite[]>(() => {
-    const cached = readCatalogCache();
-    return cached?.categories || [];
-  });
-  const [products, setProducts] = useState<Product[]>(() => {
-    const cached = readCatalogCache();
-    return cached?.products || [];
-  });
+  const [categories, setCategories] = useState<CategoryLite[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [activeCat, setActiveCat] = useState<string>("all");
-  const [isLoading, setIsLoading] = useState(() => {
-    const cached = readCatalogCache();
-    return !cached || cached.products.length === 0;
-  });
+  const [isLoading, setIsLoading] = useState(true);
   const [configProduct, setConfigProduct] = useState<Product | null>(null);
   const [weightProduct, setWeightProduct] = useState<Product | null>(null);
   const [optionsProduct, setOptionsProduct] = useState<Product | null>(null);
@@ -139,7 +124,7 @@ export default function CatalogPage() {
         api.get("/api/menu/items?admin=true"),
       ]);
 
-      const cached = readCatalogCache();
+      const cached = await readCatalogCache();
       let nextCats = cached?.categories ?? [];
       let nextItems = cached?.products ?? [];
       if (catsRes.status === "fulfilled" && Array.isArray(catsRes.value.data)) {
@@ -152,7 +137,7 @@ export default function CatalogPage() {
       setProducts(nextItems);
       // Solo cacheamos si al menos una respuesta llegó bien (no pisar con vacío).
       if (catsRes.status === "fulfilled" || itemsRes.status === "fulfilled") {
-        writeCatalogCache({ categories: nextCats, products: nextItems, fetchedAt: Date.now() });
+        await writeCatalogCache({ categories: nextCats, products: nextItems, fetchedAt: Date.now() });
       }
     } catch (error) {
       console.error("Error loading POS catalog:", error);
@@ -164,32 +149,20 @@ export default function CatalogPage() {
   useEffect(() => {
     let cancelled = false;
 
-    // 1. Pinta al instante lo último cacheado: el menú se ve de inmediato al
-    //    entrar y el cajero no espera a la nube (stale-while-revalidate).
-    const cached = readCatalogCache();
-    if (cached) {
-      // Diferido a microtask: evita el set-state síncrono dentro del effect.
-      queueMicrotask(() => {
-        if (cancelled) return;
+    readCatalogCache().then((cached) => {
+      if (cancelled) return;
+      if (cached) {
         setCategories(cached.categories);
         setProducts(cached.products);
         setIsLoading(false);
-      });
-    }
+      }
 
-    // 2. Revalida en segundo plano SOLO si el cache dejó de estar fresco. El
-    //    cajero entra/sale del menú decenas de veces por turno; sin este gate
-    //    cada entrada disparaba 2 llamadas a Railway aunque el menú no cambie.
-    const isFresh =
-      !!cached?.fetchedAt && Date.now() - cached.fetchedAt < CATALOG_TTL_MS;
-    if (!isFresh) {
-      // Diferido a microtask (igual que el pintado de cache): evita disparar el
-      // set-state de loadCatalog de forma síncrona dentro del effect.
-      queueMicrotask(() => {
-        if (cancelled) return;
+      const isFresh =
+        !!cached?.fetchedAt && Date.now() - cached.fetchedAt < CATALOG_TTL_MS;
+      if (!isFresh) {
         void loadCatalog();
-      });
-    }
+      }
+    });
 
     return () => {
       cancelled = true;

@@ -15,38 +15,43 @@ function fmtTime(iso: string) {
 }
 
 export default function WaiterMyTablesPage() {
-  const [tables, setTables] = useState<TableRow[]>(() => {
-    const cached = readTablesCache();
-    return cached?.tables || [];
-  });
-  const [loading, setLoading] = useState(() => {
-    const cached = readTablesCache();
-    return !cached || cached.tables.length === 0;
-  });
+  const [tables, setTables] = useState<TableRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    api.get<TableRow[]>("/api/tables")
-      .then(({ data }) => {
-        if (!mounted) return;
-        const fetched = Array.isArray(data) ? data : [];
-        setTables(fetched);
-        const cached = readTablesCache();
-        writeTablesCache(fetched, cached?.zones || []);
-        setError(null);
-      })
-      .catch((e) => {
-        if (!mounted) return;
-        const cached = readTablesCache();
-        if (cached && cached.tables.length > 0) {
-          setTables(cached.tables);
+    
+    // Load cache first
+    readTablesCache().then(cached => {
+      if (!mounted) return;
+      if (cached) {
+        setTables(cached.tables);
+        if (cached.tables.length > 0) setLoading(false);
+      }
+      
+      // Then fetch from network
+      api.get<TableRow[]>("/api/tables")
+        .then(async ({ data }) => {
+          if (!mounted) return;
+          const fetched = Array.isArray(data) ? data : [];
+          setTables(fetched);
+          const currentCache = await readTablesCache();
+          await writeTablesCache(fetched, currentCache?.zones || []);
           setError(null);
-        } else {
-          setError(e?.response?.data?.error || "Error al cargar mesas");
-        }
-      })
-      .finally(() => mounted && setLoading(false));
+        })
+        .catch(async (e) => {
+          if (!mounted) return;
+          const currentCache = await readTablesCache();
+          if (currentCache && currentCache.tables.length > 0) {
+            setTables(currentCache.tables);
+            setError(null);
+          } else {
+            setError(e?.response?.data?.error || "Error al cargar mesas");
+          }
+        })
+        .finally(() => mounted && setLoading(false));
+    });
     return () => { mounted = false; };
   }, []);
 

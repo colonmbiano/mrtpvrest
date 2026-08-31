@@ -83,18 +83,9 @@ const STATUS_META: Record<TableStatus, { label: string; color: string; bg: strin
 };
 
 export default function MesasAdminPage() {
-  const [tables, setTables]   = useState<TableRow[]>(() => {
-    const cached = readTablesCache();
-    return (cached?.tables as unknown as TableRow[]) || [];
-  });
-  const [zones, setZones]     = useState<Zone[]>(() => {
-    const cached = readTablesCache();
-    return (cached?.zones as unknown as Zone[]) || [];
-  });
-  const [loading, setLoading] = useState(() => {
-    const cached = readTablesCache();
-    return !cached || cached.tables.length === 0;
-  });
+  const [tables, setTables]   = useState<TableRow[]>([]);
+  const [zones, setZones]     = useState<Zone[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Modal de mesa
   const [form, setForm]       = useState<FormState>(EMPTY_FORM);
@@ -112,10 +103,22 @@ export default function MesasAdminPage() {
   const [zonePickerId, setZonePickerId] = useState<string | null>(null);
   const [busyId, setBusyId]   = useState<string | null>(null);
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { 
+    let mounted = true;
+    readTablesCache().then(cached => {
+      if (!mounted) return;
+      if (cached) {
+        setTables(cached.tables as any);
+        setZones(cached.zones as any);
+        if (cached.tables.length > 0) setLoading(false);
+      }
+      fetchAll(!!cached);
+    });
+    return () => { mounted = false; };
+  }, []);
 
-  async function fetchAll() {
-    setLoading(true);
+  async function fetchAll(hasCache = false) {
+    if (!hasCache) setLoading(true);
     try {
       const [t, z] = await Promise.all([
         api.get<TableRow[]>("/api/tables"),
@@ -125,14 +128,14 @@ export default function MesasAdminPage() {
       const fetchedZones = Array.isArray(z.data) ? z.data : [];
       setTables(fetchedTables);
       setZones(fetchedZones);
-      writeTablesCache(fetchedTables as any, fetchedZones as any);
+      await writeTablesCache(fetchedTables as any, fetchedZones as any);
     } catch (err) {
       console.error(err);
-      const cached = readTablesCache();
+      const cached = await readTablesCache();
       if (cached && cached.tables.length > 0) {
         setTables(cached.tables as any);
         setZones(cached.zones as any);
-      } else {
+      } else if (!hasCache) {
         toast.error("No pudimos cargar las mesas");
       }
     } finally {
