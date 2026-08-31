@@ -52,7 +52,7 @@ export interface TPVEmployee {
   id: string;
   name: string;
   role: UserRole;
-  pin?: string; // SHA256 hash (only for offline cache)
+  offlinePin?: string; // SHA256 hash (only for offline cache)
   isActive: boolean;
   permissions: Permission[];
   locationId?: string;
@@ -155,7 +155,7 @@ export const useAuthStore = create<AuthState>()(
           // dependa de Internet. Si hay red, el JWT se renueva en segundo plano.
           const pinHash = await hashPin(pin);
           const localMatch = state.employees.find(
-            (employee) => employee.pin === pinHash && employee.isActive,
+            (employee) => employee.offlinePin === pinHash && employee.isActive,
           );
           const isOnline = typeof navigator === "undefined" || navigator.onLine;
 

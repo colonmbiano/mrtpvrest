@@ -41,7 +41,7 @@ import {
 
 import SidebarTicket from "@/components/pos/SidebarTicket";
 import TopActionsDropdown from "@/components/pos/TopActionsDropdown";
-import { CATALOG_REFRESH_EVENT } from "./page";
+import { CATALOG_REFRESH_EVENT } from "@/lib/catalog-helpers";
 import CatalogSettingsSheet from "@/components/modals/CatalogSettingsSheet";
 import VoiceOrderDictation from "@/components/pos/VoiceOrderDictation";
 import { useUIStore } from "@/store/useUIStore";
