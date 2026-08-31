@@ -34,8 +34,7 @@ import {
   Zap,
 } from "lucide-react";
 import { hapticMedium } from "@/lib/haptics";
-import type { OrderType } from "@/components/tpv/TicketPanel";
-import { ORDER_TYPE_ACTION, ORDER_TYPE_BADGE, ORDER_TYPE_SHORT } from "@/lib/orderTypes";
+import { ORDER_TYPE_ACTION, ORDER_TYPE_BADGE, ORDER_TYPE_SHORT, type OrderTypeId as OrderType } from "@/lib/orderTypes";
 import UserBadge from "@/components/UserBadge";
 
 export type ExtendedOrderType = OrderType;

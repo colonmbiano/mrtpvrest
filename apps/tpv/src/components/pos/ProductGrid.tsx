@@ -1,189 +1,150 @@
-"use client";
-import React, {
-  memo,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import ProductCard from "@/components/pos/ProductCard";
-import type { Product } from "@/store/ticketStore";
-import type { CatalogDensity } from "@/store/catalogPrefsStore";
+import React, { memo, useCallback } from "react";
+import { Search, Plus } from "lucide-react";
+import { type CatalogDensity } from "@/store/catalogPrefsStore";
+import { type Product, useTicketStore } from "@/store/ticketStore";
+import { itemsLabel, sameCategory, categoryTone } from "@/lib/catalog-helpers";
 
-interface Props {
-  products: Product[];
-  density: CatalogDensity;
-  onProductClick: (p: Product) => void;
-  onProductLongPress?: (p: Product) => void;
-  emptyLabel?: string;
-}
-
-const COLS_BY_DENSITY: Record<
-  CatalogDensity,
-  { base: number; sm: number; md: number; lg: number; xl: number }
-> = {
-  3: { base: 2, sm: 3, md: 3, lg: 3, xl: 3 },
-  4: { base: 2, sm: 3, md: 4, lg: 4, xl: 4 },
-  6: { base: 3, sm: 4, md: 5, lg: 6, xl: 6 },
-};
-
-const BP = { sm: 640, md: 768, lg: 1024, xl: 1280 } as const;
-
-function colsForWidth(density: CatalogDensity, width: number): number {
-  const c = COLS_BY_DENSITY[density];
-  if (width >= BP.xl) return c.xl;
-  if (width >= BP.lg) return c.lg;
-  if (width >= BP.md) return c.md;
-  if (width >= BP.sm) return c.sm;
-  return c.base;
-}
-
-const ROW_GAP = 12;
-const ROW_HEIGHT = 140;
-const OVERSCAN = 4;
-
-function ProductGridBase({
+export function ProductGrid({
   products,
+  onPick,
+  onLongPress,
   density,
-  onProductClick,
-  onProductLongPress,
-  emptyLabel = "Sin productos disponibles",
-}: Props) {
-  const parentRef = useRef<HTMLDivElement | null>(null);
-  const [cols, setCols] = useState<number>(() => COLS_BY_DENSITY[density].md);
-
-  useLayoutEffect(() => {
-    const el = parentRef.current;
-    if (!el) return;
-    const update = () => {
-      const w = el.clientWidth;
-      if (w > 0) setCols(colsForWidth(density, w));
-    };
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [density]);
-
-  const rows = useMemo(() => {
-    const out: Product[][] = [];
-    for (let i = 0; i < products.length; i += cols) {
-      out.push(products.slice(i, i + cols));
-    }
-    return out;
-  }, [products, cols]);
-
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT + ROW_GAP,
-    overscan: OVERSCAN,
-    getItemKey: (idx) => rows[idx]?.[0]?.id ?? `row-${idx}`,
-  });
-
-  const clickHandlers = useRef(new Map<string, () => void>());
-  const longHandlers = useRef(new Map<string, () => void>());
-
-  useEffect(() => {
-    clickHandlers.current.clear();
-  }, [onProductClick]);
-  useEffect(() => {
-    longHandlers.current.clear();
-  }, [onProductLongPress]);
-
-  const getClick = useCallback(
-    (p: Product) => {
-      const cached = clickHandlers.current.get(p.id);
-      if (cached) return cached;
-      const h = () => onProductClick(p);
-      clickHandlers.current.set(p.id, h);
-      return h;
-    },
-    [onProductClick],
-  );
-
-  const getLong = useCallback(
-    (p: Product) => {
-      if (!onProductLongPress) return undefined;
-      const cached = longHandlers.current.get(p.id);
-      if (cached) return cached;
-      const h = () => onProductLongPress(p);
-      longHandlers.current.set(p.id, h);
-      return h;
-    },
-    [onProductLongPress],
-  );
-
-  if (products.length === 0) {
-    return (
-      <div className="h-full flex items-center justify-center p-6">
-        <p className="text-stone-500 font-bold uppercase tracking-[0.15em] text-[11px]">
-          {emptyLabel}
-        </p>
-      </div>
-    );
-  }
-
-  const virtualRows = virtualizer.getVirtualItems();
-  const totalHeight = virtualizer.getTotalSize();
+}: {
+  products: Product[];
+  onPick: (product: Product) => void;
+  onLongPress: (product: Product) => void;
+  density: CatalogDensity;
+}) {
+  // Columnas fluidas: el nº de tarjetas se calcula del ANCHO REAL disponible
+  // (catálogo junto al sidebar), no de breakpoints de viewport. La density
+  // (S/M/L) controla el ancho mínimo de tarjeta → más densidad = más columnas.
+  const minColWidth = density === 6 ? 120 : density === 3 ? 180 : 140;
+  const rowHeight = density === 6 ? 108 : density === 3 ? 144 : 124;
 
   return (
-    <div
-      ref={parentRef}
-      className="h-full overflow-y-auto p-3 sm:p-4 pb-24 lg:pb-4 scrollbar-hide"
-      style={{
-        contain: "strict",
-        WebkitOverflowScrolling: "touch",
-        overscrollBehavior: "contain",
-      }}
-    >
-      <div style={{ height: totalHeight, width: "100%", position: "relative" }}>
-        {virtualRows.map((vr) => {
-          const row = rows[vr.index];
-          if (!row) return null;
-          return (
-            <div
-              key={vr.key}
-              data-index={vr.index}
-              ref={virtualizer.measureElement}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                transform: `translateY(${vr.start}px)`,
-                paddingBottom: ROW_GAP,
-                display: "grid",
-                gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-                gap: ROW_GAP,
-              }}
-            >
-              {row.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  id={product.id}
-                  name={product.name}
-                  price={product.price}
-                  imageUrl={product.imageUrl}
-                  promoPrice={product.promoPrice}
-                  isAvailable={product.isAvailable}
-                  isFavorite={product.isFavorite}
-                  isPopular={product.isPopular}
-                  onClick={getClick(product)}
-                  onLongPress={getLong(product)}
-                />
-              ))}
-            </div>
-          );
-        })}
+    <div className="h-full overflow-y-auto overscroll-contain scrollbar-hide">
+      <div
+        className="grid gap-2.5 pb-4"
+        style={{
+          gridTemplateColumns: `repeat(auto-fill, minmax(${minColWidth}px, 1fr))`,
+          gridAutoRows: `${rowHeight}px`,
+        }}
+      >
+        {products.map((product) => (
+          <ProductTile
+            key={product.id}
+            product={product}
+            onPick={() => onPick(product)}
+            onLongPress={() => onLongPress(product)}
+          />
+        ))}
       </div>
     </div>
   );
 }
 
-const ProductGrid = memo(ProductGridBase);
-ProductGrid.displayName = "ProductGrid";
-export default ProductGrid;
+export function ProductTile({
+  product,
+  onPick,
+  onLongPress,
+}: {
+  product: Product;
+  onPick: () => void;
+  onLongPress: () => void;
+}) {
+  const quantity = useTicketStore((s) => s.quantitiesByProduct?.[product.id] ?? 0);
+  const tone = categoryTone(product.category || product.name);
+  const palette = {
+    food: {
+      card: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
+      accent: "bg-orange-500",
+      button: "bg-orange-500 text-black",
+    },
+    wings: {
+      card: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
+      accent: "bg-red-500",
+      button: "bg-red-500 text-white",
+    },
+    snack: {
+      card: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
+      accent: "bg-amber-400",
+      button: "bg-amber-400 text-black",
+    },
+    drink: {
+      card: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
+      accent: "bg-blue-500",
+      button: "bg-blue-500 text-white",
+    },
+    neutral: {
+      card: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
+      accent: "bg-emerald-500",
+      button: "bg-emerald-500 text-black",
+    },
+  }[tone];
+  const price = Number(product.promoPrice || product.price || 0);
+  const isDisabled = product.isAvailable === false;
+
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onLongPress();
+      }}
+      disabled={isDisabled}
+      className={`product-card relative flex h-full flex-col overflow-hidden rounded-lg border-2 p-3 text-left shadow-sm ${palette.card} disabled:opacity-45 disabled:grayscale focus:outline-none focus:ring-2 focus:ring-iris-500`}
+      style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+    >
+      <span aria-hidden className={`absolute inset-x-0 top-0 h-1.5 ${palette.accent}`} />
+      {quantity > 0 && (
+        <span className="absolute right-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-iris-500 px-2 text-[12px] font-semibold text-iris-fg">
+          x{quantity}
+        </span>
+      )}
+      {product.isAvailable === false && (
+        <span className="mb-2 inline-flex self-start rounded-md bg-surf-3 px-2 py-1 text-[10px] font-semibold uppercase text-tx-sec">
+          Agotado
+        </span>
+      )}
+      <span className="line-clamp-2 pr-8 pt-1 text-[16px] font-black leading-tight">
+        {product.name}
+      </span>
+      <span className="mt-auto pt-2 text-[25px] font-black tabular-nums leading-none">
+        ${price.toFixed(0)}
+      </span>
+      <span className={`absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-md ${palette.button}`}>
+        <Plus size={22} strokeWidth={3} />
+      </span>
+    </button>
+  );
+}
+
+type ConfiguratorInitial = {
+  variantId?: string | null;
+  selectedModifierIds?: string[];
+  quantity?: number;
+  notes?: string;
+};
+
+export function ProductSkeleton() {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+      {Array.from({ length: 12 }).map((_, index) => (
+        <div key={index} className="h-[132px] rounded-lg border-2 border-bd bg-surf-1 animate-pulse" />
+      ))}
+    </div>
+  );
+}
+
+export function EmptyState({ query }: { query: string }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-bd bg-surf-1 p-6 text-center">
+      <Search size={34} className="text-tx-mut" />
+      <p className="text-[16px] font-semibold text-tx-sec">
+        {query.trim() ? "Sin resultados para la busqueda" : "Sin productos en esta categoria"}
+      </p>
+    </div>
+  );
+}
+
