@@ -75,6 +75,9 @@ interface TicketConfig {
   kitchenShowOrderNumber: boolean;
   kitchenShowModifiers: boolean;
   kitchenShowNotes: boolean;
+  kitchenInvertModifiers: boolean;
+  kitchenModifiersFontSize: "normal" | "large";
+  kitchenItemSeparator: boolean;
   kitchenShowItemDescription: boolean;
   kitchenGroupBySeat: boolean;
   kitchenSeparateByGroup: boolean;
@@ -104,6 +107,9 @@ const EMPTY: TicketConfig = {
   kitchenShowCustomer: true, kitchenShowTable: true, kitchenShowType: true, kitchenShowTime: true,
   kitchenShowOrderNumber: true, kitchenShowModifiers: true, kitchenShowNotes: true,
   kitchenShowItemDescription: false,
+  kitchenInvertModifiers: false,
+  kitchenModifiersFontSize: "normal",
+  kitchenItemSeparator: false,
   kitchenGroupBySeat: true, kitchenSeparateByGroup: false,
   kitchenFontSize: "large", kitchenFontFamily: "monospace",
   kitchenLineSpacing: "normal", kitchenLineWeight: "bold",
@@ -343,6 +349,9 @@ export default function TicketFormatTab() {
               <Toggle label="Modificadores (+ extra, sin…)" checked={cfg.kitchenShowModifiers} onChange={(v) => setCfg({ ...cfg, kitchenShowModifiers: v })} />
               <Toggle label="Notas del producto" checked={cfg.kitchenShowNotes} onChange={(v) => setCfg({ ...cfg, kitchenShowNotes: v })} />
               <Toggle label="Contenido de combos (desglose)" checked={cfg.kitchenShowItemDescription} onChange={(v) => setCfg({ ...cfg, kitchenShowItemDescription: v })} />
+              <Toggle label="Modificadores resaltados (Fondo negro)" checked={cfg.kitchenInvertModifiers} onChange={(v) => setCfg({ ...cfg, kitchenInvertModifiers: v })} />
+              <Toggle label="Modificadores en letra grande" checked={cfg.kitchenModifiersFontSize === "large"} onChange={(v) => setCfg({ ...cfg, kitchenModifiersFontSize: v ? "large" : "normal" })} />
+              <Toggle label="Separador de platillos (---)" checked={cfg.kitchenItemSeparator} onChange={(v) => setCfg({ ...cfg, kitchenItemSeparator: v })} />
               <Toggle label="Agrupar por comensal" checked={cfg.kitchenGroupBySeat} onChange={(v) => setCfg({ ...cfg, kitchenGroupBySeat: v })} />
               <Toggle label="Ticket separado por estación" checked={cfg.kitchenSeparateByGroup} onChange={(v) => setCfg({ ...cfg, kitchenSeparateByGroup: v })} />
             </div>

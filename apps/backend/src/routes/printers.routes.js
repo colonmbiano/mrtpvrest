@@ -19,7 +19,7 @@ const TICKET_CONFIG_FIELDS = [
   'tipSuggestions', 'kitchenHeader', 'kitchenLayout', 'adminPin', 'kitchenShowCustomer',
   'kitchenShowTable', 'kitchenShowType', 'kitchenShowTime', 'kitchenShowOrderNumber',
   'kitchenShowModifiers', 'kitchenShowNotes', 'kitchenShowItemDescription',
-  'kitchenGroupBySeat', 'kitchenFontSize', 'kitchenFooter',
+  'kitchenGroupBySeat', 'kitchenFontSize', 'kitchenFooter', 'kitchenInvertModifiers', 'kitchenModifiersFontSize', 'kitchenItemSeparator',
 ];
 
 // ── Gate común ───────────────────────────────────────────────────────────────
@@ -260,3 +260,4 @@ router.post('/:id/kick-drawer', requireAdmin, async (req, res) => {
 });
 
 module.exports = router;
+

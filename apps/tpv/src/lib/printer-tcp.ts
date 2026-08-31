@@ -595,6 +595,9 @@ export interface KitchenTicketConfig {
   paperWidth?: string | null;
   // Tamaño del nombre del ticket (Mesa/cliente) — elemento principal.
   ticketNameSize?: "normal" | "large" | "xlarge";
+    kitchenInvertModifiers?: boolean;
+    kitchenModifiersFontSize?: "normal" | "large";
+    kitchenItemSeparator?: boolean;
 }
 
 export interface KitchenTicketInput {
@@ -873,6 +876,9 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     lineWeight:       input.config?.lineWeight       ?? "bold",
     paperWidth:       input.config?.paperWidth       ?? "80mm",
     ticketNameSize:   input.config?.ticketNameSize   ?? "large",
+      kitchenInvertModifiers: input.config?.kitchenInvertModifiers ?? false,
+      kitchenModifiersFontSize: input.config?.kitchenModifiersFontSize ?? "normal",
+      kitchenItemSeparator: input.config?.kitchenItemSeparator ?? false,
   };
 
   // Resolución del tamaño de fuente para items. "normal" = ancho normal,
@@ -2159,3 +2165,5 @@ export async function printEqualSplitReceipts(
 
   return { ok: okTotal, failed: failedAll, tickets: printed };
 }
+
+

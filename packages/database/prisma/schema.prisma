@@ -1610,6 +1610,11 @@ model TicketConfig {
   // Tamaño del NOMBRE del ticket (Mesa N / cliente) en la comanda — se imprime
   // arriba y prominente para que cocina identifique la cuenta de un vistazo.
   kitchenTicketNameSize  String  @default("large")     // "normal" | "large" | "xlarge"
+
+  // --- Nuevas opciones de control visual en comanda ---
+  kitchenInvertModifiers Boolean @default(false)
+  kitchenModifiersFontSize String @default("normal") // "normal" | "large"
+  kitchenItemSeparator Boolean @default(false)
   // Pie opcional ("Verificar antes de servir", número de turno, etc.).
   kitchenFooter          String  @default("")
 
@@ -4602,3 +4607,4 @@ model AdminDailyReport {
   @@index([createdAt(sort: Desc)], map: "idx_adr_date")
   @@map("admin_daily_reports")
 }
+
