@@ -172,6 +172,9 @@ type TicketConfigDTO = {
   kitchenShowCustomer?: boolean;
   kitchenShowModifiers?: boolean;
   kitchenShowNotes?: boolean;
+  kitchenInvertModifiers?: boolean;
+  kitchenModifiersFontSize?: "normal" | "large";
+  kitchenItemSeparator?: boolean;
   kitchenShowItemDescription?: boolean;
   kitchenGroupBySeat?: boolean;
   kitchenSeparateByGroup?: boolean;
@@ -286,6 +289,9 @@ function mapToKitchenConfig(dto: TicketConfigDTO | null): KitchenTicketConfig | 
     showCustomerName: dto.kitchenShowCustomer,
     showModifiers:    dto.kitchenShowModifiers,
     showNotes:        dto.kitchenShowNotes,
+    kitchenInvertModifiers: dto.kitchenInvertModifiers,
+    kitchenModifiersFontSize: dto.kitchenModifiersFontSize,
+    kitchenItemSeparator: dto.kitchenItemSeparator,
     showItemDescription: dto.kitchenShowItemDescription,
     groupBySeat:      dto.kitchenGroupBySeat,
     separateByGroup:  dto.kitchenSeparateByGroup,

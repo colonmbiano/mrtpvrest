@@ -5,7 +5,7 @@
  * Ejecutar: pnpm --filter @mrtpvrest/tpv test
  */
 import { apiOrQueue, shiftActionQueued, syncOfflineQueue } from "@/lib/offline";
-import useOfflineStore from "@/store/useOfflineStore";
+import useOfflineStore, { mergeOfflinePersistedStates } from "@/store/useOfflineStore";
 
 // Mock del axios singleton.
 jest.mock("@/lib/api", () => ({
@@ -93,6 +93,40 @@ describe("apiOrQueue — apertura de turno offline", () => {
 
     const cfg = mockApi.post.mock.calls[0]![2] as { headers?: Record<string, string> };
     expect(cfg?.headers?.["Idempotency-Key"]).toBeTruthy();
+  });
+});
+
+describe("migración de la cola localStorage → IndexedDB", () => {
+  it("fusiona ambas colas, deduplica y conserva la versión más reciente", () => {
+    const legacy = JSON.stringify({
+      state: {
+        queue: [
+          { id: "legacy", type: "order", timestamp: 1, synced: false, data: {} },
+          { id: "shared", type: "order", timestamp: 2, synced: false, data: { source: "legacy" } },
+        ],
+        lastSync: 10,
+      },
+      version: 0,
+    });
+    const current = JSON.stringify({
+      state: {
+        queue: [
+          { id: "shared", type: "order", timestamp: 2, synced: true, data: { source: "idb" } },
+          { id: "current", type: "payment", timestamp: 3, synced: false, data: {} },
+        ],
+        lastSync: 20,
+      },
+      version: 0,
+    });
+
+    const merged = JSON.parse(mergeOfflinePersistedStates(current, legacy)!);
+    expect(merged.state.queue.map((tx: { id: string }) => tx.id)).toEqual([
+      "legacy",
+      "shared",
+      "current",
+    ]);
+    expect(merged.state.queue[1]).toMatchObject({ synced: true, data: { source: "idb" } });
+    expect(merged.state.lastSync).toBe(20);
   });
 });
 

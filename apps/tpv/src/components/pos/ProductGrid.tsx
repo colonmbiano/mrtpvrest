@@ -1,8 +1,8 @@
-import React, { memo, useCallback } from "react";
+import React from "react";
 import { Search, Plus } from "lucide-react";
 import { type CatalogDensity } from "@/store/catalogPrefsStore";
 import { type Product, useTicketStore } from "@/store/ticketStore";
-import { itemsLabel, sameCategory, categoryTone } from "@/lib/catalog-helpers";
+import { categoryTone } from "@/lib/catalog-helpers";
 
 export function ProductGrid({
   products,
@@ -119,13 +119,6 @@ export function ProductTile({
     </button>
   );
 }
-
-type ConfiguratorInitial = {
-  variantId?: string | null;
-  selectedModifierIds?: string[];
-  quantity?: number;
-  notes?: string;
-};
 
 export function ProductSkeleton() {
   return (

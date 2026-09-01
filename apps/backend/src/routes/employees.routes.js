@@ -187,7 +187,7 @@ router.get('/sync', authenticate, requireTenantAccess, async (req, res) => {
       id: e.id,
       name: e.name,
       role: e.role,
-      pin: e.offlinePin,
+      offlinePin: e.offlinePin,
       isActive: e.isActive,
       permissions: mapPermissions(e),
       lastSync: Date.now()

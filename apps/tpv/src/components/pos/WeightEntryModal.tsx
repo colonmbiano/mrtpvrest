@@ -1,5 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
-import { X, Delete, Check } from "lucide-react";
+import React, { useState } from "react";
 import { type Product } from "@/store/ticketStore";
 
 export function WeightEntryModal({

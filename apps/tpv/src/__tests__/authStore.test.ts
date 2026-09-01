@@ -266,6 +266,27 @@ describe("useAuthStore (offline-first)", () => {
   });
 
   describe("loginWithPin (offline-first)", () => {
+    it("normaliza el campo pin legacy del endpoint de sincronización", () => {
+      const { result } = renderHook(() => useAuthStore());
+
+      act(() => {
+        result.current.setEmployees([{
+          id: "emp-legacy",
+          name: "Legacy",
+          role: "CASHIER",
+          pin: "hash-1234",
+          isActive: true,
+          permissions: [],
+        }]);
+      });
+
+      expect(result.current.employees[0]).toMatchObject({
+        id: "emp-legacy",
+        offlinePin: "hash-1234",
+      });
+      expect(result.current.employees[0]).not.toHaveProperty("pin");
+    });
+
     it("debe autenticar offline si no hay red y el PIN match en cache local (sin tocar API)", async () => {
       Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
       const localEmployee: TPVEmployee = {

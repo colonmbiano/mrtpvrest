@@ -595,9 +595,9 @@ export interface KitchenTicketConfig {
   paperWidth?: string | null;
   // Tamaño del nombre del ticket (Mesa/cliente) — elemento principal.
   ticketNameSize?: "normal" | "large" | "xlarge";
-    kitchenInvertModifiers?: boolean;
-    kitchenModifiersFontSize?: "normal" | "large";
-    kitchenItemSeparator?: boolean;
+  kitchenInvertModifiers?: boolean;
+  kitchenModifiersFontSize?: "normal" | "large";
+  kitchenItemSeparator?: boolean;
 }
 
 export interface KitchenTicketInput {
@@ -876,9 +876,9 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     lineWeight:       input.config?.lineWeight       ?? "bold",
     paperWidth:       input.config?.paperWidth       ?? "80mm",
     ticketNameSize:   input.config?.ticketNameSize   ?? "large",
-      kitchenInvertModifiers: input.config?.kitchenInvertModifiers ?? false,
-      kitchenModifiersFontSize: input.config?.kitchenModifiersFontSize ?? "normal",
-      kitchenItemSeparator: input.config?.kitchenItemSeparator ?? false,
+    kitchenInvertModifiers: input.config?.kitchenInvertModifiers ?? false,
+    kitchenModifiersFontSize: input.config?.kitchenModifiersFontSize ?? "normal",
+    kitchenItemSeparator: input.config?.kitchenItemSeparator ?? false,
   };
 
   // Resolución del tamaño de fuente para items. "normal" = ancho normal,
@@ -888,6 +888,10 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     cfg.fontSize === "normal" ? "" :
     cfg.fontSize === "xlarge" ? CMD.TRIPLE_ON : CMD.DOUBLE_ON;
   const itemSizeOff = cfg.fontSize === "normal" ? "" : CMD.DOUBLE_OFF;
+  const modifierSizeOn =
+    cfg.kitchenModifiersFontSize === "large" ? CMD.DOUBLE_ON : "";
+  const modifierSizeOff =
+    cfg.kitchenModifiersFontSize === "large" ? CMD.DOUBLE_OFF : "";
 
   // Peso de las líneas. light = sin forzar negrita; bold = negrita + doble
   // golpe (más negras). El tamaño de los items se mantiene aparte (itemSize).
@@ -1047,11 +1051,10 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
         const isRemoval = /^sin\s/i.test(m.name);
         const nameText = isRemoval ? m.name.replace(/^sin\s/i, "SIN ") : (m.priceAdd === 0 || m.isKitchenNote ? m.name : `+ ${m.name}`);
         
-        if (m.isKitchenNote || m.priceAdd === 0) {
-          s += `  ` + CMD.INVERT_ON + ` ${nameText} ` + CMD.INVERT_OFF + `\n`;
-        } else {
-          s += `  ${nameText}\n`;
-        }
+        const modifierText = cfg.kitchenInvertModifiers
+          ? CMD.INVERT_ON + ` ${nameText} ` + CMD.INVERT_OFF
+          : nameText;
+        s += `  ${modifierSizeOn}${modifierText}${modifierSizeOff}\n`;
       }
       s += itemSizeOn;
     }
@@ -1073,15 +1076,20 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     if (seatBuckets.has("shared")) orderedKeys.push("shared");
 
     orderedKeys.forEach((key, idx) => {
-      if (idx > 0) d += "\n"; // separación visual entre comensales
+      if (idx > 0) {
+        d += "\n"; // separación visual entre comensales
+        if (cfg.kitchenItemSeparator) d += CMD.LINE;
+      }
       const header = key === "shared" ? "COMPARTIDO" : `COMENSAL ${key}`;
       d += CMD.BOLD_ON + header + "\n" + CMD.BOLD_OFF;
-      for (const item of seatBuckets.get(key) ?? []) {
+      for (const [itemIndex, item] of (seatBuckets.get(key) ?? []).entries()) {
+        if (cfg.kitchenItemSeparator && itemIndex > 0) d += CMD.LINE;
         d += renderItem(item);
       }
     });
   } else {
-    for (const item of input.items) {
+    for (const [itemIndex, item] of input.items.entries()) {
+      if (cfg.kitchenItemSeparator && itemIndex > 0) d += CMD.LINE;
       d += renderItem(item);
     }
   }

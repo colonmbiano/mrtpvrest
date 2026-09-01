@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Plus, Minus, ChevronLeft, X, Check, Delete } from "lucide-react";
-import { type Product, type ModifierGroup, type ModifierSelection, type CartItem, type MenuItemVariant, type Modifier } from "@/store/ticketStore";
+import { type Product, type ModifierGroup, type ModifierSelection, type MenuItemVariant, type Modifier } from "@/store/ticketStore";
 import { computeUnitExtra, buildOptionGroups, getValidationError, flattenSelections } from "@/lib/modifiers";
 import { formatModifierGroupName } from "@/lib/formatDisplayName";
 

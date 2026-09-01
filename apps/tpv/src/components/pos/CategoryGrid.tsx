@@ -1,5 +1,4 @@
-import React, { memo } from "react";
-import { ChevronLeft } from "lucide-react";
+import React from "react";
 import { categoryTone, itemsLabel } from "@/lib/catalog-helpers";
 import { type CatalogDensity } from "@/store/catalogPrefsStore";
 

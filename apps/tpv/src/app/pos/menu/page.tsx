@@ -1,19 +1,15 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { get, set } from 'idb-keyval';
-import { ChevronLeft, Search, X, Plus, Minus, Check, Delete } from "lucide-react";
 import ItemOptionsSheet from "@/components/pos/ItemOptionsSheet";
 import api from "@/lib/api";
-import { formatModifierGroupName } from "@/lib/formatDisplayName";
-import { useCatalogPrefs, type CatalogDensity } from "@/store/catalogPrefsStore";
+import { useCatalogPrefs } from "@/store/catalogPrefsStore";
 import { hapticLight } from "@/lib/haptics";
 import { isPromoActiveNow } from "@/lib/promo-window";
 import {
   useTicketStore,
   type CartItem,
   type MenuItemVariant,
-  type Modifier,
-  type ModifierGroup,
   type ModifierSelection,
   type Product,
 } from "@/store/ticketStore";
@@ -26,10 +22,6 @@ import { WeightEntryModal } from "@/components/pos/WeightEntryModal";
 import { QuickModifierPanel, type ConfiguratorInitial } from "@/components/pos/QuickModifierPanel";
 
 import {
-  buildOptionGroups,
-  computeUnitExtra,
-  flattenSelections,
-  getValidationError,
   hasQuickOptions,
 } from "@/lib/modifiers";
 

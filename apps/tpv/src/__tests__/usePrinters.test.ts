@@ -5,7 +5,7 @@
  * Ejecutar: pnpm --filter @mrtpvrest/tpv test
  */
 import { renderHook, waitFor } from "@testing-library/react";
-import { usePrinters } from "@/hooks/usePrinters";
+import { useKitchenConfig, usePrinters } from "@/hooks/usePrinters";
 
 jest.mock("@/lib/api", () => ({
   __esModule: true,
@@ -73,5 +73,26 @@ describe("usePrinters — cache local-first", () => {
     await waitFor(() => expect(result.current.loaded).toBe(true));
 
     expect(result.current.printers).toHaveLength(0);
+  });
+});
+
+describe("useKitchenConfig — opciones de render", () => {
+  it("mapea las opciones nuevas de modificadores y separadores", async () => {
+    mockApi.get.mockResolvedValueOnce({
+      data: {
+        kitchenInvertModifiers: true,
+        kitchenModifiersFontSize: "large",
+        kitchenItemSeparator: true,
+      },
+    });
+
+    const { result } = renderHook(() => useKitchenConfig());
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    expect(result.current.kitchenConfig).toMatchObject({
+      kitchenInvertModifiers: true,
+      kitchenModifiersFontSize: "large",
+      kitchenItemSeparator: true,
+    });
   });
 });

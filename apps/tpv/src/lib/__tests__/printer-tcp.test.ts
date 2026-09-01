@@ -31,6 +31,7 @@ import {
   sanitizeIp,
   sendRawTcp,
   buildShiftCloseTicket,
+  CMD,
   payloadToBytes,
   type ReceiptInput,
   type PrinterRecord,
@@ -322,6 +323,51 @@ describe("comanda :: desglose de combo/promo (kitchenDetail)", () => {
     ).toBeNull();
     expect(comboKitchenDetail({ isPromo: true, description: "  " })).toBeNull();
     expect(comboKitchenDetail(null)).toBeNull();
+  });
+});
+
+describe("comanda :: formato de modificadores y platillos", () => {
+  const input = {
+    items: [
+      {
+        name: "Hamburguesa",
+        quantity: 1,
+        price: 100,
+        modifiers: [{ name: "Sin cebolla", priceAdd: 0 }],
+      },
+      { name: "Papas", quantity: 1, price: 40 },
+    ],
+  };
+
+  it("sólo invierte modificadores cuando el toggle está activo", () => {
+    const normal = buildKitchenTicket(input);
+    const inverted = buildKitchenTicket({
+      ...input,
+      config: { kitchenInvertModifiers: true },
+    });
+
+    expect(normal).not.toContain(CMD.INVERT_ON);
+    expect(inverted).toContain(CMD.INVERT_ON + " SIN cebolla ");
+  });
+
+  it("aplica letra grande a modificadores", () => {
+    const out = buildKitchenTicket({
+      ...input,
+      config: { kitchenModifiersFontSize: "large" },
+    });
+
+    expect(out).toContain(CMD.DOUBLE_ON + "SIN cebolla" + CMD.DOUBLE_OFF);
+  });
+
+  it("agrega un separador entre platillos", () => {
+    const withoutSeparator = buildKitchenTicket(input);
+    const withSeparator = buildKitchenTicket({
+      ...input,
+      config: { kitchenItemSeparator: true },
+    });
+    const countLines = (value: string) => value.split(CMD.LINE).length - 1;
+
+    expect(countLines(withSeparator)).toBe(countLines(withoutSeparator) + 1);
   });
 });
 

@@ -88,7 +88,7 @@ interface AuthState {
     pin: string
   ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
-  setEmployees: (employees: TPVEmployee[]) => void;
+  setEmployees: (employees: Array<TPVEmployee & { pin?: string }>) => void;
   hasPermission: (permission: Permission) => boolean;
   isLocked: () => boolean;
   getRemainingLockSeconds: () => number;
@@ -335,7 +335,17 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setEmployees: (employees) => {
-        set({ employees });
+        set({
+          employees: employees.map((source) => {
+            // Compatibilidad con payloads cacheados por versiones anteriores
+            // de /employees/sync, que llamaban `pin` al hash SHA-256.
+            const { pin, ...employee } = source;
+            return {
+              ...employee,
+              offlinePin: employee.offlinePin ?? pin,
+            };
+          }),
+        });
       },
 
       setActiveShift: (shift) => set({ activeShift: shift }),

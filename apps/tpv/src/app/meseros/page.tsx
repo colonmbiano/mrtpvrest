@@ -11,8 +11,6 @@ import {
   writeTablesCache,
   type TableRow,
   type Zone,
-  type ZoneRef,
-  type ActiveOrderLite,
 } from "@/lib/tables-cache";
 
 const NO_ZONE = "__none__";

@@ -13,7 +13,7 @@ module.exports = createJestConfig({
   // Regex en vez de glob: los globs con <rootDir> se rompen cuando el repo
   // vive bajo un directorio con punto (p.ej. worktrees en .claude\worktrees:
   // jest deja el "\." del path como escape y micromatch ya no casa nada).
-  testRegex: "/src/.*/__tests__/.*\\.test\\.tsx?$",
+  testRegex: "/src/(?:.*/)?__tests__/.*\\.test\\.tsx?$",
   collectCoverageFrom: [
     "src/store/**/*.ts",
     "src/hooks/**/*.ts",
