@@ -361,7 +361,7 @@ describe("recibo :: split por comensal usa el precio inclusivo", () => {
       [{ name: "Boneless", quantity: 1, price: 165, seatNumber: 1, modifiers: [{ name: "Papas Extra", priceAdd: 30 }] }],
       2,
     );
-    expect(seats[0].subtotal).toBe(165); // price inclusivo, no se re-suma el priceAdd
+    expect(seats[0]!.subtotal).toBe(165); // price inclusivo, no se re-suma el priceAdd
   });
 });
 

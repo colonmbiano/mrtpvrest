@@ -45,7 +45,7 @@ export default function AdminPinGuardModal({
       const hash = await hashPin(pin);
       const admin = employees.find(
         (emp) =>
-          emp.pin === hash &&
+          emp.offlinePin === hash &&
           emp.isActive !== false &&
           (emp.role === 'ADMIN' || emp.role === 'OWNER')
       );

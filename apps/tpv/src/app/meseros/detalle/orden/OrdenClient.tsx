@@ -369,7 +369,7 @@ export default function WaiterOrderPage({ params }: { params: { id: string } }) 
         // así que mandamos null y la impresora pondrá un placeholder
         // visible para que cocina sepa que es prepedido.
         printKitchenTickets(printers, {
-          orderNumber: res.data?.orderNumber || (res.id ? `OFF-${res.id.slice(-4).toUpperCase()}` : null),
+          orderNumber: res.data?.orderNumber || (res.queued ? "OFFLINE" : null),
           orderType: "DINE_IN",
           tableNumber: tableName ?? tableId,
           items: printItems,

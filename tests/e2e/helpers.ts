@@ -77,8 +77,8 @@ export async function injectTPVDevice(page: Page) {
   await page.evaluate((a: Record<string, string>) => {
     // tpv-device-linked NO es httpOnly (el wizard la escribe con document.cookie)
     document.cookie = 'tpv-device-linked=true; path=/; SameSite=Lax';
-    localStorage.setItem('restaurantId', a.restaurantId);
-    localStorage.setItem('locationId',   a.locationId);
+    localStorage.setItem('restaurantId', a.restaurantId || '');
+    localStorage.setItem('locationId',   a.locationId || '');
     localStorage.setItem('locationName', a.locationName || 'Sucursal');
   }, auth as Record<string, string>);
 

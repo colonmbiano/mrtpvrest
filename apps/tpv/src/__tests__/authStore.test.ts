@@ -147,7 +147,7 @@ describe("useAuthStore (offline-first)", () => {
         id: "emp-local-502",
         name: "Offline Cashier",
         role: "CASHIER",
-        pin: "hash-1234",
+        offlinePin: "hash-1234",
         isActive: true,
         permissions: [],
       };
@@ -176,7 +176,7 @@ describe("useAuthStore (offline-first)", () => {
         id: "emp-local-first",
         name: "Local First",
         role: "CASHIER",
-        pin: "hash-2468",
+        offlinePin: "hash-2468",
         isActive: true,
         permissions: [],
       };
@@ -213,7 +213,7 @@ describe("useAuthStore (offline-first)", () => {
         id: "emp-local-timeout",
         name: "Local Timeout",
         role: "CASHIER",
-        pin: "hash-2468",
+        offlinePin: "hash-2468",
         isActive: true,
         permissions: [],
       };
@@ -243,7 +243,7 @@ describe("useAuthStore (offline-first)", () => {
         id: "emp-local-stale",
         name: "Stale Pin",
         role: "CASHIER",
-        pin: "hash-2468", // cache aceptaría, pero el PIN cambió en backend
+        offlinePin: "hash-2468", // cache aceptaría, pero el PIN cambió en backend
         isActive: true,
         permissions: [],
       };
@@ -272,7 +272,7 @@ describe("useAuthStore (offline-first)", () => {
         id: "emp-local-1",
         name: "Local Cashier",
         role: "CASHIER",
-        pin: "hash-1234", // matches mocked hashPin("1234")
+        offlinePin: "hash-1234", // matches mocked hashPin("1234")
         isActive: true,
         permissions: ["void_item"],
       };
@@ -295,7 +295,7 @@ describe("useAuthStore (offline-first)", () => {
         id: "emp-inactive",
         name: "Disabled",
         role: "CASHIER",
-        pin: "hash-1234",
+        offlinePin: "hash-1234",
         isActive: false,
         permissions: [],
       };

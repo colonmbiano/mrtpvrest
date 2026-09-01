@@ -4,7 +4,7 @@ import { type Product, type ModifierGroup, type ModifierSelection, type CartItem
 import { computeUnitExtra, buildOptionGroups, getValidationError, flattenSelections } from "@/lib/modifiers";
 import { formatModifierGroupName } from "@/lib/formatDisplayName";
 
-export type ConfiguratorInitial = { variant?: MenuItemVariant | null; selectedModifiers?: ModifierSelection[] };
+export type ConfiguratorInitial = { variantId?: string | null; selectedModifierIds?: string[]; quantity?: number; notes?: string; };
 
 export function QuickModifierPanel({
   product,

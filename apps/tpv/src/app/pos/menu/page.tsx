@@ -20,8 +20,8 @@ import {
 import { useUIStore } from "@/store/useUIStore";
 import { CATALOG_REFRESH_EVENT, fuzzyFilter, sameCategory, getCategoryIdOrName } from "@/lib/catalog-helpers";
 import { CategoryGrid } from "@/components/pos/CategoryGrid";
-import { CategoryBar } from "@/components/pos/CategoryBar";
-import { ProductGrid } from "@/components/pos/ProductGrid";
+import { CategoryBar, DrilldownHeader } from "@/components/pos/CategoryBar";
+import { ProductGrid, ProductSkeleton, EmptyState } from "@/components/pos/ProductGrid";
 import { WeightEntryModal } from "@/components/pos/WeightEntryModal";
 import { QuickModifierPanel, type ConfiguratorInitial } from "@/components/pos/QuickModifierPanel";
 

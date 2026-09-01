@@ -1,5 +1,7 @@
 import React, { useRef, useEffect, memo } from "react";
 import { ChevronLeft } from "lucide-react";
+import { CategoryButton } from "./CategoryGrid";
+import { categoryTone } from "@/lib/catalog-helpers";
 import type { CategoryLite } from "./CategoryGrid";
 
 export function CategoryBar({

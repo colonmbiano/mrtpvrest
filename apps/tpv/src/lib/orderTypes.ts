@@ -18,21 +18,21 @@ export type OrderTypeId = "DINE_IN" | "TAKEOUT" | "DELIVERY";
 // por propiedad (.DINE_IN). Ambas formas funcionan así sin fricción de tipos.
 
 /** Etiqueta de acción (larga) — cards de iniciar venta / recibo. */
-export const ORDER_TYPE_ACTION: Record<string, string> = {
+export const ORDER_TYPE_ACTION: Record<OrderTypeId, string> & Record<string, string | undefined> = {
   DINE_IN: "Comer Aquí",
   TAKEOUT: "Para Llevar",
   DELIVERY: "Domicilio",
 };
 
 /** Badge en MAYÚSCULAS — filas de cuentas abiertas, recibos, etiquetas. */
-export const ORDER_TYPE_BADGE: Record<string, string> = {
+export const ORDER_TYPE_BADGE: Record<OrderTypeId, string> & Record<string, string | undefined> = {
   DINE_IN: "MESA",
   TAKEOUT: "LLEVAR",
   DELIVERY: "DOMICILIO",
 };
 
 /** Forma corta Title Case — pestañas y filtros del POS. */
-export const ORDER_TYPE_SHORT: Record<string, string> = {
+export const ORDER_TYPE_SHORT: Record<OrderTypeId, string> & Record<string, string | undefined> = {
   DINE_IN: "Mesa",
   TAKEOUT: "Llevar",
   DELIVERY: "Domicilio",

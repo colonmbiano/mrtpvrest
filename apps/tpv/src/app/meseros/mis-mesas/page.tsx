@@ -84,7 +84,7 @@ export default function WaiterMyTablesPage() {
 
         {!loading && !error && myTables.map((table) => {
           const order = table.activeOrder!;
-          const elapsed = elapsedMinutes(order.createdAt);
+          const elapsed = elapsedMinutes(order.createdAt || "");
           const isLong = elapsed > 60;
           return (
             <button
@@ -109,7 +109,7 @@ export default function WaiterMyTablesPage() {
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <div className="text-[11px] font-bold text-tx-dis uppercase tracking-wider">
-                      {order.customerName || "Sin nombre"} · DESDE {fmtTime(order.createdAt)}
+                      {order.customerName || "Sin nombre"} · DESDE {fmtTime(order.createdAt || "")}
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-1.5 text-tx-mut">
@@ -117,7 +117,7 @@ export default function WaiterMyTablesPage() {
                         <span className="mono tnum text-[11px] font-bold">{elapsed}m</span>
                       </div>
                       <div className="text-[10px] font-semibold uppercase tracking-tighter text-tx-mut">
-                        {order._count.items} ítems
+                        {order._count?.items ?? 0} ítems
                       </div>
                     </div>
                   </div>

@@ -79,7 +79,7 @@ export default function ManagerOverrideModal({
       const hash = await hashPin(pin);
       const supervisor = employees.find(
         (emp) =>
-          emp.pin === hash &&
+          emp.offlinePin === hash &&
           (emp.role === 'ADMIN' || emp.role === 'MANAGER' || emp.role === 'OWNER') &&
           Array.isArray(emp.permissions) &&
           emp.permissions.includes(permission)

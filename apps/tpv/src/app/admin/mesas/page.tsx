@@ -362,7 +362,7 @@ export default function MesasAdminPage() {
         setZones(prev => prev.map(z => (z.id === zoneForm.id ? { ...z, name: data.name, icon: data.icon } : z)));
         // Propaga el rename a las mesas ya cargadas.
         setTables(prev => prev.map(t => (t.zone?.id === zoneForm.id
-          ? { ...t, zone: { id: t.zone.id, name: data.name, icon: data.icon } }
+          ? { ...t, zone: { id: t.zone!.id, name: data.name, icon: data.icon } }
           : t)));
         toast.success("Zona actualizada", { id: tid });
       } else {

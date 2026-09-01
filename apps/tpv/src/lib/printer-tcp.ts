@@ -291,7 +291,7 @@ function segmentsToBytes(segments: Array<string | Uint8Array>): Uint8Array {
       const norm = normalizeThermalText(seg);
       for (let i = 0; i < norm.length; i += 1) parts.push(norm.charCodeAt(i) & 0xff);
     } else {
-      for (let i = 0; i < seg.length; i += 1) parts.push(seg[i]);
+      for (let i = 0; i < seg.length; i += 1) parts.push(seg[i]!);
     }
   }
   return Uint8Array.from(parts);
@@ -299,7 +299,7 @@ function segmentsToBytes(segments: Array<string | Uint8Array>): Uint8Array {
 
 function bytesToHex(bytes: Uint8Array): string {
   let hex = "";
-  for (let i = 0; i < bytes.length; i += 1) hex += bytes[i].toString(16).padStart(2, "0");
+  for (let i = 0; i < bytes.length; i += 1) hex += bytes[i]!.toString(16).padStart(2, "0");
   return hex;
 }
 
@@ -497,7 +497,6 @@ export interface PrinterRecord {
   // caller cuando GET /api/printers regrese los joins (ver
   // SidebarTicket.fetchPrinters). Vacío = el printer no participa del
   // enrutamiento por groups y solo le llegan tickets si está en el
-  // fallback legacy (type/stations match).
   printerGroupIds?: string[];
   printerGroupRefs?: Array<{ id: string; name: string }>;
 }
@@ -505,6 +504,7 @@ export interface PrinterRecord {
 export interface TicketModifier {
   name: string;
   priceAdd?: number;
+  isKitchenNote?: boolean;
 }
 
 // Una parte de combo lista para rutear a su estación en la comanda de cocina.
@@ -1185,7 +1185,7 @@ export async function renderLogoEscPos(
     const data = ctx.getImageData(0, 0, w, h).data;
     const mono = new Uint8Array(w * h);
     for (let i = 0; i < w * h; i += 1) {
-      const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2], a = data[i * 4 + 3];
+      const r = data[i * 4]!, g = data[i * 4 + 1]!, b = data[i * 4 + 2]!, a = data[i * 4 + 3]!;
       // Píxel transparente → blanco; si no, luminancia. Por debajo del umbral = negro.
       const lum = a < 128 ? 255 : 0.299 * r + 0.587 * g + 0.114 * b;
       mono[i] = lum < threshold ? 1 : 0;
