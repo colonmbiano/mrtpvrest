@@ -16,6 +16,8 @@ const QR_URL = 'https://whatsapp-bot-production-adfe.up.railway.app/qr';
 let lastSentAt = 0;
 
 router.post('/', async (req, res) => {
+  return res.status(200).json({ ok: true, reason: 'Paused by user' });
+
   const token = process.env.BOT_ALERT_TOKEN;
   if (!token || req.query.token !== token) {
     return res.status(403).json({ error: 'forbidden' });
