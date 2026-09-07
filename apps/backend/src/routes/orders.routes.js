@@ -542,6 +542,45 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── GET /recent-takeout — Historial ligero del operador para reimpresión ──
+// Pensado para tablets de mostrador: devuelve solo las últimas órdenes TAKEOUT
+// creadas por el empleado autenticado. El detalle pesado se baja bajo demanda
+// desde GET /:id cuando el operador toca imprimir.
+router.get('/recent-takeout', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER', 'WAITER'), async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+
+    const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        ...(req.locationId ? { locationId: req.locationId } : {}),
+        createdById: req.user.id,
+        orderType: 'TAKEOUT',
+        createdAt: { gte: since },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+      select: {
+        id: true,
+        orderNumber: true,
+        customerName: true,
+        ticketName: true,
+        total: true,
+        status: true,
+        paymentStatus: true,
+        paymentMethod: true,
+        createdAt: true,
+        paidAt: true,
+        _count: { select: { items: true } },
+      },
+    });
+
+    res.json(orders);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── GET /table/:tableId/open — Orden(es) abiertas de una mesa ────────────
 // Permite al TPV saber si una mesa ya tiene cuenta activa para setear el
 // activeOrderId y agregar rondas directamente (POST /:id/items) en lugar

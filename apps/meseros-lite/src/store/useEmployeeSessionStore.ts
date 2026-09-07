@@ -22,6 +22,7 @@ interface EmployeeSessionState {
 const clearEmployeeSession = () => {
   if (typeof window === "undefined") return;
   sessionStorage.removeItem("tpv-access-token");
+  sessionStorage.removeItem("tpv-employee-token");
   localStorage.removeItem("tpv-employee-token");
   localStorage.removeItem("currentEmployeeId");
   localStorage.removeItem("currentEmployeeName");
@@ -30,8 +31,8 @@ const clearEmployeeSession = () => {
 
 const saveEmployeeSession = (employee: LiteEmployee, token: string) => {
   if (typeof window === "undefined") return;
-  localStorage.setItem("tpv-employee-token", token);
   sessionStorage.setItem("tpv-access-token", token);
+  sessionStorage.setItem("tpv-employee-token", token);
   localStorage.setItem("currentEmployeeId", employee.id);
   localStorage.setItem("currentEmployeeName", employee.name);
   localStorage.setItem("currentEmployeeRole", employee.role);
@@ -63,12 +64,12 @@ export const useEmployeeSessionStore = create<EmployeeSessionState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         employee: state.employee,
-        token: state.token,
-        isAuthenticated: state.isAuthenticated,
+        token: null,
+        isAuthenticated: false,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state || typeof window === "undefined") return;
-        const token = localStorage.getItem("tpv-employee-token");
+        const token = sessionStorage.getItem("tpv-access-token");
         const employeeId = localStorage.getItem("currentEmployeeId");
         if (!token || !employeeId) {
           state.logout();

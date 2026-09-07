@@ -9,6 +9,8 @@ import StatusBadge, { type OperationalStatus } from "@/components/StatusBadge";
 import api from "@/lib/api";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import { useOfflineQueueStore } from "@/store/useOfflineQueueStore";
+import { useConnectionStatusStore } from "@/store/useConnectionStatusStore";
+import { useEmployeeSessionStore } from "@/store/useEmployeeSessionStore";
 import { type AssignedTable, useWaiterOrderStore } from "@/store/useWaiterOrderStore";
 
 interface ApiTable {
@@ -104,6 +106,9 @@ export default function MesasPage() {
   const queue = useOfflineQueueStore((state) => state.queue);
   const lastSync = useOfflineQueueStore((state) => state.lastSync);
   const syncing = useOfflineQueueStore((state) => state.syncInProgress);
+  const serverReachability = useConnectionStatusStore((state) => state.serverReachability);
+  const lastServerContactAt = useConnectionStatusStore((state) => state.lastServerContactAt);
+  const employee = useEmployeeSessionStore((state) => state.employee);
 
   const pendingCount = queue.filter((transaction) => !transaction.synced && !transaction.failedPermanently).length;
   const failedCount = queue.filter((transaction) => transaction.failedPermanently).length;
@@ -190,6 +195,8 @@ export default function MesasPage() {
 
   const connectionStatus: ConnectionStatus = !online
     ? "offline"
+    : serverReachability === "unavailable"
+      ? "error"
     : failedCount > 0
       ? "error"
       : syncing || pendingCount > 0
@@ -218,7 +225,7 @@ export default function MesasPage() {
     <section className="min-h-screen bg-[var(--bg)] px-4 py-5 pb-28 text-[var(--text-primary)]">
       <AppHeader
         title="Mis mesas"
-        subtitle="Ana · Mesero"
+        subtitle={`${employee?.name || "Mesero activo"} · ${employee?.role || "Mesero"}`}
         connectionStatus={connectionStatus}
         rightAction={
           <button
@@ -232,11 +239,23 @@ export default function MesasPage() {
         }
       />
 
-      {(loadState === "offline" || !online || pendingCount > 0) && (
+      {(loadState === "offline" || !online || serverReachability === "unavailable" || pendingCount > 0) && (
         <div className="mb-4 rounded-card border border-[var(--warning)] bg-[rgba(246,178,59,0.1)] p-3">
-          <StatusBadge status="offline" label={pendingCount > 0 ? `${pendingCount} en cola` : "Sin WiFi"} />
+          <StatusBadge
+            status={serverReachability === "unavailable" && online ? "error" : "offline"}
+            label={
+              pendingCount > 0
+                ? `${pendingCount} en cola`
+                : serverReachability === "unavailable" && online
+                  ? "Servidor no disponible"
+                  : "Sin internet"
+            }
+          />
           <p className="mt-2 text-sm font-bold text-[var(--text-secondary)]">
-            Las rondas se guardan localmente y se enviaran al reconectar.
+            {lastServerContactAt
+              ? `Último contacto correcto ${new Date(lastServerContactAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}. `
+              : "Aún no hay una respuesta válida del servidor. "}
+            Las rondas se conservan en esta tablet hasta poder enviarse.
           </p>
         </div>
       )}
@@ -351,7 +370,7 @@ export default function MesasPage() {
                             {table.pendingCount > 0
                               ? `Por enviar${table.pendingCount > 1 ? ` (${table.pendingCount})` : ""}`
                               : isOpen
-                                ? `${table.activeOrderItemCount || 0} productos`
+                                ? `${table.activeOrderItemCount || 0} partidas`
                                 : table.status === "free"
                                   ? "Toca para abrir"
                                   : "Revisar antes de abrir"}

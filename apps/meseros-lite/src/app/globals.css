@@ -12,7 +12,7 @@
 
   --text-primary: #f5f7f6;
   --text-secondary: #b6c1ba;
-  --text-muted: #7d8a84;
+  --text-muted: #93a099;
   --text-disabled: #53635b;
 
   --border: #26362e;
@@ -41,6 +41,42 @@
   --radius-xl: 24px;
   --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.22);
   --shadow-strong: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+
+/* Sabor Toki: inspirado en la energía naranja de apps de video corto, con
+   superficies claras y planas para conservar contraste y rendimiento. */
+html[data-mode="takeout"] {
+  --bg: #fff7f2;
+  --surface-1: #ffffff;
+  --surface-2: #fff0e7;
+  --surface-3: #fff7f2;
+
+  --text-primary: #25150f;
+  --text-secondary: #704d3f;
+  --text-muted: #927265;
+  --text-disabled: #bca89f;
+
+  --border: #f1d8cc;
+  --border-strong: #dcae99;
+
+  --brand: #ff4d00;
+  --brand-hover: #eb4700;
+  --brand-active: #d94100;
+  --brand-soft: #fff0e7;
+  --brand-fg: #ffffff;
+
+  --success: #16864b;
+  --warning: #ad6500;
+  --danger: #d93025;
+  --info: #1769aa;
+  --ready: #7c3aed;
+
+  --shadow-soft: 0 4px 14px rgba(83, 38, 18, 0.08);
+  --shadow-strong: 0 12px 28px rgba(83, 38, 18, 0.16);
+}
+
+html[data-mode="takeout"] body {
+  background: var(--bg);
 }
 
 *,
@@ -78,6 +114,25 @@ button {
   user-select: none;
 }
 
+:where(button, a, input, textarea):focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 3px;
+}
+
+.scroll-cue {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.scroll-cue::-webkit-scrollbar {
+  height: 5px;
+}
+
+.scroll-cue::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--border-strong);
+}
+
 .mono,
 .tnum {
   font-family: var(--font-mono);
@@ -91,4 +146,58 @@ button {
 
 * {
   scrollbar-width: none;
+}
+
+@media (max-height: 720px) {
+  .pin-shell {
+    padding-block: 8px;
+  }
+
+  .pin-layout {
+    gap: 8px;
+  }
+
+  .pin-header {
+    padding: 10px;
+  }
+
+  .pin-header svg {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 4px;
+  }
+
+  .pin-header h1 {
+    font-size: 24px;
+  }
+
+  .pin-description {
+    display: none;
+  }
+
+  .pin-card {
+    padding: 10px;
+  }
+
+  .pin-display {
+    min-height: 48px;
+    margin-bottom: 8px;
+  }
+
+  .pin-grid {
+    gap: 8px;
+  }
+
+  .pin-key {
+    min-height: 48px;
+  }
+
+  .pin-submit {
+    min-height: 52px;
+    margin-top: 8px;
+  }
+
+  .pin-change {
+    min-height: 48px;
+  }
 }

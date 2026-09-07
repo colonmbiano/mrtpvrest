@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Printer, RefreshCw } from "lucide-react";
 import { fetchPrinterConfiguration } from "@/lib/printer-config";
 import { printTestTicket, type PrinterRecord, type PrinterStation } from "@/lib/printer";
+import { TAKEOUT_MODE } from "@/lib/app-mode";
 import { usePrinterStore } from "@/store/usePrinterStore";
 
 function stationOf(printer: PrinterRecord): PrinterStation {
@@ -98,29 +99,39 @@ export default function ImpresionPage() {
       <article className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-5">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-lg font-black text-[var(--text-primary)]">Auto-imprimir desde esta tablet</p>
+            <p className="text-lg font-black text-[var(--text-primary)]">
+              {TAKEOUT_MODE ? "Impresión automática" : "Auto-imprimir desde esta tablet"}
+            </p>
             <p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">
-              Preferencia local. Las impresoras, el ruteo y el formato son los mismos del TPV.
+              {TAKEOUT_MODE
+                ? "Cada pedido se manda a cocina al guardarlo. El ruteo y el formato vienen del TPV."
+                : "Preferencia local. Las impresoras, el ruteo y el formato son los mismos del TPV."}
             </p>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={autoPrint}
-            onClick={() => setAutoPrint(!autoPrint)}
-            className={[
-              "relative h-11 w-20 shrink-0 rounded-full border transition-all duration-150",
-              autoPrint ? "border-[var(--success)] bg-[var(--success)]" : "border-[var(--border-strong)] bg-[var(--surface-3)]",
-            ].join(" ")}
-            aria-label="Activar auto-impresion"
-          >
-            <span
+          {TAKEOUT_MODE ? (
+            <span className="rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-black text-[var(--brand-fg)]">
+              Siempre activa
+            </span>
+          ) : (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoPrint}
+              onClick={() => setAutoPrint(!autoPrint)}
               className={[
-                "absolute top-1 h-8 w-8 rounded-full bg-[var(--bg)] transition-all duration-150",
-                autoPrint ? "left-11" : "left-1",
+                "relative h-11 w-20 shrink-0 rounded-full border transition-all duration-150",
+                autoPrint ? "border-[var(--success)] bg-[var(--success)]" : "border-[var(--border-strong)] bg-[var(--surface-3)]",
               ].join(" ")}
-            />
-          </button>
+              aria-label="Activar auto-impresion"
+            >
+              <span
+                className={[
+                  "absolute top-1 h-8 w-8 rounded-full bg-[var(--bg)] transition-all duration-150",
+                  autoPrint ? "left-11" : "left-1",
+                ].join(" ")}
+              />
+            </button>
+          )}
         </div>
       </article>
 

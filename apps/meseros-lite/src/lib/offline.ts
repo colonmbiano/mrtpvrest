@@ -29,7 +29,7 @@ function isNetworkError(err: unknown) {
   if (!error) return false;
   if (error.code === "ERR_NETWORK" || error.code === "ECONNABORTED") return true;
   if (!error.response) return true;
-  return typeof error.response.status === "number" && error.response.status >= 500;
+  return false;
 }
 
 // Sesión vencida (401/403) o token inválido. Distinto de un 4xx de datos: la
@@ -124,8 +124,9 @@ export async function syncOfflineQueue() {
           useEmployeeSessionStore.getState().logout();
           break;
         }
-        // Error real (4xx: datos inválidos, turno cerrado, mesa inválida):
-        // esta comanda sí es mala. Cuenta contra MAX_SYNC_RETRIES.
+        // Un rechazo HTTP queda aislado a esta comanda. Incluso un 500 puede
+        // ser persistente para una mesa concreta: cuenta contra el límite y
+        // continuamos con las demás para que una sola ronda no congele la cola.
         store.markFailed(transaction.id, errorMessage(err));
       }
     }

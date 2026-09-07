@@ -177,6 +177,16 @@ export const useWaiterOrderStore = create<WaiterOrderState>()(
     {
       name: "meseros-lite-offline-ticket",
       storage: createJSONStorage(() => localStorage),
+      version: 2,
+      migrate: (persisted) => {
+        const state = persisted as Partial<WaiterOrderState> | undefined;
+        return {
+          ...state,
+          ticketItems: Array.isArray(state?.ticketItems) ? state.ticketItems : [],
+          assignedTables: Array.isArray(state?.assignedTables) ? state.assignedTables : [],
+          previousItems: Array.isArray(state?.previousItems) ? state.previousItems : [],
+        } as WaiterOrderState;
+      },
       partialize: (state) => ({
         activeTableId: state.activeTableId,
         activeTableName: state.activeTableName,

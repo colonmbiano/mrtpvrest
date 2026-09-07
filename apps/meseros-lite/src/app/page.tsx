@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
+import { APP_HOME } from "@/lib/app-mode";
 
 export default function HomePage() {
-  redirect("/mesas");
+  redirect(APP_HOME);
 }

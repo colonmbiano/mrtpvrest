@@ -4,20 +4,32 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ClipboardList, Map, Timer, UserRound } from "lucide-react";
 import OfflineStatus from "@/components/OfflineStatus";
+import { TAKEOUT_MODE } from "@/lib/app-mode";
 
-const tabs = [
+const waiterTabs = [
   { href: "/mesas", label: "Mesas", icon: Map },
   { href: "/menu", label: "Comanda", icon: ClipboardList },
   { href: "/pedidos", label: "Pedidos", icon: Timer },
   { href: "/perfil", label: "Perfil", icon: UserRound },
 ];
 
+const takeoutTabs = [
+  { href: "/menu", label: "Nuevo", icon: ClipboardList },
+  { href: "/pedidos", label: "Pedidos", icon: Timer },
+  { href: "/perfil", label: "Ajustes", icon: UserRound },
+];
+
 export default function BottomNavigation() {
   const pathname = usePathname();
+  const tabs = TAKEOUT_MODE ? takeoutTabs : waiterTabs;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 h-20 bg-[var(--surface-2)] border-t border-[var(--border)]">
-      <div className="grid h-full grid-cols-4 px-2 pb-[env(safe-area-inset-bottom)]">
+      <div
+        className={`grid h-full px-2 pb-[env(safe-area-inset-bottom)] ${
+          TAKEOUT_MODE ? "grid-cols-3" : "grid-cols-4"
+        }`}
+      >
         {tabs.map((tab) => {
           const isActive = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
           const Icon = tab.icon;

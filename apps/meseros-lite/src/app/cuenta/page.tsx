@@ -180,6 +180,7 @@ export default function CuentaPage() {
   // Resumen para revisar de un vistazo que no falte nada: cuantos productos
   // (sumando cantidades) y cuantas rondas lleva la cuenta.
   const itemCount = (order?.items ?? []).reduce((sum, item) => sum + item.quantity, 0);
+  const lineCount = (order?.items.length ?? 0) + pendingItems.length;
   const roundCount = groupedList.length;
 
   // Bloque "Pendiente de enviar": las comandas locales de esta mesa que la cola
@@ -225,7 +226,7 @@ export default function CuentaPage() {
     ) : null;
 
   return (
-    <section className="min-h-screen bg-[var(--bg)] px-5 py-5 pb-40 text-[var(--text-primary)]">
+    <section className="min-h-screen bg-[var(--bg)] px-5 py-5 pb-52 text-[var(--text-primary)]">
       <header className="mb-5 flex items-center justify-between gap-3">
         <button
           type="button"
@@ -306,13 +307,17 @@ export default function CuentaPage() {
           </div>
 
           {/* Resumen rapido para revisar que no falte nada en la mesa. */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3">
-              <p className="text-xs font-black uppercase text-[var(--text-muted)]">Productos</p>
+              <p className="text-xs font-bold text-[var(--text-muted)]">Partidas</p>
+              <p className="text-2xl font-black text-[var(--text-primary)]">{lineCount}</p>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3">
+              <p className="text-xs font-bold text-[var(--text-muted)]">Unidades</p>
               <p className="text-2xl font-black text-[var(--text-primary)]">{itemCount + pendingItemCount}</p>
             </div>
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-3">
-              <p className="text-xs font-black uppercase text-[var(--text-muted)]">Rondas</p>
+              <p className="text-xs font-bold text-[var(--text-muted)]">Rondas</p>
               <p className="text-2xl font-black text-[var(--text-primary)]">
                 {roundCount + pendingTransactions.length}
               </p>

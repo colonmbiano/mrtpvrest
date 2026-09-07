@@ -2,13 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronUp, Minus, Plus, RotateCw, Search, WifiOff, X } from "lucide-react";
+import { Check, ChevronUp, Minus, Plus, RotateCw, Search, UserRound, WifiOff, X } from "lucide-react";
 import type { OrderStatus } from "@mrtpvrest/types";
 import api from "@/lib/api";
 import { apiOrQueue } from "@/lib/offline";
 import { printKitchenTickets, type TicketItem } from "@/lib/printer";
 import { usePrinterStore } from "@/store/usePrinterStore";
 import { useWaiterOrderStore } from "@/store/useWaiterOrderStore";
+import { useEmployeeSessionStore } from "@/store/useEmployeeSessionStore";
+import { TAKEOUT_MODE } from "@/lib/app-mode";
 
 interface MenuCategory {
   id: string;
@@ -204,12 +206,14 @@ export default function MenuPage() {
   const incrementItem = useWaiterOrderStore((state) => state.incrementItem);
   const decrementItem = useWaiterOrderStore((state) => state.decrementItem);
   const clearTicket = useWaiterOrderStore((state) => state.clearTicket);
+  const setActiveTable = useWaiterOrderStore((state) => state.setActiveTable);
   const activeTableId = useWaiterOrderStore((state) => state.activeTableId);
   const activeTableName = useWaiterOrderStore((state) => state.activeTableName);
   const activeOrderId = useWaiterOrderStore((state) => state.activeOrderId);
   const previousItemCount = useWaiterOrderStore((state) => state.previousItemCount ?? 0);
   const previousTotal = useWaiterOrderStore((state) => state.previousTotal ?? 0);
   const previousItems = useWaiterOrderStore((state) => state.previousItems ?? []);
+  const employee = useEmployeeSessionStore((state) => state.employee);
 
   // Fetch puro: sin setState síncrono antes del primer await, para que el
   // effect de montaje no dispare react-hooks/set-state-in-effect.
@@ -254,6 +258,10 @@ export default function MenuPage() {
     void applyCatalog();
   }, []);
 
+  useEffect(() => {
+    if (TAKEOUT_MODE && activeTableId) setActiveTable(null);
+  }, [activeTableId, setActiveTable]);
+
   const visibleProducts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return products.filter((product) => {
@@ -277,7 +285,6 @@ export default function MenuPage() {
 
   const total = ticketItems.reduce((sum, item) => sum + item.total, 0);
   const itemCount = ticketItems.reduce((sum, item) => sum + item.quantity, 0);
-  const accumulatedItemCount = previousItemCount + itemCount;
   const accumulatedTotal = previousTotal + total;
 
   const handleAddItem = (product: MenuItem) => {
@@ -359,7 +366,10 @@ export default function MenuPage() {
   // para anexar al mensaje de guardado.
   const maybePrintKitchen = async (orderNumber: string | null): Promise<string> => {
     const { autoPrint, printers, kitchenConfig } = usePrinterStore.getState();
-    if (!autoPrint || printers.length === 0) return "";
+    if (!autoPrint && !TAKEOUT_MODE) return "";
+    if (printers.length === 0) {
+      return TAKEOUT_MODE ? " Pedido guardado sin imprimir: configura la impresora en Ajustes." : "";
+    }
 
     const productById = new Map(products.map((product) => [product.id, product]));
     const printItems: TicketItem[] = ticketItems.map((item) => ({
@@ -480,11 +490,11 @@ export default function MenuPage() {
       setTakeoutName("");
       const baseMessage = result.queued
         ? result.online
-          ? "Ronda guardada. Enviando..."
-          : "Ronda en cola. Se enviara al volver internet."
-        : "Ronda enviada a cocina.";
+          ? TAKEOUT_MODE ? "Pedido guardado. Enviando..." : "Ronda guardada. Enviando..."
+          : TAKEOUT_MODE ? "Pedido en cola. Se enviará al volver internet." : "Ronda en cola. Se enviara al volver internet."
+        : TAKEOUT_MODE ? "Pedido enviado a cocina." : "Ronda enviada a cocina.";
       setSaveMessage(baseMessage + printNote);
-      window.setTimeout(() => router.replace("/mesas"), 600);
+      if (!TAKEOUT_MODE) window.setTimeout(() => router.replace("/mesas"), 600);
     } catch (err: unknown) {
       const directMessage =
         err instanceof Error && err.message ? err.message : "";
@@ -508,15 +518,18 @@ export default function MenuPage() {
   };
 
   return (
-    <section className="min-h-screen bg-[var(--bg)] px-4 py-4 pb-56 text-[var(--text-primary)] lg:pb-4">
-      <header className="mb-3 flex items-center justify-between gap-3">
+    <section className="min-h-screen bg-[var(--bg)] px-4 py-4 pb-64 text-[var(--text-primary)] lg:pb-4">
+      <header className="sticky top-0 z-30 -mx-4 mb-3 flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[color:var(--bg)] px-4 pb-3 pt-1 shadow-soft">
         <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--brand)]">
-            {activeTableId ? "Toma de pedido" : "Pedido para llevar"}
+          <p className="text-[11px] font-bold tracking-wide text-[var(--brand)]">
+            {TAKEOUT_MODE ? "Toki Boba · Express" : activeTableId ? "Toma de pedido" : "Pedido para llevar"}
           </p>
           <h1 className="truncate text-xl font-black leading-tight text-[var(--text-primary)]">
-            {activeTableName || (activeTableId ? `Mesa ${activeTableId.replace("mesa-", "")}` : "Para llevar")}
+            {TAKEOUT_MODE ? "Nuevo pedido" : activeTableName || (activeTableId ? `Mesa ${activeTableId.replace("mesa-", "")}` : "Para llevar")}
           </h1>
+          <p className="mt-0.5 flex items-center gap-1.5 text-xs font-bold text-[var(--text-secondary)]">
+            <UserRound size={14} aria-hidden="true" /> {employee?.name || "Mesero activo"}
+          </p>
         </div>
         <button
           type="button"
@@ -546,7 +559,7 @@ export default function MenuPage() {
           <p className="mb-1.5 text-[11px] font-black uppercase tracking-widest text-[var(--text-muted)]">
             Sugerencias de venta
           </p>
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="scroll-cue flex gap-2 overflow-x-auto pb-2">
             {suggestions.map((product) => {
               const promo = isOnPromo(product);
               return (
@@ -591,7 +604,7 @@ export default function MenuPage() {
                 </p>
                 <p className="text-sm font-black text-[var(--text-secondary)]">{money(previousTotal)}</p>
               </div>
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="scroll-cue flex gap-2 overflow-x-auto pb-2">
                 {previousItems.map((item) => (
                   <div
                     key={item.id}
@@ -617,7 +630,7 @@ export default function MenuPage() {
             />
           </div>
 
-          <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+          <div className="scroll-cue mb-3 flex gap-2 overflow-x-auto pb-2">
             <button
               type="button"
               onClick={() => setActiveCategoryId("all")}
@@ -658,6 +671,8 @@ export default function MenuPage() {
 
           {(saveError || saveMessage) && (
             <div
+              role="status"
+              aria-live="polite"
               className={[
                 "mb-3 rounded-lg border bg-[var(--surface-1)] p-4",
                 saveError ? "border-[var(--danger)]" : "border-[var(--success)]",
@@ -709,7 +724,7 @@ export default function MenuPage() {
             <div className="mb-3 rounded-lg border border-[var(--brand)] bg-[var(--surface-3)] p-3">
               <p className="text-xs font-black uppercase text-[var(--brand)]">Cuenta abierta</p>
               <p className="mt-1 text-base font-black text-[var(--text-primary)]">
-                {previousItemCount} productos anteriores · {money(previousTotal)}
+                {previousItemCount} unidades anteriores · {money(previousTotal)}
               </p>
               <p className="mt-1 text-sm font-bold text-[var(--text-muted)]">
                 Abajo se muestran solo los productos de la nueva ronda.
@@ -722,8 +737,8 @@ export default function MenuPage() {
               <h2 className="text-2xl font-black text-[var(--text-primary)]">Ticket</h2>
             </div>
             <div className="text-right">
-              <p className="text-xs font-black uppercase text-[var(--text-muted)]">Items</p>
-              <p className="text-2xl font-black text-[var(--brand)]">{itemCount}</p>
+              <p className="text-xs font-bold text-[var(--text-muted)]">Partidas · unidades</p>
+              <p className="text-2xl font-black text-[var(--brand)]">{ticketItems.length} · {itemCount}</p>
             </div>
           </div>
 
@@ -793,7 +808,7 @@ export default function MenuPage() {
                   : "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]",
               ].join(" ")}
             >
-              {saving ? "Enviando..." : "Enviar ronda"}
+              {saving ? "Guardando..." : TAKEOUT_MODE ? "Guardar e imprimir" : "Enviar ronda"}
             </button>
           </div>
         </aside>
@@ -820,7 +835,7 @@ export default function MenuPage() {
               <span className="block truncate text-base font-black text-[var(--text-primary)]">
                 {lastAddedName && !ticketExpanded
                   ? `+ ${lastAddedName}`
-                  : `${accumulatedItemCount} producto${accumulatedItemCount === 1 ? "" : "s"}`}
+                  : `${ticketItems.length} partidas · ${itemCount} unidades`}
               </span>
             </span>
           </span>
@@ -837,7 +852,7 @@ export default function MenuPage() {
           {ticketItems.length === 0 ? (
             <p className="mb-2 rounded-lg border border-[var(--border)] bg-[var(--surface-3)] px-4 py-4 text-center text-base font-bold text-[var(--text-muted)]">
               {activeOrderId
-                ? `${previousItemCount} productos anteriores. Agrega para una nueva ronda.`
+                ? `${previousItemCount} unidades anteriores. Agrega para una nueva ronda.`
                 : "Toca un producto para agregarlo."}
             </p>
           ) : (
@@ -901,10 +916,12 @@ export default function MenuPage() {
                 : "border-[var(--brand)] bg-[var(--brand)] text-[var(--brand-fg)]",
             ].join(" ")}
           >
-            {saving ? "Enviando..." : "Enviar ronda"}
+            {saving ? "Guardando..." : TAKEOUT_MODE ? "Guardar e imprimir" : "Enviar ronda"}
           </button>
           {(saveError || saveMessage) && (
             <p
+              role="status"
+              aria-live="polite"
               className={[
                 "mt-2 rounded-lg border bg-[var(--surface-3)] p-3 text-center text-sm font-black",
                 saveError
@@ -967,6 +984,12 @@ function LiteWeightEntry({
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Capturar peso de ${product.name}`}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onClose();
+      }}
     >
       <div
         className="w-full max-w-md rounded-t-2xl border border-[var(--border)] bg-[var(--surface-2)] p-5 sm:rounded-2xl"
@@ -1152,12 +1175,20 @@ function LiteProductConfigurator({
   );
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end bg-black/55 text-[var(--text-primary)]">
+    <div
+      className="fixed inset-0 z-[80] flex items-end bg-black/55 text-[var(--text-primary)]"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="product-configurator-title"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onClose();
+      }}
+    >
       <div className="flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-[32px] border border-[var(--border-strong)] bg-[var(--bg)] shadow-strong">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-1)] p-4">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase text-[var(--ready)]">Opciones</p>
-            <h2 className="truncate text-2xl font-black text-[var(--text-primary)]">{product.name}</h2>
+            <h2 id="product-configurator-title" className="truncate text-2xl font-black text-[var(--text-primary)]">{product.name}</h2>
           </div>
           <button
             type="button"

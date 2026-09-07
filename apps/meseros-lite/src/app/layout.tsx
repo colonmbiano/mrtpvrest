@@ -4,6 +4,7 @@ import OfflineSyncInitializer from "@/components/OfflineSyncInitializer";
 import OtaUpdater from "@/components/OtaUpdater";
 import PrinterConfigInitializer from "@/components/PrinterConfigInitializer";
 import SessionGate from "@/components/SessionGate";
+import { TAKEOUT_MODE } from "@/lib/app-mode";
 import "./globals.css";
 
 // Mismas familias que el TPV (tema Fresco): Schibsted Grotesk para títulos,
@@ -28,8 +29,10 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MRTPVREST Meseros Lite",
-  description: "Comanda ligera offline-first para tablets Android de piso.",
+  title: TAKEOUT_MODE ? "Toki Boba Pedidos" : "MRTPVREST Meseros Lite",
+  description: TAKEOUT_MODE
+    ? "Pedidos para llevar de Toki Boba."
+    : "Comanda ligera offline-first para tablets Android de piso.",
 };
 
 export const viewport: Viewport = {
@@ -38,7 +41,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#07110D",
+  themeColor: TAKEOUT_MODE ? "#ff4d00" : "#07110D",
 };
 
 // Guard global contra el bug nativo de <input type="number">: con el campo
@@ -57,7 +60,11 @@ const NUMBER_WHEEL_GUARD_SCRIPT = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${schibsted.variable} ${onest.variable} ${dmMono.variable}`}>
+    <html
+      lang="es"
+      data-mode={TAKEOUT_MODE ? "takeout" : "waiter"}
+      className={`${schibsted.variable} ${onest.variable} ${dmMono.variable}`}
+    >
       <body className="min-h-screen overflow-hidden bg-[var(--bg)] font-sans text-[var(--text-primary)]">
         <script dangerouslySetInnerHTML={{__html: NUMBER_WHEEL_GUARD_SCRIPT}} />
         <OtaUpdater />

@@ -6,10 +6,10 @@ import { AlertCircle, RotateCw, Wifi, WifiOff } from "lucide-react";
 export type ConnectionStatus = "online" | "offline" | "syncing" | "error";
 
 const connectionCopy: Record<ConnectionStatus, string> = {
-  online: "Sincronizado",
-  offline: "Sin WiFi",
+  online: "Servidor activo",
+  offline: "Sin internet",
   syncing: "Sincronizando",
-  error: "Error sync",
+  error: "Servidor no disponible",
 };
 
 export default function AppHeader({
@@ -52,7 +52,9 @@ export default function AppHeader({
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <span
-          className="hidden min-h-[36px] items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 text-xs font-black uppercase sm:inline-flex"
+          className="inline-flex min-h-[36px] max-w-[150px] items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-3 text-[11px] font-bold leading-tight"
+          role="status"
+          aria-live="polite"
           style={{ color }}
         >
           <Icon

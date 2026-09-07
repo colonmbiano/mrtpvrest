@@ -1,7 +1,8 @@
 import axios from "axios";
 import { getApiUrl } from "@/lib/config";
+import { useConnectionStatusStore } from "@/store/useConnectionStatusStore";
 
-const api = axios.create({ baseURL: getApiUrl() });
+const api = axios.create({ baseURL: getApiUrl(), timeout: 12_000 });
 const devRestaurantId = "cmp53hjwh00061qo7vx9usdfn";
 const devLocationId = "cmp53hk1l00081qo7gqdsxjsb";
 
@@ -58,8 +59,20 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (typeof window !== "undefined") {
+      useConnectionStatusStore.getState().markServerAvailable();
+    }
+    return response;
+  },
   (error) => {
+    if (typeof window !== "undefined") {
+      if (error?.response) {
+        useConnectionStatusStore.getState().markServerAvailable();
+      } else {
+        useConnectionStatusStore.getState().markServerUnavailable();
+      }
+    }
     if (typeof window !== "undefined" && error?.response?.status === 401) {
       sessionStorage.removeItem("tpv-access-token");
       localStorage.removeItem("tpv-employee-token");

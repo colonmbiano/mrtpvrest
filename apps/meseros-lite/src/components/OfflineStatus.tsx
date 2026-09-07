@@ -1,7 +1,8 @@
 "use client";
 
-import { AlertTriangle, RotateCw, WifiOff } from "lucide-react";
+import { AlertTriangle, RotateCw, ServerCrash, WifiOff } from "lucide-react";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
+import { useConnectionStatusStore } from "@/store/useConnectionStatusStore";
 import { useOfflineQueueStore } from "@/store/useOfflineQueueStore";
 
 // Indicador global del estado de la cola offline. Surfacéa lo que el mesero
@@ -18,16 +19,23 @@ export default function OfflineStatus() {
     (state) => state.queue.filter((t) => t.failedPermanently).length,
   );
   const syncing = useOfflineQueueStore((state) => state.syncInProgress);
+  const serverReachability = useConnectionStatusStore((state) => state.serverReachability);
 
   // Todo en orden (con conexión, cola vacía y sin fallidas): no mostrar nada.
-  if (online && pendingCount === 0 && failedCount === 0) return null;
+  if (online && serverReachability !== "unavailable" && pendingCount === 0 && failedCount === 0) return null;
 
   return (
-    <div className="pointer-events-none flex flex-wrap justify-end gap-2">
+    <div className="pointer-events-none flex flex-wrap justify-end gap-2" role="status" aria-live="polite">
       {!online && (
         <span className="flex items-center gap-2 rounded-lg border border-[var(--warning)] bg-[var(--surface-1)] px-3 py-2 text-xs font-black uppercase text-[var(--warning)]">
           <WifiOff size={14} strokeWidth={2.6} />
           Sin conexión{pendingCount > 0 ? ` · ${pendingCount} en cola` : ""}
+        </span>
+      )}
+      {online && serverReachability === "unavailable" && (
+        <span className="flex items-center gap-2 rounded-lg border border-[var(--danger)] bg-[var(--surface-1)] px-3 py-2 text-xs font-bold text-[var(--danger)]">
+          <ServerCrash size={14} strokeWidth={2.6} />
+          Servidor no disponible
         </span>
       )}
       {online && pendingCount > 0 && (

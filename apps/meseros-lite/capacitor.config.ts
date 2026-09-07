@@ -3,8 +3,8 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const otaDisabled = process.env.CAPACITOR_OTA_DISABLED === "true";
 
 const config: CapacitorConfig = {
-  appId: "com.mrtpvrest.meseroslite",
-  appName: "MRTPV Meseros Lite",
+  appId: process.env.CAPACITOR_APP_ID || "com.mrtpvrest.meseroslite",
+  appName: process.env.CAPACITOR_APP_NAME || "MRTPV Meseros Lite",
   webDir: "out",
   server: {
     androidScheme: "https",

@@ -38,12 +38,15 @@ def getAppVersionInfo() {
 }
 
 def appVersion = getAppVersionInfo()
+def configuredApplicationId = System.getenv("CAPACITOR_APP_ID") ?: "com.mrtpvrest.meseroslite"
+def configuredAppName = System.getenv("CAPACITOR_APP_NAME") ?: "MRTPV Meseros Lite"
 
 android {
     namespace = "com.mrtpvrest.meseroslite"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.mrtpvrest.meseroslite"
+        applicationId configuredApplicationId
+        resValue "string", "build_app_name", configuredAppName
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode appVersion.code

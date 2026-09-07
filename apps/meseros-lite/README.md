@@ -6,6 +6,21 @@ App ligera de comanda para meseros en tablets Android de bajos recursos. Forma p
 
 Meseros Lite esta pensada para piso de servicio: seleccionar mesa, armar comanda, elegir variantes/modificadores y guardar el ticket aun si la tablet pierde WiFi. La meta visual y tecnica es mantener una interfaz solida, rapida y usable con pulgares.
 
+## Modo Toki Boba para llevar
+
+El mismo codigo puede compilarse como una app independiente de mostrador, sin
+mesas ni flujo de salon. Usa el estilo claro naranja de Toki, entra del PIN al
+catalogo y deja solo tres accesos: Nuevo, Pedidos y Ajustes.
+
+```bash
+pnpm --filter @mrtpvrest/meseros-lite dev:toki
+pnpm --filter @mrtpvrest/meseros-lite build:toki
+pnpm --filter @mrtpvrest/meseros-lite apk:toki:debug
+```
+
+La APK Toki usa el identificador `com.mrtpvrest.tokitakeout`, por lo que puede
+convivir con Meseros Lite. Requiere Java 17 o 21 para compilar Android.
+
 ## Stack
 
 - Next.js 16

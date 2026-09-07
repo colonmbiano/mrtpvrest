@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, LogIn, Store } from "lucide-react";
 import api from "@/lib/api";
+import { TAKEOUT_MODE } from "@/lib/app-mode";
 
 interface Workspace {
   id: string;
@@ -97,7 +98,9 @@ export default function SetupPage() {
         <p className="text-sm font-bold uppercase tracking-wide text-[var(--brand)]">
           Alta de tablet
         </p>
-        <h1 className="text-3xl font-black text-[var(--text-primary)]">Configurar meseros lite</h1>
+        <h1 className="text-3xl font-black text-[var(--text-primary)]">
+          {TAKEOUT_MODE ? "Configurar Toki Boba Pedidos" : "Configurar meseros lite"}
+        </h1>
       </header>
 
       <div className="mx-auto max-w-2xl rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">

@@ -38,6 +38,7 @@ export interface OfflineTransaction {
   timestamp: number;
   synced: boolean;
   retryCount: number;
+  nextRetryAt?: number;
   failedPermanently?: boolean;
   lastError?: string;
 }
@@ -99,6 +100,7 @@ export const useOfflineQueueStore = create<OfflineQueueState>()(
               ...transaction,
               retryCount,
               lastError: error,
+              nextRetryAt: Date.now() + Math.min(60_000, 2 ** retryCount * 2_000),
               failedPermanently: retryCount >= MAX_SYNC_RETRIES,
             };
           }),
@@ -107,7 +109,7 @@ export const useOfflineQueueStore = create<OfflineQueueState>()(
         set((state) => ({
           queue: state.queue.map((transaction) =>
             transaction.id === transactionId
-              ? { ...transaction, lastError: error }
+              ? { ...transaction, lastError: error, nextRetryAt: Date.now() + 5_000 }
               : transaction,
           ),
         })),
@@ -119,7 +121,13 @@ export const useOfflineQueueStore = create<OfflineQueueState>()(
         set((state) => ({
           queue: state.queue.map((transaction) =>
             transaction.failedPermanently
-              ? { ...transaction, failedPermanently: false, retryCount: 0, lastError: undefined }
+              ? {
+                  ...transaction,
+                  failedPermanently: false,
+                  retryCount: 0,
+                  lastError: undefined,
+                  nextRetryAt: undefined,
+                }
               : transaction,
           ),
         })),
@@ -128,11 +136,26 @@ export const useOfflineQueueStore = create<OfflineQueueState>()(
       // Excluye las marcadas como fallo permanente: no se reintentan en
       // automático, requieren acción manual del mesero (Perfil → Reintentar).
       getUnsyncedTransactions: () =>
-        get().queue.filter((transaction) => !transaction.synced && !transaction.failedPermanently),
+        get().queue.filter(
+          (transaction) =>
+            !transaction.synced &&
+            !transaction.failedPermanently &&
+            (!transaction.nextRetryAt || transaction.nextRetryAt <= Date.now()),
+        ),
     }),
     {
       name: "meseros-lite-offline-queue",
       storage: createJSONStorage(() => localStorage),
+      version: 2,
+      migrate: (persisted) => {
+        const state = persisted as Partial<OfflineQueueState> | undefined;
+        return {
+          ...state,
+          queue: Array.isArray(state?.queue) ? state.queue : [],
+          syncInProgress: false,
+          lastSync: typeof state?.lastSync === "number" ? state.lastSync : 0,
+        } as OfflineQueueState;
+      },
     },
   ),
 );
