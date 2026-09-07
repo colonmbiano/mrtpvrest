@@ -12,6 +12,9 @@ function getResend() {
 }
 
 async function sendEmail(to, subject, html) {
+  console.log(`[mailer] Paused by user request: ${to} — ${subject}`);
+  return;
+  
   if (!process.env.RESEND_API_KEY) {
     console.log(`[mailer] Skipped (no RESEND_API_KEY): ${to} — ${subject}`)
     return

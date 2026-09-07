@@ -208,6 +208,9 @@ async function processMessage({ restaurant, integration, message, io }) {
  * integración, normaliza el body y procesa cada mensaje. No lanza.
  */
 async function handleWebhook({ restaurantId, body, io }) {
+  console.log('[wa-bot] Paused by user request');
+  return;
+
   const restaurant = await prisma.restaurant.findUnique({
     where: { id: restaurantId },
     select: { id: true, name: true, slug: true, isActive: true },
