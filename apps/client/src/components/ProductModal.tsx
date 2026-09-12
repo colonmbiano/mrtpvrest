@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Check, Minus, Plus, X } from 'lucide-react';
 import { useCart } from '../lib/cartStore';
 import { cldImage } from '@/lib/cloudinary';
 import { useMoney } from './StoreLocaleContext';
@@ -28,7 +29,7 @@ const COMPLEMENT_PREFIX = 'complement:';
 type ProductModalProps = {
   product: StoreProduct;
   accent?: string;
-  variant?: 'light' | 'dark';
+  variant?: 'light' | 'dark' | 'beverage';
   onClose: () => void;
 };
 
@@ -46,6 +47,7 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
   const fmt = useMoney();
   const add = useCart(s => s.add);
   const dark = variant === 'dark';
+  const beverage = variant === 'beverage';
 
   const variants = product.variants || [];
   const groups = product.modifierGroups || [];
@@ -164,31 +166,48 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
   return (
     <div className="fixed inset-0 z-[115] flex items-end sm:items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <div className="relative w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] max-h-[90vh] flex flex-col overflow-hidden"
-        style={{ background: surface, color: textColor }} onClick={e => e.stopPropagation()}>
+      <div className="relative w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] max-h-[94vh] flex flex-col overflow-hidden"
+        style={{ background: surface, color: textColor, border: beverage ? '1px solid #E8DDF5' : undefined }} onClick={e => e.stopPropagation()}>
 
         {product.imageUrl && (
-          <div className="relative w-full h-44 shrink-0">
-            <img src={cldImage(product.imageUrl, { width: 800 })} alt={product.name} loading="lazy" decoding="async" className={`w-full h-full ${product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
-            <button onClick={onClose} aria-label="Cerrar" className="absolute top-3 right-3 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center">✕</button>
+          <div className={`relative w-full ${beverage ? 'h-36 sm:h-44' : 'h-44'} shrink-0`} style={beverage ? { background: '#F7F1FD' } : undefined}>
+            <img src={cldImage(product.imageUrl, { width: 800 })} alt={product.name} loading="eager" decoding="async" className={`w-full h-full ${beverage || product.imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
+            <button onClick={onClose} aria-label="Cerrar" className="absolute top-3 right-3 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center"><X className="h-5 w-5" /></button>
           </div>
         )}
 
         <div className="p-6 overflow-y-auto flex-1">
           <div className="flex items-start justify-between gap-3">
             <div>
+              {beverage && <p className="mb-1 text-[10px] font-black uppercase tracking-[.16em]" style={{ color: accent }}>Personaliza tu bebida</p>}
               <h2 className="text-xl font-bold" style={{ fontFamily: 'Syne, sans-serif' }}>{product.name}</h2>
-              {product.description && <p className="text-sm mt-1" style={{ color: subText }}>{product.description}</p>}
+              {product.description && (
+                <p
+                  className={beverage
+                    ? 'mt-3 rounded-xl border px-3.5 py-2.5 text-[13px] font-bold leading-5 shadow-[0_6px_18px_rgba(91,65,111,0.08)]'
+                    : 'mt-1 text-sm'}
+                  style={beverage
+                    ? {
+                        color: '#5B416F',
+                        background: '#FFF2F8',
+                        borderColor: '#F3D7E6',
+                        borderLeft: `4px solid ${accent}`,
+                      }
+                    : { color: subText }}
+                >
+                  {product.description}
+                </p>
+              )}
             </div>
             {!product.imageUrl && (
-              <button onClick={onClose} aria-label="Cerrar" className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center" style={{ background: chip }}>✕</button>
+              <button onClick={onClose} aria-label="Cerrar" className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center" style={{ background: chip }}><X className="h-5 w-5" /></button>
             )}
           </div>
 
           {/* Variantes */}
           {variants.length > 0 && (
             <div className="mt-5">
-              <p className="text-[11px] font-black uppercase tracking-widest mb-2" style={{ color: subText }}>Tamaño / Opción</p>
+              <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest mb-2" style={{ color: subText }}>{beverage && <span className="inline-flex h-6 w-6 items-center justify-center rounded-full text-white" style={{ background: accent }}>1</span>}Tamaño / Opción</p>
               <div className="space-y-2">
                 {variants.map(v => {
                   const on = variantId === v.id;
@@ -237,38 +256,117 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
           ))}
 
           {/* Grupos de modificadores */}
-          {groups.map(g => (
-            <div key={g.id} className="mt-5">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[11px] font-black uppercase tracking-widest" style={{ color: subText }}>{g.name}</p>
-                <span className="text-[10px] font-bold" style={{ color: subText }}>
-                  {g.required ? 'Obligatorio' : 'Opcional'}{g.multiSelect && g.maxSelection ? ` · máx ${g.maxSelection}` : ''}
-                </span>
+          {groups.map((g, groupIndex) => {
+            const isBaseGroup = beverage && g.name === "Base de tu creación";
+            const isSaborGroup = beverage && g.name === "Sabor";
+            const isNivelGroup = beverage && g.name === "Siguiente nivel";
+            
+            const basesEspeciales = ["Leche de coco", "Leche de almendras", "Yogur griego", "Yakult"];
+            const saboresFrutales = ["Fresa", "Mango (Frutal)", "Durazno", "Mora azul (Frutal)", "Frutos rojos", "Kiwi", "Manzana verde", "Lichi", "Guanábana", "Arándano"];
+            
+            const renderModifier = (m: any) => {
+              const on = (selected[g.id] || []).includes(m.id);
+              const soldOut = m.isAvailable === false;
+              return (
+                <button key={m.id} disabled={soldOut} onClick={() => !soldOut && toggleMod(g, m.id)}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ borderColor: on ? accent : (dark ? '#FFFFFF14' : '#e5e7eb'), background: on ? `${accent}14` : 'transparent' }}>
+                  <span className="font-bold text-sm flex items-center gap-2">
+                    <span className={`w-4 h-4 rounded-${g.multiSelect ? 'md' : 'full'} border-2 flex items-center justify-center`}
+                      style={{ borderColor: on ? accent : (dark ? '#FFFFFF40' : '#cbd5e1'), background: on ? accent : 'transparent' }}>
+                      {on && <Check className="h-2.5 w-2.5 text-white" />}
+                    </span>
+                    {m.name}
+                  </span>
+                  {soldOut
+                    ? <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: subText }}>Agotado</span>
+                    : (m.priceAdd > 0 && <span className="text-sm font-bold" style={{ color: subText }}>+{fmt(m.priceAdd)}</span>)}
+                </button>
+              );
+            };
+
+            const hasExtraPopping = (selected[g.id] || []).some(id => g.modifiers.find(m => m.id === id)?.name === "Extra popping boba");
+
+            return (
+              <div key={g.id} className="mt-5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest" style={{ color: subText }}>
+                    {beverage && <span className="inline-flex h-6 w-6 items-center justify-center rounded-full text-white" style={{ background: accent }}>{groupIndex + (variants.length ? 2 : 1)}</span>}
+                    {g.name}
+                  </p>
+                  <span className="text-[10px] font-bold" style={{ color: subText }}>
+                    {g.required ? 'Obligatorio' : 'Opcional'}{g.multiSelect && g.maxSelection ? ` · máx ${g.maxSelection}` : ''}
+                  </span>
+                </div>
+                
+                {isBaseGroup ? (
+                  <>
+                    <div className="space-y-2">
+                      {g.modifiers.filter(m => !basesEspeciales.includes(m.name)).map(renderModifier)}
+                    </div>
+                    {g.modifiers.filter(m => basesEspeciales.includes(m.name)).length > 0 && (
+                      <div className="mt-4">
+                        <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest mb-2" style={{ color: subText }}>
+                          {beverage && <span className="inline-flex h-6 w-6 items-center justify-center rounded-full text-white" style={{ background: accent }}>3.1</span>}
+                          ¿Quieres algo diferente? Bases especiales
+                        </p>
+                        <div className="space-y-2">
+                          {g.modifiers.filter(m => basesEspeciales.includes(m.name)).map(renderModifier)}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : isSaborGroup ? (
+                  <>
+                    <p className="text-[10px] font-bold uppercase tracking-widest mt-1 mb-2" style={{ color: subText }}>Cremosos</p>
+                    <div className="space-y-2">
+                      {g.modifiers.filter(m => !saboresFrutales.includes(m.name)).map(renderModifier)}
+                    </div>
+                    {g.modifiers.filter(m => saboresFrutales.includes(m.name)).length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: subText }}>Frutales</p>
+                        <div className="space-y-2">
+                          {g.modifiers.filter(m => saboresFrutales.includes(m.name)).map(renderModifier)}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    {g.modifiers.map(renderModifier)}
+                  </div>
+                )}
+                
+                {isNivelGroup && hasExtraPopping && (
+                  <div className="mt-3 p-3 rounded-xl border-2" style={{ borderColor: accent, background: `${accent}08` }}>
+                    <p className="text-xs font-bold mb-2" style={{ color: textColor }}>¿De qué sabor quieres tu boba extra?</p>
+                    <select
+                      className="w-full p-2 rounded-lg text-sm outline-none"
+                      style={{ background: dark ? '#FFFFFF14' : '#fff', color: textColor, border: `1px solid ${dark ? '#FFFFFF24' : '#e5e7eb'}` }}
+                      onChange={(e) => {
+                        const evt = { target: { value: e.target.value } };
+                        // We will append to notes or replace if already there
+                        const currentNote = note;
+                        const match = currentNote.match(/ \| Sabor boba extra: [^|]+/);
+                        if (match) {
+                          setNote(currentNote.replace(match[0], ` | Sabor boba extra: ${e.target.value}`));
+                        } else if (currentNote.includes("Sabor boba extra:")) {
+                           setNote(currentNote.replace(/Sabor boba extra: [^|]+/, `Sabor boba extra: ${e.target.value}`));
+                        } else {
+                          setNote(currentNote ? `${currentNote} | Sabor boba extra: ${e.target.value}` : `Sabor boba extra: ${e.target.value}`);
+                        }
+                      }}
+                      defaultValue="mango"
+                    >
+                      {["mango", "maracuyá", "fresa", "lichi", "mora azul", "kiwi", "durazno", "taro", "manzana verde", "piña colada", "limonada rosa", "uva", "chamoy"].map(s => (
+                        <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
-              <div className="space-y-2">
-                {g.modifiers.map(m => {
-                  const on = (selected[g.id] || []).includes(m.id);
-                  const soldOut = m.isAvailable === false;
-                  return (
-                    <button key={m.id} disabled={soldOut} onClick={() => !soldOut && toggleMod(g, m.id)}
-                      className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{ borderColor: on ? accent : (dark ? '#FFFFFF14' : '#e5e7eb'), background: on ? `${accent}14` : 'transparent' }}>
-                      <span className="font-bold text-sm flex items-center gap-2">
-                        <span className={`w-4 h-4 rounded-${g.multiSelect ? 'md' : 'full'} border-2 flex items-center justify-center`}
-                          style={{ borderColor: on ? accent : (dark ? '#FFFFFF40' : '#cbd5e1'), background: on ? accent : 'transparent' }}>
-                          {on && <span className="text-white text-[10px]">✓</span>}
-                        </span>
-                        {m.name}
-                      </span>
-                      {soldOut
-                        ? <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: subText }}>Agotado</span>
-                        : (m.priceAdd > 0 && <span className="text-sm font-bold" style={{ color: subText }}>+{fmt(m.priceAdd)}</span>)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            );
+          })}
 
           {/* Extras / Acompañamientos (complementos) */}
           {complements.length > 0 && (
@@ -322,14 +420,14 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
           {error && <p className="text-red-500 text-xs font-bold text-center">{error}</p>}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 rounded-2xl px-2 py-2" style={{ background: chip }}>
-              <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-9 h-9 font-bold text-lg">−</button>
+              <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-9 h-9 font-bold text-lg" aria-label="Quitar una unidad"><Minus className="mx-auto h-4 w-4" /></button>
               <span className="w-6 text-center font-bold">{qty}</span>
-              <button onClick={() => setQty(q => q + 1)} className="w-9 h-9 font-bold text-lg">+</button>
+              <button onClick={() => setQty(q => q + 1)} className="w-9 h-9 font-bold text-lg" aria-label="Agregar una unidad"><Plus className="mx-auto h-4 w-4" /></button>
             </div>
             <button onClick={handleAdd}
               className="flex-1 py-4 rounded-2xl font-bold uppercase tracking-widest text-white flex items-center justify-center gap-2 active:scale-95 transition-all"
               style={{ background: accent }}>
-              Agregar · {fmt(unitPrice * qty)}
+              {beverage ? 'Agregar a mi pedido' : 'Agregar'} · {fmt(unitPrice * qty)}
             </button>
           </div>
         </div>

@@ -1,0 +1,318 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import axios from '@/lib/api';
+import { Sun, Moon, ArrowLeft } from 'lucide-react';
+import LoginStep from './steps/LoginStep';
+import LocationStep from './steps/LocationStep';
+import DeviceStep from './steps/DeviceStep';
+import { useAuthStore } from '@/store/authStore';
+import { useHydrated } from '@/hooks/useClientValue';
+import { useThemeStore } from '@/store/themeStore';
+import { hasLinkedDevice, setLinkedDeviceCookie } from '@/lib/device-link';
+
+type SetupStep = 'login' | 'location' | 'device' | 'saving';
+
+interface SetupState {
+  email: string;
+  password: string;
+  selectedRestaurant: any;
+  selectedLocation: any;
+  deviceType: string;
+}
+
+export default function SetupPage() {
+  const router = useRouter();
+  const mounted = useHydrated();
+  const [step, setStep] = useState<SetupStep>('login');
+  const [state, setState] = useState<SetupState>({
+    email: '',
+    password: '',
+    selectedRestaurant: null,
+    selectedLocation: null,
+    deviceType: 'CAJA',
+  });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [, setRestaurants] = useState<any[]>([]);
+  const [authToken, setAuthToken] = useState('');
+  const { mode, toggleMode } = useThemeStore();
+
+  // Check if already linked
+  useEffect(() => {
+    const hasDevice = hasLinkedDevice();
+    if (hasDevice) {
+      router.replace('/');
+    }
+  }, [router]);
+
+  // Check internet connection
+  useEffect(() => {
+    const checkConnection = () => {
+      if (!navigator.onLine && step !== 'login') {
+        setError('Conexión requerida para vincular dispositivo');
+      }
+    };
+
+    window.addEventListener('offline', checkConnection);
+    return () => window.removeEventListener('offline', checkConnection);
+  }, [step]);
+
+  const handleLogin = async (email: string, password: string) => {
+    if (!navigator.onLine) {
+      setError('Conexión requerida para vincular dispositivo');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await axios.post('/api/auth/login', { email, password });
+      const token = response.data.accessToken;
+      const role = response.data.user?.role;
+      setAuthToken(token);
+
+      let restaurantData = null;
+
+      if (role === 'SUPER_ADMIN') {
+        const res = await axios.get('/api/saas/tpv-configs', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const rows = res.data || [];
+        const byRestaurant = new Map();
+        for (const row of rows) {
+          if (!byRestaurant.has(row.restaurantId)) {
+            byRestaurant.set(row.restaurantId, {
+              id: row.restaurantId,
+              name: row.restaurantName,
+              locations: []
+            });
+          }
+          if (row.locationId) {
+            byRestaurant.get(row.restaurantId).locations.push({
+              id: row.locationId,
+              name: row.locationName
+            });
+          }
+        }
+        const restaurantsList = Array.from(byRestaurant.values()).filter(r => r.locations.length > 0);
+        if (restaurantsList.length === 0) throw new Error("No hay sucursales activas");
+        restaurantData = restaurantsList[0];
+      } else {
+        const restResponse = await axios.get('/api/admin/config', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const locResponse = await axios.get('/api/admin/locations', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const restaurantId =
+          restResponse.data?.restaurantId || response.data.user?.restaurantId;
+        if (!restaurantId) throw new Error('El usuario no tiene un restaurante asignado');
+        restaurantData = {
+          ...restResponse.data,
+          // /api/admin/config devuelve una RestaurantConfig cuyo `id` no es
+          // el id del restaurante. Normalizamos aquí la identidad que usa el
+          // TPV para sus headers y evitamos vinculaciones recién creadas con
+          // un restaurantId inválido.
+          id: restaurantId,
+          restaurantId,
+          locations: locResponse.data.filter((l: any) => l.isActive !== false)
+        };
+      }
+
+      setRestaurants([restaurantData]);
+      setState((s) => ({
+        ...s,
+        email,
+        password,
+        selectedRestaurant: restaurantData,
+      }));
+
+      setStep('location');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al iniciar sesión');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLocationSelect = async (locationId: string) => {
+    setLoading(true);
+    try {
+      const locResponse = await axios.get(`/api/admin/locations/${locationId}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+
+      setState((s) => ({
+        ...s,
+        selectedLocation: locResponse.data,
+      }));
+
+      setStep('device');
+    } catch (_err) {
+      setError('Error al cargar sucursal');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeviceSetup = async (deviceType: string) => {
+    if (!navigator.onLine) {
+      setError('Conexión requerida para vincular dispositivo');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const restaurantId =
+        state.selectedLocation?.restaurantId ||
+        state.selectedRestaurant?.restaurantId ||
+        state.selectedRestaurant?.id;
+      if (!restaurantId) throw new Error('No se pudo identificar el restaurante');
+
+      const response = await axios.post(
+        '/api/devices/create',
+        {
+          locationId: state.selectedLocation.id,
+          deviceType,
+          restaurantId,
+        },
+        { headers: { Authorization: `Bearer ${authToken}` } }
+      );
+
+      const { deviceToken, deviceId, name: deviceName } = response.data;
+
+      // Mapear deviceType del UI ("CAJA"/"MESERO") a roles canónicos
+      // que coinciden con Device.type del schema Prisma ("POS"/"WAITER").
+      // KDS se vincula desde la app independiente apps/kds, no aquí.
+      const deviceRole = deviceType === 'MESERO' ? 'WAITER' : 'POS';
+
+      // Save device info
+      const { protectedStorage } = await import('../../lib/protected-storage');
+      await protectedStorage.setItem('deviceToken', deviceToken);
+      localStorage.setItem('deviceId', deviceId);
+      localStorage.setItem('deviceRole', deviceRole);
+      if (deviceName) localStorage.setItem('deviceName', deviceName);
+      localStorage.setItem('locationId', state.selectedLocation.id);
+      localStorage.setItem('restaurantId', restaurantId);
+
+      // Fetch and cache employees (offline cache para validar PINs en tareas).
+      const empResponse = await axios.get('/api/employees/sync', {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          'x-location-id': state.selectedLocation.id
+        },
+      });
+
+      // Use unified store to persist employees
+      useAuthStore.getState().setEmployees(empResponse.data);
+
+      // Set device cookie
+      setLinkedDeviceCookie();
+
+      setStep('saving');
+
+      // Tras vinculación pasa a / para usar el POS
+      setTimeout(() => {
+        router.replace('/');
+      }, 1500);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al vincular dispositivo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Permite corregir un paso anterior sin reiniciar todo el wizard. No aplica
+  // en 'login' (primer paso) ni en 'saving' (vinculación en curso).
+  const goBack = () => {
+    setError('');
+    if (step === 'device') setStep('location');
+    else if (step === 'location') setStep('login');
+  };
+  const canGoBack = !loading && (step === 'location' || step === 'device');
+
+  return (
+    <div
+      className="fixed inset-0 overflow-auto flex items-center justify-center px-4 py-[max(1rem,env(safe-area-inset-top))] sm:p-6"
+      style={{ background: 'var(--bg)' }}
+    >
+      {/* Glassmorphic Glows */}
+      <div
+        className="absolute pointer-events-none glow-orange"
+        style={{ width: 800, height: 800, top: -200, left: -200 }}
+      />
+      <div
+        className="absolute pointer-events-none glow-green"
+        style={{ width: 900, height: 900, bottom: -150, right: -150 }}
+      />
+
+      {mounted && (
+        <button
+          type="button"
+          onClick={toggleMode}
+          aria-label={mode === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+          title={mode === 'dark' ? 'Tema claro' : 'Tema oscuro'}
+          className="fixed top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] z-20 w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+          style={{
+            background: 'var(--surface-2)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          {mode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+      )}
+
+      <div className="w-full max-w-lg relative z-10 my-16 sm:my-10 landscape:max-w-4xl">
+        {canGoBack && (
+          <button
+            onClick={goBack}
+            className="mb-4 inline-flex items-center gap-2 text-sm font-bold transition-opacity hover:opacity-80"
+            style={{ color: 'var(--muted, var(--text-primary))' }}
+          >
+            <ArrowLeft size={18} /> Atrás
+          </button>
+        )}
+        <div
+          className="rounded-2xl p-5 sm:p-8 lg:p-12 landscape:p-7"
+          style={{ 
+            background: 'var(--surface-1)', 
+            border: '1px solid var(--border)',
+            boxShadow: 'var(--shadow-lg)'
+          }}
+        >
+          {step === 'login' && (
+            <LoginStep onSubmit={handleLogin} loading={loading} error={error} />
+          )}
+          {step === 'location' && (
+            <LocationStep
+              locations={state.selectedRestaurant?.locations || []}
+              onSelect={handleLocationSelect}
+              loading={loading}
+              error={error}
+            />
+          )}
+          {step === 'device' && (
+            <DeviceStep
+              onSubmit={handleDeviceSetup}
+              loading={loading}
+              error={error}
+            />
+          )}
+          {step === 'saving' && (
+            <div className="text-center py-10">
+              <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>
+                Guardando configuración...
+              </h1>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
