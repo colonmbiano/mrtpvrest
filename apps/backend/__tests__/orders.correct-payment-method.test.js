@@ -138,12 +138,36 @@ describe('PUT /api/orders/:id/correct-payment-method', () => {
     expect(res.body.cashAdjusted).toBe('locked');
   });
 
-  test('rechaza una orden que no está pagada', async () => {
-    prisma.order.findUnique.mockResolvedValue(baseOrder({ paymentStatus: 'PENDING' }));
+  test('orden sin liquidar (PENDING): corrige el método sin tocar la caja del repartidor', async () => {
+    // Efectivo sin liquidar marcado por error: un admin lo corrige a transferencia
+    // ANTES de cobrar. Solo cambia la etiqueta; no marca cobrada ni mueve la caja.
+    prisma.order.findUnique.mockResolvedValue(
+      baseOrder({ paymentMethod: 'CASH', paymentStatus: 'PENDING' }),
+    );
+
+    const res = await request(makeApp())
+      .put('/api/orders/o1/correct-payment-method')
+      .send({ paymentMethod: 'TRANSFER' })
+      .expect(200);
+
+    expect(tx.order.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ paymentMethod: 'TRANSFER', cashCollected: false }),
+    }));
+    // La caja del repartidor no se toca: la orden aún no se ha liquidado.
+    expect(tx.driverCashMovement.findFirst).not.toHaveBeenCalled();
+    expect(tx.driverCashMovement.create).not.toHaveBeenCalled();
+    expect(tx.driverCashMovement.delete).not.toHaveBeenCalled();
+    expect(res.body.cashAdjusted).toBeNull();
+  });
+
+  test('rechaza corregir una orden cancelada', async () => {
+    prisma.order.findUnique.mockResolvedValue(
+      baseOrder({ paymentMethod: 'CASH', status: 'CANCELLED' }),
+    );
 
     await request(makeApp())
       .put('/api/orders/o1/correct-payment-method')
-      .send({ paymentMethod: 'CASH' })
+      .send({ paymentMethod: 'TRANSFER' })
       .expect(400);
 
     expect(tx.order.update).not.toHaveBeenCalled();
