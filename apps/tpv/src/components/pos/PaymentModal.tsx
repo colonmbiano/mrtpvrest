@@ -616,8 +616,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         className="fixed inset-0 z-[100] flex items-center justify-center p-0 lg:p-6"
         style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
       >
-        <div className="absolute inset-0 bg-black/80 backdrop-blur-md" aria-hidden />
-        <div className="relative w-full h-full max-w-none rounded-none border-0 lg:w-full lg:max-w-lg lg:h-auto lg:rounded-[2.5rem] lg:border bg-[var(--bg)] border-white/10 shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+        <div className="absolute inset-0 bg-black/90" aria-hidden />
+        <div className="relative w-full h-full max-w-none rounded-none border-0 lg:w-full lg:max-w-lg lg:h-auto lg:rounded-[2.5rem] lg:border bg-[var(--bg)] border-white/10 shadow-2xl overflow-hidden flex flex-col">
           <div
             aria-hidden
             className="absolute pointer-events-none -top-40 -left-40 w-[500px] h-[500px] rounded-full opacity-30 blur-[120px]"
@@ -722,11 +722,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           accidental fuera perdía todo el progreso. La salida explícita es
           por la X o por Confirmar. */}
       <div
-        className="absolute inset-0 bg-black/80 backdrop-blur-md"
+        className="absolute inset-0 bg-black/90"
         aria-hidden
       />
 
-      <div className="relative w-full h-full max-w-none rounded-none border-0 lg:w-full lg:max-w-5xl lg:h-[88vh] lg:max-h-[760px] lg:rounded-[2.5rem] lg:border bg-[var(--bg)] border-white/10 shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+      <div className="relative w-full h-full max-w-none rounded-none border-0 lg:w-full lg:max-w-5xl lg:h-[88vh] lg:max-h-[760px] lg:rounded-[2.5rem] lg:border bg-[var(--bg)] border-white/10 shadow-2xl overflow-hidden flex flex-col">
         {/* GLOWS */}
         <div
           aria-hidden
@@ -823,7 +823,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 la atienda antes que método de pago/propina. El botón
                 Confirmar queda disabled hasta que haya driverId. */}
             {isDelivery && (
-              <section className="mb-6 rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
+              <section className="mb-6 rounded-3xl bg-white/5 border border-white/10 p-5">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <Bike size={16} className="text-[var(--brand)]" />
