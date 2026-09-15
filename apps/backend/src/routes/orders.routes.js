@@ -362,31 +362,35 @@ async function restoreInventoryForCancelledOrder(prisma, orderId) {
     netByIngredient.set(m.ingredientId, (netByIngredient.get(m.ingredientId) || 0) + Number(m.delta || 0));
   }
 
+  const restorePromises = [];
   for (const [ingredientId, net] of netByIngredient) {
     if (net >= 0) continue; // nada pendiente de reponer
     const toRestore = -net;
 
-    await prisma.$transaction(async (tx) => {
-      const updated = await tx.ingredient.update({
-        where: { id: ingredientId },
-        data: { stock: { increment: toRestore } },
-        select: { id: true, stock: true, baseUnit: true, locationId: true },
-      });
-      await tx.stockMovement.create({
-        data: {
-          ingredientId,
-          locationId: updated.locationId,
-          delta: toRestore,
-          unit: updated.baseUnit,
-          reason: 'ADJUSTMENT',
-          refType: 'order',
-          refId: orderId,
-          balanceAfter: Number(updated.stock),
-          notes: 'Reversión por cancelación de orden',
-        },
-      });
-    });
+    restorePromises.push(
+      prisma.$transaction(async (tx) => {
+        const updated = await tx.ingredient.update({
+          where: { id: ingredientId },
+          data: { stock: { increment: toRestore } },
+          select: { id: true, stock: true, baseUnit: true, locationId: true },
+        });
+        await tx.stockMovement.create({
+          data: {
+            ingredientId,
+            locationId: updated.locationId,
+            delta: toRestore,
+            unit: updated.baseUnit,
+            reason: 'ADJUSTMENT',
+            refType: 'order',
+            refId: orderId,
+            balanceAfter: Number(updated.stock),
+            notes: 'Reversión por cancelación de orden',
+          },
+        });
+      })
+    );
   }
+  await Promise.all(restorePromises);
 }
 
 const express = require('express');
@@ -2048,8 +2052,9 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
 
     // Cancelar repone el stock que la orden descontó al venderse. Best-effort:
     // la cancelación no debe fallar por inventario, pero sí queda log.
+    // OPTIMIZACIÓN: Se envía al background para no demorar la respuesta de cancelación.
     if (status === 'CANCELLED' && existing.status !== 'CANCELLED') {
-      await restoreInventoryForCancelledOrder(prisma, order.id).catch((e) =>
+      restoreInventoryForCancelledOrder(prisma, order.id).catch((e) =>
         console.error('[orders] restoreInventory al cancelar:', e.message)
       );
     }
@@ -3029,9 +3034,10 @@ router.post('/:id/refund', authenticate, requireTenantAccess, requirePermission(
 
     // Inventario: reponer el stock vendido SOLO en reembolso total (la venta se
     // deshace). Fuera de la tx de dinero y best-effort, igual que la cancelación.
+    // OPTIMIZACIÓN: Se envía al background para responder rápido.
     const shouldRestock = req.body.restock !== undefined ? req.body.restock === true : isFull;
     if (shouldRestock && isFull) {
-      await restoreInventoryForCancelledOrder(prisma, id).catch((e) =>
+      restoreInventoryForCancelledOrder(prisma, id).catch((e) =>
         console.error('[orders] restoreInventory al reembolsar:', e.message)
       );
     }
