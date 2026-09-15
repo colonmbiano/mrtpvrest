@@ -403,7 +403,7 @@ const { computeBulkPromoDiscount, loadActiveBulkPromos } = require('../lib/bulk-
 const { loadPromoWindowConfig, itemPromoActive } = require('../lib/promo-window');
 const { nextOrderNumber } = require('../lib/order-number');
 const { releaseTableAfterPayment } = require('../services/table-lifecycle.service');
-const { claimKitchenPrint } = require('../lib/print-claim');
+const { claimKitchenPrint, releaseKitchenPrint } = require('../lib/print-claim');
 const audit = require('../lib/audit-logger');
 const {
   createOrderSchema,
@@ -540,6 +540,75 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
       createdByName: o.createdById ? (employeeMap[o.createdById] || null) : null,
     })));
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Tokki: conserva los pedidos de mostrador (TAKEOUT) y suma los pedidos que
+// llegaron desde canales externos. No se incluyen mesas creadas por el TPV
+// principal, para que la tablet de Tokki no se llene con cuentas del salón.
+const TOKKI_ONLINE_SOURCES = ['ONLINE', 'STORE', 'WHATSAPP', 'KIOSK'];
+router.get('/open-tokki', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER', 'WAITER'), async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId || !req.locationId) return res.status(400).json({ error: 'Selecciona una sucursal.' });
+    const history = req.query.history === '1';
+    const onlineOnly = req.query.onlineOnly === '1';
+    const channelScope = onlineOnly
+      ? { source: { in: TOKKI_ONLINE_SOURCES } }
+      : { OR: [
+          { orderType: 'TAKEOUT' },
+          { source: { in: TOKKI_ONLINE_SOURCES } },
+        ] };
+    const lifecycleScope = history
+      ? { createdAt: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) } }
+      : { OR: [
+          { paymentStatus: 'PENDING' },
+          { status: { in: ['PENDING', 'OPEN', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING'] } },
+        ] };
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        locationId: req.locationId,
+        status: { not: 'CANCELLED' },
+        paymentStatus: { not: 'REFUNDED' },
+        AND: [channelScope, lifecycleScope],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: {
+        id: true,
+        orderNumber: true,
+        customerName: true,
+        total: true,
+        status: true,
+        paymentStatus: true,
+        paymentMethod: true,
+        orderType: true,
+        source: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    res.json(orders);
+  } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+// Mostrador Tokki legado: abiertos de la sucursal, sin limitar al cajero creador.
+router.get('/open-takeout', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER', 'WAITER'), async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId || !req.locationId) return res.status(400).json({ error: 'Selecciona una sucursal.' });
+    const history = req.query.history === '1';
+    const where = {
+      restaurantId, locationId: req.locationId, orderType: 'TAKEOUT',
+      status: { not: 'CANCELLED' }, paymentStatus: { not: 'REFUNDED' },
+      ...(history ? { createdAt: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) } } : {
+        OR: [ { paymentStatus: 'PENDING' }, { status: { in: ['PENDING', 'OPEN', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING'] } } ],
+      }),
+    };
+    const orders = await prisma.order.findMany({ where, orderBy: { createdAt: 'desc' }, take: 200,
+      select: { id: true, orderNumber: true, customerName: true, total: true, status: true, paymentStatus: true, paymentMethod: true, createdAt: true } });
+    res.json(orders);
+  } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
 // ── GET /recent-takeout — Historial ligero del operador para reimpresión ──
@@ -710,7 +779,15 @@ router.get('/:id', authenticate, requireTenantAccess, async (req, res) => {
 });
 
 // ── POST /tpv — Crear pedido ──────────────────────────────────────────
-router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'WAITER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), requireActiveShift, validateBody(createOrderSchema), async (req, res) => {
+const requireCreatePaymentAccess = (req, res, next) => {
+  const paid = req.body?.paymentMethod && ['DELIVERED', 'COMPLETED', 'PAID'].includes(String(req.body?.status || '').toUpperCase());
+  if (!paid) return next();
+  // Crear y cobrar tiene los mismos límites que cobrar una cuenta existente.
+  if (req.user?.isDevice) return res.status(403).json({ error: 'Identifica al empleado para cobrar.' });
+  return requireRole('CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN')(req, res, () =>
+    requirePermission('open_cash_drawer')(req, res, next));
+};
+router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'WAITER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), requireCreatePaymentAccess, requireActiveShift, validateBody(createOrderSchema), async (req, res) => {
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
@@ -1181,10 +1258,11 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       }
 
       // Creamos cada OrderItem individualmente porque los modificadores son
-      // una relación nested write (no se puede con createMany).
-      for (const it of resolvedItems) {
+      // una relación nested write (no se puede con createMany). 
+      // Usamos Promise.all para paralelizarlos y evitar demoras de red secuenciales.
+      await Promise.all(resolvedItems.map((it) => {
         const { _modifiers, _comboSelections, _categoryId, ...itemData } = it;
-        await tx.orderItem.create({
+        return tx.orderItem.create({
           data: {
             ...itemData,
             orderId: created.id,
@@ -1197,7 +1275,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
               : undefined,
           },
         });
-      }
+      }));
 
       return tx.order.findUnique({
         where: { id: created.id },
@@ -1211,7 +1289,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
 
     // Pasamos order.items (con id) para que discountInventory pueda
     // persistir costSnapshot en cada OrderItem.
-    await discountInventory(prisma, order.items, order.id, restaurantId, req.locationId);
+    // OPTIMIZACIÓN: Se manda al background (sin await) para no bloquear el TPV.
+    discountInventory(prisma, order.items, order.id, restaurantId, req.locationId).catch(err => console.error('[discountInventory background] Error:', err.message));
+    
     if (paidOnCreate) {
       await releaseTableIfDineIn(order.id);
     }
@@ -1398,9 +1478,9 @@ async function addRoundHandler(req, res) {
         data: { orderId: id, roundNumber: nextNumber },
       });
 
-      for (const itemData of newItemsData) {
+      await Promise.all(newItemsData.map((itemData) => {
         const { _modifiers, _comboSelections, ...data } = itemData;
-        await tx.orderItem.create({
+        return tx.orderItem.create({
           data: {
             ...data,
             orderId: id,
@@ -1413,7 +1493,7 @@ async function addRoundHandler(req, res) {
               : undefined,
           },
         });
-      }
+      }));
 
       const all = await tx.orderItem.findMany({
         where: { orderId: id },
@@ -1450,8 +1530,9 @@ async function addRoundHandler(req, res) {
     // Descontar inventario SOLO de los items de la nueva ronda. Filtramos
     // por roundId para no re-descontar items de rondas anteriores que ya
     // habían sido procesados al crearse.
+    // OPTIMIZACIÓN: Se manda al background (sin await).
     const newRoundItems = (updated.items || []).filter((it) => it.roundId === round.id);
-    await discountInventory(prisma, newRoundItems, id, restaurantId, req.locationId);
+    discountInventory(prisma, newRoundItems, id, restaurantId, req.locationId).catch(err => console.error('[discountInventory round background] Error:', err.message));
 
     // Imprimir SOLO los items de esta ronda en cocina. Fire-and-forget.
     try {
@@ -3052,6 +3133,25 @@ router.post('/:id/claim-kitchen-print', authenticate, requireTenantAccess, async
     console.error('claim-kitchen-print error:', e?.message || e);
     // Fail-open: ante error, deja imprimir (no perder la comanda por este guard).
     res.json({ claimed: true });
+  }
+});
+
+// Si la tablet ganó el reclamo pero la impresora falló, libera el pedido para
+// que el siguiente reintento (o la otra caja) pueda mandar la comanda.
+router.post('/:id/release-kitchen-print', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, restaurantId },
+      select: { id: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    await releaseKitchenPrint(`${restaurantId}:${order.id}`);
+    res.json({ released: true });
+  } catch (e) {
+    console.error('release-kitchen-print error:', e?.message || e);
+    res.status(500).json({ error: 'No se pudo liberar la impresión' });
   }
 });
 
