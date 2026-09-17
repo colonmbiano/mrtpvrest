@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Pause, Play } from 'lucide-react';
 import { cldImage, cldSrcSet } from '@/lib/cloudinary';
 
 export type Banner = {
@@ -238,9 +239,9 @@ export default function BannerCarousel({ banners, variant = 'light', accent = '#
               style={{ width: 44, height: 44, color: isDark ? '#FFFFFFB3' : 'rgba(0,0,0,0.55)' }}
             >
               {paused ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+                <Play className="h-3.5 w-3.5" aria-hidden="true" fill="currentColor" />
               ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
+                <Pause className="h-3.5 w-3.5" aria-hidden="true" fill="currentColor" />
               )}
             </button>
           )}

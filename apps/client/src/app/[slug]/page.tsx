@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import { MapPin, Phone, MessageCircle } from 'lucide-react';
 import { MochiTheme } from '@/components/themes/MochiTheme';
+import { BeverageTheme } from '@/components/themes/BeverageTheme';
 import { MundialistaTheme } from '@/components/themes/MundialistaTheme';
 import { AntojitosTheme } from '@/components/themes/AntojitosTheme';
 import {
@@ -21,12 +22,14 @@ function waLink(number?: string | null): string | null {
   return `https://wa.me/${digits}`;
 }
 
-// Temas activos: KAWAII (pastel bubble-tea, alias MOCHI), MUNDIALISTA y ANTOJITOS
+// Temas activos: BEVERAGE (bebidas/cafeterías), KAWAII (alias MOCHI),
+// MUNDIALISTA y ANTOJITOS
 // (fonda mexicana artesanal). Cualquier otro valor (incluidos los temas retirados
 // HALO/BRUTALIST/ANTOJO) cae a DEFAULT, que renderiza el cliente legacy como red
 // de seguridad.
-function normalizeTheme(raw?: string | null): 'MOCHI' | 'MUNDIALISTA' | 'ANTOJITOS' {
-  const map: Record<string, 'MOCHI' | 'MUNDIALISTA' | 'ANTOJITOS'> = {
+function normalizeTheme(raw?: string | null): 'BEVERAGE' | 'MOCHI' | 'MUNDIALISTA' | 'ANTOJITOS' {
+  const map: Record<string, 'BEVERAGE' | 'MOCHI' | 'MUNDIALISTA' | 'ANTOJITOS'> = {
+    BEVERAGE: 'BEVERAGE', DRINKS: 'BEVERAGE', CAFE: 'BEVERAGE', CAFETERIA: 'BEVERAGE', TOKKI: 'BEVERAGE',
     MOCHI: 'MOCHI', KAWAII: 'MOCHI',
     MUNDIALISTA: 'MUNDIALISTA', MUNDIAL: 'MUNDIALISTA',
     ANTOJITOS: 'ANTOJITOS', ANTOJITO: 'ANTOJITOS', FONDA: 'ANTOJITOS',
@@ -129,7 +132,12 @@ export default async function StorefrontPage({
   if (!store || !store.hasWebStore) notFound();
 
   const primary = store.primaryColor || store.themeConfig?.primaryColor || '#ff5c35';
-  const theme = normalizeTheme(themeOverride || store.storefrontTheme || store.themeConfig?.theme);
+  const configuredTheme = themeOverride || store.storefrontTheme || store.themeConfig?.theme;
+  // Tokki usa su tema especializado aunque su configuración histórica todavía
+  // diga KAWAII. Un ?theme= explícito conserva la vista previa del administrador.
+  const theme = !themeOverride && slug === 'tokki-bobba'
+    ? 'BEVERAGE'
+    : normalizeTheme(configuredTheme);
 
   // Tienda cerrada: bloqueamos el catálogo para TODOS los temas y mostramos el
   // mensaje configurado. Así "activar/desactivar tienda" desde el admin tiene
@@ -236,6 +244,7 @@ export default async function StorefrontPage({
           al abrir el checkout. */}
       {dineIn && <DineInBanner table={dineIn.table} primary={primary} />}
 
+      {theme === 'BEVERAGE' && <BeverageTheme data={data} />}
       {theme === 'MOCHI' && <MochiTheme data={data} />}
       {theme === 'MUNDIALISTA' && <MundialistaTheme data={data} />}
       {theme === 'ANTOJITOS' && <AntojitosTheme data={data} />}

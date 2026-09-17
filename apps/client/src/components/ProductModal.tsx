@@ -26,6 +26,39 @@ export type StoreProduct = {
 // (store.routes.js) los separa, valida y cobra como extras del item.
 const COMPLEMENT_PREFIX = 'complement:';
 
+const beverageSteps = [
+  { name: 'Preparación', matches: (value: string) => value.includes('prepar') },
+  { name: 'Base de tu creación', matches: (value: string) => value === 'base' || value.includes('base de tu creacion') },
+  { name: 'Sabor', matches: (value: string) => value.includes('sabor') },
+  { name: 'Toque final', matches: (value: string) => value.includes('toque') },
+  { name: 'Siguiente nivel', matches: (value: string) => value.includes('nivel') },
+] as const;
+
+function normalizedGroupName(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+}
+
+export function normalizeBeverageGroups(groups: ModifierGroup[]) {
+  const consumed = new Set<string>();
+  const ordered = beverageSteps.flatMap(step => {
+    const matches = groups.filter(group => step.matches(normalizedGroupName(group.name)));
+    if (!matches.length) return [];
+
+    matches.forEach(group => consumed.add(group.id));
+    const canonicalName = normalizedGroupName(step.name);
+    const preferred = matches.find(group => normalizedGroupName(group.name) === canonicalName)
+      || matches.sort((a, b) => b.name.length - a.name.length)[0];
+    if (!preferred) return [];
+
+    return [{ ...preferred, name: step.name, multiSelect: false, maxSelection: 1 }];
+  });
+
+  const remaining = groups.filter(group =>
+    !consumed.has(group.id) && normalizedGroupName(group.name) !== 'extras',
+  );
+  return [...ordered, ...remaining];
+}
+
 type ProductModalProps = {
   product: StoreProduct;
   accent?: string;
@@ -50,7 +83,10 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
   const beverage = variant === 'beverage';
 
   const variants = product.variants || [];
-  const groups = product.modifierGroups || [];
+  const groups = useMemo(
+    () => beverage ? normalizeBeverageGroups(product.modifierGroups || []) : (product.modifierGroups || []),
+    [beverage, product.modifierGroups],
+  );
   const complements = product.complements || [];
   const comboComponents = product.comboComponents || [];
   const basePromo = product.isPromo && product.promoPrice ? product.promoPrice : product.price;
