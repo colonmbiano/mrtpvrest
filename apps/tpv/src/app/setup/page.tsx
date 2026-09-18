@@ -64,6 +64,12 @@ export default function SetupPage() {
       return;
     }
 
+    // Limpiar estado de dispositivo obsoleto antes de iniciar un nuevo setup
+    localStorage.removeItem('restaurantId');
+    localStorage.removeItem('locationId');
+    localStorage.removeItem('deviceToken');
+    localStorage.removeItem('deviceId');
+
     setLoading(true);
     setError('');
 

@@ -47,9 +47,9 @@ api.interceptors.request.use(async (config) => {
       console.warn("[api] Petición sin restaurantId →", url, "(revisa selección de workspace en el Hub)");
     }
 
-    if (restaurantId) config.headers["x-restaurant-id"] = restaurantId;
-    if (locationId)   config.headers["x-location-id"]   = locationId;
-    if (token)        config.headers["Authorization"]    = `Bearer ${token}`;
+    if (restaurantId && !config.headers["x-restaurant-id"]) config.headers["x-restaurant-id"] = restaurantId;
+    if (locationId && !config.headers["x-location-id"])   config.headers["x-location-id"]   = locationId;
+    if (token && !config.headers["Authorization"])        config.headers["Authorization"]    = `Bearer ${token}`;
 
     // RBAC · override token de supervisor. Si hay uno pendiente (recién
     // emitido por verify-permission), lo adjuntamos a esta request mutante
