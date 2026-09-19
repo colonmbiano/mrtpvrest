@@ -877,6 +877,7 @@ router.get('/suggested-actions', authenticate, requireTenantAccess, requireAdmin
     console.error('dashboard/suggested-actions', e);
     res.status(500).json({ error: 'Error al obtener acciones sugeridas' });
   }
+});
 // ─────────────────────────────────────────────────────────────────────────────
 // 📈 GET /api/dashboard/detailed-breakdown?period=7D
 // Devuelve ventas y gastos desglosados por día para el periodo especificado.
