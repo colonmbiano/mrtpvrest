@@ -12,6 +12,7 @@ const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware');
 const { localDayRange } = require('../utils/dayRange');
+const { getPeriodRange } = require('../utils/report-period');
 
 const DAY_MS = 86_400_000;
 const router = express.Router();
@@ -38,39 +39,6 @@ function getLocationId(req) {
 // Devuelve { from, to, prevFrom, prevTo } para un período dado, normalizando
 // a zona horaria del servidor (Railway corre en UTC; las fechas que se guardan
 // son DateTime, la agregación por día sólo se usa para gráficas).
-function getPeriodRange(periodRaw) {
-  const period = String(periodRaw || 'HOY').toUpperCase();
-  const to = new Date();
-
-  // Anclamos el inicio del periodo a la medianoche de México (el servidor
-  // corre en UTC; antes `setHours(0,0,0,0)` partía el día a las 18:00 MX y
-  // las ventas de la tarde caían fuera del "HOY").
-  const todayFrom = localDayRange().from;
-  let from = todayFrom;
-
-  if (period === '7D') {
-    from = new Date(todayFrom.getTime() - 6 * DAY_MS);
-  } else if (period === '30D') {
-    from = new Date(todayFrom.getTime() - 29 * DAY_MS);
-  } else if (period === '90D') {
-    from = new Date(todayFrom.getTime() - 89 * DAY_MS);
-  } else if (period === '1Y' || period === 'AÑO' || period === 'ANIO' || period === 'ANO') {
-    // "AÑO" = últimos 365 días rolling — siempre captura datos recientes.
-    from = new Date(todayFrom.getTime() - 364 * DAY_MS);
-  } else if (period === 'HISTORICO' || period === 'HIST') {
-    // "Histórico" = desde siempre. Usamos epoch para que el aggregate
-    // tome todos los pedidos sin filtro inferior.
-    from = new Date(Date.UTC(2000, 0, 1));
-  }
-
-  // Periodo anterior: misma longitud justo antes de `from`
-  const lengthMs = to.getTime() - from.getTime();
-  const prevTo = new Date(from.getTime() - 1);
-  const prevFrom = new Date(from.getTime() - lengthMs);
-
-  return { from, to, prevFrom, prevTo, period };
-}
-
 function pctDelta(curr, prev) {
   if (!prev) return curr > 0 ? 100 : 0;
   return Math.round(((curr - prev) / prev) * 1000) / 10; // 1 decimal
@@ -602,15 +570,16 @@ router.get('/sales-by-location', authenticate, requireTenantAccess, requireAdmin
   try {
     const restaurantId = requireRestaurant(req, res);
     if (!restaurantId) return;
-    const { from, to, prevFrom, prevTo } = getPeriodRange(req.query.period);
+    const { from, to, prevFrom, prevTo, comparable } = getPeriodRange(req.query.period);
+    const locationId = getLocationId(req);
 
     const locations = await prisma.location.findMany({
-      where:  { restaurantId, isActive: true },
+      where:  { restaurantId, isActive: true, ...(locationId ? { id: locationId } : {}) },
       select: { id: true, name: true, slug: true },
     });
     if (locations.length === 0) return res.json([]);
 
-    const baseWhere = { restaurantId, status: { not: 'CANCELLED' } };
+    const baseWhere = { restaurantId, status: { not: 'CANCELLED' }, ...(locationId ? { locationId } : {}) };
 
     const [curr, prev] = await Promise.all([
       prisma.order.groupBy({
@@ -643,6 +612,7 @@ router.get('/sales-by-location', authenticate, requireTenantAccess, requireAdmin
         orders:    c?._count.id || 0,
         avgTicket: Math.round(c?._avg.total || 0),
         delta:     pctDelta(currSales, prevSales),
+        comparisonAvailable: comparable && Number(prevSales) > 0,
       };
     }).sort((a, b) => b.sales - a.sales);
 
@@ -654,29 +624,31 @@ router.get('/sales-by-location', authenticate, requireTenantAccess, requireAdmin
 });
 
 // ── GET /api/dashboard/insights?period=30D ─────────────────────────────────
-// Devuelve insights detectados automáticamente. Hoy se entrega vacío para que
-// el frontend muestre empty-state; cuando el pipeline de análisis esté activo
-// se poblará desde el mismo endpoint.
+// Insights deterministas, sujetos al mismo periodo y sucursal que los KPIs.
 router.get('/insights', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = requireRestaurant(req, res);
     if (!restaurantId) return;
-    const { from, to, prevFrom, prevTo } = getPeriodRange(req.query.period || '30D');
+    const { from, to, prevFrom, prevTo, comparable } = getPeriodRange(req.query.period || '30D');
+    const locationId = getLocationId(req);
+    const scope = { restaurantId, ...(locationId ? { locationId } : {}) };
 
     const [currSales, prevSales, topItems] = await Promise.all([
       prisma.order.aggregate({
-        where: { restaurantId, status: { not: 'CANCELLED' }, createdAt: { gte: from, lte: to } },
+        where: { ...scope, status: { not: 'CANCELLED' }, createdAt: { gte: from, lte: to } },
         _sum: { total: true },
         _count: { id: true },
         _avg: { total: true }
       }),
       prisma.order.aggregate({
-        where: { restaurantId, status: { not: 'CANCELLED' }, createdAt: { gte: prevFrom, lte: prevTo } },
-        _sum: { total: true }
+        where: { ...scope, status: { not: 'CANCELLED' }, createdAt: { gte: prevFrom, lte: prevTo } },
+        _sum: { total: true },
+        _avg: { total: true },
+        _count: { id: true }
       }),
       prisma.orderItem.groupBy({
         by: ['name'],
-        where: { order: { restaurantId, status: { not: 'CANCELLED' }, createdAt: { gte: from } } },
+        where: { order: { ...scope, status: { not: 'CANCELLED' }, createdAt: { gte: from, lte: to } } },
         _sum: { quantity: true },
         orderBy: { _sum: { quantity: 'desc' } },
         take: 3
@@ -684,10 +656,11 @@ router.get('/insights', authenticate, requireTenantAccess, requireAdmin, async (
     ]);
 
     const insights = [];
-    const salesDelta = pctDelta(currSales._sum.total || 0, prevSales._sum.total || 0);
+    const salesDelta = comparable && Number(prevSales._sum.total) > 0
+      ? pctDelta(currSales._sum.total || 0, prevSales._sum.total) : null;
 
     // Insight 1: Ventas Generales
-    if (salesDelta > 5) {
+    if (salesDelta !== null && salesDelta > 5) {
       insights.push({
         kind: 'CRECIMIENTO',
         variant: 'ok',
@@ -695,13 +668,13 @@ router.get('/insights', authenticate, requireTenantAccess, requireAdmin, async (
         body: `Tus ingresos han subido comparado con el periodo anterior. Se han procesado ${currSales._count.id} pedidos con un ticket promedio de $${Math.round(currSales._avg.total || 0)}.`,
         cta: 'Ver detalle'
       });
-    } else if (salesDelta < -5) {
+    } else if (salesDelta !== null && salesDelta < -5) {
       insights.push({
         kind: 'ALERTA',
         variant: 'warn',
         title: `Caída de ingresos (${Math.abs(salesDelta)}%)`,
         body: `Las ventas están por debajo del periodo anterior. Considera lanzar una promoción relámpago para reactivar el flujo.`,
-        cta: 'Crear Promo'
+        cta: 'Pedir ideas de promoción'
       });
     }
 
@@ -712,16 +685,18 @@ router.get('/insights', authenticate, requireTenantAccess, requireAdmin, async (
         variant: 'info',
         title: `"${topItems[0].name}" es tu estrella`,
         body: `Es el producto más vendido con ${topItems[0]._sum.quantity} unidades en este periodo. ¿Has pensado en subirle un poco el precio o armar un combo?`,
-        cta: 'Ajustar Menú'
+        cta: 'Pedir ideas de combos'
       });
     }
 
-    // Insight 3: Eficiencia
-    insights.push({
+    const currentTicket = Number(currSales._avg.total || 0);
+    const previousTicket = Number(prevSales._avg.total || 0);
+    if (comparable && currSales._count.id > 0 && prevSales._count.id > 0 && previousTicket > 0 &&
+        Math.abs(pctDelta(currentTicket, previousTicket)) <= 5) insights.push({
       kind: 'LOGÍSTICA',
       variant: 'info',
       title: 'Ticket promedio estable',
-      body: `Tu ticket promedio se mantiene en $${Math.round(currSales._avg.total || 0)}. Un pequeño incremento en complementos podría subirlo un 10%.`,
+      body: `El ticket promedio es $${currentTicket.toFixed(2)}, frente a $${previousTicket.toFixed(2)} en el periodo anterior equivalente; la variación no supera el 5%.`,
       cta: 'Ver Sugerencias'
     });
 
@@ -747,11 +722,11 @@ router.get('/suggested-actions', authenticate, requireTenantAccess, requireAdmin
     const locationId = getLocationId(req);
     const { from, to, prevFrom, prevTo } = getPeriodRange(req.query.period || '30D');
 
-    const baseWhere = { restaurantId, status: { not: 'CANCELLED' } };
+    const baseWhere = { restaurantId, status: { not: 'CANCELLED' }, ...(locationId ? { locationId } : {}) };
 
     const [locations, currByLoc, prevByLoc, topItems, lowStock] = await Promise.all([
       prisma.location.findMany({
-        where: { restaurantId, isActive: true },
+        where: { restaurantId, isActive: true, ...(locationId ? { id: locationId } : {}) },
         select: { id: true, name: true },
       }),
       prisma.order.groupBy({
@@ -782,7 +757,96 @@ router.get('/suggested-actions', authenticate, requireTenantAccess, requireAdmin
       }),
       locationId
         ? prisma.ingredient.findMany({
-            where: { locationId, isActive: true, minStock: { gt: 0 } },
+            where: { restaurantId, locationId, isActive: true, minStock: { gt: 0 } },
+            select: { id: true, name: true, unit: true, stock: true, minStock: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const currMap = Object.fromEntries(currByLoc.map(r => [r.locationId, r]));
+    const prevMap = Object.fromEntries(prevByLoc.map(r => [r.locationId, r]));
+
+    const sedes = locations.map(loc => {
+      const c = currMap[loc.id];
+      const p = prevMap[loc.id];
+      const sales = c?._sum.total || 0;
+      const prev = p?._sum.total || 0;
+      return {
+        id: loc.id,
+        name: loc.name,
+        sales,
+        avgTicket: Math.round(c?._avg.total || 0),
+        orders: c?._count.id || 0,
+        delta: pctDelta(sales, prev),
+      };
+    });
+
+    const actions = [];
+    let n = 1;
+
+    // 1) Sede con peor caída (delta <= -10%, prioriza la más fuerte)
+    const dropping = sedes
+      .filter(s => s.sales > 0 && s.delta <= -10)
+      .sort((a, b) => a.delta - b.delta);
+    if (dropping[0]) {
+      const s = dropping[0];
+      actions.push({
+        n: n++,
+        title: `Revisar caída en ${s.name}`,
+        sub: `Ventas ${Math.abs(s.delta)}% por debajo del periodo anterior`,
+        cta: 'Crear plan de acción',
+        prompt: `La sede "${s.name}" cayó ${Math.abs(s.delta)}% en ventas vs el periodo anterior. Analiza posibles causas (turnos, productos, días) y propón un plan de acción concreto.`,
+      });
+    }
+
+    // 2) Producto top → combo / upsell
+    if (topItems[0]) {
+      const t = topItems[0];
+      actions.push({
+        n: n++,
+        title: `Capitalizar "${t.name}"`,
+        sub: `${t._sum.quantity || 0} unidades — es tu producto más vendido`,
+        cta: 'Sugerir combo',
+        prompt: `Mi producto más vendido es "${t.name}" con ${t._sum.quantity || 0} unidades en este periodo. Propón 2-3 combos o estrategias de upsell concretas para subir el ticket promedio.`,
+      });
+    }
+
+    // 3) Inventario bajo (solo si hay sede activa)
+    if (lowStock.length > 0) {
+      const critical = lowStock
+        .filter(i => i.stock <= i.minStock)
+        .sort((a, b) => (a.stock / (a.minStock || 1)) - (b.stock / (b.minStock || 1)));
+      if (critical.length > 0) {
+        const top3 = critical.slice(0, 3).map(i => i.name).join(', ');
+        actions.push({
+          n: n++,
+          title: `Reabastecer ${critical.length} ingrediente${critical.length > 1 ? 's' : ''}`,
+          sub: `${top3}${critical.length > 3 ? ` y ${critical.length - 3} más` : ''} bajo mínimo`,
+          cta: 'Generar orden de compra',
+          prompt: `Tengo ${critical.length} ingredientes por debajo del stock mínimo: ${critical.slice(0, 5).map(i => `${i.name} (${i.stock}/${i.minStock} ${i.unit || ''})`).join(', ')}. ¿Cuáles priorizo y cuánto debo pedir?`,
+        });
+      }
+    }
+
+    // 4) Coaching en sede con ticket promedio muy bajo vs mediana
+    const tickets = sedes.map(s => s.avgTicket).filter(t => t > 0).sort((a, b) => a - b);
+    if (tickets.length >= 2) {
+      const median = tickets[Math.floor(tickets.length / 2)];
+      const lowTicket = sedes
+        .filter(s => s.avgTicket > 0 && s.avgTicket < median * 0.85)
+        .sort((a, b) => a.avgTicket - b.avgTicket)[0];
+      if (lowTicket && median > 0) {
+        const diff = Math.round((1 - lowTicket.avgTicket / median) * 100);
+        actions.push({
+          n: n++,
+          title: `Coaching · encargado ${lowTicket.name}`,
+          sub: `Ticket promedio ${diff}% bajo la mediana del restaurante`,
+          cta: 'Crear plan de acción',
+          prompt: `El ticket promedio de "${lowTicket.name}" ($${lowTicket.avgTicket}) está ${diff}% por debajo de la mediana de mis sedes ($${median}). ¿Qué pasos concretos sigue el encargado para mejorar upsell y cierre de mesa?`,
+        });
+      }
+    }
+
             select: { id: true, name: true, unit: true, stock: true, minStock: true },
           })
         : Promise.resolve([]),
@@ -876,6 +940,97 @@ router.get('/suggested-actions', authenticate, requireTenantAccess, requireAdmin
   } catch (e) {
     console.error('dashboard/suggested-actions', e);
     res.status(500).json({ error: 'Error al obtener acciones sugeridas' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 📈 GET /api/dashboard/detailed-breakdown?period=7D
+// Devuelve ventas y gastos desglosados por día para el periodo especificado.
+router.get('/detailed-breakdown', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
+  try {
+    const restaurantId = requireRestaurant(req, res);
+    if (!restaurantId) return;
+    const locationId = getLocationId(req);
+    const { from, to } = getPeriodRange(req.query.period || '7D');
+
+    const baseWhere = {
+      restaurantId,
+      ...(locationId ? { locationId } : {}),
+    };
+
+    const orders = await prisma.order.findMany({
+      where: {
+        ...baseWhere,
+        createdAt: { gte: from, lte: to },
+        status: { notIn: ['CANCELLED', 'REJECTED'] },
+      },
+      select: { total: true, createdAt: true },
+    });
+
+    const operatingExpenses = await prisma.operatingExpense.findMany({
+      where: {
+        ...baseWhere,
+        occurredAt: { gte: from, lte: to },
+      },
+      select: { amount: true, occurredAt: true, concept: true },
+    });
+
+    const shiftExpenses = await prisma.shiftExpense.findMany({
+      where: {
+        shift: {
+          ...baseWhere,
+        },
+        createdAt: { gte: from, lte: to },
+      },
+      select: { amount: true, createdAt: true, description: true, operatingExpenseId: true },
+    });
+
+    const grouped = {};
+    const getDayName = (date) => {
+      const d = new Date(date);
+      d.setHours(d.getHours() - 6);
+      if (d.getHours() < 4) d.setDate(d.getDate() - 1); // Ajuste de madrugada
+      return d.toISOString().split('T')[0]; // yyyy-mm-dd
+    };
+
+    // Inicializar días
+    for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+      const dayName = getDayName(d);
+      if (!grouped[dayName]) {
+        grouped[dayName] = { date: dayName, orders: 0, sales: 0, expenses: 0, expenseDetails: [] };
+      }
+    }
+
+    for (const o of orders) {
+      const dayName = getDayName(o.createdAt);
+      if (!grouped[dayName]) grouped[dayName] = { date: dayName, orders: 0, sales: 0, expenses: 0, expenseDetails: [] };
+      grouped[dayName].orders++;
+      grouped[dayName].sales += o.total;
+    }
+
+    for (const e of operatingExpenses) {
+      const dayName = getDayName(e.occurredAt);
+      if (!grouped[dayName]) grouped[dayName] = { date: dayName, orders: 0, sales: 0, expenses: 0, expenseDetails: [] };
+      grouped[dayName].expenses += e.amount;
+      grouped[dayName].expenseDetails.push(`${e.concept} ($${e.amount})`);
+    }
+
+    for (const e of shiftExpenses) {
+      if (!e.operatingExpenseId) {
+        const dayName = getDayName(e.createdAt);
+        if (!grouped[dayName]) grouped[dayName] = { date: dayName, orders: 0, sales: 0, expenses: 0, expenseDetails: [] };
+        grouped[dayName].expenses += e.amount;
+        grouped[dayName].expenseDetails.push(`${e.description} ($${e.amount})`);
+      }
+    }
+
+    // Ordenar de más reciente a más antiguo
+    const results = Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date));
+
+    res.json(results);
+  } catch (e) {
+    console.error('dashboard/detailed-breakdown', e);
+    res.status(500).json({ error: 'Error al obtener el desglose detallado' });
   }
 });
 
