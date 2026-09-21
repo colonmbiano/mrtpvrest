@@ -31,6 +31,9 @@ type SecurePlugin = {
 let memoryToken: string | null = null;
 let plugin: SecurePlugin | null = null;
 let readyPromise: Promise<void> | null = null;
+let nextNativeRetryAt = 0;
+let hydrationAttempt = 0;
+let tokenRevision = 0;
 
 // Tope para CUALQUIER ida al puente nativo de Capacitor. El Keystore responde
 // en milisegundos; 5s es holgadísimo y solo se alcanza si el puente se colgó.
@@ -43,17 +46,25 @@ let readyPromise: Promise<void> | null = null;
 // que alguien la reinicie. Al vencer caemos al camino legacy, que es el mismo
 // fallback que ya existía para "el plugin falló".
 const VAULT_TIMEOUT_MS = 5000;
+const VAULT_RETRY_MS = 30_000;
 
 function withTimeout<T>(p: Promise<T>, label: string): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`token-vault: ${label} excedio ${VAULT_TIMEOUT_MS}ms`)),
-        VAULT_TIMEOUT_MS
-      )
-    ),
-  ]);
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error(`token-vault: ${label} excedio ${VAULT_TIMEOUT_MS}ms`)),
+      VAULT_TIMEOUT_MS,
+    );
+    p.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
 }
 
 function readLegacy(): string | null {
@@ -94,9 +105,23 @@ function clearLegacy(): void {
  * plugin, carga/migra el token al secure storage y limpia las llaves legacy.
  */
 export function initTokenVault(): Promise<void> {
-  if (readyPromise) return readyPromise;
+  // Tras un fallo del puente conservamos el fallback legacy, pero no damos al
+  // plugin por muerto hasta reiniciar la app. Pasado el cooldown una lectura
+  // vuelve a intentar el Keystore (caso observado tras reanudar Android).
+  if (
+    readyPromise &&
+    !(nextNativeRetryAt > 0 && Date.now() >= nextNativeRetryAt)
+  ) {
+    return readyPromise;
+  }
+  if (nextNativeRetryAt > 0 && Date.now() >= nextNativeRetryAt) {
+    readyPromise = null;
+    nextNativeRetryAt = 0;
+  }
   readyPromise = (async () => {
-    memoryToken = readLegacy();
+    const attempt = ++hydrationAttempt;
+    const revision = tokenRevision;
+    memoryToken ??= readLegacy();
     if (typeof window === "undefined") return;
     if (!Capacitor.isNativePlatform()) return;
     if (!Capacitor.isPluginAvailable("SecureStoragePlugin")) return; // APK viejo
@@ -105,32 +130,46 @@ export function initTokenVault(): Promise<void> {
       // esto RECHAZA en vez de colgarse y cae al catch de abajo. memoryToken
       // ya quedó hidratado desde legacy arriba, así que la app sigue con
       // sesión válida aunque el Keystore no responda.
-      await withTimeout(hydrateFromSecureStorage(), "hidratacion");
+      await withTimeout(hydrateFromSecureStorage(attempt, revision), "hidratacion");
+      nextNativeRetryAt = 0;
     } catch {
+      // Un timeout no cancela el puente. Invalidamos su respuesta tardía.
+      if (attempt === hydrationAttempt) hydrationAttempt++;
       plugin = null; // cualquier fallo (o cuelgue) del plugin → seguimos en legacy
+      nextNativeRetryAt = Date.now() + VAULT_RETRY_MS;
     }
   })();
   return readyPromise;
 }
 
-async function hydrateFromSecureStorage(): Promise<void> {
+async function hydrateFromSecureStorage(attempt: number, revision: number): Promise<void> {
   const mod = await import("capacitor-secure-storage-plugin");
-  plugin = mod.SecureStoragePlugin as unknown as SecurePlugin;
+  const nativePlugin = mod.SecureStoragePlugin as unknown as SecurePlugin;
 
   let secure: string | null = null;
   try {
-    secure = (await plugin.get({ key: SECURE_KEY })).value || null;
+    secure = (await nativePlugin.get({ key: SECURE_KEY })).value || null;
   } catch {
     secure = null; // el plugin rechaza cuando la key no existe
   }
 
-  if (secure) {
+  if (attempt !== hydrationAttempt) return;
+  plugin = nativePlugin;
+  if (revision !== tokenRevision) return;
+
+  // Una escritura o cierre de sesión local prevalece sobre el valor antiguo
+  // del Keystore, incluso si el puente se recupera después del timeout.
+  if (tokenRevision > 0) {
+    if (memoryToken) await nativePlugin.set({ key: SECURE_KEY, value: memoryToken });
+    else await nativePlugin.remove({ key: SECURE_KEY });
+    if (attempt === hydrationAttempt && revision === tokenRevision) clearLegacy();
+  } else if (secure) {
     memoryToken = secure;
     clearLegacy(); // un bundle viejo pudo re-escribirlas
   } else if (memoryToken) {
     // Migración única: el token legacy pasa al Keystore.
-    await plugin.set({ key: SECURE_KEY, value: memoryToken });
-    clearLegacy();
+    await nativePlugin.set({ key: SECURE_KEY, value: memoryToken });
+    if (attempt === hydrationAttempt && revision === tokenRevision) clearLegacy();
   }
 }
 
@@ -156,17 +195,26 @@ export function getTokenSync(): string | null {
  * pasa al Keystore y las llaves legacy se limpian al completar la escritura.
  */
 export async function setToken(token: string | null): Promise<void> {
+  const revision = ++tokenRevision;
   memoryToken = token;
   writeLegacy(token); // web y APK viejo quedan correctos desde este tick
   await initTokenVault();
+  if (revision !== tokenRevision) return;
+  // La hidratación nativa pudo terminar mientras esperábamos y leer un valor
+  // anterior del Keystore. La intención más reciente (este setToken) siempre
+  // prevalece antes de persistirla definitivamente.
+  memoryToken = token;
+  writeLegacy(token);
   if (plugin) {
     try {
       // Acotado igual que la hidratación: un puente colgado aquí dejaba
       // pendiente para siempre a quien awaitea setToken (login, logout).
       if (token) await withTimeout(plugin.set({ key: SECURE_KEY, value: token }), "set");
       else await withTimeout(plugin.remove({ key: SECURE_KEY }), "remove");
-      clearLegacy();
+      if (revision === tokenRevision) clearLegacy();
     } catch {
+      plugin = null;
+      nextNativeRetryAt = Date.now() + VAULT_RETRY_MS;
       /* plugin falló o se colgó → el token ya quedó en legacy */
     }
   }
@@ -177,4 +225,7 @@ export function __resetTokenVaultForTests(): void {
   memoryToken = null;
   plugin = null;
   readyPromise = null;
+  nextNativeRetryAt = 0;
+  hydrationAttempt++;
+  tokenRevision = 0;
 }

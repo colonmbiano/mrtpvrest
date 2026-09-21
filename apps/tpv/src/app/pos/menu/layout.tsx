@@ -247,6 +247,14 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   }, [mounted, isLocked, fetchOpenOrders]);
 
   const fetchShift = useCallback(async () => {
+    // Pintar inmediatamente el último estado confirmado mientras comprobamos
+    // el servidor. Evita que un cold start/caída convierta `null` en "cerrado".
+    if (typeof window !== "undefined") {
+      const cached = localStorage.getItem("tpv-shift-open");
+      if (cached !== null) {
+        setShiftOpen((current) => current ?? (cached === "true"));
+      }
+    }
     try {
       const { data } = await api.get("/api/shifts/active");
       const isOpen = Boolean(data?.isOpen ?? data?.id);
@@ -255,10 +263,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       }
       setShiftOpen(isOpen);
     } catch {
+      // Fallar el GET no cierra el turno. Conservamos el valor en memoria o,
+      // en primer arranque, el último valor confirmado en este dispositivo.
       if (typeof window !== "undefined") {
-        localStorage.setItem("tpv-shift-open", "false");
+        const cached = localStorage.getItem("tpv-shift-open");
+        if (cached !== null) setShiftOpen(cached === "true");
       }
-      setShiftOpen(false);
     }
   }, []);
 

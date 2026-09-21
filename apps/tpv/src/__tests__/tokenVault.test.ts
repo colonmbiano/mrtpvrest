@@ -116,4 +116,32 @@ describe("token-vault — puente nativo colgado", () => {
     // El token quedó utilizable por el camino legacy pese al cuelgue.
     expect(getTokenSync()).toBe("jwt-nuevo");
   });
+
+  it("vuelve a intentar el Keystore después de un timeout transitorio", async () => {
+    localStorage.setItem("accessToken", "jwt-legacy");
+    colgado.get.mockReturnValueOnce(new Promise(() => {}));
+
+    const primerIntento = getToken();
+    await jest.advanceTimersByTimeAsync(6000);
+    await expect(primerIntento).resolves.toBe("jwt-legacy");
+
+    colgado.get.mockResolvedValueOnce({ value: "jwt-recuperado" });
+    await jest.advanceTimersByTimeAsync(31_000);
+
+    await expect(getToken()).resolves.toBe("jwt-recuperado");
+    expect(colgado.get).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["jwt-nuevo", null])("ignora un JWT viejo que llega tras timeout y setToken(%s)", async (nextToken) => {
+    let resolveNative!: (value: { value: string }) => void;
+    colgado.get.mockReturnValueOnce(new Promise((resolve) => { resolveNative = resolve; }));
+    const pending = getToken();
+    await jest.advanceTimersByTimeAsync(6000);
+    await pending;
+    await setToken(nextToken);
+    resolveNative({ value: "jwt-anterior" });
+    await jest.advanceTimersByTimeAsync(0);
+    expect(getTokenSync()).toBe(nextToken);
+    expect(localStorage.getItem("accessToken")).toBe(nextToken);
+  });
 });

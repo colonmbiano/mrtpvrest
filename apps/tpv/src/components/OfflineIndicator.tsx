@@ -2,8 +2,11 @@
 import { useState } from "react";
 import { CloudOff, RefreshCcw, CloudUpload, X, Clock, AlertTriangle, Trash2 } from "lucide-react";
 import useOfflineStore, { type OfflineTransaction } from "@/store/useOfflineStore";
+import { useAuthStore } from "@/store/authStore";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { useBackendAvailability } from "@/hooks/useBackendAvailability";
 import { syncOfflineQueue } from "@/lib/offline";
+import { requestOnlineAuthentication } from "@/lib/api";
 
 // Chip flotante top-right que aparece SOLO cuando hay algo que comunicar:
 // - Offline → rojo, prioridad máxima.
@@ -23,6 +26,9 @@ import { syncOfflineQueue } from "@/lib/offline";
 // (bottom-right) y con el sticky CTA de /meseros/detalle (bottom).
 export default function OfflineIndicator() {
   const isOnline = useOnlineStatus();
+  const backendAvailability = useBackendAvailability();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const token = useAuthStore((s) => s.token);
   const queue = useOfflineStore((s) => s.queue);
   const syncInProgress = useOfflineStore((s) => s.syncInProgress);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -30,27 +36,53 @@ export default function OfflineIndicator() {
   const failed = queue.filter((tx) => !tx.synced && tx.failed);
   const unsyncedCount = unsynced.length;
   const failedCount = failed.length;
+  const serverUnavailable =
+    isOnline && backendAvailability === "unavailable";
+  const needsOnlineAuth = isAuthenticated && !token;
 
-  if (isOnline && !syncInProgress && unsyncedCount === 0 && failedCount === 0) {
+  if (
+    isOnline &&
+    !serverUnavailable &&
+    !needsOnlineAuth &&
+    !syncInProgress &&
+    unsyncedCount === 0 &&
+    failedCount === 0
+  ) {
     return null;
   }
 
   const base =
     "fixed top-3 right-3 z-[60] flex items-center gap-2 px-3.5 py-2 rounded-full border backdrop-blur-md shadow-lg text-[10px] font-black uppercase tracking-[0.2em] active:scale-95 transition-transform";
 
-  const chip = !isOnline ? (
+  const chip = !isOnline || serverUnavailable ? (
     <button
       type="button"
       onClick={() =>
         (unsyncedCount > 0 || failedCount > 0) && setDrawerOpen(true)
       }
       className={`${base} bg-red-500/15 border-red-500/40 text-red-400 animate-pulse`}
-      aria-label="Estado offline"
+      aria-label={isOnline ? "Servidor no disponible" : "Estado offline"}
     >
       <CloudOff size={14} strokeWidth={2.5} />
-      <span>Sin conexión</span>
+      <span>{isOnline ? "Servidor caído · modo local" : "Sin conexión · modo local"}</span>
       {unsyncedCount > 0 && (
         <span className="tabular-nums text-red-300/80">· {unsyncedCount}</span>
+      )}
+    </button>
+  ) : needsOnlineAuth ? (
+    <button
+      type="button"
+      onClick={() => {
+        if (unsyncedCount > 0 || failedCount > 0) setDrawerOpen(true);
+        else requestOnlineAuthentication("manual_reauth");
+      }}
+      className={`${base} bg-[var(--warning-soft)] border-[var(--warning)] text-[var(--warning)]`}
+      aria-label="PIN requerido para sincronizar"
+    >
+      <AlertTriangle size={14} strokeWidth={2.5} />
+      <span>Modo local · PIN para sincronizar</span>
+      {unsyncedCount > 0 && (
+        <span className="tabular-nums opacity-80">· {unsyncedCount}</span>
       )}
     </button>
   ) : syncInProgress ? (
@@ -105,6 +137,8 @@ export default function OfflineIndicator() {
           unsynced={unsynced}
           failed={failed}
           isOnline={isOnline}
+          serverUnavailable={serverUnavailable}
+          needsOnlineAuth={needsOnlineAuth}
           syncInProgress={syncInProgress}
           onClose={() => setDrawerOpen(false)}
         />
@@ -117,12 +151,16 @@ function PendingDrawer({
   unsynced,
   failed,
   isOnline,
+  serverUnavailable,
+  needsOnlineAuth,
   syncInProgress,
   onClose,
 }: {
   unsynced: OfflineTransaction[];
   failed: OfflineTransaction[];
   isOnline: boolean;
+  serverUnavailable: boolean;
+  needsOnlineAuth: boolean;
   syncInProgress: boolean;
   onClose: () => void;
 }) {
@@ -172,7 +210,13 @@ function PendingDrawer({
                   · {failed.length} con error
                 </span>
               )}{" "}
-              · {isOnline ? "Online" : "Sin conexión"}
+              · {!isOnline
+                ? "Sin conexión"
+                : serverUnavailable
+                  ? "Servidor no disponible"
+                  : needsOnlineAuth
+                    ? "PIN requerido"
+                    : "Online"}
             </p>
           </div>
           <button
@@ -266,9 +310,16 @@ function PendingDrawer({
             Cerrar
           </button>
           <button
-            disabled={!isOnline || syncInProgress || unsynced.length === 0}
+            disabled={
+              !needsOnlineAuth &&
+              (!isOnline || syncInProgress || unsynced.length === 0)
+            }
             onClick={() => {
-              void syncOfflineQueue();
+              if (needsOnlineAuth) {
+                requestOnlineAuthentication("manual_sync");
+                return;
+              }
+              void syncOfflineQueue({ force: true });
             }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-black text-[var(--brand-fg)] bg-[var(--brand)] active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100"
           >
@@ -277,7 +328,7 @@ function PendingDrawer({
             ) : (
               <CloudUpload size={12} strokeWidth={3} />
             )}
-            Forzar sync
+            {needsOnlineAuth ? "Ingresar PIN" : "Forzar sync"}
           </button>
         </div>
       </div>

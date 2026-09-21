@@ -2,8 +2,8 @@
 
 > Sistema POS SaaS multi-tenant para restaurantes y negocios de alimentos en LATAM, con enfoque offline-first y módulos integrados de IA.
 
-**Version:** 1.0.0
-**Date:** 2026-05-16
+**Version:** 1.1.0
+**Date:** 2026-09-20
 **Status:** active
 
 ---
@@ -94,10 +94,33 @@
 | Tests Integration con Postgres real (§10) | `pnpm test:integration` sin mocks. | ❌ **No implementado** | Los tests actuales mockean Prisma. Falta el job con contenedor Postgres. |
 | E2E bloqueante (§10) | Playwright bloquea merge a master. | ⚠️ **Provisional** | Suite Playwright existe; pipeline en `e2e.yml` (manual) — requiere secrets + seed de PINs deterministas para promoverse a required check. |
 | Versionado de API `/v1`,`/v2` (§6) | Versionado explícito en URL. | ❌ **No implementado** | Rutas sin prefijo de versión. |
+| Continuidad offline del TPV (§4) | Operación local-first y sincronización eventual. | ✅ **Fase 1 implementada** | App shell empacado, caches de operación, outbox IndexedDB durable y scoped, idempotencia, circuito ante caída del API, replay FIFO y estado de turno conservado. Falta la base local de órdenes/print spool para independencia multi-flujo completa. |
 
 ### Notas de estructura
 - El monorepo tiene `packages/{config,database,types}`. **No existe `packages/shared`**
   (mencionado en docs antiguas y en el filtro de `tpv-ota-release.yml`); ese path
   está muerto y puede eliminarse del workflow.
 
-*Decision Log (Sección 20) comenzará a poblarse en futuras iteraciones mediante `ard-update`.*
+## 20. Decision Log
+
+### 2026-09-20 — Railway deja de ser dependencia síncrona del flujo crítico TPV
+
+- **Contexto:** una versión del backend con error de sintaxis dejó Railway fuera
+  de servicio. El APK seguía cargando, pero el TPV podía perder el estado local
+  del turno, esperar por cada operación y quedar autenticado sin JWT.
+- **Decisión:** el flujo crítico de órdenes, pagos y turnos confirma primero su
+  persistencia en un outbox local durable. Railway/Postgres pasa a ser destino
+  de sincronización eventual con idempotencia, circuito de disponibilidad,
+  replay FIFO y pausa ante conflictos. La identidad original (restaurante,
+  sucursal, empleado y turno conocido) viaja con cada comando.
+- **Seguridad:** no se permite acceso directo del cliente a Supabase mientras
+  RLS siga sin verificar. El backend conserva la validación de permisos y
+  precios; una sesión PIN local nunca envía requests protegidas sin Bearer.
+- **Límite consciente:** esta fase garantiza continuidad de una terminal para
+  los flujos críticos ya cubiertos. Operación coordinada de varias tablets sin
+  Internet, reapertura completa de órdenes locales y spool durable de impresión
+  requieren la fase 2: repositorio local de entidades (SQLite en Capacitor,
+  IndexedDB en web) o un gateway LAN compartido.
+- **Protección de releases:** Railway valida `/health`, solo reconstruye ante
+  cambios del backend/paquetes compartidos relevantes y el Docker build ejecuta
+  un chequeo sintáctico de todos los JavaScript antes del despliegue.

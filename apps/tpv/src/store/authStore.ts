@@ -166,7 +166,7 @@ export const useAuthStore = create<AuthState>()(
             const activateSession = (employee: TPVEmployee, token?: string) => {
               set({
                 employee,
-                ...(token ? { token } : {}),
+                token: token ?? null,
                 isAuthenticated: true,
                 pinAttempts: 0,
                 lockedUntil: null,
@@ -179,12 +179,10 @@ export const useAuthStore = create<AuthState>()(
                 localStorage.setItem("currentEmployeeId", employee.id);
                 localStorage.setItem("currentEmployeeName", employee.name);
                 localStorage.setItem("currentEmployeeRole", employee.role);
-                if (token) {
-                  // token-vault: secure storage en APK con plugin; en web y
-                  // APKs viejos escribe las mismas llaves legacy de siempre.
-                  // La memoria del vault se actualiza síncronamente.
-                  void vaultSetToken(token);
-                }
+                // Una sesión local deliberadamente queda SIN JWT. Limpiamos
+                // cualquier token viejo para no atribuir ventas al empleado
+                // anterior cuando la red vuelva.
+                void vaultSetToken(token ?? null);
               }
             };
 
@@ -353,9 +351,27 @@ export const useAuthStore = create<AuthState>()(
       refreshShift: async () => {
         try {
           const { data } = await api.get("/api/shifts/active");
-          set({ activeShift: data });
+          const isOpen = Boolean(data?.isOpen ?? data?.id);
+          set({ activeShift: isOpen ? data : null });
+          if (typeof window !== "undefined") {
+            localStorage.setItem("tpv-shift-open", isOpen ? "true" : "false");
+          }
         } catch {
-          set({ activeShift: null });
+          // Una caída del API no equivale a un turno cerrado. Conservamos el
+          // último estado conocido para que caja y cobro sigan operando.
+          if (
+            typeof window !== "undefined" &&
+            localStorage.getItem("tpv-shift-open") === "true"
+          ) {
+            set((state) => ({
+              activeShift:
+                state.activeShift ??
+                ({ id: "offline-cached", isOpen: true, _optimistic: true } as Record<
+                  string,
+                  unknown
+                >),
+            }));
+          }
         }
       },
 
@@ -381,16 +397,24 @@ export const useAuthStore = create<AuthState>()(
           ? localStorage
           : (undefined as unknown as Storage)
       ),
-      // We persist employee session and the offline cache.
+      // Persistimos SOLO el cache necesario para validar PIN offline. La
+      // sesión viva no se restaura sin reconciliarla con el vault: ese estado
+      // era la causa de "UI autenticada + token ausente" tras reiniciar.
       // El token NO se persiste aquí: duplicaba el JWT en claro en
       // localStorage (tpv-auth-storage). Vive en token-vault; api.ts lo
       // resuelve de ahí, no de este estado.
       partialize: (state) => ({
-        employee: state.employee,
         employees: state.employees,
-        isAuthenticated: state.isAuthenticated,
         pinAttempts: state.pinAttempts,
         lockedUntil: state.lockedUntil,
+      }),
+      version: 1,
+      migrate: (persisted) => ({
+        ...(persisted as Partial<AuthState>),
+        employee: null,
+        token: null,
+        isAuthenticated: false,
+        activeShift: null,
       }),
     }
   )

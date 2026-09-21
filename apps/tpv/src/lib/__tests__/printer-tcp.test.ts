@@ -347,7 +347,7 @@ describe("comanda :: formato de modificadores y platillos", () => {
     });
 
     expect(normal).not.toContain(CMD.INVERT_ON);
-    expect(inverted).toContain(CMD.INVERT_ON + " SIN cebolla ");
+    expect(inverted).toContain(CMD.INVERT_ON + " [-] SIN cebolla ");
   });
 
   it("aplica letra grande a modificadores", () => {
@@ -356,7 +356,7 @@ describe("comanda :: formato de modificadores y platillos", () => {
       config: { kitchenModifiersFontSize: "large" },
     });
 
-    expect(out).toContain(CMD.DOUBLE_ON + "SIN cebolla" + CMD.DOUBLE_OFF);
+    expect(out).toContain(CMD.DOUBLE_ON + "[-] SIN cebolla" + CMD.DOUBLE_OFF);
   });
 
   it("agrega un separador entre platillos", () => {

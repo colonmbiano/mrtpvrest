@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
 import { apiOrQueue, shiftActionQueued } from "@/lib/offline";
 
@@ -61,21 +61,45 @@ export default function ShiftModal({ employee, onClose, onShiftClosed, onShiftOp
   const [previewErr, setPreviewErr]   = useState("");
   const [loadingPreview, setLoadingPreview] = useState(false);
 
-  async function fetchShift() {
+  const fetchShift = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.get("/api/shifts/active");
-      setShift(data);
-    } catch {}
+      const isOpen = Boolean(data?.isOpen ?? data?.id);
+      setShift(isOpen ? data : null);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("tpv-shift-open", isOpen ? "true" : "false");
+      }
+    } catch {
+      // El servidor incomunicado no significa turno cerrado. Si este equipo
+      // confirmó uno abierto, mostramos un resumen local y evitamos ofrecer
+      // una segunda apertura duplicada.
+      if (
+        typeof window !== "undefined" &&
+        localStorage.getItem("tpv-shift-open") === "true"
+      ) {
+        setShift((current: any) =>
+          current ?? {
+            id: null,
+            isOpen: true,
+            openedAt: new Date().toISOString(),
+            employeeName: employee.name,
+            expenses: [],
+            cashIns: [],
+            _optimistic: true,
+          },
+        );
+      }
+    }
     finally { setLoading(false); }
-  }
+  }, [employee.name]);
 
   useEffect(() => {
     let cancelled = false;
     // Arranque diferido (ver impresoras): evita set-state-in-effect.
     queueMicrotask(() => { if (!cancelled) fetchShift(); });
     return () => { cancelled = true; };
-  }, []);
+  }, [fetchShift]);
 
   async function openShift() {
     if (!openingFloat) { alert("Ingresa el fondo de caja"); return; }

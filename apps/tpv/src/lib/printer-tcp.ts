@@ -16,6 +16,7 @@
 
 import type { Plugin } from "@capacitor/core";
 import { ORDER_TYPE_ACTION } from "@/lib/orderTypes";
+import { parseKitchenLayout, legacyKitchenLayout } from "@/lib/kitchen-layout";
 
 // API del plugin `capacitor-tcp-socket` v7+. Tipo local — no exponemos
 // el namespace completo del paquete para no acoplarnos.
@@ -598,6 +599,8 @@ export interface KitchenTicketConfig {
   kitchenInvertModifiers?: boolean;
   kitchenModifiersFontSize?: "normal" | "large";
   kitchenItemSeparator?: boolean;
+  kitchenLayout?: string;
+  kitchenFooter?: string;
 }
 
 export interface KitchenTicketInput {
@@ -855,9 +858,7 @@ export function qrCode(data: string, moduleSize = 6): string {
 
 export function buildKitchenTicket(input: KitchenTicketInput): string {
   const time = new Date().toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" });
-  // Defaults — equivalentes al comportamiento previo a la introducción del
-  // config admin, para que call-sites sin config sigan funcionando igual.
-  const cfg: Required<KitchenTicketConfig> = {
+  const cfg = {
     header:           input.config?.header           ?? "",
     footer:           input.config?.footer           ?? "",
     showOrderNumber:  input.config?.showOrderNumber  ?? true,
@@ -879,27 +880,14 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     kitchenInvertModifiers: input.config?.kitchenInvertModifiers ?? false,
     kitchenModifiersFontSize: input.config?.kitchenModifiersFontSize ?? "normal",
     kitchenItemSeparator: input.config?.kitchenItemSeparator ?? false,
+    kitchenLayout:    input.config?.kitchenLayout    ?? "",
+    kitchenFooter:    input.config?.kitchenFooter    ?? "",
   };
 
-  // Resolución del tamaño de fuente para items. "normal" = ancho normal,
-  // "large" = doble (default histórico), "xlarge" = triple. Si el firmware
-  // de la impresora no soporta el comando, queda en el tamaño anterior.
-  const itemSizeOn =
-    cfg.fontSize === "normal" ? "" :
-    cfg.fontSize === "xlarge" ? CMD.TRIPLE_ON : CMD.DOUBLE_ON;
-  const itemSizeOff = cfg.fontSize === "normal" ? "" : CMD.DOUBLE_OFF;
-  const modifierSizeOn =
-    cfg.kitchenModifiersFontSize === "large" ? CMD.DOUBLE_ON : "";
-  const modifierSizeOff =
-    cfg.kitchenModifiersFontSize === "large" ? CMD.DOUBLE_OFF : "";
+  const savedBlocks = parseKitchenLayout(cfg.kitchenLayout);
+  const blocks = savedBlocks.length ? savedBlocks : legacyKitchenLayout(cfg);
 
-  // Peso de las líneas. light = sin forzar negrita; bold = negrita + doble
-  // golpe (más negras). El tamaño de los items se mantiene aparte (itemSize).
   const heavy = cfg.lineWeight === "bold";
-  const light = cfg.lineWeight === "light";
-  const itemBoldOn = light ? "" : CMD.BOLD_ON;
-  const itemBoldOff = light ? "" : CMD.BOLD_OFF;
-
   let d =
     CMD.INIT +
     fontCmd(cfg.fontFamily) +
@@ -907,9 +895,6 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     (heavy ? CMD.DBLSTRIKE_ON : "") +
     CMD.ALIGN_CENTER;
 
-  // Banner de anulación — máxima prioridad. Avisa a cocina que el/los
-  // items ya NO van (cancelados). Doble ancho + negritas para que no se
-  // confunda con una comanda normal.
   if (input.isCancel) {
     d += CMD.BOLD_ON + CMD.DOUBLE_ON;
     d += "*** ARTICULO ANULADO ***\n";
@@ -917,10 +902,6 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
     d += CMD.LINE;
   }
-
-  // Banner de reimpresión — bien visible para que el cocinero NO prepare
-  // los items dos veces. Va antes del header normal y usa el modo doble
-  // ancho para asegurar legibilidad incluso en quemadores con poco contraste.
   if (input.isReprint && !input.isCancel) {
     d += CMD.BOLD_ON + CMD.DOUBLE_ON;
     d += "*** REIMPRESION ***\n";
@@ -930,66 +911,6 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     }
     d += CMD.LINE;
   }
-
-  // TÍTULO de la comanda. En la cocina lo que se busca a un metro de distancia
-  // es LA MESA, no quién pidió: el cocinero arma el plato y el mesero necesita
-  // saber a dónde llevarlo. Así que la MESA va grande arriba y el nombre del
-  // cliente, si existe, debajo en tamaño normal.
-  //
-  // Sin mesa (para llevar / domicilio) no hay nada que encabezar, así que ahí el
-  // NOMBRE toma el lugar grande — es el dato con el que se entrega el pedido.
-  //
-  // En DINE_IN sin nombre, el backend deja customerName = nombre de la mesa
-  // ("Mesa 9"): por eso el nombre solo se imprime si es un nombre REAL, o
-  // saldrían dos líneas "Mesa 9 / Mesa 9" (el "Mesa Mesa" que ya se reportó).
-  const nameSizeOn =
-    cfg.ticketNameSize === "normal" ? "" :
-    cfg.ticketNameSize === "xlarge" ? CMD.TRIPLE_ON : CMD.DOUBLE_ON;
-  const nameSizeOff = cfg.ticketNameSize === "normal" ? "" : CMD.DOUBLE_OFF;
-
-  const mesaLabel =
-    cfg.showTableNumber && input.tableNumber
-      ? withLabel("Mesa", String(input.tableNumber))
-      : "";
-  const rawName =
-    cfg.showCustomerName && input.customerName ? String(input.customerName).trim() : "";
-  // El nombre es "real" solo si no repite la mesa (ni su etiqueta ni el valor crudo).
-  const nameIsReal =
-    !!rawName &&
-    rawName.toLowerCase() !== mesaLabel.toLowerCase() &&
-    rawName.toLowerCase() !== String(input.tableNumber ?? "").trim().toLowerCase();
-
-  if (mesaLabel) {
-    // Mesa en grande (tamaño configurable en Tickets → Cocina) y el cliente
-    // debajo, en normal: informativo, sin robarle la vista a la mesa.
-    d += nameSizeOn + CMD.BOLD_ON + mesaLabel + "\n" + CMD.BOLD_OFF + nameSizeOff;
-    if (nameIsReal) d += CMD.BOLD_ON + rawName + "\n" + CMD.BOLD_OFF;
-  } else if (nameIsReal) {
-    d += nameSizeOn + CMD.BOLD_ON + rawName + "\n" + CMD.BOLD_OFF + nameSizeOff;
-  }
-
-  // Estación destino (separateByGroup): a qué printer-group va esta comanda.
-  if (input.assignmentName?.trim()) {
-    d += CMD.BOLD_ON + CMD.DOUBLE_ON;
-    d += input.assignmentName.trim().toUpperCase() + "\n";
-    d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
-  }
-
-  // Encabezado OPCIONAL (vacío por defecto). Ya no es "COMANDA" fijo; queda
-  // como texto extra configurable (Tickets → Cocina) por si el negocio quiere
-  // un rótulo propio. Va debajo del nombre para no robarle protagonismo.
-  if (cfg.header.trim()) {
-    d += CMD.BOLD_ON + cfg.header.trim() + "\n" + CMD.BOLD_OFF;
-  }
-
-  if (cfg.showOrderNumber && input.orderNumber) d += "#" + input.orderNumber + "\n";
-  if (cfg.showTime) d += time + "\n";
-  if (cfg.showOrderType && input.orderType) {
-    d += (ORDER_TYPE_LABEL[input.orderType] || input.orderType) + "\n";
-  }
-
-  // Banner de estado de pago (pedidos web/delivery). Doble ancho para que se
-  // vea de un golpe: PAGADO = no cobrar; PENDIENTE = hay que cobrar al entregar.
   if (input.paid === true || input.paid === false) {
     d += CMD.BOLD_ON + CMD.DOUBLE_ON;
     d += (input.paid ? "** PAGADO **" : "** PENDIENTE DE PAGO **") + "\n";
@@ -997,108 +918,132 @@ export function buildKitchenTicket(input: KitchenTicketInput): string {
     if (input.paymentMethod) {
       d += paymentLabel(input.paymentMethod) + "\n";
     }
+    d += CMD.LINE;
   }
 
-  d += CMD.LINE;
-  d += CMD.ALIGN_LEFT;
-
-  // Para DINE_IN agrupamos por comensal cuando hay items repartidos entre
-  // 2+ buckets (seat numerado o compartido) Y el toggle groupBySeat está
-  // activo. Para TAKEOUT/DELIVERY o cuando todo cae en un solo bucket,
-  // se mantiene la salida plana.
-  const isDineIn = input.orderType === "DINE_IN";
-  const seatBuckets = new Map<number | "shared", TicketItem[]>();
-  if (isDineIn && cfg.groupBySeat) {
-    for (const it of input.items) {
-      const key: number | "shared" =
-        typeof it.seatNumber === "number" ? it.seatNumber : "shared";
-      const arr = seatBuckets.get(key) ?? [];
-      arr.push(it);
-      seatBuckets.set(key, arr);
+  // Iterar por cada bloque
+  for (const b of blocks) {
+    if (b.type === "DIVIDER") {
+      d += CMD.ALIGN_CENTER + (b.char || "-").repeat(32) + "\n";
     }
-  }
-  const shouldGroupBySeat = isDineIn && cfg.groupBySeat && seatBuckets.size >= 2;
-
-  const renderItem = (item: TicketItem) => {
-    let s = itemSizeOn + itemBoldOn;
-    // Línea por peso: cocina ve "1.5 kg" en vez de "1x".
-    const qtyLabel = item.weightKg != null
-      ? `${Number(item.weightKg).toFixed(3).replace(/\.?0+$/, "")} kg`
-      : `${item.quantity}x`;
-    s += `${qtyLabel} ${item.name}\n`;
-    // Etiqueta de combo en una línea ya explotada: SIEMPRE se imprime (sin gate)
-    // para que la estación sepa que ese componente pertenece a un combo.
-    if (item.comboOf && item.comboOf.trim()) {
-      s += itemSizeOff;
-      s += `  (Combo: ${item.comboOf.trim()})\n`;
-      s += itemSizeOn;
+    else if (b.type === "TEXT") {
+      d += CMD.ALIGN_CENTER + CMD.BOLD_ON + (b.text || "") + "\n" + CMD.BOLD_OFF;
     }
-    // Desglose de combo/promo: sub-línea entre paréntesis bajo el nombre, para
-    // que cocina sepa qué incluye sin depender de notas escritas a mano. Solo
-    // se puebla para items promo (ver comboKitchenDetail), así que aquí no hay
-    // riesgo de imprimir descripciones de productos normales. Gateado por el
-    // toggle showItemDescription (Ajustes → Tickets) para poder apagarlo.
-    if (cfg.showItemDescription && item.kitchenDetail && item.kitchenDetail.trim()) {
-      s += itemSizeOff;
-      s += `  (${item.kitchenDetail.trim()})\n`;
-      s += itemSizeOn;
-    }
-    if (cfg.showModifiers && item.modifiers && item.modifiers.length > 0) {
-      s += itemSizeOff;
-      for (const m of item.modifiers) {
-        // "Quitar ingredientes": el modificador se llama "Sin X" → lo imprimimos
-        // como "SIN X" (sin el "+" que sugeriría que se agrega/cobra).
-        const isRemoval = /^sin\s/i.test(m.name);
-        const nameText = isRemoval ? m.name.replace(/^sin\s/i, "SIN ") : (m.priceAdd === 0 || m.isKitchenNote ? m.name : `+ ${m.name}`);
-        
-        const modifierText = cfg.kitchenInvertModifiers
-          ? CMD.INVERT_ON + ` ${nameText} ` + CMD.INVERT_OFF
-          : nameText;
-        s += `  ${modifierSizeOn}${modifierText}${modifierSizeOff}\n`;
+    else if (b.type === "TITLE") {
+      d += CMD.ALIGN_CENTER;
+      const nameSizeOn = b.size === "normal" ? "" : b.size === "xlarge" ? CMD.TRIPLE_ON : CMD.DOUBLE_ON;
+      const nameSizeOff = b.size === "normal" ? "" : CMD.DOUBLE_OFF;
+      const mesaLabel = b.showTable && input.tableNumber ? withLabel("Mesa", String(input.tableNumber)) : "";
+      const rawName = b.showCustomer && input.customerName ? String(input.customerName).trim() : "";
+      const nameIsReal = !!rawName && rawName.toLowerCase() !== mesaLabel.toLowerCase() && rawName.toLowerCase() !== String(input.tableNumber ?? "").trim().toLowerCase();
+      const hasTitle = mesaLabel || nameIsReal || (b.showStation && cfg.separateByGroup);
+      if (hasTitle) {
+        d += CMD.BOLD_ON + "==============================\n" + CMD.BOLD_OFF;
+        if (mesaLabel) {
+          d += nameSizeOn + CMD.BOLD_ON + mesaLabel + "\n" + CMD.BOLD_OFF + nameSizeOff;
+          if (nameIsReal) d += CMD.BOLD_ON + rawName + "\n" + CMD.BOLD_OFF;
+        } else if (nameIsReal) {
+          d += nameSizeOn + CMD.BOLD_ON + rawName + "\n" + CMD.BOLD_OFF + nameSizeOff;
+        }
+        if (b.showStation && cfg.separateByGroup && input.assignmentName?.trim()) {
+          d += CMD.BOLD_ON + CMD.DOUBLE_ON;
+          d += input.assignmentName.trim().toUpperCase() + "\n";
+          d += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
+        }
+        d += CMD.BOLD_ON + "==============================\n" + CMD.BOLD_OFF;
       }
-      s += itemSizeOn;
-    }
-    if (cfg.showNotes && item.notes && item.notes.trim()) {
-      s += itemSizeOff;
-      s += `  > ${item.notes}\n`;
-      s += itemSizeOn;
-    }
-    s += itemSizeOff + itemBoldOff;
-    return s;
-  };
-
-  if (shouldGroupBySeat) {
-    // Comensales numerados ordenados ascendente; "shared" siempre al final.
-    const seatedKeys = Array.from(seatBuckets.keys())
-      .filter((k): k is number => typeof k === "number")
-      .sort((a, b) => a - b);
-    const orderedKeys: (number | "shared")[] = [...seatedKeys];
-    if (seatBuckets.has("shared")) orderedKeys.push("shared");
-
-    orderedKeys.forEach((key, idx) => {
-      if (idx > 0) {
-        d += "\n"; // separación visual entre comensales
-        if (cfg.kitchenItemSeparator) d += CMD.LINE;
+      if (cfg.header.trim()) {
+        d += CMD.BOLD_ON + cfg.header.trim() + "\n" + CMD.BOLD_OFF;
       }
-      const header = key === "shared" ? "COMPARTIDO" : `COMENSAL ${key}`;
-      d += CMD.BOLD_ON + header + "\n" + CMD.BOLD_OFF;
-      for (const [itemIndex, item] of (seatBuckets.get(key) ?? []).entries()) {
-        if (cfg.kitchenItemSeparator && itemIndex > 0) d += CMD.LINE;
+    }
+    else if (b.type === "ORDER_INFO") {
+      d += CMD.ALIGN_CENTER;
+      if (b.showOrderNumber && input.orderNumber) d += "#" + input.orderNumber + "\n";
+      if (b.showTime) d += time + "\n";
+      if (b.showType && input.orderType) d += (ORDER_TYPE_LABEL[input.orderType] || input.orderType) + "\n";
+    }
+    else if (b.type === "ITEMS") {
+      d += CMD.ALIGN_LEFT;
+      const isDineIn = input.orderType === "DINE_IN";
+      const seatBuckets = new Map<number | "shared", TicketItem[]>();
+      if (isDineIn && b.groupBySeat) {
+        for (const it of input.items) {
+          const key: number | "shared" = typeof it.seatNumber === "number" ? it.seatNumber : "shared";
+          const arr = seatBuckets.get(key) ?? [];
+          arr.push(it);
+          seatBuckets.set(key, arr);
+        }
+      }
+      const shouldGroupBySeat = isDineIn && b.groupBySeat && seatBuckets.size >= 2;
+
+      const itemSizeOn = b.size === "normal" ? "" : b.size === "xlarge" ? CMD.TRIPLE_ON : CMD.DOUBLE_ON;
+      const itemSizeOff = b.size === "normal" ? "" : CMD.DOUBLE_OFF;
+      const itemBoldOn = b.weight === "light" ? "" : CMD.BOLD_ON;
+      const itemBoldOff = b.weight === "light" ? "" : CMD.BOLD_OFF;
+      const modifierSizeOn =
+        cfg.kitchenModifiersFontSize === "large" ? CMD.DOUBLE_ON : "";
+      const modifierSizeOff =
+        cfg.kitchenModifiersFontSize === "large" ? CMD.DOUBLE_OFF : "";
+      const renderItem = (item: TicketItem) => {
+        let s = itemSizeOn + itemBoldOn;
+        const qtyLabel = item.weightKg != null ? `${Number(item.weightKg).toFixed(3).replace(/\.?0+$/, "")} kg` : `${item.quantity}x`;
+        s += `>> ${qtyLabel} ${item.name}\n`;
+        if (item.comboOf && item.comboOf.trim()) {
+          s += itemSizeOff + `  (Combo: ${item.comboOf.trim()})\n` + itemSizeOn;
+        }
+        if (cfg.showItemDescription && item.kitchenDetail && item.kitchenDetail.trim()) {
+          s += itemSizeOff + `  (${item.kitchenDetail.trim()})\n` + itemSizeOn;
+        }
+        if (b.showModifiers && item.modifiers && item.modifiers.length > 0) {
+          s += itemSizeOff;
+          for (const m of item.modifiers) {
+            const isRemoval = /^sin\s/i.test(m.name);
+            const nameText = isRemoval ? m.name.replace(/^sin\s/i, "[-] SIN ") : (m.priceAdd === 0 || m.isKitchenNote ? m.name : `[+] ${m.name}`);
+            const modifierText = cfg.kitchenInvertModifiers && isRemoval ? CMD.INVERT_ON + ` ${nameText} ` + CMD.INVERT_OFF : nameText;
+            s += `  ${modifierSizeOn}${modifierText}${modifierSizeOff}\n`;
+          }
+          s += itemSizeOn;
+        }
+        if (b.showNotes && item.notes && item.notes.trim()) {
+          s += itemSizeOff + `  > Nota: ${item.notes.trim()}\n` + itemSizeOn;
+        }
+        s += itemBoldOff + itemSizeOff;
+        s += "\n";
+        return s;
+      };
+
+      let printedItems = 0;
+      const appendItem = (item: TicketItem) => {
+        if (cfg.kitchenItemSeparator && printedItems > 0) d += CMD.LINE;
         d += renderItem(item);
+        printedItems += 1;
+      };
+
+      if (shouldGroupBySeat) {
+        const sortedSeats = Array.from(seatBuckets.keys()).sort((a, b) => (a === "shared" ? -1 : b === "shared" ? 1 : a - b));
+        for (const seat of sortedSeats) {
+          const items = seatBuckets.get(seat)!;
+          d += CMD.BOLD_ON + `--- COMENSAL ${seat === "shared" ? "COMPARTIDO" : seat} ---\n` + CMD.BOLD_OFF;
+          for (const it of items) appendItem(it);
+        }
+      } else {
+        for (const it of input.items) appendItem(it);
       }
-    });
-  } else {
-    for (const [itemIndex, item] of input.items.entries()) {
-      if (cfg.kitchenItemSeparator && itemIndex > 0) d += CMD.LINE;
-      d += renderItem(item);
+    }
+    else if (b.type === "FOOTER") {
+      const footer = cfg.kitchenFooter || cfg.footer;
+      if (footer.trim()) {
+        d += CMD.ALIGN_CENTER + footer.trim() + "\n";
+      }
     }
   }
 
-  d += CMD.LINE;
-  if (cfg.footer.trim()) {
-    d += CMD.ALIGN_CENTER + cfg.footer.trim() + "\n" + CMD.ALIGN_LEFT;
+  // Corte de papel + buzzer
+  d += (heavy ? CMD.DBLSTRIKE_OFF : "") + "\n\n\n";
+  d += CMD.CUT;
+  if ((input as any).buzzer) {
+    d += (CMD as any).BUZZER || '';
   }
-  d += (heavy ? CMD.DBLSTRIKE_OFF : "") + CMD.LF + CMD.LF + CMD.CUT;
   return d;
 }
 
@@ -2173,5 +2118,3 @@ export async function printEqualSplitReceipts(
 
   return { ok: okTotal, failed: failedAll, tickets: printed };
 }
-
-

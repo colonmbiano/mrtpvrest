@@ -11,6 +11,8 @@ import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Receipt, Printer as PrinterIcon, ShieldCheck } from "lucide-react";
+import BlockEditor from "./BlockEditor";
+import { parseKitchenLayout, legacyKitchenLayout } from "@/lib/kitchen-layout";
 
 type KitchenFontSize = "normal" | "large" | "xlarge";
 
@@ -78,6 +80,7 @@ interface TicketConfig {
   kitchenInvertModifiers: boolean;
   kitchenModifiersFontSize: "normal" | "large";
   kitchenItemSeparator: boolean;
+  kitchenLayout?: string;
   kitchenShowItemDescription: boolean;
   kitchenGroupBySeat: boolean;
   kitchenSeparateByGroup: boolean;
@@ -117,6 +120,17 @@ const EMPTY: TicketConfig = {
 };
 
 type SubTab = "general" | "kitchen" | "security";
+
+function defaultKitchenLayout(cfg: TicketConfig) {
+  return legacyKitchenLayout({
+    showTableNumber: cfg.kitchenShowTable, showCustomerName: cfg.kitchenShowCustomer,
+    ticketNameSize: cfg.kitchenTicketNameSize, showOrderNumber: cfg.kitchenShowOrderNumber,
+    showTime: cfg.kitchenShowTime, showOrderType: cfg.kitchenShowType,
+    showModifiers: cfg.kitchenShowModifiers, showNotes: cfg.kitchenShowNotes,
+    groupBySeat: cfg.kitchenGroupBySeat, fontSize: cfg.kitchenFontSize,
+    lineWeight: cfg.kitchenLineWeight,
+  });
+}
 
 const inputCls = "w-full h-14 bg-[var(--surface-1)] border border-white/5 rounded-2xl px-5 text-white font-bold focus:outline-none focus:border-[var(--brand)] transition-colors";
 
@@ -325,58 +339,19 @@ export default function TicketFormatTab() {
 
         {sub === "kitchen" && (
           <>
-            <Field label="Título ticket cocina"><input value={cfg.kitchenHeader} onChange={(e) => setCfg({ ...cfg, kitchenHeader: e.target.value })} className={inputCls} placeholder="COMANDA" /></Field>
+            <Field label="Título ticket cocina (opcional)"><input value={cfg.kitchenHeader} onChange={(e) => setCfg({ ...cfg, kitchenHeader: e.target.value })} className={inputCls} placeholder="COMANDA" /></Field>
+            <SectionLabel>Layout de la Comanda</SectionLabel>
+            <BlockEditor
+              layoutJson={cfg.kitchenLayout || ""}
+              defaultLayout={defaultKitchenLayout(cfg)}
+              onChange={(json) => setCfg({ ...cfg, kitchenLayout: json })}
+            />
 
-            {/* TITULAR DE LA COMANDA — la mesa manda; el cliente va debajo en normal */}
-            <SectionLabel>Titular de la comanda (mesa)</SectionLabel>
-            <Field label="Tamaño de la mesa — se imprime arriba y en grande. Sin mesa (para llevar/domicilio) el lugar lo toma el nombre del cliente.">
-              <Segmented value={cfg.kitchenTicketNameSize} onChange={(v) => setCfg({ ...cfg, kitchenTicketNameSize: v })} options={NAME_SIZE_OPTS} />
-            </Field>
-
-            {/* QUÉ SE IMPRIME — encabezado */}
-            <SectionLabel>Datos del encabezado</SectionLabel>
+            <SectionLabel>Opciones Adicionales de Cocina</SectionLabel>
             <div className="grid grid-cols-2 gap-3">
-              <Toggle label="Número de orden" checked={cfg.kitchenShowOrderNumber} onChange={(v) => setCfg({ ...cfg, kitchenShowOrderNumber: v })} />
-              <Toggle label="Hora de impresión" checked={cfg.kitchenShowTime} onChange={(v) => setCfg({ ...cfg, kitchenShowTime: v })} />
-              <Toggle label="Tipo de orden" checked={cfg.kitchenShowType} onChange={(v) => setCfg({ ...cfg, kitchenShowType: v })} />
-              <Toggle label="Número de mesa" checked={cfg.kitchenShowTable} onChange={(v) => setCfg({ ...cfg, kitchenShowTable: v })} />
-              <Toggle label="Nombre del cliente" checked={cfg.kitchenShowCustomer} onChange={(v) => setCfg({ ...cfg, kitchenShowCustomer: v })} />
-            </div>
-
-            {/* QUÉ SE IMPRIME — productos */}
-            <SectionLabel>Detalle de productos</SectionLabel>
-            <div className="grid grid-cols-2 gap-3">
-              <Toggle label="Modificadores (+ extra, sin…)" checked={cfg.kitchenShowModifiers} onChange={(v) => setCfg({ ...cfg, kitchenShowModifiers: v })} />
-              <Toggle label="Notas del producto" checked={cfg.kitchenShowNotes} onChange={(v) => setCfg({ ...cfg, kitchenShowNotes: v })} />
-              <Toggle label="Contenido de combos (desglose)" checked={cfg.kitchenShowItemDescription} onChange={(v) => setCfg({ ...cfg, kitchenShowItemDescription: v })} />
               <Toggle label="Modificadores resaltados (Fondo negro)" checked={cfg.kitchenInvertModifiers} onChange={(v) => setCfg({ ...cfg, kitchenInvertModifiers: v })} />
-              <Toggle label="Modificadores en letra grande" checked={cfg.kitchenModifiersFontSize === "large"} onChange={(v) => setCfg({ ...cfg, kitchenModifiersFontSize: v ? "large" : "normal" })} />
-              <Toggle label="Separador de platillos (---)" checked={cfg.kitchenItemSeparator} onChange={(v) => setCfg({ ...cfg, kitchenItemSeparator: v })} />
-              <Toggle label="Agrupar por comensal" checked={cfg.kitchenGroupBySeat} onChange={(v) => setCfg({ ...cfg, kitchenGroupBySeat: v })} />
+              <Toggle label="Contenido de combos (desglose)" checked={cfg.kitchenShowItemDescription} onChange={(v) => setCfg({ ...cfg, kitchenShowItemDescription: v })} />
               <Toggle label="Ticket separado por estación" checked={cfg.kitchenSeparateByGroup} onChange={(v) => setCfg({ ...cfg, kitchenSeparateByGroup: v })} />
-            </div>
-
-            {/* CÓMO SE IMPRIME — tamaño */}
-            <SectionLabel>Tamaño de los productos</SectionLabel>
-            <div className="grid grid-cols-3 gap-2">
-              {([
-                { id: "normal", label: "Normal", hint: "1×" },
-                { id: "large", label: "Grande", hint: "2×" },
-                { id: "xlarge", label: "Extra", hint: "3×" },
-              ] as { id: KitchenFontSize; label: string; hint: string }[]).map((opt) => {
-                const active = cfg.kitchenFontSize === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setCfg({ ...cfg, kitchenFontSize: opt.id })}
-                    className={`flex flex-col items-center justify-center gap-0.5 h-16 rounded-2xl border transition-all ${active ? "bg-iris-500 border-iris-500 text-iris-fg" : "bg-[var(--surface-1)] border-white/5 text-zinc-300 hover:border-iris-glow"}`}
-                  >
-                    <span className="text-xs font-semibold uppercase tracking-widest">{opt.label}</span>
-                    <span className={`text-[10px] font-bold ${active ? "text-[var(--brand-fg)]" : "text-zinc-500"}`}>{opt.hint} ancho</span>
-                  </button>
-                );
-              })}
             </div>
 
             <SectionLabel>Tipografía de la comanda</SectionLabel>
@@ -585,11 +560,6 @@ const WEIGHT_OPTS = [
   { id: "normal", label: "Normal" },
   { id: "bold", label: "Marcado" },
 ];
-const NAME_SIZE_OPTS = [
-  { id: "normal", label: "Normal", hint: "1×" },
-  { id: "large", label: "Grande", hint: "2×" },
-  { id: "xlarge", label: "Extra", hint: "3×" },
-];
 // Espacio vertical entre productos del recibo. "loose" mete una línea en blanco
 // entre ítems (anti-amontonado); "normal" los deja juntos.
 const ITEM_GAP_OPTS = [
@@ -707,32 +677,50 @@ function KitchenPreview({ cfg }: { cfg: TicketConfig }) {
     ],
   };
 
-  // Tamaño visual de los renglones de producto según fontSize.
-  const itemSizeCls =
-    cfg.kitchenFontSize === "normal" ? "text-[13px]" :
-    cfg.kitchenFontSize === "xlarge" ? "text-[22px] leading-tight" : "text-[17px] leading-snug";
-  const itemWeight = cfg.kitchenLineWeight === "light" ? 600 : 900;
-  const nameSizePx = cfg.kitchenTicketNameSize === "xlarge" ? 34 : cfg.kitchenTicketNameSize === "large" ? 24 : 13;
+  let blocks = parseKitchenLayout(cfg.kitchenLayout);
+  if (blocks.length === 0) {
+    blocks = defaultKitchenLayout(cfg);
+  }
 
-  const sep = <div className="text-zinc-400 select-none">{"-".repeat(32)}</div>;
+  const renderItems = (block: any) => {
+    const seats = Array.from(new Set(SAMPLE.items.map((i) => i.seat))).sort((a, b) => a - b);
+    const grouped = block.groupBySeat && seats.length >= 2;
+    const sizeCls = block.size === "normal" ? "text-[13px]" : block.size === "xlarge" ? "text-[22px] leading-tight" : "text-[17px] leading-snug";
+    const weightVal = block.weight === "light" ? 600 : 900;
 
-  const seats = Array.from(new Set(SAMPLE.items.map((i) => i.seat))).sort((a, b) => a - b);
-  const grouped = cfg.kitchenGroupBySeat && seats.length >= 2;
+    const renderIt = (it: any, key: string) => (
+      <div key={key}>
+        <div className={`text-black ${sizeCls}`} style={{ fontWeight: weightVal }}>{it.quantity}x {it.name}</div>
+        {cfg.kitchenShowItemDescription && it.kitchenDetail && (
+          <div className="text-[12px] text-zinc-700 pl-3">({it.kitchenDetail})</div>
+        )}
+        {block.showModifiers && it.modifiers.map((m: string, i: number) => {
+          const isRemoval = /^sin\s/i.test(m);
+          const text = isRemoval ? m.replace(/^sin\s/i, "[-] SIN ") : `[+] ${m}`;
+          const invert = cfg.kitchenInvertModifiers;
+          return (
+            <div key={`m${i}`} className={`text-[12px] pl-3 ${invert && isRemoval ? "bg-black text-white px-1 inline-block mt-0.5" : "text-zinc-700"}`}>
+              {text}
+            </div>
+          );
+        })}
+        {block.showNotes && it.notes && (
+          <div className="text-[12px] text-zinc-700 pl-3">&gt; {it.notes}</div>
+        )}
+      </div>
+    );
 
-  const renderItem = (it: typeof SAMPLE.items[number], key: React.Key) => (
-    <div key={key}>
-      <div className={`text-black ${itemSizeCls}`} style={{ fontWeight: itemWeight }}>{it.quantity}x {it.name}</div>
-      {cfg.kitchenShowItemDescription && it.kitchenDetail && (
-        <div className="text-[12px] text-zinc-700 pl-3">({it.kitchenDetail})</div>
-      )}
-      {cfg.kitchenShowModifiers && it.modifiers.map((m, i) => (
-        <div key={`m${i}`} className="text-[12px] text-zinc-700 pl-3">+ {m}</div>
-      ))}
-      {cfg.kitchenShowNotes && it.notes && (
-        <div className="text-[12px] text-zinc-700 pl-3">&gt; {it.notes}</div>
-      )}
-    </div>
-  );
+    if (grouped) {
+      return seats.map(seat => (
+        <div key={seat} className="space-y-0.5 mb-2">
+          <div className="font-black text-[13px] text-black">COMENSAL {seat}</div>
+          {SAMPLE.items.filter(i => i.seat === seat).map((it, idx) => renderIt(it, `${seat}-${idx}`))}
+        </div>
+      ));
+    } else {
+      return SAMPLE.items.map((it, idx) => renderIt(it, String(idx)));
+    }
+  };
 
   return (
     <div className="rounded-2xl bg-zinc-300/10 border border-white/5 p-4">
@@ -740,47 +728,44 @@ function KitchenPreview({ cfg }: { cfg: TicketConfig }) {
         className="mx-auto w-full max-w-[260px] bg-white text-black rounded-sm shadow-inner px-4 py-4"
         style={{ fontFamily: TYPO_FONT_CSS[cfg.kitchenFontFamily] ?? TYPO_FONT_CSS.monospace, lineHeight: typoLineHeight(cfg.kitchenLineSpacing) }}
       >
-        <div className="text-center">
-          {cfg.kitchenHeader.trim() && (
-            <div className="font-black text-[18px] tracking-wide">{cfg.kitchenHeader.trim()}</div>
-          )}
-          {cfg.kitchenSeparateByGroup && (
-            <div className="font-black text-[16px]">COCINA</div>
-          )}
-          {cfg.kitchenShowTable && (
-            <div className="font-black leading-tight text-black" style={{ fontSize: nameSizePx }}>Mesa {SAMPLE.tableNumber}</div>
-          )}
-          {/* El cliente va en tamaño normal: en la comanda el titular es la mesa
-              (ver buildKitchenTicket). La vista previa debe reflejarlo o el
-              dueño configura el tamaño creyendo que aplica al nombre. */}
-          {cfg.kitchenShowCustomer && (
-            <div className="font-black leading-tight text-black text-[13px]">{SAMPLE.customerName}</div>
-          )}
-          {cfg.kitchenShowOrderNumber && <div className="text-[13px]">#{SAMPLE.orderNumber}</div>}
-          {cfg.kitchenShowTime && <div className="text-[13px]">{SAMPLE.time}</div>}
-          {cfg.kitchenShowType && <div className="text-[13px]">{SAMPLE.orderTypeLabel}</div>}
-        </div>
-
-        {sep}
-
-        <div className="space-y-1">
-          {grouped ? (
-            seats.map((seat) => (
-              <div key={seat} className="space-y-0.5">
-                <div className="font-black text-[13px] text-black">COMENSAL {seat}</div>
-                {SAMPLE.items.filter((i) => i.seat === seat).map((it, idx) => renderItem(it, `${seat}-${idx}`))}
-              </div>
-            ))
-          ) : (
-            SAMPLE.items.map((it, idx) => renderItem(it, idx))
-          )}
-        </div>
-
-        {sep}
-
-        {cfg.kitchenFooter.trim() && (
-          <div className="text-center text-[12px] pt-1">{cfg.kitchenFooter.trim()}</div>
+        {cfg.kitchenHeader.trim() && (
+          <div className="text-center font-black text-[18px] tracking-wide mb-2">{cfg.kitchenHeader.trim()}</div>
         )}
+
+        {blocks.map(b => {
+          if (b.type === "DIVIDER") return <div key={b.id} className="text-center text-zinc-400 select-none overflow-hidden h-4 leading-none">{(b.char || "-").repeat(32)}</div>;
+          if (b.type === "TEXT") return <div key={b.id} className="text-center font-bold text-[14px] my-1">{b.text}</div>;
+          if (b.type === "TITLE") {
+            const sizePx = b.size === "xlarge" ? 34 : b.size === "large" ? 24 : 13;
+            return (
+              <div key={b.id} className="text-center my-2">
+                {b.showTable && <div className="font-black leading-tight text-black" style={{ fontSize: sizePx }}>Mesa {SAMPLE.tableNumber}</div>}
+                {b.showCustomer && <div className="font-black leading-tight text-black text-[13px]">{SAMPLE.customerName}</div>}
+                {b.showStation && cfg.kitchenSeparateByGroup && <div className="font-black text-[16px] mt-1">COCINA</div>}
+              </div>
+            );
+          }
+
+          if (b.type === "ORDER_INFO") {
+            return (
+              <div key={b.id} className="text-center my-2 text-[13px]">
+                {b.showOrderNumber && <div>#{SAMPLE.orderNumber}</div>}
+                {b.showTime && <div>{SAMPLE.time}</div>}
+                {b.showType && <div>{SAMPLE.orderTypeLabel}</div>}
+              </div>
+            );
+          }
+
+          if (b.type === "ITEMS") {
+            return <div key={b.id} className="my-2 text-left space-y-1">{renderItems(b)}</div>;
+          }
+
+          if (b.type === "FOOTER") {
+            return (cfg.kitchenFooter || '').trim() ? <div key={b.id} className="text-center text-[12px] pt-1 mt-2">{(cfg.kitchenFooter || '').trim()}</div> : null;
+          }
+
+          return null;
+        })}
       </div>
     </div>
   );

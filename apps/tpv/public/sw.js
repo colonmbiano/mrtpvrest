@@ -6,12 +6,13 @@
 // Estrategias:
 //  - Precache de la App Shell básica al instalar.
 //  - Cache-First (con revalidación en segundo plano) para assets estáticos (JS, CSS, fuentes, imágenes).
-//  - Stale-While-Revalidate para lecturas de catálogo, mesas, zonas y empleados.
 //  - Fallback de navegación HTML para que un F5 sin red nunca muestre error de navegador.
+// Los datos autenticados NO se guardan aquí: catálogo/mesas/empleados usan sus
+// repositorios IndexedDB con contexto de la app. Cachearlos solo por URL podía
+// enseñar datos de otra sucursal después de cambiar de workspace.
 
-const VERSION = 'tpv-sw-v2';
+const VERSION = 'tpv-sw-v3';
 const SHELL_CACHE = `${VERSION}-shell`;
-const DATA_CACHE  = `${VERSION}-data`;
 
 const PRECACHE_URLS = [
   '/',
@@ -27,9 +28,13 @@ const PRECACHE_URLS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(SHELL_CACHE).then((cache) =>
-      cache.addAll(PRECACHE_URLS).catch((err) => {
-        console.warn('[SW] Precache best-effort parcial:', err);
-      })
+      Promise.allSettled(
+        PRECACHE_URLS.map((url) =>
+          cache.add(url).catch((err) => {
+            console.warn('[SW] No se pudo precachear:', url, err);
+          })
+        )
+      )
     )
   );
   self.skipWaiting();
@@ -48,16 +53,6 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-function isDataRequest(url) {
-  return (
-    url.pathname.startsWith('/api/menu') ||
-    url.pathname.startsWith('/api/store') ||
-    url.pathname.startsWith('/api/tables') ||
-    url.pathname.startsWith('/api/zones') ||
-    url.pathname.startsWith('/api/employees/sync')
-  );
-}
-
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return; // POST/PUT van por la cola outbox de apiOrQueue
@@ -69,24 +64,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 1. Datos de lectura (catálogo, mesas, empleados) → Stale-While-Revalidate
-  if (isDataRequest(url)) {
-    event.respondWith(
-      caches.open(DATA_CACHE).then(async (cache) => {
-        const cached = await cache.match(req);
-        const network = fetch(req)
-          .then((res) => {
-            if (res.ok) cache.put(req, res.clone()).catch(() => {});
-            return res;
-          })
-          .catch(() => cached);
-        return cached || network;
-      })
-    );
-    return;
-  }
+  // Mismo origen: App Shell, chunks de JS, CSS, fuentes locales e imágenes.
+  // Las respuestas /api nunca entran: incluso si el frontend y API comparten
+  // origen, llevan identidad/tenant en headers que Cache API no separa.
+  if (url.pathname.startsWith('/api/')) return;
 
-  // 2. Mismo origen: App Shell, chunks de JS, CSS, fuentes locales e imágenes
   if (url.origin === self.location.origin) {
     const isNavigation = req.mode === 'navigate' || req.headers.get('accept')?.includes('text/html');
 

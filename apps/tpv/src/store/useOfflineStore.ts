@@ -27,6 +27,12 @@ export interface OfflineTransaction {
   synced: boolean;
   supervisor?: string;
   failed?: OfflineFailure;
+  scope?: {
+    restaurantId?: string;
+    locationId?: string;
+    employeeId?: string;
+    shiftId?: string;
+  };
 }
 
 interface OfflineState {
@@ -42,6 +48,23 @@ interface OfflineState {
   setLastSync: (timestamp: number) => void;
   getUnsyncedTransactions: () => OfflineTransaction[];
   getFailedTransactions: () => OfflineTransaction[];
+}
+
+// Zustand dispara la escritura de persistencia sin esperarla. Serializamos
+// todas las escrituras para impedir que un snapshot viejo termine después de
+// uno nuevo, y exponemos flushOfflinePersistence para que apiOrQueue NO
+// confirme una venta hasta que el outbox ya quedó durable en IndexedDB.
+let idbWriteChain: Promise<void> = Promise.resolve();
+
+function enqueueIdbWrite(name: string, value: string): Promise<void> {
+  idbWriteChain = idbWriteChain
+    .catch(() => undefined)
+    .then(() => set(name, value));
+  return idbWriteChain;
+}
+
+export function flushOfflinePersistence(): Promise<void> {
+  return idbWriteChain;
 }
 
 const idbStorage: StateStorage = {
@@ -73,8 +96,10 @@ const idbStorage: StateStorage = {
     }
     return merged;
   },
-  setItem: async (name: string, value: string): Promise<void> => {
-    await set(name, value);
+  setItem: (name: string, value: string): void => {
+    // Zustand no espera esta promesa; el caller crítico la observa mediante
+    // flushOfflinePersistence. Evitar un rejection global sin consumir.
+    void enqueueIdbWrite(name, value).catch(() => undefined);
   },
   removeItem: async (name: string): Promise<void> => {
     await del(name);
@@ -143,11 +168,11 @@ const useOfflineStore = create<OfflineState>()(
       lastSync: 0,
       addToQueue: (transaction) =>
         set((state) => ({ queue: [...state.queue, transaction] })),
+      // Un ACK del backend ya no aporta nada operativo. Retirarlo evita que
+      // el blob de IndexedDB crezca para siempre en una caja de alto volumen.
       markSynced: (transactionId) =>
         set((state) => ({
-          queue: state.queue.map((t) =>
-            t.id === transactionId ? { ...t, synced: true } : t
-          ),
+          queue: state.queue.filter((t) => t.id !== transactionId),
         })),
       markFailed: (transactionId, failure) =>
         set((state) => ({

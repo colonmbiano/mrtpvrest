@@ -1,13 +1,25 @@
-import useOfflineStore, { type TransactionType } from '@/store/useOfflineStore';
+import useOfflineStore, {
+  flushOfflinePersistence,
+  type OfflineTransaction,
+  type TransactionType,
+} from '@/store/useOfflineStore';
 import { useAuthStore } from '@/store/authStore';
-import api from '@/lib/api';
+import api, { AUTH_TOKEN_MISSING, BACKEND_UNAVAILABLE } from '@/lib/api';
+import { getToken } from '@/lib/token-vault';
+import { getTenantIds } from '@/lib/tenant';
+import {
+  isBackendCircuitOpen,
+  markBackendAvailable,
+  markBackendUnavailable,
+  resetBackendAvailability,
+} from '@/lib/backend-availability';
 
 let syncInterval: NodeJS.Timeout | null = null;
+let onlineListener: (() => void) | null = null;
 
 // Timeout para escrituras críticas (apiOrQueue) y sus replays. Acota el
 // cold-start del backend para que la operación caiga a cola en vez de
-// colgar la pantalla. NO se aplica al axios global (api.ts) porque hay
-// requests legítimamente largos (reportes/PDF).
+// colgar la pantalla. api.ts concede un margen mayor a IA y uploads.
 const QUEUE_TIMEOUT_MS = 15000;
 
 // Watchdog del candado de sync. syncHeartbeat se refresca al tomar el candado
@@ -49,6 +61,8 @@ export interface ApiOrQueueResult<T = any> {
 
 function isNetworkError(err: any): boolean {
   if (!err) return false;
+  if (err.code === AUTH_TOKEN_MISSING) return false;
+  if (err.code === BACKEND_UNAVAILABLE) return true;
   // Axios marca err.code === 'ERR_NETWORK' cuando no hay respuesta.
   if (err.code === 'ERR_NETWORK' || err.code === 'ECONNABORTED') return true;
   // Sin response = no llegó al server. Con response 5xx = server caído.
@@ -72,11 +86,88 @@ function isNetworkError(err: any): boolean {
 //   408/429/5xx/red → transitorios
 function isPermanentReplayError(err: any): boolean {
   const status = err?.response?.status;
-  return status === 400 || status === 403 || status === 409 || status === 422;
+  const code = String(err?.response?.data?.code ?? '');
+  const recoverable403 =
+    status === 403 &&
+    ['NO_ACTIVE_SHIFT', 'SHIFT_REQUIRED', 'TOKEN_EXPIRED'].includes(code);
+  return (
+    status === 400 ||
+    (status === 403 && !recoverable403) ||
+    status === 409 ||
+    status === 422
+  );
 }
 
 function genTxId(type: TransactionType) {
   return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function makeTransaction(
+  id: string,
+  type: TransactionType,
+  method: string,
+  path: string,
+  body: Record<string, any>,
+  supervisor?: string,
+): OfflineTransaction {
+  const { restaurantId, locationId } = getTenantIds();
+  const auth = useAuthStore.getState();
+  const shiftId = auth.activeShift?.id;
+  return {
+    id,
+    type,
+    data: { method, path, body },
+    timestamp: Date.now(),
+    synced: false,
+    supervisor,
+    scope: {
+      restaurantId: restaurantId ?? undefined,
+      locationId: locationId ?? undefined,
+      employeeId: auth.employee?.id,
+      shiftId: typeof shiftId === 'string' ? shiftId : undefined,
+    },
+  };
+}
+
+async function enqueueDurably(transaction: OfflineTransaction): Promise<boolean> {
+  const store = useOfflineStore.getState();
+  store.addToQueue(transaction);
+  try {
+    await flushOfflinePersistence();
+    return true;
+  } catch (error) {
+    // No confirmamos una venta que solo existe en RAM. La dejamos fuera para
+    // que el caller mantenga el ticket visible y pueda volver a intentar.
+    store.discardTransaction(transaction.id);
+    console.error('No se pudo persistir el outbox offline:', error);
+    return false;
+  }
+}
+
+function transactionMatchesCurrentScope(transaction: OfflineTransaction): boolean {
+  if (!transaction.scope) return true; // compatibilidad con cola legacy
+  const { restaurantId, locationId } = getTenantIds();
+  const employeeId = useAuthStore.getState().employee?.id;
+  const scope = transaction.scope;
+  return (
+    !!scope.restaurantId && scope.restaurantId === restaurantId &&
+    !!scope.locationId && scope.locationId === locationId &&
+    !!scope.employeeId && scope.employeeId === employeeId
+  );
+}
+
+async function queueResult<T>(
+  transaction: OfflineTransaction,
+): Promise<ApiOrQueueResult<T>> {
+  const persisted = await enqueueDurably(transaction);
+  return persisted
+    ? { ok: true, queued: true, data: null }
+    : {
+        ok: false,
+        queued: false,
+        data: null,
+        error: 'No se pudo guardar la operación en este dispositivo',
+      };
 }
 
 export async function apiOrQueue<T = any>(
@@ -86,8 +177,16 @@ export async function apiOrQueue<T = any>(
   data: Record<string, any>,
   opts?: { supervisor?: string }
 ): Promise<ApiOrQueueResult<T>> {
-  const store = useOfflineStore.getState();
-
+  const auth = useAuthStore.getState();
+  const tenant = getTenantIds();
+  if (!auth.isAuthenticated || !auth.employee?.id) {
+    return { ok: false, queued: false, data: null, status: 401,
+      error: 'Ingresa tu PIN antes de registrar la operación' };
+  }
+  if (!tenant.restaurantId || !tenant.locationId) {
+    return { ok: false, queued: false, data: null, status: 400,
+      error: 'Selecciona la sucursal antes de registrar la operación' };
+  }
   // Generamos el txId arriba para poder usarlo como clientOrderId al armar
   // el body. Si el server recibe la misma orden 2x (sync corre antes de
   // markSynced), la dedupe DB-level por clientOrderId garantiza no duplicar.
@@ -106,26 +205,31 @@ export async function apiOrQueue<T = any>(
   // queremos el 409 para preguntar antes de encimar.
   const isOrderCreate =
     type === 'order' && method === 'POST' && /\/orders\/tpv$/.test(path);
-  const queuedBody = isOrderCreate
+  const isPaidOrderCreate =
+    isOrderCreate &&
+    Boolean(data.paymentMethod || (Array.isArray(data.payments) && data.payments.length)) &&
+    ['DELIVERED', 'COMPLETED', 'PAID'].includes(
+      String(data.status ?? '').toUpperCase(),
+    );
+  // Una orden YA COBRADA nunca se fusiona silenciosamente con una cuenta que
+  // el dispositivo no conocía: el importe podría cubrir solo la venta local y
+  // no toda la mesa. Ese 409 queda visible para conciliación en vez de perder
+  // el pago dentro de addRoundHandler.
+  const queuedBody = isOrderCreate && !isPaidOrderCreate
     ? { ...bodyOut, appendToOpenTab: true }
     : bodyOut;
+  // Capturar identidad ANTES del await: un cambio de empleado durante un
+  // timeout no debe atribuir la venta al usuario que entró después.
+  const transaction = makeTransaction(txId, type, method, path, queuedBody, opts?.supervisor);
 
-  // Pre-check: si el navegador YA sabe que está offline, evitamos la
-  // request y vamos directo a cola (ahorra timeout en pantalla).
-  const isOffline =
-    typeof navigator !== 'undefined' && navigator.onLine === false;
+  // navigator.onLine solo conoce el Wi-Fi, no si Railway responde. Después
+  // del primer timeout/5xx el circuito evita pagar otros 15s por operación.
+  const shouldQueueImmediately =
+    (typeof navigator !== 'undefined' && navigator.onLine === false) ||
+    isBackendCircuitOpen();
 
-  if (isOffline) {
-    const tx = {
-      id: txId,
-      type,
-      data: { method, path, body: queuedBody },
-      timestamp: Date.now(),
-      synced: false,
-      supervisor: opts?.supervisor,
-    };
-    store.addToQueue(tx);
-    return { ok: true, queued: true, data: null };
+  if (shouldQueueImmediately) {
+    return queueResult<T>(transaction);
   }
 
   try {
@@ -144,19 +248,12 @@ export async function apiOrQueue<T = any>(
       method === 'POST'
         ? await api.post<T>(path, bodyOut, cfg)
         : await api.put<T>(path, bodyOut, cfg);
+    markBackendAvailable();
     return { ok: true, queued: false, data: res.data };
   } catch (err: any) {
-    if (isNetworkError(err)) {
-      const tx = {
-        id: txId,
-        type,
-        data: { method, path, body: queuedBody },
-        timestamp: Date.now(),
-        synced: false,
-        supervisor: opts?.supervisor,
-      };
-      store.addToQueue(tx);
-      return { ok: true, queued: true, data: null };
+    if (err?.code === AUTH_TOKEN_MISSING || isNetworkError(err)) {
+      if (err?.code !== AUTH_TOKEN_MISSING) markBackendUnavailable();
+      return queueResult<T>(transaction);
     }
     // Error legítimo (4xx) — la UI debe mostrarlo. Exponemos status + cuerpo
     // para que el caller pueda manejar el 409 de conflicto (mesa con cuenta
@@ -195,26 +292,34 @@ export function initBackgroundSync() {
   if (syncInterval) return; // Already running
 
   // Sync immediately
-  syncOfflineQueue();
+  void syncOfflineQueue();
 
   // Set up 5-second interval
   syncInterval = setInterval(() => {
     if (navigator.onLine) {
-      syncOfflineQueue();
+      void syncOfflineQueue();
     }
   }, 5000);
 
   // Sync when connection returns
   if (typeof window !== 'undefined') {
-    window.addEventListener('online', () => {
-      syncOfflineQueue();
-    });
+    onlineListener = () => {
+      resetBackendAvailability();
+      void syncOfflineQueue({ force: true });
+    };
+    window.addEventListener('online', onlineListener);
   }
 }
 
-export async function syncOfflineQueue() {
+export async function syncOfflineQueue(opts?: { force?: boolean }) {
   const store = useOfflineStore.getState();
   const authStore = useAuthStore.getState();
+
+  if (!authStore.isAuthenticated || !authStore.employee?.id) return;
+
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  if (!opts?.force && isBackendCircuitOpen()) return;
+  if (opts?.force) resetBackendAvailability();
 
   if (store.syncInProgress) {
     // Candado viejo. El flag ya no sobrevive a un reinicio (partialize+merge
@@ -230,8 +335,19 @@ export async function syncOfflineQueue() {
     );
   }
 
-  const unsyncedTransactions = store.getUnsyncedTransactions();
+  const unsyncedTransactions = store
+    .getUnsyncedTransactions()
+    .sort((a, b) => a.timestamp - b.timestamp);
   if (unsyncedTransactions.length === 0) return;
+
+  // Una operación rechazada puede ser predecesora de las siguientes. Pausar
+  // todo el replay es conservador, pero evita cobrar/cerrar una orden cuya
+  // ronda anterior no aterrizó. El drawer permite revisarla y descartarla.
+  if (store.getFailedTransactions().length > 0) return;
+
+  // Una sesión PIN local es válida para vender, pero no para atribuir replays
+  // al servidor. Sin JWT dejamos la cola intacta hasta reautenticación.
+  if (!(await getToken())) return;
 
   store.setSyncInProgress(true);
   syncHeartbeat = Date.now();
@@ -248,9 +364,18 @@ export async function syncOfflineQueue() {
       const { data: employees } = await api.get('/api/employees/sync', {
         timeout: QUEUE_TIMEOUT_MS,
       });
+      markBackendAvailable();
       if (Array.isArray(employees)) authStore.setEmployees(employees);
-    } catch {
-      /* no crítico, seguimos con el replay */
+    } catch (err: any) {
+      if (isNetworkError(err)) {
+        markBackendUnavailable();
+        return;
+      }
+      if (err?.code === AUTH_TOKEN_MISSING || err?.response?.status === 401) {
+        return;
+      }
+      // Un error funcional de refresco de empleados no impide replayear la
+      // venta con el JWT vigente.
     }
 
     // Replay de cada transacción contra su endpoint original. El
@@ -263,6 +388,13 @@ export async function syncOfflineQueue() {
       // fuera del loop para que una cola larga no se auto-desbloquee.
       syncHeartbeat = Date.now();
       try {
+        if (!transactionMatchesCurrentScope(transaction)) {
+          console.warn(
+            `Tx ${transaction.id} pertenece a otro restaurante, sucursal o empleado; replay pausado`,
+          );
+          break;
+        }
+
         // Gate de orden para el CIERRE de turno: el corte se calcula en el
         // servidor leyendo las órdenes ya en la BD. Si todavía hay cualquier
         // tx más vieja sin sincronizar (órdenes, gastos, ingresos, apertura),
@@ -306,6 +438,7 @@ export async function syncOfflineQueue() {
           });
         }
 
+        markBackendAvailable();
         store.markSynced(transaction.id);
       } catch (err: any) {
         if (isPermanentReplayError(err)) {
@@ -324,14 +457,23 @@ export async function syncOfflineQueue() {
             `Tx ${transaction.id} rechazada (${failure.status}): ${failure.error}`
           );
           store.markFailed(transaction.id, failure);
+          break;
         } else {
           console.error(`Failed to sync transaction ${transaction.id}:`, err);
-          // Transitorio — el próximo tick lo intentará.
+          if (isNetworkError(err)) markBackendUnavailable();
+          // FIFO estricto: si falla un predecesor no adelantamos una ronda,
+          // pago o cierre posterior. El próximo tick parte de este mismo tx.
+          break;
         }
       }
     }
 
-    store.setLastSync(Date.now());
+    if (
+      store.getUnsyncedTransactions().length === 0 &&
+      store.getFailedTransactions().length === 0
+    ) {
+      store.setLastSync(Date.now());
+    }
   } catch (err) {
     console.error('Background sync error:', err);
   } finally {
@@ -343,5 +485,9 @@ export function stopBackgroundSync() {
   if (syncInterval) {
     clearInterval(syncInterval);
     syncInterval = null;
+  }
+  if (typeof window !== 'undefined' && onlineListener) {
+    window.removeEventListener('online', onlineListener);
+    onlineListener = null;
   }
 }

@@ -57,6 +57,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-
 
+      - name: Verificar sintaxis JavaScript
+        run: node apps/backend/scripts/check-syntax.js
+
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
 

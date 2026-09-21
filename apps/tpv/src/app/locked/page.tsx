@@ -25,24 +25,23 @@ export default function LockedPage() {
   const [terminalKind, setTerminalKind] = useState<string>("CAJA");
   const [locationName, setLocationName] = useState<string>("Sucursal");
   const loginWithPin = useAuthStore((state) => state.loginWithPin);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   useEffect(() => {
     const checkDevice = () => {
       const deviceLinked = document.cookie.includes("tpv-device-linked=true");
-      const sessionActive = document.cookie.includes("tpv-session-active=true");
-
       if (!deviceLinked) {
         router.replace("/setup");
         return;
       }
 
-      if (sessionActive) {
+      if (isAuthenticated) {
         router.replace("/hub");
       }
     };
 
     checkDevice();
-  }, [router]);
+  }, [isAuthenticated, router]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

@@ -8,6 +8,10 @@ RUN npm install -g pnpm@9.15.0
 # Copiar todo el código fuente
 COPY . .
 
+# Fallar el build antes de instalar dependencias si cualquier archivo
+# JavaScript del backend o del paquete de datos quedó truncado.
+RUN node apps/backend/scripts/check-syntax.js
+
 # Eliminar node_modules de Windows si se coló
 RUN rm -rf node_modules apps/backend/node_modules packages/database/node_modules
 

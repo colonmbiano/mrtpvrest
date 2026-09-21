@@ -6,15 +6,38 @@
  */
 import { apiOrQueue, shiftActionQueued, syncOfflineQueue } from "@/lib/offline";
 import useOfflineStore, { mergeOfflinePersistedStates } from "@/store/useOfflineStore";
+import { resetBackendAvailability } from "@/lib/backend-availability";
+import { getToken } from "@/lib/token-vault";
+import { useAuthStore } from "@/store/authStore";
+
+jest.mock("idb-keyval", () => {
+  const values = new Map<string, unknown>();
+  return {
+    get: jest.fn(async (key: string) => values.get(key)),
+    set: jest.fn(async (key: string, value: unknown) => {
+      values.set(key, value);
+    }),
+    del: jest.fn(async (key: string) => {
+      values.delete(key);
+    }),
+  };
+});
+
+jest.mock("@/lib/token-vault", () => ({
+  getToken: jest.fn(async () => "test-token"),
+}));
 
 // Mock del axios singleton.
 jest.mock("@/lib/api", () => ({
   __esModule: true,
+  AUTH_TOKEN_MISSING: "AUTH_TOKEN_MISSING",
+  BACKEND_UNAVAILABLE: "BACKEND_UNAVAILABLE",
   default: { post: jest.fn(), put: jest.fn(), get: jest.fn() },
 }));
 
 import api from "@/lib/api";
 const mockApi = api as jest.Mocked<typeof api>;
+const mockGetToken = getToken as jest.MockedFunction<typeof getToken>;
 
 // localStorage para el persist de zustand.
 const store: Record<string, string> = {};
@@ -34,14 +57,42 @@ function setOnline(online: boolean) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  localStorage.setItem("restaurantId", "rest-1");
+  localStorage.setItem("locationId", "loc-1");
+  useAuthStore.setState({ isAuthenticated: true, employee: {
+    id: "employee-1", name: "Caja", role: "CASHIER", isActive: true, permissions: [],
+  } });
   useOfflineStore.getState().clearQueue();
   // El candado es estado compartido del store: si un test lo deja en true,
   // el guard de syncOfflineQueue hace salir temprano al siguiente.
   useOfflineStore.getState().setSyncInProgress(false);
+  resetBackendAvailability();
+  mockGetToken.mockResolvedValue("test-token");
   setOnline(true);
 });
 
 describe("apiOrQueue — apertura de turno offline", () => {
+  it("no confirma ventas sin una sesión PIN y sucursal", async () => {
+    setOnline(false);
+    useAuthStore.setState({ isAuthenticated: false, employee: null });
+    expect(await apiOrQueue("order", "POST", "/api/orders/tpv", {}))
+      .toMatchObject({ ok: false, queued: false, status: 401 });
+    expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(0);
+  });
+
+  it("conserva el empleado original si cambia mientras el servidor no responde", async () => {
+    mockApi.post.mockImplementationOnce(async () => {
+      useAuthStore.setState({ employee: {
+        id: "employee-2", name: "Relevo", role: "CASHIER", isActive: true, permissions: [],
+      } });
+      throw { code: "ERR_NETWORK" };
+    });
+    expect(await apiOrQueue("order", "POST", "/api/orders/tpv", {}))
+      .toMatchObject({ ok: true, queued: true });
+    expect(useOfflineStore.getState().getUnsyncedTransactions()[0]?.scope)
+      .toMatchObject({ employeeId: "employee-1", restaurantId: "rest-1", locationId: "loc-1" });
+  });
+
   it("offline: encola y NO pega al backend", async () => {
     setOnline(false);
 
@@ -93,6 +144,40 @@ describe("apiOrQueue — apertura de turno offline", () => {
 
     const cfg = mockApi.post.mock.calls[0]![2] as { headers?: Record<string, string> };
     expect(cfg?.headers?.["Idempotency-Key"]).toBeTruthy();
+  });
+
+  it("abre el circuito tras un 5xx y la siguiente venta encola sin esperar", async () => {
+    mockApi.post.mockRejectedValueOnce({
+      response: { status: 502, data: { error: "Bad gateway" } },
+    });
+
+    const first = await apiOrQueue("order", "POST", "/api/orders/tpv", {
+      items: [],
+    });
+    expect(first).toMatchObject({ ok: true, queued: true });
+
+    mockApi.post.mockClear();
+    const second = await apiOrQueue("order", "POST", "/api/orders/tpv", {
+      items: [],
+    });
+
+    expect(second).toMatchObject({ ok: true, queued: true });
+    expect(mockApi.post).not.toHaveBeenCalled();
+    expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(2);
+  });
+
+  it("no fusiona silenciosamente una venta offline ya cobrada con otra cuenta", async () => {
+    setOnline(false);
+
+    await apiOrQueue("order", "POST", "/api/orders/tpv", {
+      tableId: "table-1",
+      items: [{ menuItemId: "item-1", quantity: 1 }],
+      status: "DELIVERED",
+      paymentMethod: "CASH",
+    });
+
+    const [transaction] = useOfflineStore.getState().getUnsyncedTransactions();
+    expect(transaction?.data.body).not.toHaveProperty("appendToOpenTab");
   });
 });
 
@@ -256,7 +341,7 @@ describe("syncOfflineQueue — replay rechazado con 4xx definitivo", () => {
     }
   );
 
-  it("una tx congelada no bloquea el cierre de turno", async () => {
+  it("una tx congelada bloquea el cierre para preservar causalidad", async () => {
     enqueue("order", "/api/orders/OID/items", "items-2", 1000);
     enqueue("shift-close", "/api/shifts/current/close", "close-3", 2000);
     mockApi.post.mockImplementation((path: string) => {
@@ -268,12 +353,12 @@ describe("syncOfflineQueue — replay rechazado con 4xx definitivo", () => {
 
     // Pase 1: la orden se congela; el cierre se pospone (aún la ve más vieja).
     await syncOfflineQueue();
-    // Pase 2: ya no hay predecesor vivo → el cierre entra.
+    // Pase 2: el error sigue pendiente de revisión → el cierre no se adelanta.
     await syncOfflineQueue();
 
     const postedPaths = mockApi.post.mock.calls.map((c) => c[0]);
-    expect(postedPaths).toContain("/api/shifts/current/close");
-    expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(0);
+    expect(postedPaths).not.toContain("/api/shifts/current/close");
+    expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(1);
     expect(useOfflineStore.getState().getFailedTransactions()).toHaveLength(1);
   });
 
@@ -301,6 +386,20 @@ describe("syncOfflineQueue — replay rechazado con 4xx definitivo", () => {
 
     const cfg = mockApi.get.mock.calls[0]![1] as { timeout?: number };
     expect(cfg?.timeout).toBeGreaterThan(0);
+  });
+
+  it("no intenta replay sin JWT y conserva intacta la venta", async () => {
+    useOfflineStore.getState().addToQueue({
+      id: "tx-no-token", type: "order", timestamp: 1000, synced: false,
+      data: { method: "POST", path: "/api/orders/tpv", body: {} },
+    });
+    mockGetToken.mockResolvedValueOnce(null);
+
+    await syncOfflineQueue();
+
+    expect(mockApi.get).not.toHaveBeenCalled();
+    expect(mockApi.post).not.toHaveBeenCalled();
+    expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(1);
   });
 
   it("el replay legacy tambien va acotado con timeout", async () => {

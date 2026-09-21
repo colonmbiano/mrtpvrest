@@ -165,6 +165,7 @@ type TicketConfigDTO = {
   transferAccountNumber?: string;
   kitchenHeader?: string;
   kitchenFooter?: string;
+  kitchenLayout?: string;
   kitchenShowOrderNumber?: boolean;
   kitchenShowTime?: boolean;
   kitchenShowType?: boolean;
@@ -282,6 +283,8 @@ function mapToKitchenConfig(dto: TicketConfigDTO | null): KitchenTicketConfig | 
   return {
     header:           dto.kitchenHeader ?? undefined,
     footer:           dto.kitchenFooter ?? undefined,
+    kitchenFooter:    dto.kitchenFooter ?? undefined,
+    kitchenLayout:    dto.kitchenLayout ?? undefined,
     showOrderNumber:  dto.kitchenShowOrderNumber,
     showTime:         dto.kitchenShowTime,
     showOrderType:    dto.kitchenShowType,
