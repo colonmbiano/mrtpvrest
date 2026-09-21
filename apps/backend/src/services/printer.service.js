@@ -1,6 +1,13 @@
 const net = require('net');
 const { prisma } = require('@mrtpvrest/database');
 
+function usesLocalTpvPrinting() {
+  // Railway no tiene ruta hacia la LAN del restaurante. Las terminales
+  // imprimen directamente; un backend con túnel/LAN puede habilitarlo.
+  return Boolean(process.env.RAILWAY_ENVIRONMENT_ID || process.env.RAILWAY_PROJECT_ID)
+    && process.env.SERVER_PRINTING_ENABLED !== 'true';
+}
+
 // ── ESC/POS helpers ───────────────────────────────────────────────────────
 const ESC = '\x1b';
 const GS  = '\x1d';
@@ -37,6 +44,11 @@ function normalizeThermalText(value) {
 }
 
 async function printToIp(ip, port, data, isKDS = false, normalizeText = true) {
+  if (usesLocalTpvPrinting()) {
+    const error = new Error('Imprime desde el TPV conectado a la red local del restaurante');
+    error.code = 'LOCAL_TPV_PRINT_REQUIRED';
+    throw error;
+  }
   if (ip === '0.0.0.0' || !ip) {
     console.log('[printer] Skip printToIp for virtual device (0.0.0.0)');
     return Promise.resolve();
@@ -310,6 +322,7 @@ async function resolveKitchenRouting(order, kitchenPrinters) {
 
 // ── IMPRIMIR ORDEN (enrutada por PrinterGroups) ───────────────────────────
 async function printOrderTicket(order) {
+  if (usesLocalTpvPrinting()) return { delegated: true, target: 'TPV_LAN' };
   try {
     const printerWhere = { isActive: true };
     if (order.locationId) printerWhere.locationId = order.locationId;
@@ -361,6 +374,7 @@ async function printOrderTicket(order) {
 
 // ── IMPRIMIR SOLO CUENTA (sin cobro, para mostrar al cliente) ─────────────
 async function printBillTicket(order) {
+  if (usesLocalTpvPrinting()) return { delegated: true, target: 'TPV_LAN' };
   try {
     const printers = await prisma.printer.findMany({ where: { isActive: true, type: 'CASHIER' } });
     const config   = await prisma.ticketConfig.findFirst();
@@ -401,6 +415,7 @@ async function printTest(ip, port, type) {
 
 // ── IMPRIMIR ORDEN A UNA SOLA ESTACION ───────────────────────────────────
 async function printOrderToStation(order, printerId) {
+  if (usesLocalTpvPrinting()) return { delegated: true, target: 'TPV_LAN' };
   try {
     const printer = await prisma.printer.findUnique({ where: { id: printerId } });
     if (!printer || !printer.isActive) return;
@@ -448,6 +463,7 @@ async function kickDrawer(ip, port) {
 // lanza: log-and-swallow, porque un cobro no debe fallar porque el cajón
 // esté desconectado.
 async function kickCashDrawerForLocation(locationId) {
+  if (usesLocalTpvPrinting()) return { ok: false, reason: 'local_tpv_required' };
   if (!locationId) return { ok: false, reason: 'no_location' };
   try {
     const printer = await prisma.printer.findFirst({

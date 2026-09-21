@@ -55,15 +55,15 @@ describe('ai-key.service', () => {
 
     test('usa la BYOK del restaurante si existe', async () => {
       prisma.restaurant.findUnique.mockResolvedValue({
-        aiApiKey: 'gsk_byok',
+        aiApiKey: 'gemini_byok_test',
         tenant: { subscription: null },
       });
       const out = await resolveGroqKey({ restaurantId: 'r1' });
-      expect(out).toEqual({ apiKey: 'gsk_byok', source: 'customer', provider: 'groq' });
+      expect(out).toEqual({ apiKey: 'gemini_byok_test', source: 'customer', provider: 'gemini' });
     });
 
     test('fallback a platform key durante TRIAL activo', async () => {
-      process.env.GROQ_API_KEY = 'gsk_platform';
+      process.env.GOOGLE_AI_API_KEY = 'gemini_platform_test';
       prisma.restaurant.findUnique.mockResolvedValue({
         aiApiKey: null,
         tenant: {
@@ -75,8 +75,14 @@ describe('ai-key.service', () => {
       });
       const out = await resolveGroqKey({ restaurantId: 'r1' });
       expect(out.source).toBe('platform-trial');
-      expect(out.provider).toBe('groq');
-      expect(out.apiKey).toBe('gsk_platform');
+      expect(out.provider).toBe('gemini');
+      expect(out.apiKey).toBe('gemini_platform_test');
+    });
+
+    test('rechaza una clave Groq antigua con instrucciones de migración', async () => {
+      prisma.restaurant.findUnique.mockResolvedValue({ aiApiKey: 'gsk_legacy_test' });
+      await expect(resolveGroqKey({ restaurantId: 'r1' }))
+        .rejects.toMatchObject({ code: 'AI_KEY_REQUIRED' });
     });
 
     test('lanza AI_KEY_REQUIRED cuando no hay BYOK ni TRIAL activo', async () => {

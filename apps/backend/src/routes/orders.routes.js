@@ -1906,7 +1906,13 @@ router.post('/:id/print-bill', authenticate, requireTenantAccess, requireRole('A
     // Llamada al servicio de impresión (debe estar en services/printer.service)
     try {
       const { printBillTicket } = require('../services/printer.service');
-      await printBillTicket(order);
+      const printed = await printBillTicket(order);
+      if (printed?.delegated) {
+        return res.status(409).json({
+          code: 'LOCAL_TPV_PRINT_REQUIRED',
+          error: 'Imprime la cuenta desde el TPV conectado a la red local',
+        });
+      }
     } catch (err) { console.error('Error impresora:', err.message); }
 
     res.json({ ok: true });
