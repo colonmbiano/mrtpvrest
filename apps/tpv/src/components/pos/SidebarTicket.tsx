@@ -20,6 +20,8 @@ import type { CartSnapshot } from "@/lib/dual-screen/channel";
 import { hapticMedium, hapticSuccess, hapticError } from "@/lib/haptics";
 import api from "@/lib/api";
 import { apiOrQueue } from "@/lib/offline";
+import { getLocalOrders, loadOrder } from "@/lib/order-repository";
+import { localItemsFromCart } from "@/lib/local-order-model";
 import { toast } from "sonner";
 import {
   printKitchenTickets,
@@ -75,11 +77,13 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   // pantalla también debe sumarlo para no mentir sobre lo que se cobra. Se
   // sincroniza junto a previousItems (misma fuente: la orden del backend).
   const [orderDeliveryFee, setOrderDeliveryFee] = useState(0);
+  const [orderPromoDiscount, setOrderPromoDiscount] = useState(0);
   // Nombre/etiqueta de la cuenta ("Renombrar" → Order.ticketName). Se hidrata
   // del pedido activo y se muestra en el header para que el rename sea visible
   // en la pantalla de trabajo (no solo en Tickets abiertos).
   const [activeTicketName, setActiveTicketName] = useState<string | null>(null);
-  const [_loadingHistory, setLoadingHistory] = useState(false);
+  const [loadedHistoryId, setLoadedHistoryId] = useState<string | null>(null);
+  const historyReady = !activeOrderId || loadedHistoryId === activeOrderId;
   // DINE_IN: editar nº de comensales DESDE el ticket. Antes el conteo se pedía
   // sí o sí en un modal al elegir mesa (1 tap extra por mesa); ahora la mesa
   // entra directo con 1 comensal y aquí se sube solo si se va a dividir por
@@ -103,23 +107,28 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       if (!activeOrderId) {
         setPreviousItems([]);
         setOrderDeliveryFee(0);
+        setOrderPromoDiscount(0);
         setActiveTicketName(null);
+        setLoadedHistoryId(null);
         return;
       }
       (async () => {
         try {
-          setLoadingHistory(true);
-          const { data } = await api.get(`/api/orders/${activeOrderId}`);
+          setLoadedHistoryId(null);
+          setPreviousItems([]);
+          const data = await loadOrder(activeOrderId);
+          if (!Array.isArray(data.items)) throw new Error('No hay detalle local de esta cuenta');
           // Combinamos todos los items de todas las rondas como historial
           if (!cancelled) {
             setPreviousItems(data.items || []);
             setOrderDeliveryFee(Number(data.deliveryFee || 0));
+            setOrderPromoDiscount(Number(data.promoDiscount || 0));
             setActiveTicketName(data.ticketName || null);
+            setLoadedHistoryId(activeOrderId);
           }
         } catch (err) {
           console.error("Error al cargar historial de orden:", err);
-        } finally {
-          if (!cancelled) setLoadingHistory(false);
+          if (!cancelled) toast.error('No se pudo recuperar la cuenta completa. No se puede cobrar un total incompleto.');
         }
       })();
     });
@@ -137,9 +146,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   const reloadPreviousItems = React.useCallback(async () => {
     if (!activeOrderId) return;
     try {
-      const { data } = await api.get(`/api/orders/${activeOrderId}`);
+      const data = await loadOrder(activeOrderId);
       setPreviousItems(data.items || []);
       setOrderDeliveryFee(Number(data.deliveryFee || 0));
+      setOrderPromoDiscount(Number(data.promoDiscount || 0));
     } catch (err) {
       console.error("Error al recargar la orden:", err);
     }
@@ -359,7 +369,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   // que la pantalla refleje EXACTAMENTE lo que se cobra. Solo aplica si hay
   // orden cargada con items (si no, no hay envío que mostrar).
   const deliveryFee = previousItems.length > 0 ? orderDeliveryFee : 0;
-  const total = subtotal - ticket.discount + deliveryFee;
+  const total = subtotal - ticket.discount - (activeOrderId ? orderPromoDiscount : 0) + deliveryFee;
   // Desglose fiscal MX: precios mostrados llevan IVA incluido. La base se toma
   // del monto realmente cobrado (total, ya con descuento y envío), igual que el
   // recibo (ivaBreakdown(total)); subtotal sin IVA = total / 1.16.
@@ -466,6 +476,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   // los modificadores se separan dentro del helper. El precio nunca se manda:
   // el backend lo re-lee del catálogo.
   const buildItemsPayload = () => buildOrderItemsPayload(ticket.items);
+  const localOrderOptions = () => ({ localOrder: {
+    items: localItemsFromCart(ticket.items),
+    expectedTotal: total,
+    table: ticket.tableId ? { id: ticket.tableId, name: ticket.tableName || ticket.table } : null,
+  } });
 
   // Imprime el ticket de cocina de ANULACIÓN para un producto que se quita de
   // una orden ya enviada — avisa a cocina que ese platillo ya no va. Best-effort:
@@ -577,7 +592,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       let queued = false;
       if (activeOrderId) {
         // Mesa ya tiene orden abierta — agregar ronda.
-        const res = await apiOrQueue("order", "POST", `/api/orders/${activeOrderId}/items`, { items: itemsPayload });
+        const res = await apiOrQueue("order", "POST", `/api/orders/${activeOrderId}/items`, { items: itemsPayload }, localOrderOptions());
         if (!res.ok) throw new Error(res.error || "fallo desconocido");
         queued = res.queued;
         order = res.data;
@@ -606,7 +621,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           discount: ticket.discount,
           total: currentSubtotal - ticket.discount,
         };
-        let res = await apiOrQueue("order", "POST", "/api/orders/tpv", orderData);
+        let res = await apiOrQueue("order", "POST", "/api/orders/tpv", orderData, localOrderOptions());
 
         if (
           !res.ok &&
@@ -634,6 +649,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             "POST",
             `/api/orders/${ex.id}/items`,
             { items: itemsPayload },
+            localOrderOptions(),
           );
           if (!res.ok) throw new Error(res.error || "fallo desconocido");
           queued = res.queued;
@@ -730,7 +746,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
     account?: { employeeId: string; discountPct: number | null } | null,
     payments?: { method: string; amount: number }[],
   ) => {
-    if (ticket.items.length === 0 && previousItems.length === 0) return;
+    if (!historyReady || (ticket.items.length === 0 && previousItems.length === 0)) return;
     if (processing) return; // evita doble cobro / ronda duplicada por doble-tap
     setProcessing(true);
     try {
@@ -759,19 +775,15 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       let order: any = null;
       let queued = false;
       if (activeOrderId) {
-        // VELOCIDAD: antes el cobro encadenaba 4 round-trips secuenciales a la
-        // nube (items → detalles → descuento → pago). Los datos del cliente y
-        // (si no hay ronda nueva) la hidratación de la orden NO tocan total ni
-        // estado, así que arrancan EN PARALELO y se esperan justo antes de
-        // cobrar. La ronda nueva y el descuento sí van en orden (el total se
-        // recalcula server-side sobre el set completo de items).
-        const detailsPromise = persistOrderDetails(activeOrderId).catch(() => null);
+        // Persistir detalles antes de rondas/pago mantiene el orden del outbox
+        // incluso si la conexión cae a mitad del cobro.
+        const detailsRes = await persistOrderDetails(activeOrderId);
+        if (!detailsRes.ok) { toast.error(detailsRes.error || 'No se pudo guardar la cuenta'); return; }
+        queued = detailsRes.queued;
         const hydratePromise =
           itemsPayload.length === 0 &&
           (typeof navigator === "undefined" || navigator.onLine)
-            ? api
-                .get(`/api/orders/${activeOrderId}`)
-                .then((r) => r.data)
+            ? loadOrder(activeOrderId)
                 .catch(() => null)
             : null;
 
@@ -782,6 +794,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             "POST",
             `/api/orders/${activeOrderId}/items`,
             { items: itemsPayload },
+            localOrderOptions(),
           );
           if (!addRes.ok) {
             toast.error("Error al enviar ronda: " + (addRes.error || ""));
@@ -809,7 +822,6 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         }
 
         // Esperar lo que corrió en paralelo (ya sin costo de latencia extra).
-        await detailsPromise;
         if (hydratePromise) {
           const h = await hydratePromise;
           if (h) order = order ? { ...h, ...order } : h;
@@ -839,7 +851,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             ? `Propina ${tip.percent}% ($${tipAmount.toFixed(2)})`
             : undefined,
         };
-        const createRes = await apiOrQueue<any>("order", "POST", "/api/orders/tpv", orderData);
+        const createRes = await apiOrQueue<any>("order", "POST", "/api/orders/tpv", orderData, localOrderOptions());
 
         if (
           !createRes.ok &&
@@ -869,6 +881,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             "POST",
             `/api/orders/${ex.id}/items`,
             { items: itemsPayload },
+            localOrderOptions(),
           );
           if (!addRes.ok) {
             toast.error("Error al agregar a la cuenta: " + (addRes.error || ""));
@@ -923,11 +936,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       } else {
         // El create de orden nueva ya marca PAID cuando manda status=DELIVERED +
         // paymentMethod (paidOnCreate). En ese caso el PUT /payment es redundante
-        // → lo saltamos para ahorrar un round-trip. Excepción: DINE_IN, donde el
-        // PUT /payment también libera la mesa (releaseTableIfDineIn).
+        // → lo saltamos. El backend también libera la mesa en paidOnCreate.
         const alreadyPaidOnCreate =
-          !activeOrderId && order?.paymentStatus === "PAID" && ticket.type !== "DINE_IN";
-        if (payableOrderId && !queued && !alreadyPaidOnCreate) {
+          !activeOrderId && order?.paymentStatus === "PAID";
+        if (payableOrderId && !alreadyPaidOnCreate) {
           const payRes = await apiOrQueue<any>(
             "payment",
             "PUT",
@@ -940,17 +952,6 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           }
           queued = queued || payRes.queued;
           if (payRes.data) order = { ...order, ...payRes.data };
-        } else if (activeOrderId && queued) {
-          const payRes = await apiOrQueue<any>(
-            "payment",
-            "PUT",
-            `/api/orders/${activeOrderId}/payment`,
-            payBody,
-          );
-          if (!payRes.ok) {
-            toast.error("Error al encolar cobro: " + (payRes.error || ""));
-            return;
-          }
         }
       }
 
@@ -1007,7 +1008,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       const totals = {
         subtotal: useServerTotals && Number.isFinite(srvSubtotal) ? srvSubtotal : subtotal,
         discount: useServerTotals && Number.isFinite(srvDiscount) ? srvDiscount : ticket.discount,
-        promoDiscount: useServerTotals && Number.isFinite(srvPromo) ? srvPromo : 0,
+        promoDiscount: useServerTotals && Number.isFinite(srvPromo) ? srvPromo : orderPromoDiscount,
         // El envío ya está dentro del total (server o local). Se pasa aparte
         // para que el recibo lo DESGLOSE como renglón "Envío:" y ajuste la base
         // de IVA — no se re-suma. Misma fuente que el total elegido.
@@ -1099,6 +1100,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   };
 
   const handleOpenPayment = () => {
+    if (!historyReady) { toast.error('Espera a recuperar la cuenta completa'); return; }
     if (ticket.items.length === 0 && previousItems.length === 0) {
       toast.error("El ticket está vacío");
       return;
@@ -1422,7 +1424,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             ) : (
               <button
                 onClick={isShiftOpen ? handleOpenPayment : onOpenShift}
-                disabled={processing || !cartHasItems}
+                disabled={processing || !cartHasItems || !historyReady}
                 title={
                   ticket.type === "DELIVERY" && isShiftOpen
                     ? !ticket.address?.trim() && !ticket.phone?.trim()
@@ -1494,6 +1496,12 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           onPick={async (t: TableLite) => {
             updateTicket({ tableId: t.id, tableName: t.name, table: t.name });
             setShowTables(false);
+            const localAccount = getLocalOrders().find(o => o.tableId === t.id);
+            if (localAccount) {
+              setActiveOrder(localAccount.id, t.id, localAccount.orderNumber ?? null);
+              updateTicket({ discount: Number(localAccount.discount ?? 0) });
+              return;
+            }
 
             if (t.status === "OCCUPIED") {
               // Buscar la orden abierta de esta mesa para agregar rondas.

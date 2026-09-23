@@ -36,6 +36,7 @@ import {
 } from "@/lib/paid-tickets-cache";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
+import { getLocalOrders, loadOpenOrders, loadOrder, mergeLocalPaidOrders, waitForOfflineHydration } from "@/lib/order-repository";
 import { ORDER_TYPE_BADGE } from "@/lib/orderTypes";
 import { toast } from "sonner";
 
@@ -134,8 +135,7 @@ export default function OrderTypePage() {
   const fetchOpenOrders = useCallback(async () => {
     try {
       // scope=active → el backend ya filtra a pedidos abiertos (payload chico).
-      const { data } = await api.get("/api/orders/admin?scope=active");
-      const list = Array.isArray(data) ? data : [];
+      const list = await loadOpenOrders(setOpenOrders);
       setOpenOrders(list.filter((o: any) => ACTIVE_STATUSES.has(o.status)));
     } catch (err) {
       console.error("Error cargando cuentas abiertas:", err);
@@ -146,7 +146,8 @@ export default function OrderTypePage() {
   // el cache al instante y revalida contra el backend (scope=paid, payload
   // ligero). El detalle para reimprimir se baja on-demand en reprintReceiptById.
   const fetchPaidOrders = useCallback(async () => {
-    const cached = readPaidTicketsCache();
+    await waitForOfflineHydration();
+    const cached = mergeLocalPaidOrders(readPaidTicketsCache());
     if (cached.length) setPaidOrders(cached);
     setPaidLoading(cached.length === 0);
     try {
@@ -163,7 +164,7 @@ export default function OrderTypePage() {
         createdAt: o.createdAt || null,
         paymentMethod: o.paymentMethod || null,
       }));
-      setPaidOrders(lite);
+      setPaidOrders(mergeLocalPaidOrders(lite));
       writePaidTicketsCache(lite);
     } catch (err) {
       console.error("Error cargando tickets cobrados:", err);
@@ -421,7 +422,7 @@ export default function OrderTypePage() {
       name: o.customerName || o.user?.name || "",
       phone: o.customerPhone || "",
       address: o.deliveryAddress || "",
-      discount: 0,
+      discount: Number(o.discount ?? 0),
     });
     useActiveOrderStore.getState().setActiveOrder(
       o.id,
@@ -447,7 +448,7 @@ export default function OrderTypePage() {
     try {
       let full: any = null;
       try {
-        const { data } = await api.get(`/api/orders/${id}`);
+        const data = await loadOrder(id);
         full = data;
       } catch {
         full = null;
@@ -876,6 +877,12 @@ export default function OrderTypePage() {
   };
 
   const handlePickTable = async (t: TableLite) => {
+    const localAccount = getLocalOrders().find(o => o.tableId === t.id);
+    if (localAccount) {
+      setPickingTable(false);
+      enterAccount(localAccount.id);
+      return;
+    }
     useTicketStore.getState().updateTicket({
       tableId: t.id,
       tableName: t.name,

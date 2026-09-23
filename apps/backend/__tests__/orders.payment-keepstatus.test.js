@@ -65,6 +65,30 @@ beforeEach(() => {
 });
 
 describe('PUT /:id/payment · keepStatus', () => {
+  test('cobro offline condiciona atómicamente el UPDATE al importe y a cuenta no pagada', async () => {
+    const res = await request(makeApp()).put('/api/orders/o1/payment')
+      .send({ paymentMethod: 'CASH', expectedTotal: 30 });
+    expect(res.status).toBe(200);
+    expect(tx.order.update.mock.calls[0][0].where).toMatchObject({
+      id: 'o1', restaurantId: 'r1', total: 30, paymentStatus: { not: 'PAID' },
+    });
+  });
+
+  test('cambio concurrente de importe o cobro devuelve conflicto conciliable', async () => {
+    tx.order.update.mockRejectedValueOnce({ code: 'P2025', message: 'No record matched' });
+    const res = await request(makeApp()).put('/api/orders/o1/payment')
+      .send({ paymentMethod: 'CASH', expectedTotal: 30 });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('OFFLINE_TOTAL_CHANGED');
+  });
+
+  test('rechaza importes esperados negativos', async () => {
+    const res = await request(makeApp()).put('/api/orders/o1/payment')
+      .send({ paymentMethod: 'CASH', expectedTotal: -1 });
+    expect(res.status).toBe(400);
+    expect(tx.order.update).not.toHaveBeenCalled();
+  });
+
   test('keepStatus:true → marca PAID sin forzar DELIVERED (conserva el estado)', async () => {
     const res = await request(makeApp())
       .put('/api/orders/o1/payment')

@@ -52,6 +52,8 @@ const createOrderSchema = z.object({
   subtotal:      z.coerce.number().nonnegative().optional(),
   discount:      z.coerce.number().nonnegative().optional(),
   total:         z.coerce.number().nonnegative().optional(),
+  // Importe observado por el TPV offline: solo precondición, no fija precios.
+  expectedTotal: z.number().finite().nonnegative().optional(),
   customerName:  z.string().max(120).optional().nullable(),
   customerPhone: z.string().max(40).optional().nullable(),
   status:        z.string().optional(),
@@ -62,6 +64,7 @@ const createOrderSchema = z.object({
 
 const addItemsSchema = z.object({
   items: z.array(cartItemSchema).min(1, 'Sin productos'),
+  clientOrderId: z.string().min(1).max(120).optional().nullable(),
 }).passthrough();
 
 // Status update — flexible por nombres legacy. Lista canónica documentada.
@@ -77,6 +80,7 @@ const updateStatusSchema = z.object({
 // Cobro de una orden abierta. Acepta el método único (legacy) o el desglose
 // de cobro mixto `payments[]` (+ propina opcional). Al menos uno es obligatorio.
 const updatePaymentSchema = z.object({
+  expectedTotal: z.number().finite().nonnegative().optional(),
   paymentMethod: z.string().min(1).optional(),
   payments:      z.array(paymentTenderSchema).min(1).optional(),
   tip:           z.coerce.number().nonnegative().optional(),

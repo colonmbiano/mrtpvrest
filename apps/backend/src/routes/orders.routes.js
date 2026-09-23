@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { createHash } = require('node:crypto');
 
 // ─────────────────────────────────────────────────────────────────────────
 // expandSubRecipeToIngredients · devuelve los ingredientes finales (hojas)
@@ -1050,6 +1051,13 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       promoDiscount: bulkPromoDiscount,
     });
 
+    if (req.body.expectedTotal != null &&
+        Math.round(Number(req.body.expectedTotal) * 100) !== Math.round(serverTotal * 100)) {
+      return res.status(409).json({ code: 'OFFLINE_TOTAL_CHANGED',
+        error: 'El importe local difiere del servidor. Revisa precios, promociones y cobro antes de conciliar.',
+        expectedTotal: req.body.expectedTotal, serverTotal });
+    }
+
     // COBRO MIXTO al crear-y-pagar: si la orden se marca pagada en el create
     // (paidOnCreate) y trae renglones `payments[]`, validamos server-side que
     // cuadren con el total recién computado (+ propina). Si no cuadran → 400.
@@ -1326,11 +1334,12 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
 // Alias: POST /:id/rounds — mismo handler, nombre canónico para clientes
 // nuevos del API. /items se mantiene por compatibilidad con la TPV actual.
 async function addRoundHandler(req, res) {
+  let replayRound = null;
   try {
     if (!req.locationId) return res.status(400).json({ error: 'Sucursal no identificada' });
 
     const { id } = req.params;
-    const { items } = req.body || {};
+    const { items, clientOrderId } = req.body || {};
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Sin productos' });
     }
@@ -1340,9 +1349,28 @@ async function addRoundHandler(req, res) {
     // Verificar que la orden existe, pertenece a la misma sucursal y sigue abierta.
     const existing = await prisma.order.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: 'Orden no encontrada' });
-    if (existing.locationId !== req.locationId) {
+    if (existing.locationId !== req.locationId || existing.restaurantId !== restaurantId) {
       return res.status(403).json({ error: 'La orden pertenece a otra sucursal' });
     }
+    // The round itself is the durable receipt: retries after cache expiry or
+    // process restart cannot insert its products twice. No schema migration.
+    const roundId = clientOrderId ? `tpv-${createHash('sha256')
+      .update(JSON.stringify([restaurantId, id, clientOrderId])).digest('hex')}` : null;
+    replayRound = async () => {
+      if (!roundId) return null;
+      const round = await prisma.orderRound.findUnique({ where: { id: roundId } });
+      if (!round || round.orderId !== id) return null;
+      const order = await prisma.order.findUnique({
+        where: { id },
+        include: {
+          items: { include: { menuItem: true, modifiers: true, comboSelections: true } },
+          rounds: { orderBy: { roundNumber: 'asc' } }, table: true,
+        },
+      });
+      return order ? { ...order, lastRound: round } : null;
+    };
+    const replay = await replayRound();
+    if (replay) return res.json(replay);
     if (['DELIVERED', 'CANCELLED'].includes(existing.status)) {
       return res.status(400).json({ error: 'No se pueden agregar ítems a una orden cerrada' });
     }
@@ -1479,7 +1507,7 @@ async function addRoundHandler(req, res) {
       const nextNumber = (lastRound?.roundNumber || 0) + 1;
 
       const newRound = await tx.orderRound.create({
-        data: { orderId: id, roundNumber: nextNumber },
+        data: { ...(roundId ? { id: roundId } : {}), orderId: id, roundNumber: nextNumber },
       });
 
       await Promise.all(newItemsData.map((itemData) => {
@@ -1552,7 +1580,17 @@ async function addRoundHandler(req, res) {
     }
 
     res.json({ ...updated, lastRound: round });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    // A simultaneous retry can lose the unique-key race after the first
+    // request commits. Acknowledge that round without repeating side effects.
+    if (e.code === 'P2002' && replayRound) {
+      try {
+        const replay = await replayRound();
+        if (replay) return res.json(replay);
+      } catch (_) { /* Keep a transient response so the outbox retries. */ }
+    }
+    res.status(500).json({ error: e.message });
+  }
 }
 
 router.post('/:id/items',  authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER', 'WAITER'), validateBody(addItemsSchema), addRoundHandler);
@@ -2119,7 +2157,7 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
 router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), validateBody(updatePaymentSchema), async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
-    const { paymentMethod, payments, tip, keepStatus } = req.body;
+    const { paymentMethod, payments, tip, keepStatus, expectedTotal } = req.body;
     const now = new Date();
 
     // COBRO MIXTO (split-tender): si vienen renglones `payments[]`, se valida
@@ -2174,7 +2212,11 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
         cashCollected = paymentMethod === 'CASH';
       }
       return tx.order.update({
-        where: { id: req.params.id, restaurantId },
+        where: { id: req.params.id, restaurantId,
+          // Compare-and-set: un cambio concurrente de importe o un segundo
+          // cobro no puede cerrar silenciosamente otra cuenta.
+          ...(expectedTotal != null ? { total: expectedTotal, paymentStatus: { not: 'PAID' } } : {}),
+        },
         data: {
           paymentMethod: resolvedMethod,
           paymentStatus: 'PAID',
@@ -2201,7 +2243,13 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
     }
 
     res.json(order);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    if (req.body.expectedTotal != null && e.code === 'P2025') {
+      return res.status(409).json({ code: 'OFFLINE_TOTAL_CHANGED',
+        error: 'La cuenta cambió de importe, ya fue cobrada o no está disponible. Revisa el cobro local antes de conciliar.' });
+    }
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── POST /:id/charge-to-employee — Cobrar una orden "a cuenta de empleado".

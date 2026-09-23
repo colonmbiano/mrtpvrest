@@ -7,6 +7,7 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useBackendAvailability } from "@/hooks/useBackendAvailability";
 import { syncOfflineQueue } from "@/lib/offline";
 import { requestOnlineAuthentication } from "@/lib/api";
+import { toast } from "sonner";
 
 // Chip flotante top-right que aparece SOLO cuando hay algo que comunicar:
 // - Offline → rojo, prioridad máxima.
@@ -288,7 +289,9 @@ function PendingDrawer({
                       )}
                     </div>
                     <button
-                      onClick={() => discardTransaction(tx.id)}
+                      onClick={() => {
+                        if (!discardTransaction(tx.id)) toast.error('Esta operación pertenece a una cuenta local. Conserva el registro y solicita conciliación; descartarla podría perder productos o cobros.');
+                      }}
                       className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold text-[var(--danger)] bg-[var(--danger-soft)] border border-[var(--danger)]/40 active:scale-95"
                       aria-label={`Descartar ${typeLabel[tx.type] || tx.type}`}
                     >

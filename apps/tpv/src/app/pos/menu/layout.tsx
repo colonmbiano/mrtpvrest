@@ -21,6 +21,8 @@ import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { buildOrderItemsPayload, comboPartsFromOrderItem } from "@/lib/modifiers";
 import api from "@/lib/api";
+import { loadOpenOrders, loadOrder, mergeLocalPaidOrders, waitForOfflineHydration } from "@/lib/order-repository";
+import { localItemsFromCart } from "@/lib/local-order-model";
 import {
   readPaidTicketsCache,
   writePaidTicketsCache,
@@ -182,8 +184,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     try {
       // scope=active → el backend ya filtra a pedidos abiertos (payload chico).
       // Mantenemos el filtro cliente como red de seguridad.
-      const { data } = await api.get("/api/orders/admin?scope=active");
-      const list = Array.isArray(data) ? data : [];
+      const list = await loadOpenOrders(setOpenOrders);
       setOpenOrders(list.filter((o: any) => ACTIVE_STATUSES.has(o.status)));
     } catch (err) {
       console.error("Error cargando órdenes abiertas:", err);
@@ -195,7 +196,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // El backend (scope=paid) manda payload ligero sin items; el detalle completo
   // para reimprimir el recibo se baja on-demand por id en handleReprintOrder.
   const fetchPaidOrders = useCallback(async () => {
-    const cached = readPaidTicketsCache();
+    await waitForOfflineHydration();
+    const cached = mergeLocalPaidOrders(readPaidTicketsCache());
     if (cached.length) setPaidOrders(cached);
     setPaidLoading(cached.length === 0);
     try {
@@ -212,7 +214,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         createdAt: o.createdAt || null,
         paymentMethod: o.paymentMethod || null,
       }));
-      setPaidOrders(lite);
+      setPaidOrders(mergeLocalPaidOrders(lite));
       writePaidTicketsCache(lite);
     } catch (err) {
       console.error("Error cargando tickets cobrados:", err);
@@ -538,8 +540,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   // listado para que el usuario al menos vea el header.
   const fetchFullOrder = async (o: any) => {
     try {
-      const { data } = await api.get(`/api/orders/${o.id}`);
-      return data;
+      return await loadOrder(o.id);
     } catch {
       return o;
     }
@@ -561,7 +562,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       name: o.customerName || o.user?.name || "",
       phone: o.customerPhone || "",
       address: o.deliveryAddress || "",
-      discount: 0,
+      discount: Number(o.discount ?? 0),
     });
     useActiveOrderStore.getState().setActiveOrder(
       o.id,
@@ -593,6 +594,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     setChargingIntent(true);
     try {
       const full = await fetchFullOrder(o);
+      if (!Array.isArray(full.items) || !full.items.length || !Number.isFinite(Number(full.total))) {
+        toast.error('No se pudo recuperar la cuenta completa para cobrar');
+        return;
+      }
+      if (full.paymentStatus === 'PAID') { toast.error('Esta cuenta ya fue cobrada'); return; }
       setShowOrders(false);
       useUIStore.getState().setIsOrdersOpen(false);
       setPayOrder(full);
@@ -852,6 +858,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         "POST",
         `/api/orders/${activeOrderId}/items`,
         { items: buildOrderItemsPayload(pending) },
+        { localOrder: { items: localItemsFromCart(pending) } },
       );
       if (!res.ok) {
         toast.error("No se pudieron guardar los productos: " + (res.error || ""));
@@ -899,10 +906,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   ) => {
     if (!payOrder) return;
     try {
-      const { data } = await api.put(`/api/orders/${payOrder.id}/discount`, {
+      const result = await apiOrQueue('order', 'PUT', `/api/orders/${payOrder.id}/discount`, {
         type,
         value,
       });
+      if (!result.ok) throw new Error(result.error || 'No se pudo guardar el descuento');
+      const data = result.data;
       setPayOrder((current: any) =>
         current?.id === payOrder.id ? { ...current, ...data } : current,
       );

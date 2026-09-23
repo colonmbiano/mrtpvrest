@@ -2,8 +2,8 @@
 
 > Sistema POS SaaS multi-tenant para restaurantes y negocios de alimentos en LATAM, con enfoque offline-first y módulos integrados de IA.
 
-**Version:** 1.1.0
-**Date:** 2026-09-20
+**Version:** 1.2.0
+**Date:** 2026-09-21
 **Status:** active
 
 ---
@@ -94,7 +94,7 @@
 | Tests Integration con Postgres real (§10) | `pnpm test:integration` sin mocks. | ❌ **No implementado** | Los tests actuales mockean Prisma. Falta el job con contenedor Postgres. |
 | E2E bloqueante (§10) | Playwright bloquea merge a master. | ⚠️ **Provisional** | Suite Playwright existe; pipeline en `e2e.yml` (manual) — requiere secrets + seed de PINs deterministas para promoverse a required check. |
 | Versionado de API `/v1`,`/v2` (§6) | Versionado explícito en URL. | ❌ **No implementado** | Rutas sin prefijo de versión. |
-| Continuidad offline del TPV (§4) | Operación local-first y sincronización eventual. | ✅ **Fase 1 implementada** | App shell empacado, caches de operación, outbox IndexedDB durable y scoped, idempotencia, circuito ante caída del API, replay FIFO y estado de turno conservado. Falta la base local de órdenes/print spool para independencia multi-flujo completa. |
+| Continuidad offline del TPV (§4) | Operación local-first y sincronización eventual, sin PC obligatoria. | ⚠️ **Fase 2 parcial** | Cuentas locales con productos, reapertura, nuevas rondas y cobro; cuenta y outbox en el mismo snapshot IndexedDB. Alias local/servidor durable, aislamiento por sucursal y conflictos de importe explícitos. Pendientes coordinación entre tablets, spool durable, edición/anulación de líneas locales y paridad de todas las promociones offline. |
 
 ### Notas de estructura
 - El monorepo tiene `packages/{config,database,types}`. **No existe `packages/shared`**
@@ -102,6 +102,34 @@
   está muerto y puede eliminarse del workflow.
 
 ## 20. Decision Log
+
+### 2026-09-21 — Cuentas dentro de cada TPV; sin servidor PC obligatorio
+
+- **Motivo (usuario):** no todos los clientes disponen de una PC permanentemente
+  encendida; imponerla añade hardware y soporte por instalación.
+- **Decisión (§4, §5):** conservar las cuentas junto al outbox en IndexedDB, ya
+  disponible en el WebView del APK y en web. El modelo local se separa del
+  acceso HTTP para poder evolucionar el almacenamiento sin reescribir la UI.
+  Una cuenta nueva recibe identificador local y el ACK guarda su correspondencia
+  con el servidor antes de enviar rondas dependientes.
+- **Alternativas descartadas para esta entrega:** PC/gateway obligatorio por
+  coste de despliegue; SQLite nativo inmediato porque requiere instalar un APK
+  con nuevo plugin en toda la flota. IndexedDB permite entregar esta fase por OTA.
+- **Consistencia (§8):** las cuentas con operaciones pendientes no se reemplazan
+  con lecturas remotas. No se fusionan silenciosamente mesas desconocidas. El
+  replay incluye el importe esperado; el servidor calcula los precios y rechaza
+  diferencias. El pago usa una condición atómica de importe y estado no pagado,
+  siguiendo el [control de concurrencia de Prisma 7](https://www.prisma.io/docs/orm/v7/reference/prisma-client-reference).
+- **Refuerzo 2026-09-22 (§8):** cada ronda usa un ID determinista derivado del
+  restaurante, cuenta y comando. Su clave única en `OrderRound` evita volver a
+  insertar productos después de perder un ACK, incluso tras expirar la caché
+  temporal de idempotencia. Se reutiliza la tabla existente, sin migración.
+- **Límites:** no se promete coordinación entre dispositivos aislados ni pagos
+  bancarios offline. La política entre tablets sigue pendiente; no se eligió una
+  tablet principal ni se abrió un servidor LAN sin validar hardware y seguridad.
+- **Verificación (§10):** pruebas de reapertura tras rehidratar, nueva ronda,
+  cobro, remapeo de IDs, fallo de disco, separación de sucursales y conflictos.
+  Solo se podan copias de cuentas cerradas confirmadas; nunca cuentas pendientes.
 
 ### 2026-09-20 — Railway deja de ser dependencia síncrona del flujo crítico TPV
 

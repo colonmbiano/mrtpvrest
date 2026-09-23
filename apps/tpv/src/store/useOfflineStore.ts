@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { get, set, del } from 'idb-keyval';
+import { acknowledgeLocalOrder, projectOrderTransaction, pruneLocalOrders, type LocalOrders } from '@/lib/local-order-model';
 
 export type TransactionType =
   | 'order'
@@ -26,6 +27,8 @@ export interface OfflineTransaction {
   timestamp: number;
   synced: boolean;
   supervisor?: string;
+  /** Metadatos de presentación locales; nunca se envían al backend. */
+  localOrder?: Record<string, any>;
   failed?: OfflineFailure;
   scope?: {
     restaurantId?: string;
@@ -37,12 +40,13 @@ export interface OfflineTransaction {
 
 interface OfflineState {
   queue: OfflineTransaction[];
+  orders: LocalOrders;
   syncInProgress: boolean;
   lastSync: number;
   addToQueue: (transaction: OfflineTransaction) => void;
-  markSynced: (transactionId: string) => void;
+  markSynced: (transactionId: string, response?: any) => void;
   markFailed: (transactionId: string, failure: OfflineFailure) => void;
-  discardTransaction: (transactionId: string) => void;
+  discardTransaction: (transactionId: string, rollback?: boolean) => boolean;
   clearQueue: () => void;
   setSyncInProgress: (inProgress: boolean) => void;
   setLastSync: (timestamp: number) => void;
@@ -164,15 +168,18 @@ const useOfflineStore = create<OfflineState>()(
   persist(
     (set, get) => ({
       queue: [],
+      orders: {},
       syncInProgress: false,
       lastSync: 0,
       addToQueue: (transaction) =>
-        set((state) => ({ queue: [...state.queue, transaction] })),
+        set((state) => ({ queue: [...state.queue, transaction],
+          orders: projectOrderTransaction(state.orders, transaction) })),
       // Un ACK del backend ya no aporta nada operativo. Retirarlo evita que
       // el blob de IndexedDB crezca para siempre en una caja de alto volumen.
-      markSynced: (transactionId) =>
+      markSynced: (transactionId, response) =>
         set((state) => ({
           queue: state.queue.filter((t) => t.id !== transactionId),
+          orders: pruneLocalOrders(acknowledgeLocalOrder(state.orders, transactionId, response)),
         })),
       markFailed: (transactionId, failure) =>
         set((state) => ({
@@ -180,10 +187,15 @@ const useOfflineStore = create<OfflineState>()(
             t.id === transactionId ? { ...t, failed: failure } : t
           ),
         })),
-      discardTransaction: (transactionId) =>
+      discardTransaction: (transactionId, rollback = false) => {
+        // Borrar un comando de una cuenta local dejaría rondas/pagos
+        // huérfanos. Su conciliación debe conservar el registro completo.
+        if (!rollback && Object.values(get().orders).some(r => r.pending.includes(transactionId))) return false;
         set((state) => ({
           queue: state.queue.filter((t) => t.id !== transactionId),
-        })),
+        }));
+        return true;
+      },
       clearQueue: () => set({ queue: [] }),
       setSyncInProgress: (inProgress) => set({ syncInProgress: inProgress }),
       setLastSync: (timestamp) => set({ lastSync: timestamp }),
@@ -197,7 +209,7 @@ const useOfflineStore = create<OfflineState>()(
     {
       name: 'tpv-offline-store',
       storage: createJSONStorage(() => idbStorage),
-      partialize: (state) => ({ queue: state.queue, lastSync: state.lastSync }),
+      partialize: (state) => ({ queue: state.queue, orders: state.orders, lastSync: state.lastSync }),
       merge: (persisted, current) => ({
         ...current,
         ...(persisted as Partial<OfflineState>),

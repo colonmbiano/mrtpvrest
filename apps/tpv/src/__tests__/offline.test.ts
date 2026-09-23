@@ -5,7 +5,8 @@
  * Ejecutar: pnpm --filter @mrtpvrest/tpv test
  */
 import { apiOrQueue, shiftActionQueued, syncOfflineQueue } from "@/lib/offline";
-import useOfflineStore, { mergeOfflinePersistedStates } from "@/store/useOfflineStore";
+import useOfflineStore, { flushOfflinePersistence, mergeOfflinePersistedStates } from "@/store/useOfflineStore";
+import { getLocalOrder, getLocalOrders, loadOrder, loadOpenOrders, rememberServerOrder } from '@/lib/order-repository';
 import { resetBackendAvailability } from "@/lib/backend-availability";
 import { getToken } from "@/lib/token-vault";
 import { useAuthStore } from "@/store/authStore";
@@ -57,18 +58,145 @@ function setOnline(online: boolean) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockApi.get.mockReset().mockResolvedValue({ data: [] });
+  mockApi.post.mockReset().mockResolvedValue({ data: {} });
+  mockApi.put.mockReset().mockResolvedValue({ data: {} });
   localStorage.setItem("restaurantId", "rest-1");
   localStorage.setItem("locationId", "loc-1");
   useAuthStore.setState({ isAuthenticated: true, employee: {
     id: "employee-1", name: "Caja", role: "CASHIER", isActive: true, permissions: [],
   } });
   useOfflineStore.getState().clearQueue();
+  useOfflineStore.setState({ orders: {} });
   // El candado es estado compartido del store: si un test lo deja en true,
   // el guard de syncOfflineQueue hace salir temprano al siguiente.
   useOfflineStore.getState().setSyncInProgress(false);
   resetBackendAvailability();
   mockGetToken.mockResolvedValue("test-token");
   setOnline(true);
+});
+
+describe('cuentas locales completas', () => {
+  const firstItems = [{ menuItemId: 'p1', name: 'Agua', quantity: 1, price: 20, subtotal: 20 }];
+  async function createLocal(tableId?: string) {
+    setOnline(false);
+    return apiOrQueue<any>('order', 'POST', '/api/orders/tpv', {
+      orderType: tableId ? 'DINE_IN' : 'TAKEOUT', tableId,
+      items: [{ menuItemId: 'p1', quantity: 1 }], subtotal: 20, total: 20,
+    }, { localOrder: { items: firstItems, expectedTotal: 20 } });
+  }
+
+  it('guarda, recarga, agrega ronda y cobra la misma cuenta sin red', async () => {
+    const created = await createLocal();
+    expect(created).toMatchObject({ ok: true, queued: true, data: { total: 20 } });
+    const id = created.data.id;
+    await flushOfflinePersistence();
+    const { get } = jest.requireMock('idb-keyval');
+    const persisted = await get('tpv-offline-store');
+    expect(JSON.parse(persisted).state.orders).not.toEqual({});
+    useOfflineStore.setState({ queue: [], orders: {} });
+    get.mockResolvedValueOnce(persisted);
+    await useOfflineStore.persist.rehydrate();
+    expect((await loadOrder(id)).items[0].name).toBe('Agua');
+    const added = await apiOrQueue<any>('order', 'POST', `/api/orders/${id}/items`, {
+      items: [{ menuItemId: 'p2', quantity: 1 }],
+    }, { localOrder: { items: [{ name: 'Extra', menuItemId: 'p2', price: 10, subtotal: 10, quantity: 1 }] } });
+    expect(added.data.total).toBe(30);
+    expect(added.data.items).toHaveLength(2);
+    const payment = await apiOrQueue<any>('payment', 'PUT', `/api/orders/${id}/payment`, { paymentMethod: 'CASH' });
+    expect(payment.data).toMatchObject({ paymentStatus: 'PAID', total: 30 });
+    expect(getLocalOrders()).toHaveLength(0);
+    expect(getLocalOrders('paid')).toHaveLength(1);
+    expect(useOfflineStore.getState().queue.at(-1)?.data.body.expectedTotal).toBe(30);
+    expect(await apiOrQueue('payment', 'PUT', `/api/orders/${id}/payment`, { paymentMethod: 'CASH' }))
+      .toMatchObject({ ok: false, status: 409 });
+  });
+
+  it('remapea el identificador antes de enviar rondas y pago, sin borrar la proyección pendiente', async () => {
+    const created = await createLocal();
+    const id = created.data.id;
+    await apiOrQueue('order', 'POST', `/api/orders/${id}/items`, { items: [{ menuItemId: 'p1', quantity: 1 }] },
+      { localOrder: { items: firstItems } });
+    await apiOrQueue('payment', 'PUT', `/api/orders/${id}/payment`, { paymentMethod: 'CASH' });
+    setOnline(true);
+    mockApi.get.mockResolvedValue({ data: [] });
+    mockApi.post.mockImplementation(async path => {
+      if (path === '/api/orders/tpv') return { data: { id: 'server-1', total: 20, items: firstItems, paymentStatus: 'PENDING' } };
+      expect(path).toBe('/api/orders/server-1/items');
+      expect(getLocalOrder(id)).toMatchObject({ total: 40, paymentStatus: 'PAID' });
+      return { data: { id: 'server-1', total: 40 } };
+    });
+    mockApi.put.mockResolvedValue({ data: { id: 'server-1', total: 40, status: 'DELIVERED', paymentStatus: 'PAID' } });
+    await syncOfflineQueue();
+    expect(mockApi.put).toHaveBeenCalledWith('/api/orders/server-1/payment', expect.objectContaining({ expectedTotal: 40 }), expect.anything());
+    expect(useOfflineStore.getState().queue).toHaveLength(0);
+    expect(getLocalOrder(id)).toMatchObject({ id: 'server-1', total: 40, localPending: false });
+    const sentBody = mockApi.post.mock.calls[0]![1] as any;
+    expect(sentBody).not.toHaveProperty('localOrder');
+    expect(sentBody.items[0]).not.toHaveProperty('name');
+  });
+
+  it('no envía una ronda antes de obtener el ACK durable de la creación', async () => {
+    const { data } = await createLocal();
+    await apiOrQueue('order', 'POST', `/api/orders/${data.id}/items`, { items: [] }, { localOrder: { items: [] } });
+    setOnline(true);
+    mockApi.get.mockResolvedValue({ data: [] });
+    mockApi.post.mockResolvedValue({ data: {} });
+    await syncOfflineQueue();
+    expect(mockApi.post).toHaveBeenCalledTimes(1);
+    expect(useOfflineStore.getState().queue).toHaveLength(2);
+  });
+
+  it('un fallo de disco no confirma ni deja una cuenta fantasma', async () => {
+    const { set } = jest.requireMock('idb-keyval');
+    await flushOfflinePersistence();
+    set.mockRejectedValueOnce(new Error('QuotaExceededError'));
+    const result = await createLocal();
+    expect(result.ok).toBe(false);
+    expect(getLocalOrders()).toHaveLength(0);
+    expect(useOfflineStore.getState().queue).toHaveLength(0);
+  });
+
+  it('rechaza duplicar una mesa local y no fusiona a ciegas al sincronizar', async () => {
+    const created = await createLocal('mesa-1');
+    expect(useOfflineStore.getState().queue[0]?.data.body.appendToOpenTab).toBeUndefined();
+    expect(await createLocal('mesa-1')).toMatchObject({ ok: false, status: 409,
+      conflict: { existingOrder: { id: created.data.id } } });
+  });
+
+  it('crear y cobrar guarda el importe base sin sumar la propina dos veces', async () => {
+    setOnline(false);
+    const result = await apiOrQueue<any>('order', 'POST', '/api/orders/tpv', {
+      orderType: 'DINE_IN', tableId: 'mesa-2', items: [{ menuItemId: 'p1', quantity: 1 }],
+      subtotal: 20, total: 22, paymentMethod: 'MIXED', status: 'DELIVERED',
+      tip: 2, payments: [{ method: 'CASH', amount: 22 }],
+    }, { localOrder: { items: firstItems, expectedTotal: 20 } });
+    expect(result.data).toMatchObject({ paymentStatus: 'PAID', total: 20, tip: 2 });
+    expect(getLocalOrders()).toHaveLength(0);
+    expect(getLocalOrders('paid')).toHaveLength(1);
+    expect(useOfflineStore.getState().queue[0]?.data.body.expectedTotal).toBe(20);
+  });
+
+  it('aísla cuentas por sucursal y evita descartes que dejarían comandos huérfanos', async () => {
+    const created = await createLocal();
+    const tx = useOfflineStore.getState().queue[0]!;
+    expect(useOfflineStore.getState().discardTransaction(tx.id)).toBe(false);
+    localStorage.setItem('locationId', 'loc-2');
+    expect(getLocalOrders()).toEqual([]);
+    expect(await apiOrQueue('payment', 'PUT', `/api/orders/${created.data.id}/payment`, { paymentMethod: 'CASH' }))
+      .toMatchObject({ ok: false });
+    expect(useOfflineStore.getState().queue).toHaveLength(1);
+  });
+
+  it('una lista remota vacía no borra una venta pendiente y el detalle conserva modificadores cacheados', async () => {
+    const created = await createLocal();
+    setOnline(true);
+    mockApi.get.mockResolvedValue({ data: [] });
+    expect((await loadOpenOrders()).map(o => o.id)).toEqual([created.data.id]);
+    rememberServerOrder({ id: 'remote', status: 'CONFIRMED', items: [{ id: 'line', name: 'Agua', modifiers: [{ name: 'Hielo' }] }] });
+    rememberServerOrder({ id: 'remote', status: 'CONFIRMED', items: [{ id: 'line', quantity: 2 }] });
+    expect(getLocalOrder('remote').items[0].modifiers).toHaveLength(1);
+  });
 });
 
 describe("apiOrQueue — apertura de turno offline", () => {

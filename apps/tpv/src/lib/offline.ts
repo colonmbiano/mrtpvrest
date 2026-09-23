@@ -7,6 +7,8 @@ import { useAuthStore } from '@/store/authStore';
 import api, { AUTH_TOKEN_MISSING, BACKEND_UNAVAILABLE } from '@/lib/api';
 import { getToken } from '@/lib/token-vault';
 import { getTenantIds } from '@/lib/tenant';
+import { ACTIVE_ORDER_STATUSES, findLocalOrder, LOCAL_ORDER_PREFIX, orderIdFromPath, sameOrderScope } from '@/lib/local-order-model';
+import { getLocalOrder, rememberServerOrder, waitForOfflineHydration } from '@/lib/order-repository';
 import {
   isBackendCircuitOpen,
   markBackendAvailable,
@@ -131,14 +133,19 @@ function makeTransaction(
 
 async function enqueueDurably(transaction: OfflineTransaction): Promise<boolean> {
   const store = useOfflineStore.getState();
-  store.addToQueue(transaction);
+  const previousOrders = store.orders;
   try {
+    store.addToQueue(transaction);
     await flushOfflinePersistence();
     return true;
   } catch (error) {
     // No confirmamos una venta que solo existe en RAM. La dejamos fuera para
     // que el caller mantenga el ticket visible y pueda volver a intentar.
-    store.discardTransaction(transaction.id);
+    store.discardTransaction(transaction.id, true);
+    useOfflineStore.setState(s => ({ orders: Object.fromEntries(
+      Object.entries(s.orders).flatMap(([key, record]) => record.pending.includes(transaction.id)
+        ? (previousOrders[key] ? [[key, previousOrders[key]]] : []) : [[key, record]]),
+    ) }));
     console.error('No se pudo persistir el outbox offline:', error);
     return false;
   }
@@ -159,9 +166,27 @@ function transactionMatchesCurrentScope(transaction: OfflineTransaction): boolea
 async function queueResult<T>(
   transaction: OfflineTransaction,
 ): Promise<ApiOrQueueResult<T>> {
+  const localTarget = orderIdFromPath(transaction.data.path ?? '');
+  const record = localTarget ? findLocalOrder(useOfflineStore.getState().orders, transaction.scope ?? {}, localTarget) : undefined;
+  const expectedTotal = transaction.type === 'payment' ? record?.order.total
+    : transaction.data.path === '/api/orders/tpv' ? transaction.localOrder?.expectedTotal : undefined;
+  if (expectedTotal != null) {
+    transaction.data = { ...transaction.data, body: { ...transaction.data.body, expectedTotal: Number(expectedTotal) } };
+  }
+  if (transaction.localOrder && transaction.data.path === '/api/orders/tpv' && transaction.data.body?.tableId) {
+    const existing = Object.values(useOfflineStore.getState().orders).find(r =>
+      sameOrderScope(r.scope, transaction.scope ?? {}) && r.order.tableId === transaction.data.body.tableId &&
+      r.order.paymentStatus !== 'PAID' && ACTIVE_ORDER_STATUSES.has(r.order.status));
+    if (existing) return { ok: false, queued: false, data: null, status: 409,
+      error: 'Esta mesa ya tiene una cuenta en el dispositivo',
+      conflict: { code: 'TABLE_HAS_OPEN_TAB', existingOrder: existing.order } };
+  }
   const persisted = await enqueueDurably(transaction);
   return persisted
-    ? { ok: true, queued: true, data: null }
+    ? { ok: true, queued: true, data: (getLocalOrder(
+        transaction.data.path === '/api/orders/tpv' ? `${LOCAL_ORDER_PREFIX}${transaction.id}`
+          : orderIdFromPath(transaction.data.path) ?? '', transaction.scope,
+      ) as T | null) }
     : {
         ok: false,
         queued: false,
@@ -175,8 +200,11 @@ export async function apiOrQueue<T = any>(
   method: 'POST' | 'PUT',
   path: string,
   data: Record<string, any>,
-  opts?: { supervisor?: string }
+  opts?: { supervisor?: string; localOrder?: Record<string, any> }
 ): Promise<ApiOrQueueResult<T>> {
+  try { await waitForOfflineHydration(); } catch (error: any) {
+    return { ok: false, queued: false, data: null, error: error.message };
+  }
   const auth = useAuthStore.getState();
   const tenant = getTenantIds();
   if (!auth.isAuthenticated || !auth.employee?.id) {
@@ -215,18 +243,30 @@ export async function apiOrQueue<T = any>(
   // el dispositivo no conocía: el importe podría cubrir solo la venta local y
   // no toda la mesa. Ese 409 queda visible para conciliación en vez de perder
   // el pago dentro de addRoundHandler.
-  const queuedBody = isOrderCreate && !isPaidOrderCreate
+  const queuedBody = isOrderCreate && !isPaidOrderCreate && !opts?.localOrder
     ? { ...bodyOut, appendToOpenTab: true }
     : bodyOut;
   // Capturar identidad ANTES del await: un cambio de empleado durante un
   // timeout no debe atribuir la venta al usuario que entró después.
   const transaction = makeTransaction(txId, type, method, path, queuedBody, opts?.supervisor);
+  transaction.localOrder = opts?.localOrder;
+  const targetId = orderIdFromPath(path);
+  const targetRecord = targetId ? findLocalOrder(useOfflineStore.getState().orders, transaction.scope ?? {}, targetId) : undefined;
+  if (targetId?.startsWith(LOCAL_ORDER_PREFIX) && !targetRecord) {
+    return { ok: false, queued: false, data: null, error: 'No se encontró la cuenta local en esta sucursal' };
+  }
+  if (targetRecord?.order.paymentStatus === 'PAID') {
+    return { ok: false, queued: false, data: null, status: 409, error: 'Esta cuenta ya fue cobrada en el dispositivo' };
+  }
+  const resolvedPath = targetRecord?.serverId && targetId
+    ? path.replace(`/orders/${targetId}/`, `/orders/${targetRecord.serverId}/`) : path;
 
   // navigator.onLine solo conoce el Wi-Fi, no si Railway responde. Después
   // del primer timeout/5xx el circuito evita pagar otros 15s por operación.
   const shouldQueueImmediately =
     (typeof navigator !== 'undefined' && navigator.onLine === false) ||
-    isBackendCircuitOpen();
+    isBackendCircuitOpen() || (targetRecord?.pending.length ?? 0) > 0 ||
+    useOfflineStore.getState().queue.some(tx => !tx.synced);
 
   if (shouldQueueImmediately) {
     return queueResult<T>(transaction);
@@ -246,9 +286,10 @@ export async function apiOrQueue<T = any>(
     const cfg = { headers: { 'Idempotency-Key': txId }, timeout: QUEUE_TIMEOUT_MS };
     const res =
       method === 'POST'
-        ? await api.post<T>(path, bodyOut, cfg)
-        : await api.put<T>(path, bodyOut, cfg);
+        ? await api.post<T>(resolvedPath, bodyOut, cfg)
+        : await api.put<T>(resolvedPath, bodyOut, cfg);
     markBackendAvailable();
+    if (isOrderCreate || targetId) rememberServerOrder(res.data, transaction.scope);
     return { ok: true, queued: false, data: res.data };
   } catch (err: any) {
     if (err?.code === AUTH_TOKEN_MISSING || isNetworkError(err)) {
@@ -312,6 +353,7 @@ export function initBackgroundSync() {
 }
 
 export async function syncOfflineQueue(opts?: { force?: boolean }) {
+  try { await waitForOfflineHydration(); } catch { return; }
   const store = useOfflineStore.getState();
   const authStore = useAuthStore.getState();
 
@@ -413,15 +455,23 @@ export async function syncOfflineQueue(opts?: { force?: boolean }) {
           | { method?: string; path?: string; body?: Record<string, any> }
           | undefined;
 
+        let replayResponse: any;
         if (replay && replay.method && replay.path) {
           // Shape nuevo (apiOrQueue) — replay directo con Idempotency-Key
           // para que el backend deduplique si por alguna razón este tx
           // se replay-eara dos veces (sync corre 2x antes de markSynced).
           const cfg = { headers: { 'Idempotency-Key': transaction.id }, timeout: QUEUE_TIMEOUT_MS };
+          const localId = orderIdFromPath(replay.path);
+          const record = localId ? findLocalOrder(useOfflineStore.getState().orders, transaction.scope ?? {}, localId) : undefined;
+          if (localId?.startsWith(LOCAL_ORDER_PREFIX) && !record?.serverId) {
+            throw new Error('La cuenta local aún no tiene confirmación del servidor');
+          }
+          const replayPath = localId && record?.serverId
+            ? replay.path.replace(`/orders/${localId}/`, `/orders/${record.serverId}/`) : replay.path;
           if (replay.method.toUpperCase() === 'POST') {
-            await api.post(replay.path, replay.body || {}, cfg);
+            replayResponse = (await api.post(replayPath, replay.body || {}, cfg)).data;
           } else if (replay.method.toUpperCase() === 'PUT') {
-            await api.put(replay.path, replay.body || {}, cfg);
+            replayResponse = (await api.put(replayPath, replay.body || {}, cfg)).data;
           } else {
             console.warn(
               `Skipping tx ${transaction.id} — método ${replay.method} no soportado`
@@ -439,7 +489,13 @@ export async function syncOfflineQueue(opts?: { force?: boolean }) {
         }
 
         markBackendAvailable();
-        store.markSynced(transaction.id);
+        if (transaction.localOrder && replay?.path === '/api/orders/tpv' && !replayResponse?.id) {
+          throw new Error('El servidor no confirmó el identificador de la cuenta');
+        }
+        store.markSynced(transaction.id, replayResponse);
+        // El alias local → servidor y el ACK deben sobrevivir ANTES de
+        // enviar una ronda/pago que dependa del identificador recién creado.
+        await flushOfflinePersistence();
       } catch (err: any) {
         if (isPermanentReplayError(err)) {
           // El backend ya dictaminó: reintentar no la va a salvar. La
