@@ -25,7 +25,7 @@ export function findLocalOrder(orders: LocalOrders, scope: OrderScope, id: strin
     (r.localId === id || r.serverId === id || r.order.id === id));
 }
 export function orderIdFromPath(path: string): string | null {
-  return /^\/api\/orders\/([^/]+)\/(?:items|details|discount|payment)$/.exec(path)?.[1] ?? null;
+  return /^\/api\/orders\/([^/]+)\/(?:items|details|discount|payment|split)$/.exec(path)?.[1] ?? null;
 }
 export function localItemsFromCart(items: CartItem[]): Record<string, any>[] {
   return items.map(item => ({
@@ -37,7 +37,70 @@ export function localItemsFromCart(items: CartItem[]): Record<string, any>[] {
     id: undefined,
   }));
 }
-const cents = (n: number) => Math.round(n * 100) / 100;
+const cents = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+function splitOrderLocally(orders: LocalOrders, tx: OfflineTransaction, source: LocalOrderRecord): LocalOrders {
+  const selections = tx.data.body?.items as { id: string; quantity: number; newItemId?: string }[] | undefined;
+  const sourceItems = Array.isArray(source.order.items) ? source.order.items as Record<string, any>[] : [];
+  if (!Array.isArray(selections) || selections.length === 0 || sourceItems.length === 0 ||
+      source.order.paymentStatus === 'PAID') {
+    throw new Error('La cuenta local no se puede dividir');
+  }
+  if (selections.some(s => !s || typeof s.id !== 'string')) {
+    throw new Error('Los productos seleccionados cambiaron; revisa la cuenta');
+  }
+  const byId = new Map(selections.map(s => [s.id, s]));
+  if (byId.size !== selections.length || selections.some(s =>
+    !Number.isSafeInteger(s.quantity) || s.quantity < 1 ||
+    !sourceItems.some(item => item.id === s.id && s.quantity <= Number(item.quantity) &&
+      (item.weightKg == null || s.quantity === Number(item.quantity))))) {
+    throw new Error('Los productos seleccionados cambiaron; revisa la cuenta');
+  }
+  const remaining: Record<string, any>[] = [];
+  const moved: Record<string, any>[] = [];
+  for (const item of sourceItems) {
+    const selection = byId.get(item.id);
+    if (!selection) { remaining.push(item); continue; }
+    if (selection.quantity === Number(item.quantity)) { moved.push(item); continue; }
+    const movedSubtotal = cents(Number(item.subtotal) * selection.quantity / Number(item.quantity));
+    moved.push({ ...item, id: selection.newItemId ?? `local-item-${tx.id}-${moved.length}`,
+      quantity: selection.quantity, subtotal: movedSubtotal });
+    remaining.push({ ...item, quantity: Number(item.quantity) - selection.quantity,
+      subtotal: cents(Number(item.subtotal) - movedSubtotal) });
+  }
+  if (remaining.length === 0 || moved.length === 0) {
+    throw new Error('Deja al menos un producto en la cuenta original');
+  }
+  const subtotal = (rows: Record<string, any>[]) => cents(rows.reduce((sum, item) => sum + Number(item.subtotal || 0), 0));
+  const sourceSubtotal = subtotal(remaining);
+  const movedSubtotal = subtotal(moved);
+  const originalSubtotal = Number(source.order.subtotal) || sourceSubtotal + movedSubtotal;
+  const originalPromo = Number(source.order.promoDiscount || 0);
+  const movedPromo = originalSubtotal > 0 ? cents(originalPromo * movedSubtotal / originalSubtotal) : 0;
+  const sourcePromo = cents(originalPromo - movedPromo);
+  const sourceDiscount = cents(Math.min(Math.max(0, Number(source.order.discount || 0)),
+    Math.max(0, sourceSubtotal - sourcePromo)));
+  const deliveryFee = Number(source.order.deliveryFee || 0);
+  const sourceOrder = { ...source.order, items: remaining, subtotal: sourceSubtotal,
+    discount: sourceDiscount, promoDiscount: sourcePromo,
+    total: cents(Math.max(0, sourceSubtotal - sourceDiscount - sourcePromo + deliveryFee)), localPending: true };
+  const newId = `${LOCAL_ORDER_PREFIX}${tx.id}`;
+  const newOrder = { ...source.order, id: newId,
+    clientOrderId: tx.id,
+    orderNumber: `LOCAL-${tx.id.slice(-6).toUpperCase()}`,
+    ticketName: source.order.ticketName ? `${source.order.ticketName} (2)` : null,
+    createdAt: new Date(tx.timestamp).toISOString(),
+    items: moved, subtotal: movedSubtotal, discount: 0, promoDiscount: movedPromo,
+    deliveryFee: 0, total: cents(Math.max(0, movedSubtotal - movedPromo)),
+    paymentStatus: 'PENDING', localPending: true };
+  const updatedSource: LocalOrderRecord = { ...source, order: sourceOrder,
+    pending: [...source.pending, tx.id] };
+  const created: LocalOrderRecord = { scope: tx.scope!, localId: newId, order: newOrder,
+    pending: [tx.id] };
+  return { ...orders,
+    [orderRecordKey(tx.scope!, source.localId)]: updatedSource,
+    [orderRecordKey(tx.scope!, newId)]: created };
+}
 
 /** Proyección local + outbox se persisten en un mismo snapshot IndexedDB. */
 export function projectOrderTransaction(orders: LocalOrders, tx: OfflineTransaction): LocalOrders {
@@ -47,9 +110,13 @@ export function projectOrderTransaction(orders: LocalOrders, tx: OfflineTransact
   const id = creating ? `${LOCAL_ORDER_PREFIX}${tx.id}` : orderIdFromPath(path);
   if (!id) return orders;
   const existing = findLocalOrder(orders, tx.scope, id);
+  if (path.endsWith('/split')) {
+    if (!existing) throw new Error('No hay una copia local de esta cuenta para dividir');
+    return splitOrderLocally(orders, tx, existing);
+  }
   if (!creating && !existing) return orders; // Comando legacy sin detalle cacheado.
   const items = (tx.localOrder?.items ?? body.items ?? []).map((item: any, index: number) => ({
-    ...item, id: `local-item-${tx.id}-${index}`,
+    ...item, id: body.items?.[index]?.clientItemId ?? `local-item-${tx.id}-${index}`,
   }));
   let order: Record<string, any> = creating ? {
     ...body, ...tx.localOrder, id, orderNumber: `LOCAL-${tx.id.slice(-6).toUpperCase()}`,
@@ -58,6 +125,13 @@ export function projectOrderTransaction(orders: LocalOrders, tx: OfflineTransact
     total: tx.localOrder?.expectedTotal ?? body.total,
     discount: Number(body.discount ?? 0), deliveryFee: Number(body.deliveryFee ?? 0), items,
   } : { ...existing!.order };
+  if (creating && !body.paymentMethod && Number.isFinite(Number(tx.localOrder?.expectedTotal))) {
+    const subtotal = cents(items.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0));
+    const expectedTotal = Number(tx.localOrder!.expectedTotal);
+    order.subtotal = subtotal;
+    order.promoDiscount = cents(Math.max(0, subtotal - Number(order.discount) +
+      Number(order.deliveryFee) - expectedTotal));
+  }
   if (creating && body.paymentMethod && ['DELIVERED', 'COMPLETED', 'PAID'].includes(body.status)) {
     order.paymentStatus = 'PAID';
     order.paidAt = new Date(tx.timestamp).toISOString();
@@ -90,6 +164,20 @@ export function projectOrderTransaction(orders: LocalOrders, tx: OfflineTransact
 }
 
 export function acknowledgeLocalOrder(orders: LocalOrders, txId: string, response?: any): LocalOrders {
+  if (response?.source?.id && response?.created?.id) {
+    const newLocalId = `${LOCAL_ORDER_PREFIX}${txId}`;
+    const updated = { ...orders };
+    for (const [key, record] of Object.entries(orders)) {
+      if (!record.pending.includes(txId)) continue;
+      const serverOrder = record.localId === newLocalId ? response.created : response.source;
+      const pending = record.pending.filter(id => id !== txId);
+      updated[key] = { ...record, serverId: serverOrder.id, pending,
+        order: pending.length > 0
+          ? { ...record.order, localPending: true }
+          : { ...record.order, ...serverOrder, localPending: false } };
+    }
+    return updated;
+  }
   const entry = Object.entries(orders).find(([, r]) => r.pending.includes(txId));
   if (!entry) return orders;
   const [key, record] = entry;

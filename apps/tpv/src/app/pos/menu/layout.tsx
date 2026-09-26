@@ -968,9 +968,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   };
 
   const handleSplitActiveOrder = async () => {
+    if (!(await flushPendingRound())) return;
     const order = await getActiveOrderForAction();
     if (!order) return;
-    if (!Array.isArray(order.items) || order.items.length < 2) {
+    if (!Array.isArray(order.items) ||
+        order.items.reduce((sum: number, item: { quantity?: number }) => sum + Number(item.quantity ?? 1), 0) < 2) {
       toast.warning("El ticket necesita al menos dos productos para dividirse");
       return;
     }
@@ -1048,15 +1050,20 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const handleConfirmActiveSplit = async (items: SplitSelection[]) => {
     if (!splitOrder) return;
     try {
-      const { data } = await api.post(`/api/orders/${splitOrder.id}/split`, {
-        items,
-      });
+      const result = await apiOrQueue<{ source: any; created: any }>(
+        "order", "POST", `/api/orders/${splitOrder.id}/split`, { items },
+      );
+      if (!result.ok || !result.data) throw new Error(result.error || "No se pudo guardar la división");
+      const { data } = result;
       setSplitOrder(null);
+      useActiveOrderStore.getState().bumpRoundsRevision();
       await fetchOpenOrders();
       const newNumber =
         data?.created?.orderNumber ||
         String(data?.created?.id || "").slice(-6).toUpperCase();
-      toast.success(`Ticket dividido · nuevo #${newNumber}`);
+      toast.success(result.queued
+        ? `Ticket dividido en este dispositivo · nuevo #${newNumber} · pendiente de sincronizar`
+        : `Ticket dividido · nuevo #${newNumber}`);
     } catch (err: any) {
       toast.error(
         "No se pudo dividir: " +

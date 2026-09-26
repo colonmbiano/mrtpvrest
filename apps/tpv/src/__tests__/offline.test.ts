@@ -199,6 +199,147 @@ describe('cuentas locales completas', () => {
   });
 });
 
+describe('división de cuentas sin red', () => {
+  it('mantiene el precio promocional de una cuenta creada sin conexión', async () => {
+    setOnline(false);
+    const created = await apiOrQueue<any>('order', 'POST', '/api/orders/tpv', {
+      orderType: 'DINE_IN', items: [{ menuItemId: 'burger', quantity: 2 }],
+      subtotal: 240, total: 240,
+    }, { localOrder: { items: [{ menuItemId: 'burger', name: 'Hamburguesa',
+      quantity: 2, price: 120, subtotal: 240 }], expectedTotal: 120 } });
+    expect(created.data).toMatchObject({ promoDiscount: 120, total: 120 });
+    const split = await apiOrQueue<any>('order', 'POST', `/api/orders/${created.data.id}/split`, {
+      items: [{ id: created.data.items[0].id, quantity: 1 }],
+    });
+    expect(split.data.source).toMatchObject({ promoDiscount: 60, total: 60 });
+    expect(split.data.created).toMatchObject({ promoDiscount: 60, total: 60 });
+  });
+
+  it('puede separar un producto agregado en una ronda sin sincronizar', async () => {
+    setOnline(false);
+    const created = await apiOrQueue<any>('order', 'POST', '/api/orders/tpv', {
+      orderType: 'DINE_IN', items: [{ menuItemId: 'water', quantity: 1 }],
+    }, { localOrder: { items: [{ menuItemId: 'water', name: 'Agua',
+      quantity: 1, price: 20, subtotal: 20 }], expectedTotal: 20 } });
+    const sourceId = created.data.id as string;
+    const round = await apiOrQueue<any>('order', 'POST', `/api/orders/${sourceId}/items`, {
+      items: [{ menuItemId: 'burger', quantity: 2 }],
+    }, { localOrder: { items: [{ menuItemId: 'burger', name: 'Hamburguesa',
+      quantity: 2, price: 120, subtotal: 240 }], expectedTotal: 240 } });
+    const burgerId = round.data.items.find((item: { name: string }) => item.name === 'Hamburguesa').id;
+    expect(burgerId).toMatch(/^local-item-order-/);
+    const split = await apiOrQueue<any>('order', 'POST', `/api/orders/${sourceId}/split`, {
+      items: [{ id: burgerId, quantity: 1 }],
+    });
+    expect(split).toMatchObject({ ok: true, queued: true });
+    expect(split.data.source.total).toBe(140);
+    expect(split.data.created.total).toBe(120);
+    expect(useOfflineStore.getState().queue.map(tx => tx.data.path)).toEqual([
+      '/api/orders/tpv', `/api/orders/${sourceId}/items`, `/api/orders/${sourceId}/split`,
+    ]);
+  });
+
+  it('divide una línea de dos unidades, cobra ambas cuentas y sincroniza en orden', async () => {
+    setOnline(false);
+    const created = await apiOrQueue<any>('order', 'POST', '/api/orders/tpv', {
+      orderType: 'DINE_IN', tableId: 'mesa-1',
+      items: [{ menuItemId: 'burger', quantity: 2 }], subtotal: 240, total: 240,
+    }, { localOrder: { items: [{ menuItemId: 'burger', name: 'Hamburguesa', quantity: 2,
+      price: 120, subtotal: 240, modifiers: [{ name: 'Tocino', priceAdd: 20 }] }], expectedTotal: 240 } });
+    const sourceId = created.data.id as string;
+    const lineId = created.data.items[0].id as string;
+    expect(lineId).toMatch(/^local-item-order-/);
+
+    const split = await apiOrQueue<any>('order', 'POST', `/api/orders/${sourceId}/split`, {
+      items: [{ id: lineId, quantity: 1 }],
+    });
+    expect(split).toMatchObject({ ok: true, queued: true });
+    const newId = split.data.created.id as string;
+    expect(split.data.source).toMatchObject({ subtotal: 120, total: 120 });
+    expect(split.data.created).toMatchObject({ subtotal: 120, total: 120 });
+    expect(split.data.created.items[0].modifiers).toHaveLength(1);
+    expect(getLocalOrders()).toHaveLength(2);
+
+    // La división y las dos cuentas sobreviven a un cierre de la app.
+    await flushOfflinePersistence();
+    const { get } = jest.requireMock('idb-keyval');
+    const snapshot = await get('tpv-offline-store');
+    useOfflineStore.setState({ queue: [], orders: {} });
+    get.mockResolvedValueOnce(snapshot);
+    await useOfflineStore.persist.rehydrate();
+    expect(getLocalOrder(newId)?.total).toBe(120);
+
+    await apiOrQueue('payment', 'PUT', `/api/orders/${sourceId}/payment`, { paymentMethod: 'CASH' });
+    await apiOrQueue('payment', 'PUT', `/api/orders/${newId}/payment`, { paymentMethod: 'CARD' });
+    expect(useOfflineStore.getState().queue.map(tx => tx.data.path)).toEqual([
+      '/api/orders/tpv', `/api/orders/${sourceId}/split`,
+      `/api/orders/${sourceId}/payment`, `/api/orders/${newId}/payment`,
+    ]);
+    expect(getLocalOrders('paid')).toHaveLength(2);
+
+    setOnline(true);
+    mockApi.post.mockImplementation(async (path, body) => {
+      const sent = body as { items: { clientItemId?: string; newItemId?: string }[] };
+      if (path === '/api/orders/tpv') {
+        expect(sent.items[0]?.clientItemId).toBe(lineId);
+        return { data: { id: 'server-source', orderNumber: '101', status: 'OPEN',
+          paymentStatus: 'PENDING', subtotal: 240, total: 240,
+          items: [{ id: lineId, name: 'Hamburguesa', quantity: 2, subtotal: 240 }] } };
+      }
+      expect(path).toBe('/api/orders/server-source/split');
+      expect(sent.items).toEqual([{ id: lineId, quantity: 1,
+        newItemId: expect.stringMatching(/^local-item-order-/) }]);
+      return { data: {
+        source: { id: 'server-source', orderNumber: '101', status: 'OPEN',
+          paymentStatus: 'PENDING', subtotal: 120, total: 120,
+          items: [{ id: lineId, quantity: 1, subtotal: 120 }] },
+        created: { id: 'server-created', orderNumber: '102', status: 'OPEN',
+          paymentStatus: 'PENDING', subtotal: 120, total: 120,
+          items: [{ id: sent.items[0]?.newItemId, quantity: 1, subtotal: 120 }] },
+      } };
+    });
+    mockApi.put.mockImplementation(async (path) => ({ data: { id: path.includes('server-created')
+      ? 'server-created' : 'server-source', status: 'DELIVERED', paymentStatus: 'PAID', total: 120 } }));
+
+    await syncOfflineQueue();
+    expect(mockApi.put.mock.calls.map(call => call[0])).toEqual([
+      '/api/orders/server-source/payment', '/api/orders/server-created/payment',
+    ]);
+    expect(mockApi.put.mock.calls.map(call => call[1])).toEqual([
+      expect.objectContaining({ expectedTotal: 120 }),
+      expect.objectContaining({ expectedTotal: 120 }),
+    ]);
+    expect(useOfflineStore.getState().queue).toHaveLength(0);
+    expect(getLocalOrder(newId)).toMatchObject({ id: 'server-created', paymentStatus: 'PAID', localPending: false });
+  });
+
+  it('separa una cuenta previamente cacheada aunque falle la red al confirmar', async () => {
+    rememberServerOrder({ id: 'server-source', status: 'OPEN', paymentStatus: 'PENDING',
+      subtotal: 200.01, total: 200.01, discount: 0, promoDiscount: 0,
+      items: [{ id: 'line-1', name: 'Hamburguesa', quantity: 2, price: 100.005, subtotal: 200.01 }] });
+    mockApi.post.mockRejectedValueOnce({ code: 'ERR_NETWORK' });
+    const split = await apiOrQueue<any>('order', 'POST', '/api/orders/server-source/split', {
+      items: [{ id: 'line-1', quantity: 1 }],
+    });
+    expect(split).toMatchObject({ ok: true, queued: true });
+    expect(split.data.source.subtotal + split.data.created.subtotal).toBeCloseTo(200.01, 2);
+    expect(useOfflineStore.getState().queue).toHaveLength(1);
+  });
+
+  it('conserva una promoción de la cuenta al repartir dos unidades', async () => {
+    rememberServerOrder({ id: 'server-source', status: 'OPEN', paymentStatus: 'PENDING',
+      subtotal: 240, promoDiscount: 120, discount: 0, deliveryFee: 0, total: 120,
+      items: [{ id: 'line-1', name: 'Hamburguesa', quantity: 2, price: 120, subtotal: 240 }] });
+    setOnline(false);
+    const split = await apiOrQueue<any>('order', 'POST', '/api/orders/server-source/split', {
+      items: [{ id: 'line-1', quantity: 1 }],
+    });
+    expect(split).toMatchObject({ ok: true, queued: true });
+    expect(split.data.source).toMatchObject({ promoDiscount: 60, total: 60 });
+    expect(split.data.created).toMatchObject({ promoDiscount: 60, total: 60 });
+  });
+});
+
 describe("apiOrQueue — apertura de turno offline", () => {
   it("no confirma ventas sin una sesión PIN y sucursal", async () => {
     setOnline(false);

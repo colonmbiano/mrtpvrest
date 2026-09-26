@@ -5,6 +5,8 @@ import Button from "@/components/ui/Button";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { apiOrQueue } from "@/lib/offline";
+import { getLocalOrder, getLocalOrders, rememberServerOrder } from "@/lib/order-repository";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { useWaiterRealtime } from "@/hooks/useWaiterRealtime";
 import SplitOrderModal, { type SplitSelection } from "@/components/pos/SplitOrderModal";
@@ -97,10 +99,23 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
   const loadTable = useCallback(async () => {
     try {
       const { data } = await api.get<TableData>(`/api/tables/${params.id}`);
-      setTable(data);
+      if (data.activeOrder) rememberServerOrder({ ...data.activeOrder, tableId: params.id });
+      const local = data.activeOrder ? getLocalOrder(data.activeOrder.id) : null;
+      setTable({ ...data, activeOrder: (local || data.activeOrder) as ActiveOrder | null });
       setErrorMsg(null);
     } catch (e: any) {
-      setErrorMsg(e?.response?.data?.error || "No se pudo cargar la mesa");
+      const cached = getLocalOrders().find((candidate) => candidate.tableId === params.id);
+      if (cached && (!e?.response || e.response.status >= 500)) {
+        setTable((current) => ({
+          id: params.id,
+          name: current?.name || `Mesa ${cached.tableNumber || ''}`.trim(),
+          status: 'OCCUPIED', zone: current?.zone || null,
+          activeOrder: (getLocalOrders().find((candidate) => candidate.id === current?.activeOrder?.id) || cached) as ActiveOrder,
+        }));
+        setErrorMsg(null);
+      } else {
+        setErrorMsg(e?.response?.data?.error || "No se pudo cargar la mesa");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -214,16 +229,19 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
   const handleConfirmSplit = async (items: SplitSelection[]) => {
     if (!order) return;
     try {
-      const { data } = await api.post<{ created?: { id?: string; orderNumber?: string } }>(
-        `/api/orders/${order.id}/split`,
-        { items }
+      const result = await apiOrQueue<{ source: ActiveOrder; created: ActiveOrder }>(
+        'order', 'POST', `/api/orders/${order.id}/split`, { items },
       );
+      if (!result.ok || !result.data) throw new Error(result.error || 'No se pudo guardar la división');
+      const { data } = result;
       setShowSplit(false);
       await loadTable();
       const newNumber =
         data?.created?.orderNumber ||
         String(data?.created?.id || "").slice(-6).toUpperCase();
-      toast.success(`Cuenta dividida · nueva #${newNumber}`);
+      toast.success(result.queued
+        ? `Cuenta dividida en este dispositivo · nueva #${newNumber} · pendiente de sincronizar`
+        : `Cuenta dividida · nueva #${newNumber}`);
     } catch (err: any) {
       toast.error(
         "No se pudo dividir: " +

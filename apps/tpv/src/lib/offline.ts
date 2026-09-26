@@ -182,6 +182,12 @@ async function queueResult<T>(
       conflict: { code: 'TABLE_HAS_OPEN_TAB', existingOrder: existing.order } };
   }
   const persisted = await enqueueDurably(transaction);
+  if (persisted && transaction.data.path?.endsWith('/split')) {
+    return { ok: true, queued: true, data: {
+      source: getLocalOrder(localTarget ?? '', transaction.scope),
+      created: getLocalOrder(`${LOCAL_ORDER_PREFIX}${transaction.id}`, transaction.scope),
+    } as T };
+  }
   return persisted
     ? { ok: true, queued: true, data: (getLocalOrder(
         transaction.data.path === '/api/orders/tpv' ? `${LOCAL_ORDER_PREFIX}${transaction.id}`
@@ -219,10 +225,27 @@ export async function apiOrQueue<T = any>(
   // el body. Si el server recibe la misma orden 2x (sync corre antes de
   // markSynced), la dedupe DB-level por clientOrderId garantiza no duplicar.
   const txId = genTxId(type);
-  const bodyOut =
+  const isOrderCreate =
+    type === 'order' && method === 'POST' && /\/orders\/tpv$/.test(path);
+  const isOrderItems = type === 'order' && method === 'POST' && /\/orders\/[^/]+\/items$/.test(path);
+  const isSplit = type === 'order' && method === 'POST' && /\/orders\/[^/]+\/split$/.test(path);
+  const bodyOut: Record<string, any> =
     type === 'order' && !data.clientOrderId
       ? { ...data, clientOrderId: txId }
       : data;
+  // Las líneas del outbox conservan su mismo ID cuando se crean en el
+  // servidor. Así una división posterior puede referirse a ellas aun antes
+  // de recibir el ACK de la creación o de una ronda pendiente.
+  if ((isOrderCreate || isOrderItems) && Array.isArray(data.items)) {
+    bodyOut.items = data.items.map((item: any, index: number) => ({
+      ...item, clientItemId: item.clientItemId ?? `local-item-${txId}-${index}`,
+    }));
+  }
+  if (isSplit && Array.isArray(data.items)) {
+    bodyOut.items = data.items.map((item: any, index: number) => ({
+      ...item, newItemId: item.newItemId ?? `local-item-${txId}-${index}`,
+    }));
+  }
 
   // Las creaciones de orden ENCOLADAS (offline, o replay tras un blip de red)
   // se marcan appendToOpenTab: al sincronizar no podemos abrir un dialogo de
@@ -231,8 +254,6 @@ export async function apiOrQueue<T = any>(
   // ronda) en vez de que el backend 409-ee el replay y se pierda el pedido.
   // El intento ONLINE original (api.post de abajo) NO lleva el flag: ahi SI
   // queremos el 409 para preguntar antes de encimar.
-  const isOrderCreate =
-    type === 'order' && method === 'POST' && /\/orders\/tpv$/.test(path);
   const isPaidOrderCreate =
     isOrderCreate &&
     Boolean(data.paymentMethod || (Array.isArray(data.payments) && data.payments.length)) &&
@@ -252,6 +273,18 @@ export async function apiOrQueue<T = any>(
   transaction.localOrder = opts?.localOrder;
   const targetId = orderIdFromPath(path);
   const targetRecord = targetId ? findLocalOrder(useOfflineStore.getState().orders, transaction.scope ?? {}, targetId) : undefined;
+  if (isSplit && !targetRecord) {
+    return { ok: false, queued: false, data: null,
+      error: 'Abre la cuenta para guardar una copia local antes de dividirla' };
+  }
+  if (isSplit && targetRecord?.pending.some(pendingId => {
+    const pending = useOfflineStore.getState().queue.find(entry => entry.id === pendingId);
+    return pending && (/\/orders\/tpv$|\/orders\/[^/]+\/items$/.test(pending.data.path)) &&
+      pending.data.body?.items?.some((item: any) => !item.clientItemId);
+  })) {
+    return { ok: false, queued: false, data: null,
+      error: 'Sincroniza esta cuenta anterior antes de dividirla' };
+  }
   if (targetId?.startsWith(LOCAL_ORDER_PREFIX) && !targetRecord) {
     return { ok: false, queued: false, data: null, error: 'No se encontró la cuenta local en esta sucursal' };
   }
@@ -289,7 +322,12 @@ export async function apiOrQueue<T = any>(
         ? await api.post<T>(resolvedPath, bodyOut, cfg)
         : await api.put<T>(resolvedPath, bodyOut, cfg);
     markBackendAvailable();
-    if (isOrderCreate || targetId) rememberServerOrder(res.data, transaction.scope);
+    if (isSplit) {
+      const split = res.data as { source?: any; created?: any };
+      if (!split?.source?.id || !split?.created?.id) throw new Error('El servidor no confirmó ambas cuentas');
+      rememberServerOrder(split.source, transaction.scope);
+      rememberServerOrder(split.created, transaction.scope);
+    } else if (isOrderCreate || targetId) rememberServerOrder(res.data, transaction.scope);
     return { ok: true, queued: false, data: res.data };
   } catch (err: any) {
     if (err?.code === AUTH_TOKEN_MISSING || isNetworkError(err)) {
@@ -491,6 +529,10 @@ export async function syncOfflineQueue(opts?: { force?: boolean }) {
         markBackendAvailable();
         if (transaction.localOrder && replay?.path === '/api/orders/tpv' && !replayResponse?.id) {
           throw new Error('El servidor no confirmó el identificador de la cuenta');
+        }
+        if (replay?.path?.endsWith('/split') &&
+            (!replayResponse?.source?.id || !replayResponse?.created?.id)) {
+          throw new Error('El servidor no confirmó ambas cuentas divididas');
         }
         store.markSynced(transaction.id, replayResponse);
         // El alias local → servidor y el ACK deben sobrevivir ANTES de
