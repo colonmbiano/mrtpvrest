@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Check, SplitSquareHorizontal, X } from "lucide-react";
+import { Check, Minus, Plus, SplitSquareHorizontal, X } from "lucide-react";
 
 interface SplitItem {
   id: string;
@@ -11,12 +11,17 @@ interface SplitItem {
   seatNumber?: number | null;
 }
 
+export interface SplitSelection {
+  id: string;
+  quantity: number;
+}
+
 interface Props {
   isOpen: boolean;
   orderNumber: string;
   items: SplitItem[];
   onClose: () => void;
-  onConfirm: (itemIds: string[]) => Promise<void>;
+  onConfirm: (items: SplitSelection[]) => Promise<void>;
 }
 
 export default function SplitOrderModal({
@@ -26,36 +31,40 @@ export default function SplitOrderModal({
   onClose,
   onConfirm,
 }: Props) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  const selectedCount = useMemo(
+    () => items.reduce((sum, item) => sum + (selected[item.id] || 0), 0),
+    [items, selected],
+  );
+  const totalCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const selectedTotal = useMemo(
-    () =>
-      items
-        .filter((item) => selected.has(item.id))
-        .reduce((sum, item) => sum + item.subtotal, 0),
+    () => items.reduce((sum, item) =>
+      sum + Math.round((item.subtotal * (selected[item.id] || 0) / item.quantity) * 100) / 100, 0),
     [items, selected],
   );
 
   if (!isOpen) return null;
 
-  const toggle = (id: string) => {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const changeQuantity = (item: SplitItem, quantity: number) => {
+    setSelected((current) => ({
+      ...current,
+      [item.id]: Math.max(0, Math.min(item.quantity, quantity)),
+    }));
   };
 
-  const invalid = selected.size === 0 || selected.size === items.length;
+  const invalid = selectedCount === 0 || selectedCount === totalCount;
 
   const confirmSplit = async () => {
     if (invalid || submitting) return;
     setSubmitting(true);
     try {
-      await onConfirm(Array.from(selected));
-      setSelected(new Set());
+      await onConfirm(items.filter((item) => (selected[item.id] ?? 0) > 0).map((item) => ({
+        id: item.id,
+        quantity: selected[item.id] ?? 0,
+      })));
+      setSelected({});
     } finally {
       setSubmitting(false);
     }
@@ -87,15 +96,14 @@ export default function SplitOrderModal({
 
         <div className="flex-1 space-y-2 overflow-y-auto p-5">
           <p className="pb-2 text-xs font-bold text-white/50">
-            Selecciona los productos que pasarán al nuevo ticket.
+            Elige cuántas unidades pasarán al nuevo ticket.
           </p>
           {items.map((item) => {
-            const active = selected.has(item.id);
+            const count = selected[item.id] || 0;
+            const active = count > 0;
             return (
-              <button
+              <div
                 key={item.id}
-                type="button"
-                onClick={() => toggle(item.id)}
                 className={`flex w-full items-center gap-3 rounded-2xl border p-4 text-left ${
                   active
                     ? "border-[var(--brand)] bg-[var(--brand-soft)]"
@@ -121,10 +129,21 @@ export default function SplitOrderModal({
                     </span>
                   ) : null}
                 </span>
-                <span className="text-sm font-semibold tabular-nums text-white">
-                  ${item.subtotal.toFixed(2)}
-                </span>
-              </button>
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <span className="text-sm font-semibold tabular-nums text-white">
+                    ${item.subtotal.toFixed(2)}
+                  </span>
+                  <div className="flex items-center gap-2" aria-label={`Unidades de ${item.name} para el nuevo ticket`}>
+                    <button type="button" onClick={() => changeQuantity(item, count - 1)} disabled={count === 0 || submitting} aria-label={`Quitar una unidad de ${item.name}`} className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 text-white disabled:opacity-30">
+                      <Minus size={16} />
+                    </button>
+                    <span className="w-6 text-center text-sm font-bold tabular-nums text-white">{count}</span>
+                    <button type="button" onClick={() => changeQuantity(item, count + 1)} disabled={count === item.quantity || submitting} aria-label={`Agregar una unidad de ${item.name}`} className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 text-white disabled:opacity-30">
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
             );
           })}
         </div>
@@ -132,7 +151,7 @@ export default function SplitOrderModal({
         <footer className="flex items-center gap-3 border-t border-white/10 p-5">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
-              Nuevo ticket · {selected.size} productos
+              Nuevo ticket · {selectedCount} unidades
             </p>
             <p className="text-xl font-black tabular-nums text-white">
               ${selectedTotal.toFixed(2)}

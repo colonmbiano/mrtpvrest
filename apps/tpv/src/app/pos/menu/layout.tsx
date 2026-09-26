@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Home, Search, ShoppingCart, UtensilsCrossed } from "lucide-react";
 import OrdersDrawer from "@/components/pos/OrdersDrawer";
 import ReprintKitchenModal from "@/components/pos/ReprintKitchenModal";
-import SplitOrderModal from "@/components/pos/SplitOrderModal";
+import SplitOrderModal, { type SplitSelection } from "@/components/pos/SplitOrderModal";
 import PaymentModal from "@/components/pos/PaymentModal";
 import { useTPVAuth } from "@/hooks/useTPVAuth";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
@@ -1045,11 +1045,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     return () => clearTimeout(t);
   }, [chargingIntent, payOrder]);
 
-  const handleConfirmActiveSplit = async (itemIds: string[]) => {
+  const handleConfirmActiveSplit = async (items: SplitSelection[]) => {
     if (!splitOrder) return;
     try {
       const { data } = await api.post(`/api/orders/${splitOrder.id}/split`, {
-        itemIds,
+        items,
       });
       setSplitOrder(null);
       await fetchOpenOrders();

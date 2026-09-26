@@ -2658,50 +2658,61 @@ router.put(
 );
 
 // ── POST /:id/split — Dividir una cuenta abierta en dos ───────────────
-// Mueve los itemIds seleccionados a una NUEVA orden (hermana, misma mesa y
-// contexto) y deja el resto en la original. El descuento se queda en la
-// original (no se prorratea). No se permite mover todos los items. Mismo
-// rol que merge/transfer.
+// Mueve unidades seleccionadas a una NUEVA orden (hermana, misma mesa y
+// contexto) y deja el resto en la original. Conserva el contrato legado
+// itemIds para clientes anteriores. No se permite mover toda la cuenta.
 async function splitOrderHandler(req, res) {
   try {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.restaurantId;
-    const itemIds = Array.isArray(req.body?.itemIds) ? req.body.itemIds.map(String) : [];
-    if (itemIds.length === 0) {
+    const legacy = !Array.isArray(req.body?.items);
+    const requested = legacy
+      ? [...new Set(Array.isArray(req.body?.itemIds) ? req.body.itemIds.map(String) : [])]
+        .map((itemId) => ({ id: itemId, quantity: null }))
+      : req.body.items;
+    if (requested.length === 0) {
       return res.status(400).json({ error: 'Selecciona al menos un producto' });
     }
-
-    const source = await prisma.order.findFirst({
-      where: { id, restaurantId },
-      include: { items: true },
-    });
-    if (!source) return res.status(404).json({ error: 'Orden no encontrada' });
-    if (['DELIVERED', 'CANCELLED'].includes(source.status)) {
-      return res.status(400).json({ error: 'La orden está cerrada' });
-    }
-    if (source.paymentStatus === 'PAID') {
-      return res.status(400).json({ error: 'La orden ya está pagada' });
+    if (!legacy && (requested.some((item) =>
+      !item || typeof item.id !== 'string' || !item.id ||
+      !Number.isSafeInteger(item.quantity) || item.quantity < 1
+    ) || new Set(requested.map((item) => item.id)).size !== requested.length)) {
+      return res.status(400).json({ error: 'Las cantidades seleccionadas no son válidas' });
     }
 
-    const sourceItemIds = new Set(source.items.map((i) => i.id));
-    const moving = [...new Set(itemIds)].filter((iid) => sourceItemIds.has(iid));
-    if (moving.length === 0) {
-      return res.status(400).json({ error: 'Los productos no pertenecen a esta orden' });
-    }
-    if (moving.length >= source.items.length) {
-      return res.status(400).json({ error: 'Deja al menos un producto en la cuenta original' });
-    }
-
-    const recalc = (tx, orderId, baseDiscount, baseDelivery) =>
-      tx.orderItem
-        .findMany({ where: { orderId }, select: { subtotal: true } })
-        .then((its) => {
-          const sub = its.reduce((s, i) => s + (i.subtotal || 0), 0);
-          const tot = sub - (baseDiscount || 0) + (baseDelivery || 0);
-          return tx.order.update({ where: { id: orderId }, data: { subtotal: sub, total: tot } });
-        });
+    const splitError = (status, message) => Object.assign(new Error(message), { status });
 
     const result = await prisma.$transaction(async (tx) => {
+      const source = await tx.order.findFirst({
+        where: { id, restaurantId },
+        include: { items: { include: { modifiers: true, comboSelections: true } } },
+      });
+      if (!source) throw splitError(404, 'Orden no encontrada');
+      if (['DELIVERED', 'CANCELLED'].includes(source.status)) {
+        throw splitError(400, 'La orden está cerrada');
+      }
+      if (source.paymentStatus === 'PAID') {
+        throw splitError(400, 'La orden ya está pagada');
+      }
+
+      const byId = new Map(source.items.map((item) => [item.id, item]));
+      const moving = requested.map(({ id: itemId, quantity }) => ({
+        item: byId.get(itemId),
+        quantity: legacy ? byId.get(itemId)?.quantity : quantity,
+      }));
+      if (moving.some(({ item }) => !item)) {
+        throw splitError(400, 'Los productos no pertenecen a esta orden');
+      }
+      if (moving.some(({ item, quantity }) => quantity > item.quantity ||
+        (item.weightKg != null && quantity !== item.quantity))) {
+        throw splitError(400, 'La cantidad seleccionada supera la disponible');
+      }
+      const sourceUnits = source.items.reduce((sum, item) => sum + item.quantity, 0);
+      const movingUnits = moving.reduce((sum, selection) => sum + selection.quantity, 0);
+      if (movingUnits >= sourceUnits) {
+        throw splitError(400, 'Deja al menos un producto en la cuenta original');
+      }
+
       // El split genera un ticket nuevo → consume su propio folio de la serie.
       const orderNumber = await nextOrderNumber(tx, source.restaurantId);
 
@@ -2730,14 +2741,73 @@ async function splitOrderHandler(req, res) {
         },
       });
 
-      await tx.orderItem.updateMany({
-        where: { orderId: id, id: { in: moving } },
-        data: { orderId: created.id },
-      });
+      for (const { item, quantity } of moving) {
+        if (quantity === item.quantity) {
+          const updated = await tx.orderItem.updateMany({
+            where: { id: item.id, orderId: id, quantity: item.quantity },
+            data: { orderId: created.id },
+          });
+          if (updated.count !== 1) throw splitError(409, 'La cuenta cambió; vuelve a intentar');
+          continue;
+        }
 
-      // Descuento/envío se quedan en la original; la nueva arranca limpia.
-      await recalc(tx, id, source.discount, source.deliveryFee);
-      await recalc(tx, created.id, 0, 0);
+        // Repartir centavos del subtotal guardado; el remanente conserva el
+        // centavo residual para que la suma de ambos tickets sea exacta.
+        const movedSubtotal = round2(item.subtotal * quantity / item.quantity);
+        const remainingSubtotal = round2(item.subtotal - movedSubtotal);
+        const updated = await tx.orderItem.updateMany({
+          where: { id: item.id, orderId: id, quantity: item.quantity },
+          data: { quantity: item.quantity - quantity, subtotal: remainingSubtotal },
+        });
+        if (updated.count !== 1) throw splitError(409, 'La cuenta cambió; vuelve a intentar');
+        await tx.orderItem.create({
+          data: {
+            orderId: created.id,
+            menuItemId: item.menuItemId,
+            name: item.name,
+            price: item.price,
+            quantity,
+            subtotal: movedSubtotal,
+            notes: item.notes,
+            roundId: item.roundId,
+            seatNumber: item.seatNumber,
+            course: item.course,
+            costSnapshot: item.costSnapshot,
+            recipeIdSnap: item.recipeIdSnap,
+            modifiers: item.modifiers.length ? { create: item.modifiers.map((modifier) => ({
+              modifierId: modifier.modifierId, name: modifier.name, priceAdd: modifier.priceAdd,
+            })) } : undefined,
+            comboSelections: item.comboSelections.length ? { create: item.comboSelections.map((selection) => ({
+              componentId: selection.componentId,
+              optionId: selection.optionId,
+              optionMenuItemId: selection.optionMenuItemId,
+              name: selection.name,
+              priceDelta: selection.priceDelta,
+            })) } : undefined,
+          },
+        });
+      }
+
+      const activePromos = await loadActiveBulkPromos(tx, source.restaurantId);
+      const recalc = async (orderId, discount, deliveryFee) => {
+        const items = await tx.orderItem.findMany({
+          where: { orderId },
+          include: { menuItem: { select: { categoryId: true } } },
+        });
+        const { promoDiscount } = computeBulkPromoDiscount(
+          items.map((item) => ({
+            price: Number(item.price), quantity: item.quantity,
+            categoryId: item.menuItem?.categoryId,
+          })),
+          activePromos,
+        );
+        const totals = computeOrderTotals(items, { discount, deliveryFee, promoDiscount });
+        return tx.order.update({ where: { id: orderId }, data: totals });
+      };
+      // Descuento manual y envío se quedan en la original; las promociones
+      // por cantidad se recalculan para cada cuenta según sus unidades.
+      await recalc(id, source.discount, source.deliveryFee);
+      await recalc(created.id, 0, 0);
 
       const [srcFull, createdFull] = await Promise.all([
         tx.order.findUnique({ where: { id }, include: ORDER_DETAIL_INCLUDE }),
@@ -2754,7 +2824,7 @@ async function splitOrderHandler(req, res) {
     }
 
     res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 }
 
 router.post('/:id/split', authenticate, requireTenantAccess, requireOrderMergeRole, splitOrderHandler);

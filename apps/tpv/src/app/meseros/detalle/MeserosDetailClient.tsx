@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { useWaiterRealtime } from "@/hooks/useWaiterRealtime";
-import SplitOrderModal from "@/components/pos/SplitOrderModal";
+import SplitOrderModal, { type SplitSelection } from "@/components/pos/SplitOrderModal";
 import MergeTableModal from "@/components/pos/MergeTableModal";
 
 interface OrderItem {
@@ -211,12 +211,12 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
 
   // ✂️ Dividir cuenta — separa los items seleccionados en una orden nueva
   // (mismo endpoint que el TPV principal). El modal maneja la selección.
-  const handleConfirmSplit = async (itemIds: string[]) => {
+  const handleConfirmSplit = async (items: SplitSelection[]) => {
     if (!order) return;
     try {
       const { data } = await api.post<{ created?: { id?: string; orderNumber?: string } }>(
         `/api/orders/${order.id}/split`,
-        { itemIds }
+        { items }
       );
       setShowSplit(false);
       await loadTable();
