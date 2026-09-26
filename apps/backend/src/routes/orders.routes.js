@@ -1000,6 +1000,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       const courseRaw = typeof item.course === 'string' ? item.course.trim().toUpperCase() : null;
       const course = courseRaw && courseRaw.length > 0 && courseRaw.length <= 32 ? courseRaw : null;
       return {
+        ...(item.clientItemId ? { id: item.clientItemId } : {}),
         menuItemId: item.menuItemId,
         name: variantSelection.name,
         price: unitPrice,
@@ -1461,6 +1462,7 @@ async function addRoundHandler(req, res) {
       const courseRaw = typeof item.course === 'string' ? item.course.trim().toUpperCase() : null;
       const course = courseRaw && courseRaw.length > 0 && courseRaw.length <= 32 ? courseRaw : null;
       return {
+        ...(item.clientItemId ? { id: item.clientItemId } : {}),
         menuItemId: item.menuItemId,
         name: variantSelection.name,
         price,
@@ -2665,6 +2667,11 @@ async function splitOrderHandler(req, res) {
   try {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const clientOrderId = req.body?.clientOrderId;
+    if (clientOrderId != null && (typeof clientOrderId !== 'string' ||
+      !/^order-[a-z0-9-]{1,100}$/.test(clientOrderId))) {
+      return res.status(400).json({ error: 'Identificador de división inválido' });
+    }
     const legacy = !Array.isArray(req.body?.items);
     const requested = legacy
       ? [...new Set(Array.isArray(req.body?.itemIds) ? req.body.itemIds.map(String) : [])]
@@ -2675,8 +2682,12 @@ async function splitOrderHandler(req, res) {
     }
     if (!legacy && (requested.some((item) =>
       !item || typeof item.id !== 'string' || !item.id ||
-      !Number.isSafeInteger(item.quantity) || item.quantity < 1
-    ) || new Set(requested.map((item) => item.id)).size !== requested.length)) {
+      !Number.isSafeInteger(item.quantity) || item.quantity < 1 ||
+      (item.newItemId != null && (typeof item.newItemId !== 'string' ||
+        !/^local-item-order-[a-z0-9-]{1,90}-\d{1,4}$/.test(item.newItemId)))
+    ) || new Set(requested.map((item) => item.id)).size !== requested.length ||
+      new Set(requested.map((item) => item.newItemId).filter(Boolean)).size !==
+        requested.filter((item) => item.newItemId).length)) {
       return res.status(400).json({ error: 'Las cantidades seleccionadas no son válidas' });
     }
 
@@ -2688,6 +2699,16 @@ async function splitOrderHandler(req, res) {
         include: { items: { include: { modifiers: true, comboSelections: true } } },
       });
       if (!source) throw splitError(404, 'Orden no encontrada');
+      if (clientOrderId) {
+        const previous = await tx.order.findFirst({ where: { clientOrderId, restaurantId } });
+        if (previous) {
+          const [sourceFull, createdFull] = await Promise.all([
+            tx.order.findUnique({ where: { id }, include: ORDER_DETAIL_INCLUDE }),
+            tx.order.findUnique({ where: { id: previous.id }, include: ORDER_DETAIL_INCLUDE }),
+          ]);
+          return { source: sourceFull, created: createdFull };
+        }
+      }
       if (['DELIVERED', 'CANCELLED'].includes(source.status)) {
         throw splitError(400, 'La orden está cerrada');
       }
@@ -2696,9 +2717,10 @@ async function splitOrderHandler(req, res) {
       }
 
       const byId = new Map(source.items.map((item) => [item.id, item]));
-      const moving = requested.map(({ id: itemId, quantity }) => ({
+      const moving = requested.map(({ id: itemId, quantity, newItemId }) => ({
         item: byId.get(itemId),
         quantity: legacy ? byId.get(itemId)?.quantity : quantity,
+        newItemId,
       }));
       if (moving.some(({ item }) => !item)) {
         throw splitError(400, 'Los productos no pertenecen a esta orden');
@@ -2721,6 +2743,7 @@ async function splitOrderHandler(req, res) {
           restaurantId: source.restaurantId,
           locationId: source.locationId,
           orderNumber,
+          clientOrderId: clientOrderId || null,
           orderType: source.orderType,
           status: source.status,
           paymentMethod: source.paymentMethod,
@@ -2741,7 +2764,7 @@ async function splitOrderHandler(req, res) {
         },
       });
 
-      for (const { item, quantity } of moving) {
+      for (const { item, quantity, newItemId } of moving) {
         if (quantity === item.quantity) {
           const updated = await tx.orderItem.updateMany({
             where: { id: item.id, orderId: id, quantity: item.quantity },
@@ -2763,6 +2786,7 @@ async function splitOrderHandler(req, res) {
         await tx.orderItem.create({
           data: {
             orderId: created.id,
+            ...(newItemId ? { id: newItemId } : {}),
             menuItemId: item.menuItemId,
             name: item.name,
             price: item.price,
@@ -2788,26 +2812,25 @@ async function splitOrderHandler(req, res) {
         });
       }
 
-      const activePromos = await loadActiveBulkPromos(tx, source.restaurantId);
-      const recalc = async (orderId, discount, deliveryFee) => {
+      // La promoción ganada por la cuenta original se reparte por importe.
+      // Esto conserva el total al dividir al final, incluso si la promo ya
+      // salió de su horario de vigencia mientras la tablet estuvo sin red.
+      const createdItems = await tx.orderItem.findMany({ where: { orderId: created.id } });
+      const createdSubtotal = round2(createdItems.reduce((sum, item) => sum + Number(item.subtotal || 0), 0));
+      const originalSubtotal = Number(source.subtotal) || source.items.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
+      const createdPromo = originalSubtotal > 0
+        ? round2(Number(source.promoDiscount || 0) * createdSubtotal / originalSubtotal) : 0;
+      const sourcePromo = round2(Number(source.promoDiscount || 0) - createdPromo);
+      const recalc = async (orderId, discount, deliveryFee, promoDiscount) => {
         const items = await tx.orderItem.findMany({
           where: { orderId },
-          include: { menuItem: { select: { categoryId: true } } },
         });
-        const { promoDiscount } = computeBulkPromoDiscount(
-          items.map((item) => ({
-            price: Number(item.price), quantity: item.quantity,
-            categoryId: item.menuItem?.categoryId,
-          })),
-          activePromos,
-        );
         const totals = computeOrderTotals(items, { discount, deliveryFee, promoDiscount });
         return tx.order.update({ where: { id: orderId }, data: totals });
       };
-      // Descuento manual y envío se quedan en la original; las promociones
-      // por cantidad se recalculan para cada cuenta según sus unidades.
-      await recalc(id, source.discount, source.deliveryFee);
-      await recalc(created.id, 0, 0);
+      // El descuento manual y el envío permanecen en la cuenta original.
+      await recalc(id, source.discount, source.deliveryFee, sourcePromo);
+      await recalc(created.id, 0, 0, createdPromo);
 
       const [srcFull, createdFull] = await Promise.all([
         tx.order.findUnique({ where: { id }, include: ORDER_DETAIL_INCLUDE }),

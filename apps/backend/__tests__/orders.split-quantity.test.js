@@ -63,10 +63,14 @@ beforeEach(() => {
     comboSelections: [{ componentId: 'c1', optionId: 'opt1', optionMenuItemId: 'menu2', name: 'Papas', priceDelta: 0 }],
   }];
 
-  tx.order.findFirst.mockImplementation(async ({ where }) =>
-    orders[where.id]?.restaurantId === where.restaurantId
-      ? { ...orders[where.id], items: items.filter((item) => item.orderId === where.id).map((item) => ({ ...item })) }
-      : null);
+  tx.order.findFirst.mockImplementation(async ({ where }) => {
+    const order = where.clientOrderId
+      ? Object.values(orders).find((candidate) => candidate.clientOrderId === where.clientOrderId)
+      : orders[where.id];
+    return order?.restaurantId === where.restaurantId
+      ? { ...order, items: items.filter((item) => item.orderId === order.id).map((item) => ({ ...item })) }
+      : null;
+  });
   tx.order.create.mockImplementation(async ({ data }) => {
     orders.o2 = { id: 'o2', ...data };
     return orders.o2;
@@ -117,6 +121,23 @@ describe('POST /api/orders/:id/split', () => {
     const response = await request(app()).post('/api/orders/o1/split')
       .send({ items: [{ id: 'burger', quantity: 1 }] }).expect(200);
     expect(response.body.source.subtotal + response.body.created.subtotal).toBeCloseTo(200.01, 2);
+  });
+
+  it('usa IDs estables, reparte la promoción y deduplica el replay', async () => {
+    orders.o1.promoDiscount = 120;
+    orders.o1.total = 120;
+    const payload = {
+      clientOrderId: 'order-1790401000000-abcdef',
+      items: [{ id: 'burger', quantity: 1, newItemId: 'local-item-order-1790401000000-abcdef-0' }],
+    };
+    const first = await request(app()).post('/api/orders/o1/split').send(payload).expect(200);
+    expect(items[1].id).toBe(payload.items[0].newItemId);
+    expect(first.body.source).toMatchObject({ subtotal: 120, promoDiscount: 60, total: 60 });
+    expect(first.body.created).toMatchObject({ subtotal: 120, promoDiscount: 60, total: 60 });
+
+    await request(app()).post('/api/orders/o1/split').send(payload).expect(200);
+    expect(tx.order.create).toHaveBeenCalledTimes(1);
+    expect(tx.orderItem.create).toHaveBeenCalledTimes(1);
   });
 
   it('rechaza cantidades inválidas y una cuenta que quedaría vacía', async () => {

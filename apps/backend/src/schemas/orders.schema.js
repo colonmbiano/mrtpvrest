@@ -7,6 +7,9 @@ const { z } = require('zod');
 
 const cartItemSchema = z.object({
   menuItemId: z.string().min(1),
+  // Identificador estable del renglón local: permite dividir y cobrar una
+  // cuenta creada sin red antes de que el servidor confirme sus líneas.
+  clientItemId: z.string().regex(/^local-item-order-[a-z0-9-]{1,90}-\d{1,4}$/).max(120).optional(),
   quantity:   z.coerce.number().int().positive(),
   // Peso en KG para productos vendidos por báscula (MenuItem.soldByWeight).
   // Decimal positivo; el servidor decide si lo respeta (solo si el producto
