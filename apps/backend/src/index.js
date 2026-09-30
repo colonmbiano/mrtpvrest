@@ -225,6 +225,8 @@ app.use('/api/whatsapp/webhook',  require('./routes/whatsapp-webhook.routes'))
 // OTA — el TPV consulta esto en arranque sin contexto de tenant todavía.
 // /publish, /bundles y DELETE están protegidos con SUPER_ADMIN dentro del router.
 app.use('/api/ota',               require('./routes/ota.routes'))
+// Autenticación propia y credenciales limitadas a copias privadas de una caja.
+app.use('/api/retail-offline-backups', require('./routes/retail-offline-backups.routes'))
 
 // --- MIDDLEWARE DE SAAS (TENANT) ---
 app.use(tenantMiddleware);
