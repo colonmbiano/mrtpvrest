@@ -13,9 +13,11 @@ export type Modifier = {
   priceAdd: number;
   isDefault?: boolean;
   isKitchenNote?: boolean;
+  isAvailable?: boolean;
 };
 
 export type ModifierGroup = {
+  groupType?: string;
   id: string;
   name: string;
   required: boolean;

@@ -1,3 +1,4 @@
+const { validateQuantityGroups, compactQuantityModifiers, modifierSnapshotKey } = require('../lib/quantity-modifiers');
 require('dotenv').config();
 const { createHash } = require('node:crypto');
 
@@ -949,7 +950,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       }
 
       // Aplicar freeModifiersLimit por grupo: los más baratos van gratis primero.
-      const { unitExtra: modsExtra, flatMods } = applyFreeModifiers(selectedByGroup, groupsById);
+      validateQuantityGroups(menuItem.modifierGroups, modifierIds);
+      const { unitExtra: modsExtra, flatMods: rawFlatMods } = applyFreeModifiers(selectedByGroup, groupsById);
+      const flatMods = compactQuantityModifiers(rawFlatMods, menuItem.modifierGroups);
       let unitExtra = modsExtra;
 
       const validComplementsById = new Map(
@@ -1089,7 +1092,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     const buildItemSig = (its) => its
       .map((it) => {
         const mods = (it._modifiers || it.modifiers || [])
-          .map((m) => m.modifierId)
+          .map(modifierSnapshotKey)
           .filter(Boolean)
           .sort()
           .join('+');
@@ -1421,7 +1424,9 @@ async function addRoundHandler(req, res) {
         selectedByGroup.set(mod.groupId, arr);
       }
 
-      const { unitExtra: modsExtra, flatMods } = applyFreeModifiers(selectedByGroup, groupsById);
+      validateQuantityGroups(menuItem.modifierGroups, modifierIds);
+      const { unitExtra: modsExtra, flatMods: rawFlatMods } = applyFreeModifiers(selectedByGroup, groupsById);
+      const flatMods = compactQuantityModifiers(rawFlatMods, menuItem.modifierGroups);
       let unitExtra = modsExtra;
 
       const validComplementsById = new Map(

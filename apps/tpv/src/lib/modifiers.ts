@@ -165,6 +165,32 @@ export function flattenSelections(
   return modifiers;
 }
 
+// Display quantities without changing the repeated IDs sent to the server.
+export function quantityModifierSummary(item: {
+  modifierGroups?: ModifierGroup[];
+  modifiers?: ModifierSelection[];
+}): ModifierSelection[] {
+  const quantityIds = new Set((item.modifierGroups || [])
+    .filter(group => group.groupType === 'QUANTITY')
+    .flatMap(group => group.modifiers.map(modifier => modifier.id)));
+  const result: ModifierSelection[] = [];
+  const summaries = new Map<string, { index: number; count: number; name: string }>();
+  for (const modifier of item.modifiers || []) {
+    if (!quantityIds.has(modifier.id)) { result.push(modifier); continue; }
+    const summary = summaries.get(modifier.id);
+    if (summary) {
+      summary.count++;
+      const entry = result[summary.index]!;
+      entry.name = `${summary.count} ${summary.name}`;
+      entry.priceAdd += modifier.priceAdd;
+    } else {
+      summaries.set(modifier.id, { index: result.length, count: 1, name: modifier.name });
+      result.push({ ...modifier, name: `1 ${modifier.name}` });
+    }
+  }
+  return result;
+}
+
 // Separa las selecciones aplanadas en las tres colecciones que espera el
 // backend (`POST /api/orders/tpv` y `/:id/rounds`): modificadores reales,
 // complementos y variantes multi-select (estas dos viajan con id prefijado).

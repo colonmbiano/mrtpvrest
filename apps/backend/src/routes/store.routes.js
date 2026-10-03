@@ -1,3 +1,4 @@
+const { validateQuantityGroups, compactQuantityModifiers, modifierSnapshotKey } = require('../lib/quantity-modifiers');
 /**
  * store.routes.js — API Pública para la Tienda del Cliente
  *
@@ -947,6 +948,8 @@ router.post('/orders', async (req, res) => {
           }
           if (mod) selectedModifiers.push(mod);
         }
+        validateQuantityGroups(menuItem.modifierGroups, requestedModIds);
+        const compactModifiers = compactQuantityModifiers(selectedModifiers, menuItem.modifierGroups);
         const modifiersAdd = selectedModifiers.reduce((s, m) => s + Number(m.priceAdd || 0), 0);
 
         // Complementos (extras/acompañamientos). No existe OrderItemComplement:
@@ -1002,7 +1005,7 @@ router.post('/orders', async (req, res) => {
           // Modificadores como relación anidada — se persisten en OrderItemModifier
           ...(selectedModifiers.length > 0 && {
             modifiers: {
-              create: selectedModifiers.map(m => ({
+              create: compactModifiers.map(m => ({
                 modifierId: m.id,
                 name: m.name,
                 priceAdd: Number(m.priceAdd || 0),
@@ -1065,7 +1068,7 @@ router.post('/orders', async (req, res) => {
       .sort()
       .join('|');
     // itemsData: los modificadores viven en `.modifiers.create[].modifierId`.
-    const newSig = buildStoreItemSig(itemsData, (it) => (it.modifiers?.create || []).map(m => m.modifierId));
+    const newSig = buildStoreItemSig(itemsData, (it) => (it.modifiers?.create || []).map(modifierSnapshotKey));
     const recentCandidates = await prisma.order.findMany({
       where: {
         restaurantId: restaurant.id,
@@ -1082,7 +1085,7 @@ router.post('/orders', async (req, res) => {
     });
     const dup = recentCandidates.find((cand) => {
       if (Math.abs(Number(cand.subtotal) - subtotal) >= 0.01) return false;
-      const candSig = buildStoreItemSig(cand.items, (it) => (it.modifiers || []).map(m => m.modifierId));
+      const candSig = buildStoreItemSig(cand.items, (it) => (it.modifiers || []).map(modifierSnapshotKey));
       return candSig === newSig;
     });
     if (dup) {

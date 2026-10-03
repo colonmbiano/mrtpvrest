@@ -9,7 +9,7 @@ import GuestCountModal from "@/components/pos/GuestCountModal";
 import ConfirmModal from "@/components/pos/ConfirmModal";
 import ManagerOverrideModal from "@/components/ManagerOverrideModal";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
-import { buildOrderItemsPayload, comboPartsFromCartItem, comboPartsFromOrderItem } from "@/lib/modifiers";
+import { buildOrderItemsPayload, comboPartsFromCartItem, comboPartsFromOrderItem, quantityModifierSummary } from "@/lib/modifiers";
 import { useAuthStore } from "@/store/authStore";
 import { useTicketStore, type CartItem } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
@@ -466,7 +466,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         // Partes del combo (si lo es) para que la comanda las rutee cada una a
         // su estación. [] en productos normales → se imprime como una línea.
         comboParts: comboPartsFromCartItem(it),
-        modifiers: (it.modifiers || []).map((m) => ({ name: m.name, priceAdd: m.priceAdd })),
+        modifiers: quantityModifierSummary(it).map((m) => ({ name: m.name, priceAdd: m.priceAdd })),
       };
     });
 
@@ -504,7 +504,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       // estación: cada área recibe el aviso de cancelar SU parte.
       comboParts: comboPartsFromOrderItem(item),
       modifiers: (item.modifiers || []).map((m: any) => ({
-        name: m.modifier?.name || m.name || "",
+        name: m.name || m.modifier?.name || "",
         priceAdd: Number(m.modifier?.priceAdd ?? m.priceAdd ?? 0),
       })),
     };
@@ -1277,7 +1277,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                   notes={item.notes}
                   modifiers={item.modifiers?.map((m: any) => ({
                     id: m.id,
-                    name: m.modifier?.name || m.name,
+                    name: m.name || m.modifier?.name,
                     priceAdd: m.modifier?.priceAdd || m.priceAdd
                   }))}
                   onIncrease={() => changePreviousItemQty(item, 1)}
@@ -1319,7 +1319,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               unit={item.unit}
               price={item.price}
               notes={item.notes}
-              modifiers={item.modifiers?.map(m => ({ name: m.name, priceAdd: m.priceAdd }))}
+              modifiers={quantityModifierSummary(item).map(m => ({ name: m.name, priceAdd: m.priceAdd }))}
               onIncrease={() => changeItemQty(idx, 1)}
               onDecrease={() => changeItemQty(idx, -1)}
               onUpdateNotes={(n) => setItemNotes(idx, n)}

@@ -1,3 +1,4 @@
+import QuantityOptions from "@/components/pos/QuantityOptions";
 import React, { useState, useMemo } from "react";
 import { Plus, Minus, ChevronLeft, X, Check, Delete } from "lucide-react";
 import { type Product, type ModifierGroup, type ModifierSelection, type MenuItemVariant, type Modifier } from "@/store/ticketStore";
@@ -70,7 +71,9 @@ export function QuickModifierPanel({
     const out: Record<string, Modifier[]> = {};
     for (const group of groups) {
       if (initialIds) {
-        const matched = group.modifiers.filter((modifier) => initialIds.has(modifier.id));
+        const matched = group.groupType === "QUANTITY"
+          ? initial!.selectedModifierIds!.flatMap(id => group.modifiers.filter(m => m.id === id))
+          : group.modifiers.filter((modifier) => initialIds.has(modifier.id));
         out[group.id] = group.multiSelect ? matched : matched.slice(0, 1);
       } else {
         const defaults = group.modifiers.filter((modifier) => modifier.isDefault);
@@ -172,6 +175,8 @@ export function QuickModifierPanel({
         )}
 
         {groups.map((group) => {
+            if (group.groupType === "QUANTITY") return <div key={group.id} className="mb-5"><h3 className="mb-2 font-bold">{group.name}</h3><QuantityOptions options={group.modifiers} selected={(selections[group.id] || []).map(m => m.id)} max={group.maxSelection} onChange={ids => setSelections(prev => ({ ...prev, [group.id]: ids.map(id => group.modifiers.find(m => m.id === id)!) }))} /></div>;
+
           const selectedIds = new Set((selections[group.id] || []).map((modifier) => modifier.id));
           const min = Math.max(group.required ? 1 : 0, group.minSelection || 0);
           const max = group.maxSelection || 0;

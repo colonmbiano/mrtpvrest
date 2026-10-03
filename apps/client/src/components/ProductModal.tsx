@@ -1,4 +1,5 @@
 'use client';
+import QuantityOptions from './QuantityOptions';
 
 import { useMemo, useState } from 'react';
 import { Check, Minus, Plus, X } from 'lucide-react';
@@ -10,7 +11,7 @@ type Variant = { id: string; name: string; price: number };
 type Modifier = { id: string; name: string; priceAdd: number; isAvailable?: boolean };
 type Complement = { id: string; name: string; price: number };
 type ModifierGroup = {
-  id: string; name: string; required?: boolean; multiSelect?: boolean;
+  id: string; name: string; groupType?: string; required?: boolean; multiSelect?: boolean;
   minSelection?: number; maxSelection?: number; modifiers: Modifier[];
 };
 type ComboOption = { id: string; priceDelta: number; optionMenuItemId: string; optionMenuItem?: { id: string; name: string; imageUrl?: string | null } };
@@ -160,7 +161,8 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
       // Si un grupo requerido se quedó sin opciones disponibles (todas agotadas),
       // no podemos exigir selección o el cliente queda trabado.
       const hasAvailable = g.modifiers.some(m => m.isAvailable !== false);
-      if (!hasAvailable) continue;
+      if (!hasAvailable && g.groupType !== 'QUANTITY') continue;
+      if (g.maxSelection && cur.length > g.maxSelection) { setError(`Elige máximo ${g.maxSelection} en "${g.name}".`); return; }
       if (g.required && cur.length === 0) { setError(`Selecciona una opción en "${g.name}".`); return; }
       if (g.minSelection && g.minSelection > 0 && cur.length < g.minSelection) {
         setError(`Elige al menos ${g.minSelection} en "${g.name}".`); return;
@@ -176,7 +178,11 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
     const complementPayloadIds = selectedComplements.map(id => `${COMPLEMENT_PREFIX}${id}`);
     const payloadIds = [...modifierIds, ...complementPayloadIds];
     const variantName = variantId ? variants.find(v => v.id === variantId)?.name : null;
-    const modNames = modifierIds.map(id => allMods.find(m => m.id === id)?.name).filter(Boolean);
+    const modNames = [...new Set(modifierIds)].map(id => {
+      const name = allMods.find(m => m.id === id)?.name;
+      const count = modifierIds.filter(mid => mid === id).length;
+      return count > 1 ? `${count} ${name}` : name;
+    }).filter(Boolean);
     const complementNames = selectedComplements.map(id => complements.find(c => c.id === id)?.name).filter(Boolean);
     const comboSelections = comboComponents.flatMap(c => (comboSel[c.id] || []).map(optionId => ({ componentId: c.id, optionId })));
     const comboNames = comboSelections
@@ -293,6 +299,8 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
 
           {/* Grupos de modificadores */}
           {groups.map((g, groupIndex) => {
+            if (g.groupType === 'QUANTITY') return <div key={g.id} className="mt-5"><h3 className="mb-2 font-bold">{g.name}</h3><QuantityOptions options={g.modifiers} selected={selected[g.id] || []} max={g.maxSelection || 0} onChange={ids => { setError(''); setSelected(prev => ({ ...prev, [g.id]: ids })); }} /></div>;
+
             const isBaseGroup = beverage && g.name === "Base de tu creación";
             const isSaborGroup = beverage && g.name === "Sabor";
             const isNivelGroup = beverage && g.name === "Siguiente nivel";

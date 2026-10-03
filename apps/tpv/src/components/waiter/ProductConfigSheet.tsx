@@ -1,4 +1,5 @@
 "use client";
+import QuantityOptions from "@/components/pos/QuantityOptions";
 import React, { useMemo, useState } from "react";
 import { Check, Minus, Plus, X } from "lucide-react";
 import type {
@@ -178,6 +179,8 @@ export default function ProductConfigSheet({
           )}
 
           {groups.map((group) => {
+            if (group.groupType === "QUANTITY") return <div key={group.id} className="mb-5"><h3 className="mb-2 font-bold">{group.name}</h3><QuantityOptions options={group.modifiers} selected={(selections[group.id] || []).map(m => m.id)} max={group.maxSelection} onChange={ids => setSelections(prev => ({ ...prev, [group.id]: ids.map(id => group.modifiers.find(m => m.id === id)!) }))} /></div>;
+
             const selectedIds = new Set((selections[group.id] || []).map((modifier) => modifier.id));
             const min = Math.max(group.required ? 1 : 0, group.minSelection || 0);
             const max = group.maxSelection || 0;

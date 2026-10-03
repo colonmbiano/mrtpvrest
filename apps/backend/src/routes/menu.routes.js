@@ -801,7 +801,7 @@ router.post('/items/:itemId/modifier-groups', authenticate, requireTenantAccess,
         minSelection: parseInt(minSelection) || 0,
         maxSelection: parseInt(maxSelection) || 0,
         freeModifiersLimit: parseInt(freeModifiersLimit) || 0,
-        groupType: groupType === 'REMOVE' ? 'REMOVE' : 'ADD',
+        groupType: ['REMOVE', 'QUANTITY'].includes(groupType) ? groupType : 'ADD',
       },
       include: { modifiers: true },
     });
@@ -825,7 +825,7 @@ router.put('/modifier-groups/:groupId', authenticate, requireTenantAccess, requi
         ...(minSelection !== undefined && { minSelection: parseInt(minSelection) || 0 }),
         ...(maxSelection !== undefined && { maxSelection: parseInt(maxSelection) || 0 }),
         ...(freeModifiersLimit !== undefined && { freeModifiersLimit: parseInt(freeModifiersLimit) || 0 }),
-        ...(groupType !== undefined && { groupType: groupType === 'REMOVE' ? 'REMOVE' : 'ADD' }),
+        ...(groupType !== undefined && { groupType: ['REMOVE', 'QUANTITY'].includes(groupType) ? groupType : 'ADD' }),
       },
       include: { modifiers: true },
     });
