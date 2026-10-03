@@ -56,3 +56,28 @@ compacto generado por backend; no requiere migración.
 En esta revisión pasaron cinco pruebas backend de cantidades y dos del TPV.
 La publicación y la comprobación visual de una orden real en KDS/impresora
 siguen pendientes; esta revisión no realizó despliegues ni generó ventas.
+
+## Publicado — 2 de octubre de 2026, hora de México
+
+La publicación pendiente descrita arriba quedó resuelta para el commit
+`f067eceb9d56620dd4ad7b619a2ae3fdb0017b79` en `master`.
+
+- Backend Railway: `89f7efb9-2bca-46a2-bfc7-4bce59d08036`, SUCCESS; `/health` HTTP 200.
+- TPV Vercel: `dpl_DDQ52VLTY5RchWFkphfEeoiwRsME`, READY, `https://tpv.mrtpvrest.com`.
+- Tienda Vercel: `dpl_uGBfUoTY4pbEcWLkXuhVRQSfnEv8`, READY, `https://master-burguer-s.mrtpvrest.com`.
+- OTA Android producción: versión `0.2.473`, publicada por el workflow del mismo commit;
+  comprobada en `/api/ota/check`. Checksum SHA-256:
+  `f03e9adcdc968f7917454dfd09de0577bd0f652c41a185b8df6de06966849cbb`.
+- CI Backend: 76 suites y 635 pruebas aprobadas. CI TPV, tienda y APK Android: success.
+
+Comprobación en la tienda publicada: los tres accesos rápidos completan 10;
+con 9 se bloquea agregar; la mezcla 4 Pastor / 3 Chuleta / 3 Campechano suma
+10 y aparece desglosada en el carrito por $250. Se retiró el carrito de prueba
+sin confirmar ventas ni enviar comandas.
+
+Se compactó también la presentación del carrito TPV y la comanda local para
+mostrar las cantidades, conservando los diez IDs en el payload. La firma
+anti doble envío de TPV incluye el desglose guardado igual que la tienda.
+No se agregaron migraciones ni se modificó el catálogo durante la publicación.
+La instalación efectiva de OTA en cada tablet y la impresión física/KDS con
+una orden real requieren comprobación en el establecimiento.
