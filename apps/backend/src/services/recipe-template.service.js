@@ -64,7 +64,7 @@ function buildInsumosWorkbook({ ingredients = [], typeNames = [] }) {
   // ── Hoja GUÍA ──
   const guia = wb.addWorksheet('GUIA');
   guia.getColumn(1).width = 100;
-  guia.addRow(['PLANTILLA DE INSUMOS — Master Burguer no, TU restaurante']).font = TITLE_FONT;
+  guia.addRow(['PLANTILLA DE INSUMOS — Tu restaurante']).font = TITLE_FONT;
   [
     '',
     'Esta hoja "INSUMOS" ya viene con los insumos que tu sistema conoce hoy.',
