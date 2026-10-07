@@ -103,6 +103,7 @@ router.get('/by-menu-item/:menuItemId', requireAdmin, async (req, res) => {
 // Admin-only simulation of actual packaging for a whole order. Does not
 // mutate inventory or rewrite historical cost snapshots.
 const packagingPreviewSchema = z.object({
+  orderType: z.enum(['DINE_IN', 'TAKEOUT', 'DELIVERY']).default('TAKEOUT'),
   lines: z.array(z.object({
     recipeId: z.string().min(1).max(200),
     quantity: z.number().int().positive().max(10000),
@@ -131,6 +132,7 @@ router.post('/packaging-preview', requireAdmin, async (req, res) => {
       result = costing.packagingPreview(
         parsed.data.lines.map(l => ({ recipe: byId.get(l.recipeId), quantity: l.quantity })),
         parsed.data.packaging,
+        parsed.data.orderType,
       );
     } catch (error) {
       return res.status(400).json({ error: error.message });

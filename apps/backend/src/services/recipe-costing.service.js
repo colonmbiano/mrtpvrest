@@ -1,4 +1,5 @@
 'use strict';
+const { usesPackaging } = require('../lib/order-packaging');
 
 // Tenant-scoped catalog loaded once per request. Missing costs are warnings,
 // never silently presented as a complete recipe.
@@ -45,7 +46,7 @@ function createRecipeCosting(ingredients, subRecipes) {
     }
   }
 
-  function recipe(recipe) {
+  function recipe(recipe, orderType = 'TAKEOUT') {
     const warnings = new Set();
     const leaves = new Map();
     if (!recipe.items?.length) warnings.add('EMPTY_RECIPE');
@@ -53,18 +54,18 @@ function createRecipeCosting(ingredients, subRecipes) {
       const quantity = Number(item.quantity) * (1 + Number(item.wastagePercent || 0) / 100);
       expand(item, quantity, item.unit, [], warnings, leaves);
     }
-    const consumption = [...leaves.values()];
+    const consumption = [...leaves.values()].filter(r => usesPackaging(orderType) || !r.ingredient.isPackaging);
     const totalCost = consumption.reduce((sum, row) => sum + row.quantity * Number(row.ingredient.cost || 0), 0);
     return { totalCost: Number(totalCost.toFixed(4)), costWarnings: [...warnings], consumption };
   }
 
   // Counts are actual containers for the entire order, not counts per dish.
   // Each provided ingredient replaces its baseline consumption, including zero.
-  function packagingPreview(lines, counts) {
+  function packagingPreview(lines, counts, orderType = 'TAKEOUT') {
     const warnings = new Set();
     const quantities = new Map();
     for (const line of lines) {
-      const result = recipe(line.recipe);
+      const result = recipe(line.recipe, orderType);
       result.costWarnings.forEach(w => warnings.add(w));
       for (const row of result.consumption) {
         quantities.set(row.ingredient.id, (quantities.get(row.ingredient.id) || 0) + row.quantity * line.quantity);
@@ -83,6 +84,7 @@ function createRecipeCosting(ingredients, subRecipes) {
         throw new Error('Cantidad de empaque inválida');
       }
       if (count.quantity > 0 && !(Number(ingredient.cost) > 0)) warnings.add('MISSING_PRICE');
+      if (!usesPackaging(orderType) && count.quantity > 0) throw new Error('Los pedidos de mesa no incluyen desechables');
       quantities.set(ingredient.id, count.quantity);
     }
     const consumption = [...quantities].map(([id, quantity]) => ({ ingredientId: id, quantity, cost: quantity * Number(ingredientById.get(id).cost || 0) }));
