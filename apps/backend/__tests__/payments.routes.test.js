@@ -1,5 +1,10 @@
 'use strict';
 
+jest.mock('../src/services/order-inventory.service', () => ({
+  ...jest.requireActual('../src/services/order-inventory.service'),
+  consumePaidOrder: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('@mrtpvrest/database', () => ({
   prisma: {
     order: {
@@ -34,6 +39,7 @@ function makeApp() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  prisma.$transaction = jest.fn(work => work(prisma));
   delete process.env.MP_WEBHOOK_SECRET;
   mockPaymentGet.mockResolvedValue({
     external_reference: 'order-7',
@@ -42,6 +48,7 @@ beforeEach(() => {
   });
   prisma.order.updateMany.mockResolvedValue({ count: 1 });
   prisma.order.findUnique.mockResolvedValue({
+    restaurantId: 'r1',
     tableId: 'table-7',
     orderType: 'DINE_IN',
   });
@@ -58,7 +65,7 @@ describe('POST /api/payments/webhook', () => {
     // El update es condicional (paymentStatus != PAID) para que los replays
     // at-least-once de MP no re-procesen una orden ya cobrada.
     expect(prisma.order.updateMany).toHaveBeenCalledWith({
-      where: { id: 'order-7', paymentStatus: { not: 'PAID' } },
+      where: { id: 'order-7', restaurantId: 'r1', status: { not: 'CANCELLED' }, paymentStatus: { not: 'PAID' } },
       data: expect.objectContaining({
         status: 'DELIVERED',
         paymentStatus: 'PAID',

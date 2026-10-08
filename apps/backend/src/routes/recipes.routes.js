@@ -16,6 +16,8 @@ const { buildInsumosWorkbook, buildRecetasWorkbook } = require('../services/reci
 const { importInsumosFromBuffer, importRecetasFromBuffer, computeCostPerBase, norm } = require('../services/recipe-import.service');
 const { recordCostChange } = require('../services/cost-history.service');
 const multer = require('multer');
+const { z } = require('zod');
+const { loadRecipeCosting } = require('../services/recipe-costing.service');
 const router = express.Router();
 
 // Multer en memoria, sólo .xlsx, 10MB.
@@ -57,16 +59,10 @@ router.get('/', requireAdmin, async (req, res) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Anexar totalCost computed por receta (sum de items con su cost).
+    const costing = await loadRecipeCosting(prisma, restaurantId);
     const enriched = recipes.map((r) => {
-      const totalCost = (r.items || []).reduce((acc, it) => {
-        const wastage = 1 + (Number(it.wastagePercent || 0) / 100);
-        const qty = Number(it.quantity || 0) * wastage;
-        const unitCost = it.ingredient ? Number(it.ingredient.cost || 0) : 0;
-        // TODO: cost de subreceta cuando hagamos expansión recursiva
-        return acc + qty * unitCost;
-      }, 0);
-      return { ...r, totalCost: Number(totalCost.toFixed(4)) };
+      const { totalCost, costWarnings } = costing.recipe(r);
+      return { ...r, totalCost, costWarnings };
     });
 
     res.json(enriched);
@@ -95,9 +91,56 @@ router.get('/by-menu-item/:menuItemId', requireAdmin, async (req, res) => {
         },
       },
     });
-    res.json(recipe);
+    if (!recipe) return res.json(null);
+    const costing = await loadRecipeCosting(prisma, restaurantId);
+    const { totalCost, costWarnings } = costing.recipe(recipe);
+    res.json({ ...recipe, totalCost, costWarnings });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Admin-only simulation of actual packaging for a whole order. Does not
+// mutate inventory or rewrite historical cost snapshots.
+const packagingPreviewSchema = z.object({
+  orderType: z.enum(['DINE_IN', 'TAKEOUT', 'DELIVERY']).default('TAKEOUT'),
+  lines: z.array(z.object({
+    recipeId: z.string().min(1).max(200),
+    quantity: z.number().int().positive().max(10000),
+  }).strict()).min(1).max(100),
+  packaging: z.array(z.object({
+    ingredientId: z.string().min(1).max(200),
+    quantity: z.number().int().min(0).max(10000),
+  }).strict()).max(100),
+}).strict();
+
+router.post('/packaging-preview', requireAdmin, async (req, res) => {
+  const parsed = packagingPreviewSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Plan de empaques inválido' });
+  const restaurantId = req.restaurantId || req.user?.restaurantId;
+  if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+  try {
+    const ids = [...new Set(parsed.data.lines.map(l => l.recipeId))];
+    const recipes = await prisma.recipe.findMany({
+      where: { restaurantId, id: { in: ids }, isActive: true }, include: { items: true },
+    });
+    if (recipes.length !== ids.length) return res.status(404).json({ error: 'Receta no encontrada' });
+    const byId = new Map(recipes.map(r => [r.id, r]));
+    const costing = await loadRecipeCosting(prisma, restaurantId);
+    let result;
+    try {
+      result = costing.packagingPreview(
+        parsed.data.lines.map(l => ({ recipe: byId.get(l.recipeId), quantity: l.quantity })),
+        parsed.data.packaging,
+        parsed.data.orderType,
+      );
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.json({ ...result, mode: 'preview' });
+  } catch (error) {
+    console.error('POST /api/recipes/packaging-preview:', error);
+    return res.status(500).json({ error: 'No se pudo calcular el empaque' });
   }
 });
 

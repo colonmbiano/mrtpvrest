@@ -1,3 +1,4 @@
+const { consumePaidOrder } = require('../services/order-inventory.service');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -501,11 +502,12 @@ router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAcces
         data.paidAt = new Date();
       }
     }
-    const order = await prisma.order.update({
-      where: { id: existing.id },
-      data,
-      include: { items: { include: { menuItem: true } }, user: true },
-    });
+    const order = await prisma.$transaction(async tx => {
+      const updated = await tx.order.update({ where: { id: existing.id, restaurantId: existing.restaurantId },
+        data, include: { items: { include: { menuItem: true } }, user: true } });
+      if (updated.paymentStatus === 'PAID') await consumePaidOrder(tx, updated.id, updated.restaurantId, { confirmedExternalPayment: true });
+      return updated;
+    }, { timeout: 30000 });
 
     if (order.status === 'DELIVERED') await ensureCashOnDeliveryMovement(order);
 

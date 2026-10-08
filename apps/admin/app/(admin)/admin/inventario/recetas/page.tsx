@@ -75,6 +75,14 @@ export default function RecetasPage() {
 
   const headerActions = (
     <>
+      <a
+        href="/manuales/manual-costeo-recetas.pdf"
+        download="MRTPVREST-Manual-Costeo-Recetas.pdf"
+        className="inline-flex min-h-9 items-center justify-center gap-2 rounded-[10px] border px-3 text-[12px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ background: "var(--surf-1)", color: "var(--tx)", borderColor: "var(--bd-2)" }}
+      >
+        <Download size={16} aria-hidden="true" /> Manual de costeo (PDF)
+      </a>
       <Button variant="secondary" size="sm" icon={Download} onClick={downloadTemplate}>Plantilla</Button>
       <Button variant="secondary" size="sm" icon={Upload} onClick={() => setImportOpen(true)}>Subir</Button>
       <Button variant="secondary" size="sm" icon={ChevronRight} href="/admin/inventario/subrecetas">Sub-recetas</Button>

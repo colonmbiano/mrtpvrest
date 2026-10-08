@@ -1,3 +1,4 @@
+const { consumePaidOrder } = require('../services/order-inventory.service');
 // apps/backend/src/routes/terminal.routes.js
 
 const express = require('express');
@@ -70,10 +71,11 @@ router.post(
       });
 
       if (result.success) {
-        await prisma.order.update({
-          where: { id: orderId },
-          data: { paymentStatus: 'PAID', paidAt: new Date() },
-        });
+        await prisma.$transaction(async tx => {
+          await tx.order.update({ where: { id: orderId, restaurantId },
+            data: { paymentStatus: 'PAID', paidAt: new Date() } });
+          await consumePaidOrder(tx, orderId, restaurantId, { confirmedExternalPayment: true });
+        }, { timeout: 30000 });
 
         const io = req.app.get('io');
         if (io) {

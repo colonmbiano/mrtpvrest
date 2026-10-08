@@ -67,5 +67,8 @@ jobs:
       - name: Generar cliente Prisma
         run: pnpm --filter @mrtpvrest/database run db:generate
 
+      - name: Pruebas de recetas y empaques
+        run: node --test apps/backend/tests/*.test.cjs
+
       - name: Pruebas unitarias + cobertura
         run: pnpm --filter @mrtpvrest/backend run test:coverage --ci

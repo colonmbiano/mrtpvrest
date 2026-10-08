@@ -12,6 +12,8 @@ jest.mock('@mrtpvrest/database', () => ({
   },
 }));
 
+jest.mock('../src/services/order-inventory.service', () => ({ consumePaidOrder: jest.fn().mockResolvedValue(undefined) }));
+
 jest.mock('../src/lib/payment-providers', () => ({
   getProviderForRestaurant: jest.fn(),
   instantiateFromIntegration: jest.fn(),
@@ -41,6 +43,7 @@ const stripeEvent = {
 describe('POST /api/kiosk/webhook/stripe', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    prisma.$transaction = jest.fn(work => work(prisma));
     prisma.order.findUnique.mockResolvedValue({ id: 'o1', restaurantId: 'r1', status: 'PENDING', paymentStatus: 'PENDING' });
     getProviderForRestaurant.mockResolvedValue({
       getPayment: jest.fn().mockResolvedValue({
@@ -56,9 +59,10 @@ describe('POST /api/kiosk/webhook/stripe', () => {
 
     expect(res.status).toBe(200);
     expect(prisma.order.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'o1', paymentStatus: { not: 'PAID' } },
+      where: { id: 'o1', restaurantId: 'r1', status: { not: 'CANCELLED' }, paymentStatus: { not: 'PAID' } },
       data: expect.objectContaining({ paymentStatus: 'PAID', status: 'CONFIRMED' }),
     }));
+    expect(require('../src/services/order-inventory.service').consumePaidOrder).toHaveBeenCalledWith(prisma, 'o1', 'r1', { confirmedExternalPayment: true });
     expect(io.to).toHaveBeenCalledWith('restaurant:r1');
     expect(emit).toHaveBeenCalledWith('order:paid', { orderId: 'o1', source: 'KIOSK' });
     expect(emit).toHaveBeenCalledWith('new:order', { orderId: 'o1', source: 'KIOSK' });
@@ -71,6 +75,7 @@ describe('POST /api/kiosk/webhook/stripe', () => {
 
     expect(res.status).toBe(200);
     expect(emit).not.toHaveBeenCalled();
+    expect(require('../src/services/order-inventory.service').consumePaidOrder).not.toHaveBeenCalled();
   });
 
   it('un FAILED tardío nunca degrada una orden pagada (guard en el WHERE)', async () => {

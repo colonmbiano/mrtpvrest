@@ -23,6 +23,7 @@ import {
   Undo2,
   User,
 } from "lucide-react";
+import OrderPackagingPanel from "./OrderPackagingPanel";
 import { hapticMedium } from "@/lib/haptics";
 
 export interface DrawerOrder {
@@ -226,6 +227,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   onRefund,
 }) => {
   const paidMode = mode === "paid";
+  const [packagingOrder, setPackagingOrder] = useState<DrawerOrder | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterKey>("Todos");
   const [payFilter, setPayFilter] = useState<string>("Todos");
   const [sortKey, setSortKey] = useState<SortKey>("default");
@@ -752,6 +754,11 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                     {paidMode ? (
                       <div className="flex flex-col gap-2 w-full">
                         <div className="flex items-stretch gap-2 w-full">
+                          {!["CANCELLED", "DELIVERED"].includes(order.status) && (
+                            <button type="button" onPointerDown={e => e.stopPropagation()}
+                              onClick={e => { e.stopPropagation(); setPackagingOrder(order); }}
+                              className="min-h-[48px] rounded-xl px-3 bg-white/5 border border-white/10 text-white text-[10px] font-semibold">Empaques</button>
+                          )}
                           <button
                             type="button"
                             aria-label={`Reimprimir recibo de ${order.customerName}`}
@@ -980,6 +987,13 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                         en caja). En modo selección se ocultan. */
                     !selectionMode && (
                       <div className="flex items-stretch gap-2 w-full">
+                        {!["CANCELLED", "DELIVERED"].includes(order.status) && (
+                          <button type="button" onPointerDown={e => e.stopPropagation()}
+                            onClick={e => { e.stopPropagation(); setPackagingOrder(order); }}
+                            className="min-h-[48px] rounded-xl px-3 bg-white/5 border border-white/10 text-white text-[10px] font-semibold">
+                            Empaques
+                          </button>
+                        )}
                         <button
                           type="button"
                           aria-label={`Editar ticket de ${order.customerName}`}
@@ -1111,6 +1125,8 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
           )}
         </div>
       </aside>
+
+      {packagingOrder && <OrderPackagingPanel key={packagingOrder.id} orderId={packagingOrder.id} orderNumber={packagingOrder.orderNumber} onClose={() => setPackagingOrder(null)} />}
 
       {showMergeConfirm && targetOrder && selectedOrders.length >= 2 && (
         <div className="absolute inset-0 z-[10] flex items-center justify-center p-5">
