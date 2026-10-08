@@ -1,3 +1,4 @@
+const { consumePaidOrder } = require('../services/order-inventory.service');
 // routes/kiosk-webhook.routes.js — Webhooks públicos de pasarelas de pago
 // Montado sin tenantMiddleware para que las pasarelas puedan notificar sin
 // mandar x-restaurant-id. Cada pasarela resuelve el restaurante a partir
@@ -18,8 +19,9 @@ async function applyPaymentResult(orderId, { status, rawStatus, providerId }, io
   if (!order) return
 
   if (status === 'PAID') {
-    const updated = await prisma.order.updateMany({
-      where: { id: orderId, paymentStatus: { not: 'PAID' } },
+    const updated = await prisma.$transaction(async tx => {
+      const result = await tx.order.updateMany({
+      where: { id: orderId, restaurantId: order.restaurantId, status: { not: 'CANCELLED' }, paymentStatus: { not: 'PAID' } },
       data: {
         paymentProviderId:     providerId,
         paymentProviderStatus: rawStatus,
@@ -28,6 +30,9 @@ async function applyPaymentResult(orderId, { status, rawStatus, providerId }, io
         paidAt:                new Date(),
       },
     })
+      if (result.count) await consumePaidOrder(tx, orderId, order.restaurantId, { confirmedExternalPayment: true });
+      return result;
+    }, { timeout: 30000 });
     if (updated.count === 0) return // duplicado: ya estaba pagada
 
     if (io) {
@@ -98,7 +103,7 @@ router.post('/mercadopago', async (req, res) => {
     res.status(200).json({ received: true })
   } catch (err) {
     console.error('[kiosk-webhook:mercadopago] error:', err)
-    res.status(200).json({ received: true })
+    res.status(500).json({ received: false })
   }
 })
 
@@ -135,7 +140,7 @@ router.post('/stripe', async (req, res) => {
     res.status(200).json({ received: true })
   } catch (err) {
     console.error('[kiosk-webhook:stripe] error:', err)
-    res.status(200).json({ received: true })
+    res.status(500).json({ received: false })
   }
 })
 

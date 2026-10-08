@@ -1,39 +1,40 @@
 # Costeo y empaques por pedido
 
-## Implementado en esta rama
+## Reglas operativas
 
-- GET /api/recipes y GET /api/recipes/by-menu-item/:id incluyen subrecetas anidadas, rendimiento, merma y alertas de costos incompletos.
-- POST /api/recipes/packaging-preview (admin) calcula consumo y costos con empaques reales por pedido. No modifica inventario ni históricos.
-- Body: lines [{recipeId, quantity}], packaging [{ingredientId, quantity}]. Las cantidades de packaging son absolutas por pedido, reemplazan el consumo base del insumo y aceptan cero.
-- Dos volcanes: lines con quantity2; packaging con hamburguesero0, charola7x7 cantidad1 y bolsa1. Los dos papeles permanecen. Burrito con papas: misma sustitución para una pieza; el aluminio permanece.
-- Empaques requieren isPackaging=true y baseUnit=PIECE; cantidades enteras. IDs de recetas e insumos se resuelven solo en el restaurante autenticado.
+- Las mesas consumen alimentos y salsas, sin los insumos marcados `isPackaging`. Para llevar y domicilio usan los empaques de receta.
+- Un producto marcado `MenuItem.isPackagingProduct` representa un desechable **vendido aparte**. Su receta consume su propio contenedor incluso en mesa. No debe contener alimentos, ni duplicar un platillo. Se vende por pieza.
+- Disponibilidad del extra: `isAvailable=true`, `availableOnline=false`, `availableOnKiosk=false` para venta exclusiva desde el TPV del local.
+- Abrir un pedido, agregar rondas o guardar su plan de empaques **no descuenta inventario**. El consumo, los movimientos y el costo histórico se registran en la misma transacción que marca el pedido pagado.
+- Después de pagar, los extras se venden en un ticket nuevo. No se vuelve a cobrar ni descontar la comida del ticket anterior.
 
-## Empaques en pedidos del TPV
+## Panel del TPV
 
-- DINE_IN excluye todos los insumos marcados `isPackaging`, incluidos los contenidos en subrecetas y extras. Sí consume alimentos, salsas y guarniciones. La validación de existencias sigue la misma regla. TAKEOUT y DELIVERY conservan el empaque de su receta.
-- En Tickets > Empaques, se muestran las cantidades consumidas por todo el pedido. Cambiar una caja por una charola requiere caja 0 y charola 1; las bolsas se capturan por pedido. La agrupación física la decide quien despacha, sin inferirla de notas libres.
-- GET /api/orders/:id/packaging devuelve cantidades, costo registrado y revisión del pedido. PUT recibe `{revision, packaging:[{ingredientId, quantity}]}`. Cada cantidad enviada reemplaza ese insumo; los no enviados conservan su consumo.
-- Los insumos por PIECE requieren enteros; GRAM/ML se capturan en su unidad de inventario. No convertir centímetros de aluminio a gramos sin una equivalencia medida.
-- El descuento base se registra al crear el pedido/ronda. Guardar empaques ajusta solo la diferencia en una transacción con bloqueo del pedido, movimientos y costos por producto. Reintentar el mismo plan no duplica consumo. Los costos de compras posteriores no revalúan lo ya consumido.
-- Para pedidos remotos que aún no registraron inventario, el panel ofrece **Registrar consumo del pedido** (POST /:id/packaging/initialize). Usa las recetas de sus productos, extras y componentes. Esta acción descuenta insumos; abrir el panel no lo hace.
-- Cambiar una cuenta abierta entre mesa y llevar reconcilia sus empaques. Las rondas usan el tipo persistido del pedido.
-- Cancelar repone el consumo neto registrado, incluidos ajustes; reintentos se serializan. Este flujo supone empaques recuperables: el registro de desechables ya usados como merma sigue siendo operativo.
-- El ajuste actualiza `costSnapshot` de los productos afectados sin cambiar precios o total del cliente. Un empaque compartido nuevo se atribuye a la primera línea elegible; la contribución exacta se evalúa por pedido, no por la línea individual que recibió esa bolsa/charola.
-- Si falla la conexión, el TPV conserva un borrador local; el operador debe reintentar al recuperar conexión. El servidor rechaza una revisión vieja con cambios distintos. No se confirma inventario offline.
+En Tickets > Empaques y en el cobro de un pedido ya sincronizado, se revisan cantidades antes de pagar. Dos volcanes pueden compartir una charola: hamburgueseros 0, charola 1; se conservan los papeles. Las bolsas se cuentan por pedido.
 
-## Límites actuales
+`GET /api/orders/:id/packaging` devuelve cantidades previstas, extras vendidos por separado, costo y revisión. `PUT` recibe `{revision, packaging:[{ingredientId, quantity}]}`. Guarda cantidades absolutas en `Order.packagingPlan`, sin tocar stock ni el total del cliente. Los extras vendidos son adicionales y no se pueden anular desde este panel.
 
-- Los pedidos entregados/cancelados no admiten ajustes desde este panel. No se corrigen ventas históricas automáticamente.
-- Cuentas divididas/transferidas con movimientos que ya no corresponden a sus líneas quedan bloqueadas para ajuste: requieren reconciliar su inventario. No se inventa una distribución entre tickets.
-- El stock de una receta incompleta sigue siendo parcial; costo cero no confirma una receta completa. Falta mostrar todas las advertencias de costeo en la interfaz.
-- La selección de combinaciones del 3x2 de alitas/boneless es un cambio independiente.
-- No aplicar indirectos como consumo físico. Mantener correctamente la clasificación `isPackaging` de los insumos.
+Las piezas requieren enteros; GRAM/ML usan la unidad de inventario. La receta, la sucursal y los insumos se validan en el restaurante autenticado. Una revisión vieja con cambios distintos se rechaza. Si cambian los productos, cantidades o recetas, se invalida el plan anterior y se recalculan los empaques de receta; el panel avisa para revisarlos.
 
-## Manual reutilizable para restaurantes
+Sin conexión se conserva el borrador local para reintentar; no se confirma consumo offline. Un pedido nuevo que se crea y cobra en una sola operación usa sus recetas. Para agrupar empaques manualmente primero debe estar guardado/sincronizado como pedido abierto.
 
-- Descarga desde Inventario > Recetas, en escritorio y móvil: `/manuales/manual-costeo-recetas.pdf`.
-- Fuente de consulta: `docs/manuales/manual-costeo-recetas.md`.
-- Fuente de edición y generación: `docs/manuales/generar_manual.py` (Python 3 + ReportLab).
-- Regenerar desde la raíz con `python3 docs/manuales/generar_manual.py`; revisar visualmente el PDF y commitear ambos resultados.
-- Los ejemplos son ficticios. No incorporar exports de restaurantes, tickets, identificadores, precios privados ni datos de empleados.
-- La guía distingue reglas operativas de automatizaciones todavía pendientes. Actualizar su alcance cuando se conecte el simulador con ventas e inventario.
+## Integridad al cobrar
+
+- Cobro directo TPV, pago mixto, confirmaciones de caja, cuenta de empleado, terminal y pagos verificados de tienda/kiosco/delivery llaman al mismo servicio.
+- El bloqueo del pedido y los `costSnapshot` existentes evitan aplicar otra vez sus recetas. Los pedidos antiguos con consumo previo conservan lo ya registrado y no permiten editar empaques desde este panel.
+- El stock insuficiente revierte una operación de caja cuando la configuración lo exige. Un pago ya confirmado por una pasarela registra la existencia real, incluso negativa: no se puede rechazar retroactivamente el dinero ya cobrado. Un fallo técnico devuelve error para que la pasarela reintente.
+- Las cancelaciones reponen el consumo neto registrado, sin recalcular recetas actuales. Los empaques usados que no se recuperen deben registrarse como merma operativa.
+- La agrupación conserva el costo total del pedido. Un empaque sustituto sin presencia en las recetas se atribuye a la primera línea de comida; no se reparte sobre los extras vendidos.
+- No se reconsumen ventas históricas importadas. No aplicar nómina, renta u otros indirectos como consumo físico.
+
+## Migración y configuración
+
+La migración aditiva agrega `MenuItem.isPackagingProduct` (false por defecto) y `Order.packagingPlan` (nullable). Se despliega con Prisma y es compatible con el código anterior. Después del despliegue se deben marcar explícitamente los productos extra existentes; nunca inferir la excepción por nombre o por una receta incompleta.
+
+## Costeo y manual
+
+`GET /api/recipes` y `/by-menu-item/:id` incluyen subrecetas anidadas, rendimiento, merma y alertas de costos incompletos. `POST /api/recipes/packaging-preview` es un simulador de costos, sin escrituras de stock.
+
+El manual descargable está en Inventario > Recetas (`/manuales/manual-costeo-recetas.pdf`). Sus ejemplos son ficticios; no publicar datos de restaurantes ni empleados. Sus fuentes están en `docs/manuales/`. Este documento describe el alcance actualizado de la integración con pedidos.
+
+La selección de combinaciones del 3x2 de alitas/boneless es un cambio independiente. Una receta incompleta sigue produciendo costos y consumos parciales; costo cero no acredita que esté completa.

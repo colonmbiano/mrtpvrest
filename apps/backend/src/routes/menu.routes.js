@@ -308,7 +308,7 @@ router.get('/items/:id', async (req, res) => {
 
 router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, promoPrice, activeDays, promoStartTime, promoEndTime, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isCombo, soldByWeight, saleUnit, unit } = req.body
+    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, promoPrice, activeDays, promoStartTime, promoEndTime, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isPackagingProduct, isCombo, soldByWeight, saleUnit, unit } = req.body
     if (!categoryId || !name || price === undefined) return res.status(400).json({ error: 'Faltan campos requeridos' })
     // Unidad de venta (comportamiento) normalizada; soldByWeight deriva de ella.
     const sUnit = normalizeSaleUnit(saleUnit, soldByWeight)
@@ -332,6 +332,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
         availableOnline: availableOnline === undefined ? true : !!availableOnline,
         availableOnKiosk: availableOnKiosk === undefined ? true : !!availableOnKiosk,
         isCombo: !!isCombo,
+        isPackagingProduct: !!isPackagingProduct,
         isPopular: isPopular || false,
         isPromo: promo.isPromo,
         promoPrice: promo.promoPrice,
@@ -362,7 +363,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
 router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId
-    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, promoPrice, activeDays, promoStartTime, promoEndTime, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isCombo, soldByWeight, saleUnit, unit } = req.body
+    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, promoPrice, activeDays, promoStartTime, promoEndTime, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isPackagingProduct, isCombo, soldByWeight, saleUnit, unit } = req.body
     const existingItem = await prisma.menuItem.findFirst({
       where: { id: req.params.id, restaurantId },
       select: { price: true, isPromo: true, promoPrice: true },
@@ -389,6 +390,7 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
         ...(isAvailable !== undefined && { isAvailable }),
         ...(availableOnline !== undefined && { availableOnline: !!availableOnline }),
         ...(availableOnKiosk !== undefined && { availableOnKiosk: !!availableOnKiosk }),
+        ...(isPackagingProduct !== undefined && { isPackagingProduct: !!isPackagingProduct }),
         ...(isCombo !== undefined && { isCombo: !!isCombo }),
         ...(isPopular !== undefined && { isPopular }),
         ...(isFavorite !== undefined && { isFavorite: !!isFavorite }),

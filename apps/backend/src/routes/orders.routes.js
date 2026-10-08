@@ -2,7 +2,7 @@ const { validateQuantityGroups, compactQuantityModifiers, modifierSnapshotKey } 
 require('dotenv').config();
 const { createHash } = require('node:crypto');
 
-const { discountInventory, assertStockAvailable, restoreInventoryForCancelledOrder, resolveRecipeFlatItems } = require('../services/order-inventory.service');
+const { consumePaidOrder, discountInventory, assertStockAvailable, restoreInventoryForCancelledOrder, resolveRecipeFlatItems } = require('../services/order-inventory.service');
 
 const { readPackaging, publicState, setPackaging, changePackagingType, lockOrder } = require('../services/order-packaging.service');
 const express = require('express');
@@ -337,17 +337,6 @@ router.get('/:id/packaging', authenticate, requireTenantAccess, requireRole('ADM
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
     return res.json(publicState(await readPackaging(prisma, req.params.id, restaurantId, req.locationId)));
   } catch (e) { return res.status(e.status || 500).json({ error: e.status ? e.message : 'No se pudieron leer los empaques' }); }
-});
-router.post('/:id/packaging/initialize', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER', 'WAITER'), async (req, res) => {
-  try {
-    const restaurantId = req.restaurantId || req.user?.restaurantId;
-    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
-    const state = await readPackaging(prisma, req.params.id, restaurantId, req.locationId);
-    if (['DELIVERED', 'CANCELLED'].includes(state.order.status)) return res.status(409).json({ error: 'El pedido está cerrado' });
-    if (state.transferred) return res.status(409).json({ error: publicState(state).message });
-    await discountInventory(prisma, state.order.items, state.order.id, restaurantId, state.order.locationId);
-    return res.json(publicState(await readPackaging(prisma, req.params.id, restaurantId, req.locationId)));
-  } catch (e) { return res.status(e.status || 500).json({ error: e.status ? e.message : 'No se pudo registrar el consumo' }); }
 });
 router.put('/:id/packaging', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER', 'WAITER'), async (req, res) => {
   try {
@@ -931,6 +920,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         });
       }));
 
+      if (paidOnCreate) await consumePaidOrder(tx, created.id, restaurantId);
       return tx.order.findUnique({
         where: { id: created.id },
         include: {
@@ -939,13 +929,8 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           table: true,
         },
       });
-    });
+    }, { timeout: 30000 });
 
-    // Pasamos order.items (con id) para que discountInventory pueda
-    // persistir costSnapshot en cada OrderItem.
-    // OPTIMIZACIÓN: Se manda al background (sin await) para no bloquear el TPV.
-    discountInventory(prisma, order.items, order.id, restaurantId, req.locationId).catch(err => console.error('[discountInventory background] Error:', err.message));
-    
     if (paidOnCreate) {
       await releaseTableIfDineIn(order.id);
     }
@@ -1204,12 +1189,7 @@ async function addRoundHandler(req, res) {
       return { updated: finalOrder, round: newRound };
     });
 
-    // Descontar inventario SOLO de los items de la nueva ronda. Filtramos
-    // por roundId para no re-descontar items de rondas anteriores que ya
-    // habían sido procesados al crearse.
-    // OPTIMIZACIÓN: Se manda al background (sin await).
-    const newRoundItems = (updated.items || []).filter((it) => it.roundId === round.id);
-    discountInventory(prisma, newRoundItems, id, restaurantId, req.locationId).catch(err => console.error('[discountInventory round background] Error:', err.message));
+    // Las rondas abiertas se consumen juntas al cobrar el pedido.
 
     // Imprimir SOLO los items de esta ronda en cocina. Fire-and-forget.
     try {
@@ -1568,11 +1548,15 @@ router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireRo
       where: { id: req.params.id, restaurantId }, select: { locationId: true },
     });
     const cobroShiftId = existing ? await openShiftIdForCobro(prisma, existing.locationId) : null;
-    const order = await prisma.order.update({
-      where: { id: req.params.id, restaurantId },
+    const order = await prisma.$transaction(async tx => {
+      const paid = await tx.order.update({
+      where: { id: req.params.id, restaurantId, status: { not: 'CANCELLED' } },
       data: { status: 'CONFIRMED', paidAt: new Date(), paymentStatus: 'PAID', ...(cobroShiftId ? { shiftId: cobroShiftId } : {}) },
       include: { user: true }
     });
+      await consumePaidOrder(tx, paid.id, restaurantId);
+      return paid;
+    }, { timeout: 30000 });
     await releaseTableIfDineIn(order.id);
     res.json({ ok: true, order });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1666,8 +1650,9 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
       where: { id: req.params.id, restaurantId }, select: { locationId: true },
     });
     const cobroShiftId = existing ? await openShiftIdForCobro(prisma, existing.locationId) : null;
-    const order = await prisma.order.update({
-      where: { id: req.params.id, restaurantId },
+    const order = await prisma.$transaction(async tx => {
+      const paid = await tx.order.update({
+      where: { id: req.params.id, restaurantId, status: { not: 'CANCELLED' } },
       data: {
         paymentMethod: method,
         cashCollected: isCash,
@@ -1678,6 +1663,9 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
         ...(cobroShiftId ? { shiftId: cobroShiftId } : {}),
       }
     });
+      await consumePaidOrder(tx, paid.id, restaurantId);
+      return paid;
+    }, { timeout: 30000 });
 
     // Kick del cajón solo para efectivo: una transferencia no abre la caja.
     // Fire-and-forget: un cobro nunca debe fallar porque el cajón esté
@@ -1856,8 +1844,8 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
         resolvedMethod = paymentMethod;
         cashCollected = paymentMethod === 'CASH';
       }
-      return tx.order.update({
-        where: { id: req.params.id, restaurantId,
+      const paid = await tx.order.update({
+        where: { id: req.params.id, restaurantId, status: { not: 'CANCELLED' },
           // Compare-and-set: un cambio concurrente de importe o un segundo
           // cobro no puede cerrar silenciosamente otra cuenta.
           ...(expectedTotal != null ? { total: expectedTotal, paymentStatus: { not: 'PAID' } } : {}),
@@ -1878,7 +1866,9 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
           ...(cobroShiftId ? { shiftId: cobroShiftId } : {}),
         },
       });
-    });
+      await consumePaidOrder(tx, paid.id, restaurantId);
+      return paid;
+    }, { timeout: 30000 });
 
     await releaseTableIfDineIn(order.id);
 
@@ -1986,6 +1976,7 @@ router.post('/:id/charge-to-employee',
             createdById: req.user?.id || null,
           },
         });
+        await consumePaidOrder(tx, order.id, restaurantId);
         return { updatedOrder, charge };
       });
 

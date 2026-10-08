@@ -38,7 +38,7 @@ export default function DetailedBreakdownCard({ period }: { period: Period }) {
   if (loading) {
     return (
       <Card className="p-5 flex items-center justify-center min-h-[200px]">
-        <LoadingState title="Cargando desglose..." />
+        <LoadingState label="Cargando desglose..." />
       </Card>
     );
   }

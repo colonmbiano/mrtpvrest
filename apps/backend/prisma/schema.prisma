@@ -617,6 +617,8 @@ model Category {
 }
 
 model MenuItem {
+  // Explicit extra: consume its recipe even for table orders.
+  isPackagingProduct Boolean @default(false)
   id           String     @id @default(cuid())
   restaurantId String
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
@@ -801,6 +803,8 @@ enum PaymentStatus {
 }
 
 model Order {
+  // Draft absolute counts. Stock is consumed only by payment finalization.
+  packagingPlan Json?
   id           String     @id @default(cuid())
   restaurantId String
   locationId   String?

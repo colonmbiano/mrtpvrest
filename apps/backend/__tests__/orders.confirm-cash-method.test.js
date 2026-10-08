@@ -1,5 +1,10 @@
 'use strict';
 
+jest.mock('../src/services/order-inventory.service', () => ({
+  ...jest.requireActual('../src/services/order-inventory.service'),
+  consumePaidOrder: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Tests de PUT /api/orders/:id/confirm-cash: liquidar un pendiente de cobro.
 // El método es opcional y por defecto es CASH (efectivo que trae el repartidor).
 // Para una "transferencia pendiente" el cajero confirma con paymentMethod:
@@ -49,6 +54,7 @@ function makeApp() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  prisma.$transaction = jest.fn(work => work(prisma));
   prisma.order.update.mockImplementation(async ({ data }) => ({
     id: 'o1', restaurantId: 'r1', locationId: 'loc1', orderNumber: 101, total: 250, ...data,
   }));

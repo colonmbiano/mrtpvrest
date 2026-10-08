@@ -188,20 +188,29 @@ async function resolveOrderLineItems(prisma, oi, restaurantId) {
   return { flatItems, recipeIdSnap };
 }
 
-async function applyInventory(prisma, orderItems, orderId, restaurantId, locationId, orderType) {
+async function applyInventory(prisma, orderItems, orderId, restaurantId, locationId, orderType, options = {}) {
   if (!Array.isArray(orderItems) || orderItems.length === 0) return;
   if (!locationId) {
-    console.warn('[discountInventory] locationId requerido; abortando descuento');
-    return;
+    throw Object.assign(new Error('El pedido no tiene sucursal para registrar inventario'), { status: 409 });
   }
 
   try {
     const cfg = await prisma.restaurantConfig.findUnique({ where: { restaurantId }, select: { blockOnInsufficientStock: true } });
-    for (const oi of orderItems) {
-      const { flatItems, recipeIdSnap } = await resolveOrderLineItems(prisma, oi, restaurantId);
+    const lines = options.lines || await resolveInventoryLines(prisma, orderItems, restaurantId);
+    for (const { item: oi, flatItems, recipeIdSnap, isPackagingProduct } of lines) {
 
       // DINE_IN consumes food, including sauces, but no disposable supplies.
-      const applicableItems = flatItems.filter(fi => usesPackaging(orderType) || !fi.ingredient.isPackaging);
+      const applicableItems = flatItems.filter(fi => !fi.ingredient.isPackaging || isPackagingProduct || (usesPackaging(orderType) && !options.packagingCounts));
+      if (options.packagingCounts && !isPackagingProduct) {
+        const normalLines = lines.filter(l => !l.isPackagingProduct);
+        for (const [id, count] of options.packagingCounts) {
+          const ingredient = options.packagingIngredients.get(id);
+          const amount = line => line.flatItems.filter(f => f.ingredient.id === id).reduce((n, f) => n + f.qtyToConsumePerUnit * Number(line.item.weightKg ?? line.item.quantity), 0);
+          const total = normalLines.reduce((n, l) => n + amount(l), 0);
+          const share = total > 0 ? amount({ item: oi, flatItems }) / total : Number(normalLines[0]?.item.id === oi.id);
+          if (count > 0 && share > 0) applicableItems.push({ ingredient, qtyToConsumePerUnit: count * share / Number(oi.weightKg ?? oi.quantity) });
+        }
+      }
 
       // Si dos paths (ingrediente directo + sub-receta) consumen el mismo
       // ingrediente, agregamos las cantidades en una sola operación de
@@ -234,7 +243,7 @@ async function applyInventory(prisma, orderItems, orderId, restaurantId, locatio
         // 1. Decremento de stock + lectura del nuevo balance.
         const changed = await prisma.ingredient.updateMany({
           where: { id: ingredient.id, restaurantId,
-            ...(cfg?.blockOnInsufficientStock && needed > 0 ? { stock: { gte: needed } } : {}),
+            ...(cfg?.blockOnInsufficientStock && !options.confirmedExternalPayment && needed > 0 ? { stock: { gte: needed } } : {}),
           },
           data: { stock: { decrement: needed } },
         });
@@ -292,14 +301,17 @@ async function assertStockAvailable(prisma, resolvedItems, restaurantId, orderTy
   if (!Array.isArray(resolvedItems) || resolvedItems.length === 0) return;
 
   const needByIngredient = new Map(); // ingredientId -> { needed, name }
+  let explicitPackaging = false;
+  const extraIds = new Set((await prisma.menuItem.findMany({ where: { restaurantId, id: { in: resolvedItems.map(l => l.menuItemId) }, isPackagingProduct: true }, select: { id: true } })).map(m => m.id));
   const addNeed = (ingredient, qty) => {
-    if (!ingredient || !(qty > 0) || (!usesPackaging(orderType) && ingredient.isPackaging)) return;
+    if (!ingredient || !(qty > 0) || (!usesPackaging(orderType) && !explicitPackaging && ingredient.isPackaging)) return;
     const cur = needByIngredient.get(ingredient.id);
     if (cur) cur.needed += qty;
     else needByIngredient.set(ingredient.id, { needed: qty, name: ingredient.name });
   };
 
   for (const line of resolvedItems) {
+    explicitPackaging = extraIds.has(line.menuItemId);
     const multiplier = line.weightKg != null ? Number(line.weightKg) : Number(line.quantity || 1);
     if (!(multiplier > 0)) continue;
 
@@ -418,22 +430,48 @@ async function restoreInventoryForCancelledOrder(prisma, orderId, restaurantId) 
 }
 
 
-// Lock the order before reading snapshots. Concurrent retries/packing edits
-// serialize on this row; stock, ledger and cost snapshots commit together.
-async function discountInventory(prisma, orderItems, orderId, restaurantId, locationId) {
-  if (!orderItems?.length || !locationId) return;
-  return prisma.$transaction(async tx => {
-    const locked = await tx.order.updateMany({
-      where: { id: orderId, restaurantId }, data: { updatedAt: new Date() },
-    });
-    if (!locked.count) return;
-    const order = await tx.order.findFirst({ where: { id: orderId, restaurantId } });
-    if (!order || order.status === 'CANCELLED') return;
-    const pending = await tx.orderItem.findMany({
-      where: { orderId, id: { in: orderItems.map(i => i.id) }, costSnapshot: null },
-    });
-    await applyInventory(tx, pending, orderId, restaurantId, locationId, order.orderType);
-  }, { timeout: 30000 });
+// A single transaction owns payment, stock movements and item cost snapshots.
+async function resolveInventoryLines(tx, items, restaurantId) {
+  const extras = new Set((await tx.menuItem.findMany({ where: { restaurantId,
+    id: { in: items.map(i => i.menuItemId) }, isPackagingProduct: true }, select: { id: true } })).map(i => i.id));
+  const lines = [];
+  for (const item of items) lines.push({ item, isPackagingProduct: extras.has(item.menuItemId),
+    ...await resolveOrderLineItems(tx, item, restaurantId) });
+  return lines;
 }
 
-module.exports = { resolveOrderLineItems, discountInventory, assertStockAvailable, restoreInventoryForCancelledOrder, resolveRecipeFlatItems };
+async function consumePaidOrder(tx, orderId, restaurantId, options = {}) {
+  const locked = await tx.order.updateMany({ where: { id: orderId, restaurantId }, data: { updatedAt: new Date() } });
+  if (!locked.count) throw Object.assign(new Error('Pedido no encontrado'), { status: 404 });
+  const order = await tx.order.findFirst({ where: { id: orderId, restaurantId }, include: { items: true } });
+  if (!order || order.paymentStatus !== 'PAID' || order.status === 'CANCELLED') return;
+  const pending = order.items.filter(i => i.costSnapshot == null);
+  if (!pending.length) return;
+  const lines = await resolveInventoryLines(tx, pending, restaurantId);
+  let packagingCounts, packagingIngredients;
+  if (pending.length === order.items.length && order.packagingPlan && usesPackaging(order.orderType)) {
+    const { describePlan } = require('../lib/order-packaging-plan');
+    const description = describePlan(order, lines);
+    // Item/recipe changes invalidate a previous draft; use current recipes.
+    if (order.packagingPlan.signature === description.signature) {
+      packagingCounts = new Map(order.packagingPlan.counts.map(c => [c.ingredientId, c.quantity]));
+      const ingredients = await tx.ingredient.findMany({ where: { restaurantId, isPackaging: true,
+        id: { in: [...packagingCounts.keys()] }, OR: [{ locationId: null }, { locationId: order.locationId }] } });
+      packagingIngredients = new Map(ingredients.map(i => [i.id, i]));
+      if ([...packagingCounts.keys()].some(id => !packagingIngredients.has(id))) {
+        throw Object.assign(new Error('Revisa los insumos del plan de empaques'), { status: 409 });
+      }
+    }
+  }
+  await applyInventory(tx, pending, orderId, restaurantId, order.locationId, order.orderType,
+    { ...options, lines, packagingCounts, packagingIngredients });
+}
+
+// Compatibility entry point: never consumes an unpaid order, even on replay.
+async function discountInventory(prisma, orderItems, orderId, restaurantId, locationId) {
+  if (!orderItems?.length || !locationId) return;
+  return prisma.$transaction(tx => consumePaidOrder(tx, orderId, restaurantId), { timeout: 30000 });
+}
+
+module.exports = { resolveOrderLineItems, resolveInventoryLines, consumePaidOrder, discountInventory,
+  assertStockAvailable, restoreInventoryForCancelledOrder, resolveRecipeFlatItems };

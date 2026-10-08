@@ -21,6 +21,7 @@ import {
   Layers,
 } from "lucide-react";
 import api from "@/lib/api";
+import OrderPackagingPanel from "./OrderPackagingPanel";
 import DiscountModal from "@/components/pos/DiscountModal";
 
 /**
@@ -85,6 +86,7 @@ interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   orderNumber: string;
+  orderId?: string | null;
   tableName?: string;
   total: number;
   items: PaymentItem[];
@@ -173,6 +175,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   isOpen,
   onClose,
   orderNumber,
+  orderId,
   tableName,
   total,
   items,
@@ -188,6 +191,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   onFinish,
   onPrintReceipt,
 }) => {
+  const [showPackaging, setShowPackaging] = useState(false);
   const [tab, setTab] = useState<Tab>("TOTAL");
   const [splitMode, setSplitMode] = useState<SplitMode>("EQUAL");
   // Default CASH: efectivo es el método más frecuente en piso; abrir en
@@ -737,6 +741,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           }}
         />
 
+        {showPackaging && orderId && <OrderPackagingPanel orderId={orderId} orderNumber={orderNumber} onClose={() => setShowPackaging(false)} />}
         {/* HEADER + TABS */}
         <div className="relative z-10 px-7 sm:px-10 pt-7 sm:pt-9 pb-0 shrink-0">
           <div className="flex items-start justify-between gap-4 mb-6">
@@ -758,6 +763,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             </button>
           </div>
 
+          {orderId && <button type="button" onClick={() => setShowPackaging(true)} className="min-h-11 mb-3 px-4 rounded-xl border border-white/20 text-white">Revisar empaques antes de cobrar</button>}
           {/* TABS */}
           <div className="flex items-center gap-2 p-1 bg-white/5 border border-white/10 rounded-2xl w-fit">
             <TabButton

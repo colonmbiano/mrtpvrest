@@ -1,5 +1,10 @@
 'use strict';
 
+jest.mock('../src/services/order-inventory.service', () => ({
+  ...jest.requireActual('../src/services/order-inventory.service'),
+  consumePaidOrder: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Tests del flag `keepStatus` en PUT /api/orders/:id/payment.
 //
 // El cobro desde el kanban del admin marca la orden PAID pero NO la salta a
