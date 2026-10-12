@@ -23,13 +23,13 @@ const KITCHEN_PIN = process.env.KITCHEN_PIN ?? '1113';
 
 function redirectPath(location: string | undefined): string {
   if (!location) return '';
-  return new URL(location, TPV_URL).pathname;
+  return new URL(location, TPV_URL).pathname.replace(/\/$/, '') || '/';
 }
 
 test.describe('Validación de Roles (Seguridad)', () => {
   test.describe('Dispositivo sin vincular', () => {
     test('Cualquier ruta protegida redirige a /setup', async ({ page }) => {
-      await page.goto(`${TPV_URL}/pos/menu`);
+      await page.goto(`${TPV_URL}/pos/menu/`);
       await expect(page).toHaveURL(/\/setup/, { timeout: 10_000 });
 
       await page.goto(`${TPV_URL}/hub`);
@@ -41,7 +41,7 @@ test.describe('Validación de Roles (Seguridad)', () => {
     test('Rutas autenticadas redirigen a /locked (PIN pad)', async ({ page }) => {
       await injectTPVDevice(page);
 
-      for (const route of ['/pos/menu', '/hub', '/cierre', '/meseros']) {
+      for (const route of ['/pos/menu/', '/hub/', '/cierre/', '/meseros/']) {
         const response = await page.context().request.get(`${TPV_URL}${route}`, {
           maxRedirects: 0,
         });
@@ -60,14 +60,14 @@ test.describe('Validación de Roles (Seguridad)', () => {
     test('Puede operar el POS (toma de pedidos)', async ({ page }) => {
       expect(await getTPVCookie(page, 'tpv-role')).toBe('WAITER');
 
-      const response = await page.context().request.get(`${TPV_URL}/pos/order-type`, {
+      const response = await page.context().request.get(`${TPV_URL}/pos/order-type/`, {
         maxRedirects: 0,
       });
       expect(response.status()).toBe(200);
     });
 
     test('NO puede entrar al cierre de caja — rebota a /hub', async ({ page }) => {
-      const response = await page.context().request.get(`${TPV_URL}/cierre`, {
+      const response = await page.context().request.get(`${TPV_URL}/cierre/`, {
         maxRedirects: 0,
       });
       expect([307, 308]).toContain(response.status());
@@ -84,14 +84,14 @@ test.describe('Validación de Roles (Seguridad)', () => {
     test('Puede operar el POS', async ({ page }) => {
       expect(await getTPVCookie(page, 'tpv-role')).toBe('CASHIER');
 
-      const response = await page.context().request.get(`${TPV_URL}/pos/order-type`, {
+      const response = await page.context().request.get(`${TPV_URL}/pos/order-type/`, {
         maxRedirects: 0,
       });
       expect(response.status()).toBe(200);
     });
 
     test('Puede entrar al cierre de caja', async ({ page }) => {
-      const response = await page.context().request.get(`${TPV_URL}/cierre`, {
+      const response = await page.context().request.get(`${TPV_URL}/cierre/`, {
         maxRedirects: 0,
       });
       expect(response.status()).toBe(200);
@@ -105,7 +105,7 @@ test.describe('Validación de Roles (Seguridad)', () => {
 
       expect(await getTPVCookie(page, 'tpv-role')).toBe('KITCHEN');
 
-      const response = await page.context().request.get(`${TPV_URL}/pos/menu`, {
+      const response = await page.context().request.get(`${TPV_URL}/pos/menu/`, {
         maxRedirects: 0,
       });
       expect([307, 308]).toContain(response.status());
@@ -129,7 +129,7 @@ test.describe('Validación de Roles (Seguridad)', () => {
       expect(await getTPVCookie(page, 'tpv-role')).toBeFalsy();
 
       // Deep-link tras logout vuelve al PIN pad, no al POS.
-      await page.goto(`${TPV_URL}/pos/menu`);
+      await page.goto(`${TPV_URL}/pos/menu/`);
       await expect(page).toHaveURL(/\/locked/, { timeout: 10_000 });
     });
   });
