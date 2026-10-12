@@ -2661,6 +2661,34 @@ model WhatsappMessage {
   @@map("whatsapp_messages")
 }
 
+// Telemetría de consumo del asistente de WhatsApp. Un evento representa una
+// unidad reportada por el worker (mensaje procesado / llamada de IA / batch).
+// externalEventId permite deduplicar reintentos sin inflar costos.
+model BotUsageEvent {
+  id           String @id @default(cuid())
+  restaurantId String
+
+  source          String  @default("WHATSAPP_ASSISTANT")
+  transport       String? // WHATSAPP_WEB | META | WHAPI | OTHER
+  aiProvider      String? // GEMINI | GROQ | OPENAI | OTHER
+  aiModel         String?
+  inboundMessages Int     @default(0)
+  outboundMessages Int    @default(0)
+  aiRequests      Int     @default(0)
+  inputTokens     Int     @default(0)
+  outputTokens    Int     @default(0)
+  totalTokens     Int     @default(0)
+  estimatedCostUsd Decimal @default(0) @db.Decimal(12, 6)
+  externalEventId String?
+  occurredAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@unique([restaurantId, externalEventId])
+  @@index([restaurantId, occurredAt])
+  @@index([restaurantId, source, occurredAt])
+  @@map("bot_usage_events")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SUGERENCIAS DE VENTA (UPSELL) — el chatbot ofrece un producto antes del
 // checkout ("¿le agregas unas papas?") y se mide cuánto genera cada regla.
