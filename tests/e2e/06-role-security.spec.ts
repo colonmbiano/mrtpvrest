@@ -10,13 +10,21 @@ import { injectTPVDevice, enterPIN, getTPVCookie } from './helpers';
  *       /cierre → CASHIER, ADMIN, OWNER, MANAGER, SUPER_ADMIN (sin WAITER/KITCHEN)
  *     Un rol no autorizado rebota a /hub.
  *   - /kds ya NO existe en el TPV: el KDS es una app independiente (apps/kds).
- * El backend sigue siendo la autoridad real (requireRole por endpoint);
- * esto valida la defensa en profundidad del front.
+ *
+ * IMPORTANTE: la sesión PIN viva NO se persiste tras un reload completo.
+ * Por eso los tests de middleware posteriores al login usan el request context
+ * compartido del navegador (mismas cookies) en vez de page.goto(), que montaría
+ * SyncInitializer y pediría un PIN fresco por diseño.
  */
 const TPV_URL = process.env.TPV_URL ?? 'http://localhost:3005';
-const WAITER_PIN = process.env.WAITER_PIN ?? '1111';   // seed: E2E Mesero
-const CASHIER_PIN = process.env.CASHIER_PIN ?? '1112'; // seed: E2E Cajero
-const KITCHEN_PIN = process.env.KITCHEN_PIN ?? '1113'; // seed: E2E Cocina
+const WAITER_PIN = process.env.WAITER_PIN ?? '1111';
+const CASHIER_PIN = process.env.CASHIER_PIN ?? '1112';
+const KITCHEN_PIN = process.env.KITCHEN_PIN ?? '1113';
+
+function redirectPath(location: string | undefined): string {
+  if (!location) return '';
+  return new URL(location, TPV_URL).pathname;
+}
 
 test.describe('Validación de Roles (Seguridad)', () => {
   test.describe('Dispositivo sin vincular', () => {
@@ -34,8 +42,11 @@ test.describe('Validación de Roles (Seguridad)', () => {
       await injectTPVDevice(page);
 
       for (const route of ['/pos/menu', '/hub', '/cierre', '/meseros']) {
-        await page.goto(`${TPV_URL}${route}`);
-        await expect(page, `${route} debería exigir PIN`).toHaveURL(/\/locked/, { timeout: 10_000 });
+        const response = await page.context().request.get(`${TPV_URL}${route}`, {
+          maxRedirects: 0,
+        });
+        expect([307, 308]).toContain(response.status());
+        expect(redirectPath(response.headers().location), `${route} debería exigir PIN`).toBe('/locked');
       }
     });
   });
@@ -49,16 +60,18 @@ test.describe('Validación de Roles (Seguridad)', () => {
     test('Puede operar el POS (toma de pedidos)', async ({ page }) => {
       expect(await getTPVCookie(page, 'tpv-role')).toBe('WAITER');
 
-      await page.goto(`${TPV_URL}/pos/order-type`);
-      await expect(page).toHaveURL(/\/pos\//, { timeout: 10_000 });
+      const response = await page.context().request.get(`${TPV_URL}/pos/order-type`, {
+        maxRedirects: 0,
+      });
+      expect(response.status()).toBe(200);
     });
 
     test('NO puede entrar al cierre de caja — rebota a /hub', async ({ page }) => {
-      await page.goto(`${TPV_URL}/cierre`);
-
-      // El middleware lo expulsa de /cierre; el Hub puede re-enrutarlo a /pos.
-      await page.waitForURL((url) => !url.pathname.startsWith('/cierre'), { timeout: 10_000 });
-      await expect(page).not.toHaveURL(/\/cierre/);
+      const response = await page.context().request.get(`${TPV_URL}/cierre`, {
+        maxRedirects: 0,
+      });
+      expect([307, 308]).toContain(response.status());
+      expect(redirectPath(response.headers().location)).toBe('/hub');
     });
   });
 
@@ -71,13 +84,17 @@ test.describe('Validación de Roles (Seguridad)', () => {
     test('Puede operar el POS', async ({ page }) => {
       expect(await getTPVCookie(page, 'tpv-role')).toBe('CASHIER');
 
-      await page.goto(`${TPV_URL}/pos/order-type`);
-      await expect(page).toHaveURL(/\/pos\//, { timeout: 10_000 });
+      const response = await page.context().request.get(`${TPV_URL}/pos/order-type`, {
+        maxRedirects: 0,
+      });
+      expect(response.status()).toBe(200);
     });
 
     test('Puede entrar al cierre de caja', async ({ page }) => {
-      await page.goto(`${TPV_URL}/cierre`);
-      await expect(page).toHaveURL(/\/cierre/, { timeout: 10_000 });
+      const response = await page.context().request.get(`${TPV_URL}/cierre`, {
+        maxRedirects: 0,
+      });
+      expect(response.status()).toBe(200);
     });
   });
 
@@ -88,28 +105,30 @@ test.describe('Validación de Roles (Seguridad)', () => {
 
       expect(await getTPVCookie(page, 'tpv-role')).toBe('KITCHEN');
 
-      // El Hub re-intenta mandarlo a /pos y el middleware lo rebota en
-      // ciclo — goto puede ser interrumpido por esas navegaciones.
-      await page.goto(`${TPV_URL}/pos/menu`).catch(() => {});
-      await page.waitForURL((url) => !url.pathname.startsWith('/pos'), { timeout: 10_000 });
-      await expect(page).not.toHaveURL(/\/pos/);
+      const response = await page.context().request.get(`${TPV_URL}/pos/menu`, {
+        maxRedirects: 0,
+      });
+      expect([307, 308]).toContain(response.status());
+      expect(redirectPath(response.headers().location)).toBe('/hub');
     });
   });
 
   test.describe('Logout', () => {
-    test('Cerrar sesión limpia cookies y vuelve a exigir PIN', async ({ page }) => {
+    test('Cambiar empleado limpia cookies y vuelve a exigir PIN', async ({ page }) => {
       await injectTPVDevice(page);
       await enterPIN(page, CASHIER_PIN);
 
-      // /hub?force=true muestra el selector de workspaces con "Cerrar sesión"
-      await page.goto(`${TPV_URL}/hub?force=true`);
-      await page.getByRole('button', { name: /cerrar sesión/i }).first().click();
+      // No hacemos page.goto() post-login: un reload completo pide PIN fresco
+      // intencionalmente. Usamos el flujo real de la UI desde /pos/order-type.
+      await page.waitForURL(/\/pos\/order-type/, { timeout: 20_000 });
+      await page.getByRole('button', { name: 'Menú', exact: true }).click();
+      await page.getByRole('button', { name: /cambiar empleado/i }).click();
 
       await expect(page).toHaveURL(/\/locked/, { timeout: 10_000 });
       expect(await getTPVCookie(page, 'tpv-session-active')).toBeFalsy();
       expect(await getTPVCookie(page, 'tpv-role')).toBeFalsy();
 
-      // Deep-link tras logout vuelve al PIN pad, no al POS
+      // Deep-link tras logout vuelve al PIN pad, no al POS.
       await page.goto(`${TPV_URL}/pos/menu`);
       await expect(page).toHaveURL(/\/locked/, { timeout: 10_000 });
     });
