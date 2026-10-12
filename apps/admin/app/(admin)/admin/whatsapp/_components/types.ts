@@ -49,8 +49,24 @@ export type AssistantState = {
   updatedAt: string | null;
   config: AssistantConfig;
 };
+export type BotUsageWindow = {
+  events: number;
+  inboundMessages: number;
+  outboundMessages: number;
+  aiRequests: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+};
 export type BotMetrics = {
   bot: { total: number; last24h: number; last7d: number; revenue: number; avgTicket: number; lastOrderAt: string | null };
+  usage?: {
+    last7d: BotUsageWindow;
+    last30d: BotUsageWindow;
+    transports30d: { transport: string; events: number; inboundMessages: number; outboundMessages: number }[];
+    ai30d: { provider: string; model: string; events: number; aiRequests: number; totalTokens: number; estimatedCostUsd: number }[];
+  };
 } | null;
 export type BotStatus = {
   reachable: boolean;
