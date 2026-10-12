@@ -21,19 +21,23 @@ const WAITER_PIN = process.env.WAITER_PIN ?? '1111';
 test.describe('Meseros — rondas y cuenta', () => {
   test.beforeEach(async ({ page }) => {
     await injectTPVDevice(page);
-    await page.goto(TPV_URL);
+
+    // Este flujo representa una comandera real de mesero. Al fijar deviceRole
+    // antes del PIN, useTPVAuth hace la navegación SPA /hub → /meseros sin un
+    // reload completo (un reload debe pedir PIN fresco por diseño).
+    await page.evaluate(() => localStorage.setItem('deviceRole', 'WAITER'));
     await enterPIN(page, WAITER_PIN);
-    // Pre-compila la ruta de detalle. Es una ruta ESTÁTICA con query param
-    // (/meseros/detalle/?id=<cuid>) — antes era el segmento dinámico
-    // /meseros/[id], que en el export estático del APK solo generaba un
-    // placeholder "_" y hacía 404 al abrir una mesa real. En `next dev` el
-    // primer hit la compila on-demand (~7s); sin este warm-up, el tap a una
-    // mesa real corría contra esa compilación y a veces excedía el timeout
-    // del click (flake). Un goto usa el timeout de navegación (30s).
-    await page.goto(`${TPV_URL}/meseros/detalle/?id=_`);
-    // El WAITER puede aterrizar en / (modo préstamo) o en /meseros según
-    // deviceRole; navegamos explícito a la sala para no depender de eso.
-    await page.goto(`${TPV_URL}/meseros`);
+    await page.waitForURL(/\/meseros(?:\/|$)/, { timeout: 20_000 });
+
+    // Calienta la ruta estática de detalle sin recargar la página autenticada.
+    // El request context comparte cookies con el browser y evita perder la
+    // sesión Zustand viva mientras Next compila el primer hit en dev.
+    const warmup = await page.context().request.get(
+      `${TPV_URL}/meseros/detalle/?id=_`,
+      { maxRedirects: 0 },
+    );
+    expect(warmup.status()).toBe(200);
+
     await expect(page.getByText(/gestión de salón/i)).toBeVisible({ timeout: 15_000 });
   });
 
