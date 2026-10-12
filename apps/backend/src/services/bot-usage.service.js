@@ -4,6 +4,11 @@ const { prisma } = require('@mrtpvrest/database');
 
 const MAX_COUNT = 1_000_000_000;
 
+// Tarifas estándar de Gemini 2.5 Flash verificadas el 2026-10-12.
+// Se pueden sobreescribir sin deploy si Google cambia el precio.
+const GEMINI_25_FLASH_INPUT_USD_PER_M = Number(process.env.GEMINI_25_FLASH_INPUT_USD_PER_M || 0.30);
+const GEMINI_25_FLASH_OUTPUT_USD_PER_M = Number(process.env.GEMINI_25_FLASH_OUTPUT_USD_PER_M || 2.50);
+
 function count(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return 0;
@@ -22,6 +27,18 @@ function money(value) {
   return Math.min(n, 1_000_000);
 }
 
+function estimateCostUsd({ aiProvider, aiModel, inputTokens, outputTokens, reported }) {
+  const explicit = money(reported);
+  if (explicit > 0) return explicit;
+  const provider = String(aiProvider || '').toLowerCase();
+  const model = String(aiModel || '').toLowerCase();
+  if (provider === 'gemini' && model === 'gemini-2.5-flash') {
+    return (inputTokens / 1_000_000) * GEMINI_25_FLASH_INPUT_USD_PER_M
+      + (outputTokens / 1_000_000) * GEMINI_25_FLASH_OUTPUT_USD_PER_M;
+  }
+  return 0;
+}
+
 async function recordBotUsage(restaurantId, payload = {}) {
   if (!restaurantId) throw new Error('restaurantId requerido');
 
@@ -30,20 +47,22 @@ async function recordBotUsage(restaurantId, payload = {}) {
   const reportedTotal = count(payload.totalTokens);
   const totalTokens = reportedTotal || inputTokens + outputTokens;
   const externalEventId = text(payload.externalEventId, 160);
+  const aiProvider = text(payload.aiProvider, 40);
+  const aiModel = text(payload.aiModel, 120);
 
   const data = {
     restaurantId,
     source: text(payload.source, 60) || 'WHATSAPP_ASSISTANT',
     transport: text(payload.transport, 40),
-    aiProvider: text(payload.aiProvider, 40),
-    aiModel: text(payload.aiModel, 120),
+    aiProvider,
+    aiModel,
     inboundMessages: count(payload.inboundMessages),
     outboundMessages: count(payload.outboundMessages),
     aiRequests: count(payload.aiRequests),
     inputTokens,
     outputTokens,
     totalTokens,
-    estimatedCostUsd: money(payload.estimatedCostUsd),
+    estimatedCostUsd: estimateCostUsd({ aiProvider, aiModel, inputTokens, outputTokens, reported: payload.estimatedCostUsd }),
     externalEventId,
     occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : new Date(),
   };
@@ -77,7 +96,7 @@ function normalizeAggregate(agg) {
 
 async function aggregateSince(restaurantId, from) {
   const agg = await prisma.botUsageEvent.aggregate({
-    where: { restaurantId, occurredAt: { gte: from } },
+    where: { restaurantId, source: 'WHATSAPP_ASSISTANT', occurredAt: { gte: from } },
     _count: { _all: true },
     _sum: {
       inboundMessages: true,
@@ -103,13 +122,13 @@ async function computeBotUsageMetrics(restaurantId) {
     aggregateSince(restaurantId, d30),
     prisma.botUsageEvent.groupBy({
       by: ['transport'],
-      where: { restaurantId, occurredAt: { gte: d30 } },
+      where: { restaurantId, source: 'WHATSAPP_ASSISTANT', occurredAt: { gte: d30 } },
       _count: { _all: true },
       _sum: { inboundMessages: true, outboundMessages: true },
     }),
     prisma.botUsageEvent.groupBy({
       by: ['aiProvider', 'aiModel'],
-      where: { restaurantId, occurredAt: { gte: d30 }, aiRequests: { gt: 0 } },
+      where: { restaurantId, source: 'WHATSAPP_ASSISTANT', occurredAt: { gte: d30 }, aiRequests: { gt: 0 } },
       _count: { _all: true },
       _sum: { aiRequests: true, totalTokens: true, estimatedCostUsd: true },
     }),
