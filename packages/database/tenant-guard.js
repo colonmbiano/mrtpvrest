@@ -36,6 +36,7 @@ const tenantStore = new AsyncLocalStorage();
 const SCOPED_MODELS = new Set([
   'AccessLog',
   'BulkPromo',
+  'BotUsageEvent',
   'Category',
   'Counter',
   'Coupon',

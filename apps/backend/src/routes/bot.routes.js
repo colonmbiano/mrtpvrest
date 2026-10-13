@@ -204,6 +204,24 @@ router.get('/config', (req, res) => {
   });
 });
 
+// ── Telemetría de consumo (worker → backend) ────────────────────────────────
+// El worker reporta el uso DESPUÉS de procesar el mensaje/llamada de IA.
+// externalEventId debe ser estable por llamada para hacer el endpoint idempotente.
+router.post('/usage', async (req, res) => {
+  try {
+    const { recordBotUsage } = require('../services/bot-usage.service');
+    const event = await recordBotUsage(req.restaurantId, req.body || {});
+    res.status(event?.duplicate ? 200 : 201).json({
+      ok: true,
+      duplicate: !!event?.duplicate,
+      id: event?.id || null,
+    });
+  } catch (e) {
+    console.error('[bot] usage error:', e?.message || e);
+    res.status(500).json({ error: 'No se pudo registrar el consumo del bot' });
+  }
+});
+
 // ── Agregar items a una orden (ADD_TO_ORDER) ─────────────────────────────────
 // Mueve al BACKEND lo que hoy hace orderProcessor.addItemsToOrder (el único punto
 // que forja un JWT y necesita JWT_SECRET). Así el bot deja de necesitar el secreto.

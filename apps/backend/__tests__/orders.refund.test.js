@@ -6,7 +6,9 @@
 // DriverCashMovement EXPENSE del repartidor) en la misma $transaction.
 
 jest.mock('@mrtpvrest/database', () => {
+  const stockMovement = { findMany: jest.fn(async () => []) };
   const tx = {
+    stockMovement,
     order: { updateMany: jest.fn(), findUnique: jest.fn() },
     driverCashMovement: { create: jest.fn() },
     cashShift: { findFirst: jest.fn() },
@@ -15,8 +17,8 @@ jest.mock('@mrtpvrest/database', () => {
   return {
     prisma: {
       order: { findFirst: jest.fn() },
-      // restoreInventoryForCancelledOrder lee de aquí; [] ⇒ no-op.
-      stockMovement: { findMany: jest.fn(async () => []) },
+      // El restock usa el mismo modelo dentro de la transacción bloqueada.
+      stockMovement,
       $transaction: jest.fn(async (fn) => fn(tx)),
       __tx: tx,
     },

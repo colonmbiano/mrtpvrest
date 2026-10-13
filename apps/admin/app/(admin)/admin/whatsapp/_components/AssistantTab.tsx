@@ -258,6 +258,31 @@ export default function AssistantTab() {
         <StatTile icon={Receipt} value={formatMoney(b?.avgTicket ?? 0)} label="Ticket prom." />
       </div>
 
+      {/* Consumo técnico — aparece en cuanto el worker empiece a reportar /api/bot/usage. */}
+      <Card className="space-y-3 p-5">
+        <SectionHead title="Consumo y costo del asistente" />
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <StatTile
+            icon={MessageSquare}
+            value={String((metrics?.usage?.last7d.inboundMessages ?? 0) + (metrics?.usage?.last7d.outboundMessages ?? 0))}
+            label="Mensajes 7d"
+          />
+          <StatTile icon={Sparkles} value={String(metrics?.usage?.last7d.aiRequests ?? 0)} label="Llamadas IA 7d" />
+          <StatTile icon={TrendingUp} value={(metrics?.usage?.last7d.totalTokens ?? 0).toLocaleString("es-MX")} label="Tokens 7d" />
+          <StatTile
+            icon={Wallet}
+            value={`${(metrics?.usage?.last30d.estimatedCostUsd ?? 0).toFixed(4)} USD`}
+            label="Costo IA 30d"
+          />
+        </div>
+        {(metrics?.usage?.last30d.events ?? 0) === 0 && (
+          <p className="text-xs text-tx-mut">
+            Aún no hay telemetría. El worker debe reportar cada llamada a <span className="font-mono">/api/bot/usage</span>;
+            hasta entonces no se mostrará un costo inventado.
+          </p>
+        )}
+      </Card>
+
       {/* Freno de saturación — el bot deja de aceptar pedidos con la cocina al tope */}
       <Card className="space-y-4 p-5">
         <div className="flex items-center gap-3">

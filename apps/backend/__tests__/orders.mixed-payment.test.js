@@ -1,5 +1,10 @@
 'use strict';
 
+jest.mock('../src/services/order-inventory.service', () => ({
+  ...jest.requireActual('../src/services/order-inventory.service'),
+  consumePaidOrder: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Tests de PUT /api/orders/:id/payment con COBRO MIXTO (split-tender): la orden
 // se paga con >1 método a la vez. El servidor re-valida que los renglones cuadren
 // con el total REAL de la orden y persiste un payment_transactions por método

@@ -1691,6 +1691,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       {payOrder && !isLoanMode && (
         <PaymentModal
           isOpen={!!payOrder}
+          orderId={payOrder.id}
           onClose={() => setPayOrder(null)}
           orderNumber={payOrder.orderNumber || String(payOrder.id).slice(-6).toUpperCase()}
           tableName={payOrder.table?.name || payOrder.tableNumber || undefined}

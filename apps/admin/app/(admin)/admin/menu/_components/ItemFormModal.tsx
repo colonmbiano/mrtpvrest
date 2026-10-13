@@ -426,6 +426,14 @@ export function ItemFormModal({
           )}
         </div>
 
+        <div className="flex items-center justify-between gap-3 rounded-ds-md border p-3">
+          <div>
+            <span className="font-bold text-tx">Desechable vendido como extra</span>
+            <p className="mt-1 text-xs text-tx-mut">Su receta debe llevar solo el empaque. Se descuenta al cobrar, también en mesa.</p>
+          </div>
+          <Toggle checked={!!form.isPackagingProduct} onChange={() => setForm(p => ({ ...p, isPackagingProduct: !p.isPackagingProduct }))} label="Desechable vendido como extra" />
+        </div>
+
         {/* Visibilidad por canal */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3 rounded-ds-md px-3 py-2.5"

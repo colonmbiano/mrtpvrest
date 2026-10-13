@@ -20,6 +20,7 @@ Reglas:
 - Para preguntas sobre el conteo, corte o caja de un repartidor (p. ej. "revísame a Pablo de hoy"), usa get_driver_cash_report. El saldo pendiente de corte es el efectivo que el repartidor debe entregar en caja; distínguelo de los pedidos aún sin cobrar.
 - Para ver qué productos están bajando o subiendo en ventas (tendencias), usa get_product_trends.
 - Para predecir ventas futuras o estimar lo que se venderá la próxima semana, usa predict_sales.
+- Para consumo de ingredientes, kilos usados o qué comprar, usa get_weekly_purchasing_report. Reporta siempre los faltantes de receta/costo antes de recomendar compra.
 - Si el usuario saluda o pregunta algo fuera de alcance, responde breve sin llamar herramientas.
 - Presenta resultados claros: viñetas para listas, moneda en pesos con símbolo $ y agrupación de miles, y resalta la cifra principal con **markdown**.
 - Si una herramienta devuelve lista vacía, di honestamente "no hay datos" y sugiere la acción (p. ej. "aún no hay ventas hoy" o "ningún ingrediente por debajo del mínimo").
@@ -257,6 +258,31 @@ const tools = [
             type: 'string',
             enum: ['HOY', 'AYER', '7D', '30D', '90D', 'AÑO', 'HIST'],
             description: 'Filtro de fecha.',
+          },
+        },
+        required: ['period'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_weekly_purchasing_report',
+      description: 'Reporte operativo de compras basado en ventas pagadas y consumo de inventario por receta. Devuelve ventas, productos, ingredientes consumidos, equivalentes en kg/l cuando aplica, stock, cobertura, sugerencia de compra y advertencias por recetas/costos incompletos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: {
+            type: 'string',
+            enum: ['7D', '30D'],
+            description: 'Ventana histórica para calcular consumo promedio. 7D es la recomendada para el reporte semanal.',
+          },
+          safetyDays: {
+            type: ['integer', 'null'],
+            minimum: 1,
+            maximum: 21,
+            description: 'Días extra de cobertura después del lead time del proveedor. Default 7.',
           },
         },
         required: ['period'],
@@ -559,6 +585,180 @@ async function execTool(name, args, { restaurantId, locationId }) {
 
     summary.totalRevenue = Math.round(summary.totalRevenue);
     return summary;
+  }
+
+  if (name === 'get_weekly_purchasing_report') {
+    if (!locationId) return { error: 'Sin sucursal activa. Selecciona una sucursal para calcular consumo y compras.' };
+
+    const period = args.period === '30D' ? '30D' : '7D';
+    const days = period === '30D' ? 30 : 7;
+    const safetyDays = Math.min(Math.max(parseInt(args.safetyDays, 10) || 7, 1), 21);
+    const dateFilter = buildDateFilter(period);
+    const from = dateFilter.gte;
+    const to = dateFilter.lt;
+
+    const orderScope = {
+      restaurantId,
+      locationId,
+      paymentStatus: 'PAID',
+      paidAt: { gte: from, ...(to ? { lt: to } : {}) },
+    };
+
+    const [salesAgg, soldRows, soldByMenu, saleMovements] = await Promise.all([
+      prisma.order.aggregate({
+        where: orderScope,
+        _sum: { total: true },
+        _count: { id: true },
+      }),
+      prisma.orderItem.groupBy({
+        by: ['name'],
+        where: { order: orderScope },
+        _sum: { quantity: true, subtotal: true },
+        orderBy: { _sum: { quantity: 'desc' } },
+        take: 20,
+      }),
+      prisma.orderItem.groupBy({
+        by: ['menuItemId'],
+        where: { order: orderScope, menuItemId: { not: null } },
+        _sum: { quantity: true },
+      }),
+      prisma.stockMovement.groupBy({
+        by: ['ingredientId'],
+        where: {
+          locationId,
+          reason: 'SALE',
+          createdAt: { gte: from, ...(to ? { lt: to } : {}) },
+        },
+        _sum: { delta: true },
+      }),
+    ]);
+
+    const soldMenuIds = soldByMenu.map((r) => r.menuItemId).filter(Boolean);
+    const consumedIds = saleMovements.map((r) => r.ingredientId).filter(Boolean);
+
+    const [soldMenuItems, ingredients] = await Promise.all([
+      soldMenuIds.length
+        ? prisma.menuItem.findMany({
+            where: { restaurantId, id: { in: soldMenuIds } },
+            select: {
+              id: true,
+              name: true,
+              recipeItems: { select: { id: true }, take: 1 },
+              recipes: { select: { id: true }, take: 1 },
+            },
+          })
+        : [],
+      consumedIds.length
+        ? prisma.ingredient.findMany({
+            where: { restaurantId, locationId, id: { in: consumedIds } },
+            select: {
+              id: true, name: true, stock: true, minStock: true,
+              unit: true, baseUnit: true, cost: true, purchaseCost: true,
+              conversionFactor: true, purchaseUnit: true,
+              supplier: {
+                select: { id: true, name: true, leadTimeDays: true, minOrderAmount: true },
+              },
+            },
+          })
+        : [],
+    ]);
+
+    const soldQtyByMenu = new Map(soldByMenu.map((r) => [r.menuItemId, Number(r._sum.quantity || 0)]));
+    const soldWithoutRecipe = soldMenuItems
+      .filter((mi) => (mi.recipeItems?.length || 0) === 0 && (mi.recipes?.length || 0) === 0)
+      .map((mi) => ({ name: mi.name, unitsSold: soldQtyByMenu.get(mi.id) || 0 }))
+      .sort((a, b) => b.unitsSold - a.unitsSold);
+
+    const ingById = new Map(ingredients.map((i) => [i.id, i]));
+    const consumption = [];
+    let estimatedPurchaseTotal = 0;
+    const zeroCostIngredients = [];
+
+    for (const row of saleMovements) {
+      const ing = ingById.get(row.ingredientId);
+      if (!ing) continue;
+      const qtyConsumed = Math.max(0, -Number(row._sum.delta || 0));
+      if (qtyConsumed <= 0) continue;
+
+      const dailyAvg = qtyConsumed / days;
+      const leadTimeDays = Number(ing.supplier?.leadTimeDays ?? 3);
+      const stock = Number(ing.stock || 0);
+      const targetDays = leadTimeDays + safetyDays;
+      const qtySuggestedBase = Math.max(0, dailyAvg * targetDays - stock);
+      const factor = Number(ing.conversionFactor) || 1;
+      const qtySuggestedPurchase = qtySuggestedBase > 0
+        ? Math.max(1, Math.ceil(qtySuggestedBase / factor))
+        : 0;
+      const unitPrice = Number(ing.purchaseCost ?? (Number(ing.cost || 0) * factor)) || 0;
+      const lineTotal = qtySuggestedPurchase * unitPrice;
+      const daysOfStock = dailyAvg > 0 ? stock / dailyAvg : null;
+
+      if (Number(ing.cost || 0) <= 0) zeroCostIngredients.push(ing.name);
+      estimatedPurchaseTotal += lineTotal;
+
+      const base = String(ing.baseUnit || ing.unit || '').toUpperCase();
+      let equivalent = null;
+      if (base === 'GRAM' || base === 'G' || base === 'GRAMO' || base === 'GRAMOS') {
+        equivalent = { value: qtyConsumed / 1000, unit: 'kg' };
+      } else if (base === 'ML' || base === 'MILLILITER' || base === 'MILILITRO' || base === 'MILILITROS') {
+        equivalent = { value: qtyConsumed / 1000, unit: 'L' };
+      } else if (base === 'KG' || base === 'KILOGRAM' || base === 'KILOGRAMO') {
+        equivalent = { value: qtyConsumed, unit: 'kg' };
+      } else if (base === 'L' || base === 'LITER' || base === 'LITRO') {
+        equivalent = { value: qtyConsumed, unit: 'L' };
+      }
+
+      consumption.push({
+        ingredient: ing.name,
+        baseUnit: ing.baseUnit || ing.unit,
+        consumed: qtyConsumed,
+        equivalent,
+        dailyAvg,
+        stock,
+        daysOfStock,
+        supplier: ing.supplier?.name || null,
+        leadTimeDays,
+        urgency: daysOfStock != null && daysOfStock < leadTimeDays ? 'URGENTE'
+          : qtySuggestedPurchase > 0 ? 'COMPRAR' : 'OK',
+        qtySuggestedBase,
+        qtySuggestedPurchase,
+        purchaseUnit: ing.purchaseUnit || ing.baseUnit || ing.unit,
+        unitPrice,
+        estimatedLineTotal: lineTotal,
+      });
+    }
+
+    consumption.sort((a, b) => {
+      const rank = { URGENTE: 0, COMPRAR: 1, OK: 2 };
+      return (rank[a.urgency] - rank[b.urgency]) || (b.estimatedLineTotal - a.estimatedLineTotal);
+    });
+
+    return {
+      period,
+      days,
+      generatedAt: new Date().toISOString(),
+      sales: {
+        paidOrders: salesAgg._count.id || 0,
+        revenue: Math.round(Number(salesAgg._sum.total || 0)),
+        topProducts: soldRows.map((r) => ({
+          name: r.name,
+          quantity: Number(r._sum.quantity || 0),
+          revenue: Math.round(Number(r._sum.subtotal || 0)),
+        })),
+      },
+      ingredientConsumption: consumption,
+      purchasing: {
+        safetyDays,
+        estimatedTotal: Math.round(estimatedPurchaseTotal * 100) / 100,
+        suggestedItems: consumption.filter((r) => r.qtySuggestedPurchase > 0).length,
+        urgentItems: consumption.filter((r) => r.urgency === 'URGENTE').length,
+      },
+      dataQuality: {
+        soldProductsWithoutRecipe: soldWithoutRecipe,
+        zeroCostIngredients: [...new Set(zeroCostIngredients)].sort(),
+        note: 'El consumo usa movimientos SALE registrados por las recetas al cobrar. Productos vendidos sin receta o ingredientes con costo 0 hacen el reporte incompleto y se señalan aquí.',
+      },
+    };
   }
 
   if (name === 'get_inventory_alerts') {
