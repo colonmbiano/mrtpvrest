@@ -688,6 +688,7 @@ model MenuItem {
   preparationTime Int      @default(15)
   taxCategoryId   String?
 
+  modifierConsumption ModifierIngredient[]
   modifierGroups ModifierGroup[]
   orderItems     OrderItem[]
   variants       MenuItemVariant[]
@@ -3578,6 +3579,9 @@ model Recipe {
 // "Papas Gajo Extra → 150g papa" cubre el extra en todos los platillos.
 // Un modificador puede consumir varios insumos/subrecetas (varias filas).
 model ModifierIngredient {
+  // NULL preserves the restaurant-wide recipe; a product recipe overrides it.
+  menuItemId     String?
+  menuItem       MenuItem?          @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
   id             String             @id @default(cuid())
   restaurantId   String
   restaurant     Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
@@ -3592,6 +3596,7 @@ model ModifierIngredient {
   createdAt      DateTime           @default(now())
 
   @@index([restaurantId, name])
+  @@index([restaurantId, menuItemId, name])
   @@map("modifier_ingredients")
 }
 

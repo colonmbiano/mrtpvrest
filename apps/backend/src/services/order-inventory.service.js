@@ -1,3 +1,4 @@
+const { resolveModifierIngredients } = require('../lib/modifier-consumption');
 const { parseVariantsFromItem } = require('../lib/parse-variant');
 const { usesPackaging } = require('../lib/order-packaging');
 
@@ -149,41 +150,13 @@ async function resolveOrderLineItems(prisma, oi, restaurantId) {
         recipeIdSnap = r.recipeIdSnap;
       }
 
-      // Consumo por MODIFICADORES (extras): cada modificador de la línea puede
-      // consumir insumos (Papas Gajo Extra → 150g papa, etc.). Se mapea por
-      // NOMBRE a nivel restaurante (order_item_modifiers guarda el nombre). El
-      // extra aplica por unidad del platillo, igual que la receta.
       const oiModifiers = await prisma.orderItemModifier.findMany({
         where: { orderItemId: oi.id },
-        select: { name: true },
+        select: { name: true, modifierId: true },
       });
-      if (oiModifiers.length > 0) {
-        const names = [...new Set(oiModifiers.map((m) => m.name))];
-        const modMaps = await prisma.modifierIngredient.findMany({
-          where: { restaurantId, name: { in: names } },
-          include: { ingredient: true },
-        });
-        const byName = new Map();
-        for (const mm of modMaps) {
-          if (!byName.has(mm.name)) byName.set(mm.name, []);
-          byName.get(mm.name).push(mm);
-        }
-        for (const om of oiModifiers) {
-          const maps = byName.get(om.name) || [];
-          for (const mm of maps) {
-            const wf = 1 + (Number(mm.wastagePercent || 0) / 100);
-            const q = Number(mm.quantity) * wf;
-            if (mm.ingredientId && mm.ingredient) {
-              flatItems.push({ ingredient: mm.ingredient, qtyToConsumePerUnit: q });
-            } else if (mm.subRecipeId) {
-              const expanded = await expandSubRecipeToIngredients(prisma, mm.subRecipeId, q, restaurantId);
-              for (const exp of expanded) {
-                flatItems.push({ ingredient: exp.ingredient, qtyToConsumePerUnit: exp.qtyToConsume });
-              }
-            }
-          }
-        }
-      }
+      flatItems.push(...await resolveModifierIngredients(
+        prisma, restaurantId, oi.menuItemId, oiModifiers, expandSubRecipeToIngredients,
+      ));
 
   return { flatItems, recipeIdSnap };
 }
@@ -326,24 +299,10 @@ async function assertStockAvailable(prisma, resolvedItems, restaurantId, orderTy
       for (const fi of flatItems) addNeed(fi.ingredient, fi.qtyToConsumePerUnit * multiplier);
     }
 
-    // Modificadores con consumo (mapeados por nombre).
-    const modNames = [...new Set((line._modifiers || []).map((m) => m.name).filter(Boolean))];
-    if (modNames.length > 0) {
-      const modMaps = await prisma.modifierIngredient.findMany({
-        where: { restaurantId, name: { in: modNames } },
-        include: { ingredient: true },
-      });
-      for (const mm of modMaps) {
-        const wf = 1 + (Number(mm.wastagePercent || 0) / 100);
-        const q = Number(mm.quantity) * wf;
-        if (mm.ingredientId && mm.ingredient) {
-          addNeed(mm.ingredient, q * multiplier);
-        } else if (mm.subRecipeId) {
-          const expanded = await expandSubRecipeToIngredients(prisma, mm.subRecipeId, q, restaurantId);
-          for (const exp of expanded) addNeed(exp.ingredient, exp.qtyToConsume * multiplier);
-        }
-      }
-    }
+    const modifierItems = await resolveModifierIngredients(
+      prisma, restaurantId, line.menuItemId, line._modifiers, expandSubRecipeToIngredients,
+    );
+    for (const fi of modifierItems) addNeed(fi.ingredient, fi.qtyToConsumePerUnit * multiplier);
   }
 
   if (needByIngredient.size === 0) return;

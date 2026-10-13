@@ -1,3 +1,4 @@
+const { selectModifierMappings } = require('../lib/modifier-consumption');
 // recipes.routes.js
 //
 // CRUD para el módulo de costeo/recetario:
@@ -81,6 +82,7 @@ router.get('/by-menu-item/:menuItemId', requireAdmin, async (req, res) => {
     const variantId = req.query.variantId ? String(req.query.variantId) : null;
     const recipe = await prisma.recipe.findFirst({
       where: { menuItemId: req.params.menuItemId, restaurantId, variantId },
+      orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }, { id: 'asc' }],
       include: {
         menuItem: { select: { id: true, name: true, price: true, imageUrl: true } },
         items: {
@@ -183,7 +185,10 @@ router.post('/', requireAdmin, async (req, res) => {
 
     const recipe = await prisma.$transaction(async (tx) => {
       // Upsert manual por (menuItemId, variantId). variantId NULL = receta base.
-      const existing = await tx.recipe.findFirst({ where: { menuItemId, variantId: variant } });
+      const existing = await tx.recipe.findFirst({
+        where: { menuItemId, restaurantId, variantId: variant },
+        orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }, { id: 'asc' }],
+      });
       const data = {
         restaurantId,
         marginErrorPct: Number(marginErrorPct) || 0,
@@ -221,13 +226,17 @@ router.get('/modifiers', requireAdmin, async (req, res) => {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
 
+    const menuItemId = req.query.menuItemId ? String(req.query.menuItemId) : null;
+    if (menuItemId && !await prisma.menuItem.findFirst({ where: { id: menuItemId, restaurantId } })) {
+      return res.status(404).json({ error: 'MenuItem no encontrado' });
+    }
     const [mods, maps] = await Promise.all([
       prisma.modifier.findMany({
-        where: { group: { menuItem: { restaurantId } } },
+        where: { group: { ...(menuItemId ? { menuItemId } : {}), menuItem: { restaurantId } } },
         select: { name: true, priceAdd: true, isAvailable: true },
       }),
       prisma.modifierIngredient.findMany({
-        where: { restaurantId },
+        where: { restaurantId, OR: [{ menuItemId: null }, ...(menuItemId ? [{ menuItemId }] : [])] },
         include: {
           ingredient: { select: { id: true, name: true, baseUnit: true, cost: true } },
           subRecipe: { select: { id: true, name: true, yieldUnit: true } },
@@ -245,14 +254,12 @@ router.get('/modifiers', requireAdmin, async (req, res) => {
       e.count += 1;
       nameMap.set(m.name, e);
     }
-    const mapsByName = new Map();
-    for (const mm of maps) {
-      if (!mapsByName.has(mm.name)) mapsByName.set(mm.name, []);
-      mapsByName.get(mm.name).push(mm);
-    }
     const result = [...nameMap.values()]
       .sort((a, b) => b.priceAdd - a.priceAdd || a.name.localeCompare(b.name))
-      .map((n) => ({ ...n, items: mapsByName.get(n.name) || [] }));
+      .map((n) => {
+        const items = selectModifierMappings(maps, menuItemId, n.name);
+        return { ...n, menuItemId, inherited: !!menuItemId && !items.some(i => i.menuItemId === menuItemId), items };
+      });
 
     res.json(result);
   } catch (e) {
@@ -262,13 +269,14 @@ router.get('/modifiers', requireAdmin, async (req, res) => {
 });
 
 // POST /api/recipes/modifiers — define el consumo de un modificador (por nombre).
-// Body: { name, items: [{ ingredientId? | subRecipeId?, quantity, unit, wastagePercent? }] }
-// Reemplaza por completo el mapeo de ese nombre.
+// Body: { name, menuItemId? (null = global), items: [{ ingredientId? | subRecipeId?, quantity, unit, wastagePercent? }] }
+// Reemplaza solo el mapeo de ese nombre dentro del producto o ámbito global.
 router.post('/modifiers', requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
-    const { name, items = [] } = req.body || {};
+    const { name, items = [], menuItemId = null } = req.body || {};
+    if (menuItemId !== null && (typeof menuItemId !== 'string' || !menuItemId.trim())) return res.status(400).json({ error: 'menuItemId inválido' });
     if (!name || !String(name).trim()) return res.status(400).json({ error: 'name requerido' });
     // Los "Sin ..." (quitar ingredientes) son gratis y NO descuentan inventario:
     // prohibido mapearles insumos (evita descuento fantasma por colisión de nombre).
@@ -279,12 +287,33 @@ router.post('/modifiers', requireAdmin, async (req, res) => {
     const normalized = validateItems(items);
     if (normalized.error) return res.status(400).json({ error: normalized.error });
 
+    if (menuItemId && !await prisma.modifier.findFirst({
+      where: { name: String(name), group: { menuItemId, menuItem: { restaurantId } } },
+    })) return res.status(404).json({ error: 'Modificador no encontrado en este platillo' });
+    if (normalized.data.some(i => !Number.isFinite(i.wastagePercent) || i.wastagePercent < 0)) {
+      return res.status(400).json({ error: 'Merma inválida' });
+    }
+    const ingredientIds = [...new Set(normalized.data.map(i => i.ingredientId).filter(Boolean))];
+    const subRecipeIds = [...new Set(normalized.data.map(i => i.subRecipeId).filter(Boolean))];
+    const [ingredients, subRecipes] = await Promise.all([
+      ingredientIds.length ? prisma.ingredient.findMany({ where: { restaurantId, id: { in: ingredientIds } }, select: { id: true, baseUnit: true } }) : [],
+      subRecipeIds.length ? prisma.subRecipe.findMany({ where: { restaurantId, id: { in: subRecipeIds } }, select: { id: true, yieldUnit: true } }) : [],
+    ]);
+    if (ingredients.length !== ingredientIds.length || subRecipes.length !== subRecipeIds.length) {
+      return res.status(400).json({ error: 'Insumo o subreceta fuera del restaurante' });
+    }
+    if (normalized.data.some(i => i.ingredientId
+      ? ingredients.find(v => v.id === i.ingredientId)?.baseUnit !== i.unit
+      : subRecipes.find(v => v.id === i.subRecipeId)?.yieldUnit !== i.unit)) {
+      return res.status(400).json({ error: 'La unidad debe coincidir con el insumo o rendimiento de la subreceta' });
+    }
     await prisma.$transaction(async (tx) => {
-      await tx.modifierIngredient.deleteMany({ where: { restaurantId, name: String(name) } });
+      await tx.modifierIngredient.deleteMany({ where: { restaurantId, menuItemId, name: String(name) } });
       if (normalized.data.length > 0) {
         await tx.modifierIngredient.createMany({
           data: normalized.data.map((it) => ({
             restaurantId,
+            menuItemId,
             name: String(name),
             ingredientId: it.ingredientId,
             subRecipeId: it.subRecipeId,
