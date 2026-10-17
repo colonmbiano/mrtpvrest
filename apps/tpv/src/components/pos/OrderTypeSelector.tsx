@@ -34,6 +34,7 @@ import {
   Zap,
 } from "lucide-react";
 import { hapticMedium } from "@/lib/haptics";
+import { PAY_FILTERS, matchesPayFilter } from "@/lib/paid-order-filters";
 import { ORDER_TYPE_ACTION, ORDER_TYPE_BADGE, ORDER_TYPE_SHORT, type OrderTypeId as OrderType } from "@/lib/orderTypes";
 import UserBadge from "@/components/UserBadge";
 
@@ -315,6 +316,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   const paidMode = mode === "paid";
   const [menuOpen, setMenuOpen] = useState(false);
   const [filter, setFilter] = useState<"ALL" | OrderType>("ALL");
+  const [payFilter, setPayFilter] = useState("Todos");
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Selección múltiple para juntar cuentas / asignar repartidor SIN abrir un
@@ -409,10 +411,12 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
   const visibleAccounts = useMemo(
     () =>
-      filter === "ALL"
-        ? openAccounts
-        : openAccounts.filter((a) => a.rawType === filter),
-    [openAccounts, filter],
+      openAccounts.filter(
+        (a) =>
+          (filter === "ALL" || a.rawType === filter) &&
+          (!paidMode || matchesPayFilter(a, payFilter)),
+      ),
+    [openAccounts, filter, paidMode, payFilter],
   );
 
   useEffect(() => {
@@ -653,16 +657,16 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <p
                 className="text-[10px] font-semibold uppercase tracking-[0.14em]"
                 style={{ color: paidMode ? "#88D66C" : "var(--brand)" }}
               >
                 {paidMode
-                  ? `Cobradas · último mes · ${openAccounts.length}`
+                  ? `Cobradas · último mes · ${visibleAccounts.length} de ${openAccounts.length}`
                   : `Cuentas abiertas · ${openAccounts.length}`}
               </p>
-              <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+              <div role="group" aria-label="Tipo de pedido" className="flex gap-1.5 overflow-x-auto scrollbar-hide">
                 {FILTERS.map((f) => {
                   const active = filter === f.key;
                   return (
@@ -670,6 +674,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       key={f.key}
                       type="button"
                       onClick={() => setFilter(f.key)}
+                      aria-pressed={active}
                       className={`shrink-0 rounded-lg px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] transition-all active:scale-95 ${
                         active
                           ? "bg-[var(--brand)] text-[var(--brand-fg)]"
@@ -682,6 +687,34 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                 })}
               </div>
             </div>
+
+            {paidMode && (
+              <div role="group" aria-label="Tipo de pago" className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/40">
+                  Pago
+                </span>
+                <div className="flex min-w-0 gap-1.5 overflow-x-auto scrollbar-hide">
+                  {PAY_FILTERS.map((p) => {
+                    const active = payFilter === p.key;
+                    return (
+                      <button
+                        key={p.key}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => setPayFilter(p.key)}
+                        className={`shrink-0 min-h-[44px] rounded-lg border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] transition-all active:scale-95 ${
+                          active
+                            ? "border-[#88D66C]/40 bg-[#88D66C]/20 text-[#88D66C]"
+                            : "border-white/10 bg-white/5 text-white/55"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Selección múltiple EN ESTA pantalla: juntar cuentas / asignar
                 repartidor sin abrir un cajón aparte. */}
@@ -718,7 +751,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   {paidMode
                     ? openAccounts.length === 0
                       ? "Sin tickets cobrados este mes"
-                      : "Sin cobrados de este tipo"
+                      : "Sin cobrados con estos filtros"
                     : openAccounts.length === 0
                       ? "No hay cuentas abiertas"
                       : "Sin cuentas de este tipo"}
