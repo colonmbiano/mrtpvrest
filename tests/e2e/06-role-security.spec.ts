@@ -10,6 +10,9 @@ import { injectTPVDevice, enterPIN, getTPVCookie } from './helpers';
  *       /cierre → CASHIER, ADMIN, OWNER, MANAGER, SUPER_ADMIN (sin WAITER/KITCHEN)
  *     Un rol no autorizado rebota a /hub.
  *   - /kds ya NO existe en el TPV: el KDS es una app independiente (apps/kds).
+ *   - Una recarga completa exige PIN de nuevo (SyncInitializer). Las rutas
+ *     permitidas se recorren con la UI; las prohibidas se consultan sin seguir
+ *     redirects para comprobar el middleware sin destruir la sesión del SPA.
  * El backend sigue siendo la autoridad real (requireRole por endpoint);
  * esto valida la defensa en profundidad del front.
  */
@@ -49,16 +52,15 @@ test.describe('Validación de Roles (Seguridad)', () => {
     test('Puede operar el POS (toma de pedidos)', async ({ page }) => {
       expect(await getTPVCookie(page, 'tpv-role')).toBe('WAITER');
 
-      await page.goto(`${TPV_URL}/pos/order-type`);
-      await expect(page).toHaveURL(/\/pos\//, { timeout: 10_000 });
+      await expect(page).toHaveURL(/\/pos\/order-type\/?$/, { timeout: 20_000 });
+      await expect(page.getByRole('heading', { name: 'Nueva venta' })).toBeVisible();
     });
 
     test('NO puede entrar al cierre de caja — rebota a /hub', async ({ page }) => {
-      await page.goto(`${TPV_URL}/cierre`);
-
-      // El middleware lo expulsa de /cierre; el Hub puede re-enrutarlo a /pos.
-      await page.waitForURL((url) => !url.pathname.startsWith('/cierre'), { timeout: 10_000 });
-      await expect(page).not.toHaveURL(/\/cierre/);
+      const response = await page.request.get(`${TPV_URL}/cierre/`, { maxRedirects: 0 });
+      expect(response.status()).toBe(307);
+      expect(new URL(response.headers().location).pathname).toBe('/hub');
+      expect(await getTPVCookie(page, 'tpv-role')).toBe('WAITER');
     });
   });
 
@@ -71,13 +73,16 @@ test.describe('Validación de Roles (Seguridad)', () => {
     test('Puede operar el POS', async ({ page }) => {
       expect(await getTPVCookie(page, 'tpv-role')).toBe('CASHIER');
 
-      await page.goto(`${TPV_URL}/pos/order-type`);
-      await expect(page).toHaveURL(/\/pos\//, { timeout: 10_000 });
+      await expect(page).toHaveURL(/\/pos\/order-type\/?$/, { timeout: 20_000 });
+      await expect(page.getByRole('heading', { name: 'Nueva venta' })).toBeVisible();
     });
 
     test('Puede entrar al cierre de caja', async ({ page }) => {
-      await page.goto(`${TPV_URL}/cierre`);
+      await expect(page).toHaveURL(/\/pos\/order-type\/?$/, { timeout: 20_000 });
+      await page.getByRole('button', { name: 'Menú', exact: true }).click();
+      await page.getByRole('button', { name: 'Corte de caja', exact: true }).click();
       await expect(page).toHaveURL(/\/cierre/, { timeout: 10_000 });
+      expect(await getTPVCookie(page, 'tpv-session-active')).toBe('true');
     });
   });
 
@@ -88,11 +93,9 @@ test.describe('Validación de Roles (Seguridad)', () => {
 
       expect(await getTPVCookie(page, 'tpv-role')).toBe('KITCHEN');
 
-      // El Hub re-intenta mandarlo a /pos y el middleware lo rebota en
-      // ciclo — goto puede ser interrumpido por esas navegaciones.
-      await page.goto(`${TPV_URL}/pos/menu`).catch(() => {});
-      await page.waitForURL((url) => !url.pathname.startsWith('/pos'), { timeout: 10_000 });
-      await expect(page).not.toHaveURL(/\/pos/);
+      const response = await page.request.get(`${TPV_URL}/pos/menu/`, { maxRedirects: 0 });
+      expect(response.status()).toBe(307);
+      expect(new URL(response.headers().location).pathname).toBe('/hub');
     });
   });
 
@@ -101,9 +104,11 @@ test.describe('Validación de Roles (Seguridad)', () => {
       await injectTPVDevice(page);
       await enterPIN(page, CASHIER_PIN);
 
-      // /hub?force=true muestra el selector de workspaces con "Cerrar sesión"
-      await page.goto(`${TPV_URL}/hub?force=true`);
-      await page.getByRole('button', { name: /cerrar sesión/i }).first().click();
+      // Usar el cierre real de la sesión desde la pantalla operativa. Un solo
+      // workspace ya no muestra el selector de /hub, ni siquiera con force.
+      await expect(page).toHaveURL(/\/pos\/order-type\/?$/, { timeout: 20_000 });
+      await page.getByRole('button', { name: 'Menú', exact: true }).click();
+      await page.getByRole('button', { name: 'Cambiar empleado', exact: true }).click();
 
       await expect(page).toHaveURL(/\/locked/, { timeout: 10_000 });
       expect(await getTPVCookie(page, 'tpv-session-active')).toBeFalsy();
@@ -113,5 +118,19 @@ test.describe('Validación de Roles (Seguridad)', () => {
       await page.goto(`${TPV_URL}/pos/menu`);
       await expect(page).toHaveURL(/\/locked/, { timeout: 10_000 });
     });
+  });
+
+  test('Recargar una sesión exige PIN y limpia las cookies de empleado', async ({ page }) => {
+    await injectTPVDevice(page);
+    await enterPIN(page, CASHIER_PIN);
+    await expect(page).toHaveURL(/\/pos\/order-type\/?$/, { timeout: 20_000 });
+    await expect(page.getByRole('heading', { name: 'Nueva venta' })).toBeVisible();
+
+    await page.reload();
+
+    await expect(page).toHaveURL(/\/locked/, { timeout: 10_000 });
+    expect(await getTPVCookie(page, 'tpv-session-active')).toBeFalsy();
+    expect(await getTPVCookie(page, 'tpv-role')).toBeFalsy();
+    await expect(page.getByRole('button', { name: '1', exact: true })).toBeVisible();
   });
 });
