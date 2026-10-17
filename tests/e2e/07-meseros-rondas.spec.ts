@@ -15,25 +15,17 @@ import { injectTPVDevice, enterPIN } from './helpers';
  *   - CashShift abierto (requireActiveShift gatea POST /api/orders/tpv).
  */
 
-const TPV_URL = process.env.TPV_URL ?? 'http://localhost:3005';
 const WAITER_PIN = process.env.WAITER_PIN ?? '1111';
 
 test.describe('Meseros — rondas y cuenta', () => {
   test.beforeEach(async ({ page }) => {
     await injectTPVDevice(page);
-    await page.goto(TPV_URL);
+    // La comandera lleva al mesero al salón tras el PIN. Los page.goto()
+    // posteriores al login recargaban el documento y activaban el bloqueo
+    // intencional de sesión, antes de que comenzara el flujo de rondas.
+    await page.evaluate(() => localStorage.setItem('deviceRole', 'WAITER'));
     await enterPIN(page, WAITER_PIN);
-    // Pre-compila la ruta de detalle. Es una ruta ESTÁTICA con query param
-    // (/meseros/detalle/?id=<cuid>) — antes era el segmento dinámico
-    // /meseros/[id], que en el export estático del APK solo generaba un
-    // placeholder "_" y hacía 404 al abrir una mesa real. En `next dev` el
-    // primer hit la compila on-demand (~7s); sin este warm-up, el tap a una
-    // mesa real corría contra esa compilación y a veces excedía el timeout
-    // del click (flake). Un goto usa el timeout de navegación (30s).
-    await page.goto(`${TPV_URL}/meseros/detalle/?id=_`);
-    // El WAITER puede aterrizar en / (modo préstamo) o en /meseros según
-    // deviceRole; navegamos explícito a la sala para no depender de eso.
-    await page.goto(`${TPV_URL}/meseros`);
+    await expect(page).toHaveURL(/\/meseros\/?$/, { timeout: 20_000 });
     await expect(page.getByText(/gestión de salón/i)).toBeVisible({ timeout: 15_000 });
   });
 
@@ -50,7 +42,7 @@ test.describe('Meseros — rondas y cuenta', () => {
     await freeTile.click();
 
     // 2. Detalle de mesa sin cuenta → abrir comanda.
-    await page.getByRole('button', { name: /abrir comanda/i }).click({ timeout: 15_000 });
+    await page.getByRole('button', { name: /abrir comanda/i }).click({ timeout: 30_000 });
 
     // 3. RONDA 1: agregar burger y enviar a cocina.
     await page.getByRole('button', { name: /E2E Burger/i }).first().click({ timeout: 15_000 });
