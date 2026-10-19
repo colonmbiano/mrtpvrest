@@ -36,6 +36,7 @@ on:
       - "apps/kds/**"
       - "packages/**"
       - "tests/e2e/**"
+      - "tests/integration/**"
       - ".github/workflows/e2e.yml"
 
 env:
