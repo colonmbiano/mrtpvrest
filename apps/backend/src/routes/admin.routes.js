@@ -296,6 +296,8 @@ router.put('/whatsapp-assistant', authenticate, requireTenantAccess, requireAdmi
       ...(prev.statusUrl ? { statusUrl: prev.statusUrl } : {}),
       ...(prev.phoneNumber ? { phoneNumber: prev.phoneNumber } : {}),
       ...(prev.botTokenHash ? { botTokenHash: prev.botTokenHash } : {}),
+      ...(prev.runMode ? { runMode: prev.runMode } : {}),
+      ...(prev.localEnabled !== undefined ? { localEnabled: prev.localEnabled } : {}),
     });
     const enabled = body.enabled !== false; // default true
 
@@ -328,22 +330,36 @@ router.get('/whatsapp-assistant/metrics', authenticate, requireTenantAccess, req
     const row = await prisma.integrationConfig.findUnique({
       where: { restaurantId_type: { restaurantId, type: WA_ASSISTANT_TYPE } },
     });
-    status.provisioned = !!assistantStatusUrl(row);
-    const statusUrl = assistantStatusUrl(row);
-    if (statusUrl) {
-      status.url = statusUrl.replace(/\/+$/, '');
-      try {
-        const axios = require('axios');
-        const r = await axios.get(status.url, { timeout: 4000 });
-        status.reachable = true;
-        status.ready = r.data?.ready ?? null;
-        status.hasQr = r.data?.hasQr ?? null;
-        // qrUrl del worker es una ruta ('/qr'): resolverla contra el origin del
-        // status URL (robusto aunque el status URL traiga path como '/healthz').
-        try { status.qrUrl = r.data?.qrUrl ? new URL(r.data.qrUrl, status.url).href : null; }
-        catch { status.qrUrl = null; }
-      } catch (e) {
-        status.error = e?.code || e?.message || 'no alcanzable';
+    const cfg = rawAssistantConfig(row);
+    if (cfg.runMode === 'local') {
+      const isFresh = Boolean(row?.lastSync && (Date.now() - new Date(row.lastSync).getTime() < 60000));
+      status.provisioned = true;
+      status.reachable = isFresh;
+      status.ready = isFresh;
+      status.hasQr = false;
+      status.local = true;
+      status.url = 'http://localhost:3005';
+      if (!isFresh) {
+        status.error = 'PC local desconectada o en espera';
+      }
+    } else {
+      status.provisioned = !!assistantStatusUrl(row);
+      const statusUrl = assistantStatusUrl(row);
+      if (statusUrl) {
+        status.url = statusUrl.replace(/\/+$/, '');
+        try {
+          const axios = require('axios');
+          const r = await axios.get(status.url, { timeout: 4000 });
+          status.reachable = true;
+          status.ready = r.data?.ready ?? null;
+          status.hasQr = r.data?.hasQr ?? null;
+          // qrUrl del worker es una ruta ('/qr'): resolverla contra el origin del
+          // status URL (robusto aunque el status URL traiga path como '/healthz').
+          try { status.qrUrl = r.data?.qrUrl ? new URL(r.data.qrUrl, status.url).href : null; }
+          catch { status.qrUrl = null; }
+        } catch (e) {
+          status.error = e?.code || e?.message || 'no alcanzable';
+        }
       }
     }
     res.set('Cache-Control', 'no-store');
