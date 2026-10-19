@@ -368,8 +368,31 @@ function itemExtrasText(it) {
   return [...new Set(parts.filter(Boolean))];
 }
 
+function resolveBrowserExecutable() {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
+  if (process.platform === 'win32') {
+    const fs = require('fs');
+    const candidates = [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    ];
+    for (const p of candidates) {
+      try { if (fs.existsSync(p)) return p; } catch {}
+    }
+  }
+  return undefined;
+}
+
 function initWhatsApp(io) {
   console.log('[WhatsApp Bot] Inicializando cliente...');
+  sessionState = 'connecting';
+  lastReadyAt = 0;
+  const execPath = resolveBrowserExecutable();
+  if (execPath) {
+    console.log(`[WhatsApp Bot] Usando navegador: ${execPath}`);
+  }
 
   whatsappClient = new Client({
     // dataPath: en el worker de Railway apunta a un VOLUMEN persistente
@@ -381,18 +404,14 @@ function initWhatsApp(io) {
       ...(process.env.WWEBJS_DATA_PATH ? { dataPath: process.env.WWEBJS_DATA_PATH } : {}),
     }),
     puppeteer: {
-      // executablePath: en contenedor usamos el Chromium del sistema
-      // (PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium) en vez del bundled.
-      ...(process.env.PUPPETEER_EXECUTABLE_PATH ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH } : {}),
-      // Flags container-safe: sin sandbox (root en Docker) y sin /dev/shm
-      // (limitado en contenedores → Chromium crashea sin --disable-dev-shm-usage).
+      ...(execPath ? { executablePath: execPath } : {}),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
         '--no-first-run',
-        '--no-zygote',
+        ...(process.platform === 'win32' ? [] : ['--no-zygote']),
       ],
     },
   });
@@ -1014,8 +1033,26 @@ function initWhatsApp(io) {
   });
 }
 
+async function destroyWhatsApp() {
+  const c = whatsappClient;
+  whatsappClient = null;
+  latestQr = null;
+  lastReadyAt = 0;
+  sessionState = 'standby';
+  if (c) {
+    try {
+      c.removeAllListeners();
+      await c.destroy();
+      console.log('[WhatsApp Bot] Sesión de WhatsApp cerrada (modo STANDBY).');
+    } catch (e) {
+      console.warn('[WhatsApp Bot] Error cerrando sesión en standby:', e?.message || e);
+    }
+  }
+}
+
 module.exports = {
   initWhatsApp,
+  destroyWhatsApp,
   getWhatsAppClient: () => whatsappClient,
   getLatestQr: () => latestQr,
   getSessionState: () => sessionState,

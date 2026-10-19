@@ -26,7 +26,8 @@ require('dotenv').config();
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { initWhatsApp, getWhatsAppClient, getLatestQr, getSessionState, getIgnoredGroupInfo, refreshIgnoredGroup } = require('./client');
+const botConfig = require('./botConfig');
+const { initWhatsApp, destroyWhatsApp, getWhatsAppClient, getLatestQr, getSessionState, getIgnoredGroupInfo, refreshIgnoredGroup } = require('./client');
 
 // Al correr con volumen persistente, Chromium deja archivos Singleton* (lock del
 // perfil) en el userDataDir dentro del volumen. Como cada deploy es un contenedor
@@ -67,6 +68,12 @@ function isReady() {
 }
 
 function qrPageHtml() {
+  if (!botConfig.shouldRunHere()) {
+    return '<!doctype html><meta charset="utf-8"><title>WhatsApp Bot — Standby</title>' +
+      '<body style="font-family:system-ui;text-align:center;padding:3rem">' +
+      `<h1>⏸️ Modo Standby (${botConfig.getRunMode()})</h1>` +
+      '<p>Este entorno está en espera para no chocar con la sesión activa en tu PC local.</p></body>';
+  }
   const qr = getLatestQr();
   if (isReady()) {
     return '<!doctype html><meta charset="utf-8"><title>WhatsApp Bot</title>' +
@@ -102,14 +109,10 @@ const healthServer = http.createServer((req, res) => {
     return res.end('ok');
   }
   if (url === '/livez') {
-    // LIVENESS de la SESIÓN para monitoreo EXTERNO (UptimeRobot). 200 solo si el
-    // bot está operando; 503 si necesita atención (esperando QR / sesión perdida).
-    // Configura UptimeRobot con confirmación tras varios fallos para no alertar
-    // por el boot inicial.
     const state = getSessionState();
-    const ok = state === 'ready';
+    const ok = state === 'ready' || !botConfig.shouldRunHere();
     res.writeHead(ok ? 200 : 503, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ ok, state }));
+    return res.end(JSON.stringify({ ok, state, runMode: botConfig.getRunMode(), standby: !botConfig.shouldRunHere() }));
   }
   // Diagnóstico del grupo ignorado: cuántos miembros detectó + una muestra.
   // GATEADO por token (expone teléfonos del staff). Requiere ?token= que iguale
@@ -135,6 +138,9 @@ const healthServer = http.createServer((req, res) => {
   res.end(JSON.stringify({
     service: 'whatsapp-bot-worker',
     ready: isReady(),
+    standby: !botConfig.shouldRunHere(),
+    runMode: botConfig.getRunMode(),
+    active: botConfig.getActive(),
     hasQr: !!getLatestQr(),
     qrUrl: '/qr',
   }));
@@ -144,12 +150,35 @@ healthServer.listen(PORT, '0.0.0.0', () => {
   console.log(`[WhatsApp Worker] Health/QR server en :${PORT} (GET /qr para escanear).`);
 });
 
-// ── Arranque del bot ─────────────────────────────────────────────────────────
-// io = null: no hay Socket.io en el worker; el QR se ve por logs y por /qr.
-console.log('[WhatsApp Worker] Iniciando bot Cajero Estrella…');
-// Limpia locks de Chromium del deploy anterior antes de lanzar el navegador.
-limpiarLocksChromium(process.env.WWEBJS_DATA_PATH || '.');
-initWhatsApp(null);
+// ── Arranque del bot con protección anti-choque Railway <-> PC Local ────────
+(async () => {
+  await botConfig.init();
+  const dataDir = process.env.WWEBJS_DATA_PATH || '.';
+  if (botConfig.shouldRunHere()) {
+    console.log('[WhatsApp Worker] Iniciando bot Cajero Estrella en este entorno…');
+    limpiarLocksChromium(dataDir);
+    initWhatsApp(null);
+  } else {
+    console.log(`[WhatsApp Worker] STANDBY: runMode="${botConfig.getRunMode()}" — este entorno (${botConfig.isRailwayRuntime() ? 'Railway' : 'PC Local'}) NO abre WhatsApp para no chocar con la otra instancia.`);
+  }
+
+  // Vigilar cada 15s por si cambia runMode en BD:
+  setInterval(async () => {
+    try {
+      const hasClient = !!getWhatsAppClient();
+      if (!botConfig.shouldRunHere() && hasClient) {
+        console.log('[WhatsApp Worker] Cambio a STANDBY detectado; cerrando sesión de WhatsApp en este entorno para evitar choque.');
+        await destroyWhatsApp();
+      } else if (botConfig.shouldRunHere() && !hasClient) {
+        console.log('[WhatsApp Worker] Salida de STANDBY detectada; iniciando cliente de WhatsApp en este entorno.');
+        limpiarLocksChromium(dataDir);
+        initWhatsApp(null);
+      }
+    } catch (e) {
+      console.error('[WhatsApp Worker] Error en monitor de standby:', e?.message || e);
+    }
+  }, 15000).unref?.();
+})();
 
 // ── Apagado limpio ───────────────────────────────────────────────────────────
 let shuttingDown = false;

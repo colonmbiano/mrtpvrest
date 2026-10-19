@@ -25,10 +25,20 @@ function restaurantId() {
   return process.env.WHATSAPP_BOT_RESTAURANT_ID || null;
 }
 
+function isRailwayRuntime() {
+  return Boolean(
+    process.env.RAILWAY_ENVIRONMENT ||
+    process.env.RAILWAY_PROJECT_ID ||
+    process.env.RAILWAY_SERVICE_ID ||
+    process.env.WWEBJS_DATA_PATH === '/data/.wwebjs_auth'
+  );
+}
+
 // Config tal como vive en los env (fallback y semilla inicial).
 function fromEnv() {
   return {
     active: true,
+    runMode: (process.env.WHATSAPP_BOT_RUN_MODE || 'cloud').trim().toLowerCase(),
     extraInstructions: (process.env.WHATSAPP_BOT_EXTRA_INSTRUCTIONS || '').trim(),
     ignoreNumbers: (process.env.WHATSAPP_BOT_IGNORE_NUMBERS || '')
       .split(',').map((s) => s.trim()).filter(Boolean),
@@ -50,9 +60,13 @@ function parseRow(row, envCfg) {
     : null;
   const instr = typeof cfg.extraInstructions === 'string' ? cfg.extraInstructions.trim() : '';
   const grp = typeof cfg.ignoreGroupName === 'string' ? cfg.ignoreGroupName.trim() : '';
+  const mode = typeof cfg.runMode === 'string' && cfg.runMode.trim()
+    ? cfg.runMode.trim().toLowerCase()
+    : envCfg.runMode;
   // Merge por-campo: BD gana cuando tiene valor; si no, cae al env.
   return {
     active: row?.enabled !== false,
+    runMode: mode || 'cloud',
     extraInstructions: instr || envCfg.extraInstructions,
     ignoreNumbers: (nums && nums.length) ? nums : envCfg.ignoreNumbers,
     ignoreGroupName: grp || envCfg.ignoreGroupName,
@@ -65,6 +79,7 @@ async function loadFromApi() {
     const c = await botApi.getConfig();
     snapshot = {
       active: c.active !== false,
+      runMode: typeof c.runMode === 'string' && c.runMode.trim() ? c.runMode.trim().toLowerCase() : (process.env.WHATSAPP_BOT_RUN_MODE || 'cloud'),
       extraInstructions: typeof c.extraInstructions === 'string' ? c.extraInstructions.trim() : '',
       ignoreNumbers: Array.isArray(c.ignoreNumbers) ? c.ignoreNumbers.map((s) => String(s).trim()).filter(Boolean) : [],
       ignoreGroupName: typeof c.ignoreGroupName === 'string' ? c.ignoreGroupName.trim() : '',
@@ -122,14 +137,30 @@ async function loadFromDb() {
   snapshot = parseRow(row, envCfg);
 }
 
+let initialized = false;
 async function init() {
   await loadFromDb();
-  setInterval(() => { loadFromDb().catch(() => {}); }, REFRESH_MS).unref?.();
-  console.log(`[botConfig] Config cargada (active=${snapshot.active}, instr=${snapshot.extraInstructions.length}c, ignore#=${snapshot.ignoreNumbers.length}, grupo="${snapshot.ignoreGroupName}").`);
+  if (!initialized) {
+    initialized = true;
+    setInterval(() => { loadFromDb().catch(() => {}); }, REFRESH_MS).unref?.();
+  }
+  console.log(`[botConfig] Config cargada (active=${snapshot.active}, runMode=${snapshot.runMode}, shouldRunHere=${shouldRunHere()}, instr=${snapshot.extraInstructions.length}c, ignore#=${snapshot.ignoreNumbers.length}, grupo="${snapshot.ignoreGroupName}").`);
+}
+
+function getRunMode() {
+  return snapshot.runMode || 'cloud';
+}
+
+function shouldRunHere() {
+  const mode = getRunMode();
+  if (mode === 'local') {
+    return !isRailwayRuntime();
+  }
+  return true;
 }
 
 // ── Getters síncronos (hot-path) ─────────────────────────────────────────────
-function getActive() { return snapshot.active !== false; }
+function getActive() { return snapshot.active !== false && shouldRunHere(); }
 function getExtraInstructions() { return snapshot.extraInstructions || ''; }
 function getIgnoreNumbers() { return snapshot.ignoreNumbers || []; }
 function getIgnoreNumbersCsv() { return (snapshot.ignoreNumbers || []).join(','); }
@@ -138,6 +169,9 @@ function getIgnoreGroupName() { return snapshot.ignoreGroupName || ''; }
 module.exports = {
   init,
   getActive,
+  getRunMode,
+  shouldRunHere,
+  isRailwayRuntime,
   getExtraInstructions,
   getIgnoreNumbers,
   getIgnoreNumbersCsv,
