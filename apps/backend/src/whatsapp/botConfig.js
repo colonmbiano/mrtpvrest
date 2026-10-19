@@ -63,10 +63,16 @@ function parseRow(row, envCfg) {
   const mode = typeof cfg.runMode === 'string' && cfg.runMode.trim()
     ? cfg.runMode.trim().toLowerCase()
     : envCfg.runMode;
-  // Merge por-campo: BD gana cuando tiene valor; si no, cae al env.
+  const effectiveMode = mode || 'cloud';
+  // Si runMode==='local' y estamos en la PC local (!isRailwayRuntime()), permitimos
+  // activar el bot local con cfg.localEnabled=true manteniendo row.enabled=false en BD
+  // para que cualquier instancia en Railway quede 100% silenciada al instante.
+  const isActive = (effectiveMode === 'local' && !isRailwayRuntime() && cfg.localEnabled === true)
+    ? true
+    : (row?.enabled !== false);
   return {
-    active: row?.enabled !== false,
-    runMode: mode || 'cloud',
+    active: isActive,
+    runMode: effectiveMode,
     extraInstructions: instr || envCfg.extraInstructions,
     ignoreNumbers: (nums && nums.length) ? nums : envCfg.ignoreNumbers,
     ignoreGroupName: grp || envCfg.ignoreGroupName,
