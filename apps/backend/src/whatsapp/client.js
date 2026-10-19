@@ -21,15 +21,16 @@ let latestQr = null;
 // 'lost' → sesión caída (antes de reiniciar).
 let sessionState = 'connecting';
 
-// Momento (ms) en que el bot quedó 'ready' por última vez. Lo usa el guard
-// ANTI-BLAST: al reconectar, whatsapp-web.js re-entrega por el evento 'message'
-// los mensajes que llegaron mientras estuvo offline (backlog); si los
-// contestamos, sale una RÁFAGA de respuestas a decenas de clientes de golpe →
-// envío no solicitado → riesgo REAL de baneo (incidentes 2026-07-03/04). Solo
-// atendemos mensajes cuyo timestamp sea posterior a este 'ready' (con gracia).
+// Momento (ms) en que el bot terminó de conectar, cargar config/grupos y pasar
+// el enfriamiento de sincronización inicial. NINGÚN mensaje previo a este
+// instante (ni durante la fase connecting/qr) se procesa jamás.
 let lastReadyAt = 0;
-// Gracia para no descartar un mensaje legítimo enviado justo antes de reconectar.
-const BACKLOG_GRACE_MS = 60 * 1000;
+// Enfriamiento tras 'ready': al escanear QR o reconectar, WhatsApp Web vuelca
+// decenas de eventos 'message' del historial durante los primeros segundos.
+const POST_READY_SYNC_COOLDOWN_MS = 15 * 1000;
+const MAX_MSG_AGE_MS = 90 * 1000;
+// Cortafuegos global de salida: impide enviar a >3 chats distintos en 10s o >6 envíos/min total.
+const globalOutboundLog = []; // Array<{ chatKey, at }>
 
 // Alerta best-effort al dueño cuando el bot necesita atención (sesión perdida /
 // QR requerido). Se dispara a un webhook configurable WHATSAPP_BOT_ALERT_WEBHOOK
@@ -422,25 +423,22 @@ function initWhatsApp(io) {
 
   whatsappClient.on('ready', async () => {
     latestQr = null;
-    sessionState = 'ready';
-    // Marca de corte para el guard anti-blast: a partir de aquí solo se
-    // atienden mensajes con timestamp >= (lastReadyAt - gracia). Todo lo que
-    // whatsapp-web.js re-entregue del backlog (mensajes viejos que llegaron
-    // mientras estuvo offline) queda por debajo del corte y se ignora.
-    lastReadyAt = Date.now();
-    console.log('[WhatsApp Bot] Cliente WhatsApp listo y conectado!');
+    console.log('[WhatsApp Bot] Cliente WhatsApp conectado; cargando config y esperando fin de sync inicial (15s)...');
     if (io) {
       io.emit('whatsapp:ready');
     }
-    // Cargar la config editable del admin (BD, fallback a env; auto-siembra en
-    // el primer arranque) ANTES de leer el grupo a ignorar, que sale de ahí.
     await botConfig.init();
-    // Cargar el grupo a ignorar ANTES del backfill (para no responder a staff),
-    // y refrescarlo cada 10 min (recoge altas/bajas de miembros sin redeploy).
     await refreshIgnoredGroup();
     setInterval(refreshIgnoredGroup, 10 * 60 * 1000).unref?.();
-    // Atender lo que entró mientras el bot estuvo caído (redeploy/restart).
     await backfillUnread();
+
+    // Esperar 15s tras conectar/escanear QR para que whatsapp-web.js termine de
+    // volcar todos los eventos 'message' del historial sincronizado.
+    await new Promise((r) => setTimeout(r, POST_READY_SYNC_COOLDOWN_MS));
+
+    lastReadyAt = Date.now();
+    sessionState = 'ready';
+    console.log(`[WhatsApp Bot] Listo y operando (corte anti-blast=${new Date(lastReadyAt).toISOString()}, active=${botConfig.getActive()}).`);
   });
 
   // Procesa UN mensaje entrante. Se usa desde el evento 'message' y desde el
@@ -468,28 +466,53 @@ function initWhatsApp(io) {
     // de golpe → riesgo de baneo. Solo atendemos mensajes cuyo timestamp sea
     // posterior a que el bot quedó 'ready' (con 60s de gracia). Los del backlog
     // se ignoran en silencio (el humano los ve en el chat y los atiende).
-    const msgTsMs = Number(msg.timestamp) > 0 ? Number(msg.timestamp) * 1000 : Date.now();
-    if (lastReadyAt && msgTsMs < lastReadyAt - BACKLOG_GRACE_MS) {
-      console.log(`[WhatsApp Bot] Backlog ignorado (anti-blast) de ${msg.from}: ts=${new Date(msgTsMs).toISOString()} < ready=${new Date(lastReadyAt).toISOString()}.`);
+    if (sessionState !== 'ready' || !lastReadyAt || Date.now() < lastReadyAt) {
+      console.log(`[WhatsApp Bot] Mensaje ignorado durante sync inicial de ${msg.from} (state=${sessionState}).`);
       return;
     }
 
-    // Interruptor global desde el admin: si el bot está en pausa (enabled=false
-    // en IntegrationConfig), no responde a nadie hasta reactivarlo. Ver botConfig.js.
     if (!botConfig.getActive()) return;
+
+    const rawTs = Number(msg.timestamp);
+    if (!Number.isFinite(rawTs) || rawTs <= 0) {
+      console.log(`[WhatsApp Bot] Mensaje sin timestamp valido de ${msg.from} ignorado.`);
+      return;
+    }
+    const msgTsMs = rawTs * 1000;
+    const nowMs = Date.now();
+    if (msgTsMs < lastReadyAt || nowMs - msgTsMs > MAX_MSG_AGE_MS) {
+      console.log(`[WhatsApp Bot] Backlog/mensaje viejo ignorado (anti-blast) de ${msg.from}: ts=${new Date(msgTsMs).toISOString()} vs ready=${new Date(lastReadyAt).toISOString()}.`);
+      return;
+    }
 
     // EnvÃ­o robusto (sendMessage anda mejor con @lid que msg.reply).
     const safeSend = async (text) => {
       try {
+        const now = Date.now();
         // Anti-baneo: no reenviar el MISMO texto al mismo chat dentro de 60s.
-        // Corta las rafagas de mensajes identicos (p.ej. varios "problema
-        // tecnico" seguidos al reprocesar no-leidos), que disparan el bloqueo.
         const prevSend = lastBotSendByChat.get(chatKey);
-        if (prevSend && prevSend.text === text && Date.now() - prevSend.at < 60000) {
+        if (prevSend && prevSend.text === text && now - prevSend.at < 60000) {
           console.log(`[WhatsApp Bot] Envio duplicado suprimido (anti-spam) a ${msg.from}`);
           return;
         }
-        lastBotSendByChat.set(chatKey, { text, at: Date.now() });
+        // Cortafuegos GLOBAL anti-blast: limpiar envios >60s y bloquear si hay
+        // >3 chats distintos en 10s o >=8 envios totales en 60s.
+        while (globalOutboundLog.length > 0 && now - globalOutboundLog[0].at > 60000) {
+          globalOutboundLog.shift();
+        }
+        const recent10sChats = new Set(
+          globalOutboundLog.filter((e) => now - e.at < 10000).map((e) => e.chatKey)
+        );
+        if (!recent10sChats.has(chatKey) && recent10sChats.size >= 3) {
+          console.warn(`[WhatsApp Bot] CORTAFUEGOS ANTI-BLAST: bloqueado envio a ${msg.from} (>3 chats distintos en 10s).`);
+          return;
+        }
+        if (globalOutboundLog.length >= 8) {
+          console.warn(`[WhatsApp Bot] CORTAFUEGOS ANTI-BLAST: bloqueado envio a ${msg.from} (>=8 envios en 60s).`);
+          return;
+        }
+        globalOutboundLog.push({ chatKey, at: now });
+        lastBotSendByChat.set(chatKey, { text, at: now });
         rememberBotOutgoingIntent(chatKey, text);
         const sent = await whatsappClient.sendMessage(msg.from, text);
         rememberBotSentMessage(sent);
@@ -916,6 +939,13 @@ function initWhatsApp(io) {
   // ni disparen doble CONFIRMED (orden duplicada). Encadena por msg.from.
   const chatLocks = new Map();
   const handleIncomingMessage = (msg) => {
+    // Cortar ANTES de encolar en chatLocks: si se encolara durante los 15s de
+    // sync inicial, la promesa correría después de que lastReadyAt se active.
+    if (sessionState !== 'ready' || !lastReadyAt || Date.now() < lastReadyAt) return;
+    if (!botConfig.getActive()) return;
+    const rawTs = Number(msg?.timestamp);
+    if (!Number.isFinite(rawTs) || rawTs <= 0 || rawTs * 1000 < lastReadyAt) return;
+
     const key = msg.from || 'unknown';
     const prev = chatLocks.get(key) || Promise.resolve();
     const run = prev.then(() => processMessage(msg), () => processMessage(msg));
@@ -928,6 +958,7 @@ function initWhatsApp(io) {
   whatsappClient.on('message_create', (msg) => {
     try {
       if (!msg.fromMe) return;
+      if (sessionState !== 'ready' || !lastReadyAt) return;
       const chatKey = chatKeyForMessage(msg);
       if (!isCustomerChatId(chatKey)) return;
       if (isBotAuthoredOutgoing(msg, chatKey)) return;

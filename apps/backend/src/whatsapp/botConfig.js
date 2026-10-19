@@ -19,7 +19,7 @@ const { prisma } = require('@mrtpvrest/database');
 const botApi = require('./botApi');
 
 const TYPE = 'WHATSAPP_ASSISTANT';
-const REFRESH_MS = 60 * 1000;
+const REFRESH_MS = 15 * 1000;
 
 function restaurantId() {
   return process.env.WHATSAPP_BOT_RESTAURANT_ID || null;
@@ -36,8 +36,10 @@ function fromEnv() {
   };
 }
 
-// Snapshot vivo. Arranca desde env; init()/refresh lo sobreescriben con BD.
-let snapshot = fromEnv();
+// Snapshot vivo. Arranca con active=false hasta que init() lea la BD/API,
+// evitando que el bot conteste mensajes durante el arranque o antes de saber
+// si está pausado en el panel admin.
+let snapshot = { ...fromEnv(), active: false };
 let seeded = false;
 
 function parseRow(row, envCfg) {
