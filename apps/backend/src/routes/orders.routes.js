@@ -1165,6 +1165,18 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     // Si es dine-in con mesa: status=OPEN (cuenta abierta) y la primera ronda
     // se crea explícita para que el flujo de rondas posteriores quede limpio.
     const order = await prisma.$transaction(async (tx) => {
+      if (isDineInTab) {
+        // Bloquea la mesa antes de crear: puede haberse reasignado desde la
+        // consulta inicial. Comparte el bloqueo de fila con PATCH /:id/table.
+        await tx.table.update({ where: { id: tableId }, data: { status: 'OCCUPIED' } });
+        const occupied = await tx.order.findFirst({
+          where: { tableId, status: { in: OPEN_TABLE_STATUSES }, paymentStatus: { not: 'PAID' } },
+          select: { id: true },
+        });
+        if (occupied) {
+          throw Object.assign(new Error('La mesa acaba de ocuparse; actualiza las cuentas e inténtalo de nuevo'), { status: 409 });
+        }
+      }
       // numberOfGuests: clamp 1..50, ignorado si no es DINE_IN.
       const guestsRaw = Number(numberOfGuests);
       const safeGuests = isDineInTab && Number.isFinite(guestsRaw) && guestsRaw >= 1 && guestsRaw <= 50
@@ -1270,7 +1282,6 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           data: { orderId: created.id, roundNumber: 1 },
         });
         roundId = round.id;
-        await tx.table.update({ where: { id: tableId }, data: { status: 'OCCUPIED' } });
       }
 
       // Creamos cada OrderItem individualmente porque los modificadores son
@@ -1327,7 +1338,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     }
 
     res.json(order);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 
 // ── POST /:id/items — Añadir ronda a una orden activa ──────────────────
@@ -2556,6 +2567,89 @@ const ORDER_DETAIL_INCLUDE = {
   table: true,
   rounds: { orderBy: { roundNumber: 'asc' } },
 };
+
+// Reasigna la MISMA cuenta a una mesa libre, sin mover líneas ni recalcularla.
+// La reserva de destino y la liberación de origen se confirman juntas.
+router.patch('/:id/table', authenticate, requireTenantAccess,
+  requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER', 'WAITER'),
+  async (req, res) => {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const { tableId, fromTableId } = req.body || {};
+    if (!restaurantId || !req.locationId) {
+      return res.status(400).json({ error: 'Sucursal no identificada' });
+    }
+    if (typeof tableId !== 'string' || !tableId.trim() ||
+        typeof fromTableId !== 'string' || !fromTableId.trim()) {
+      return res.status(400).json({ error: 'Indica la mesa de origen y la mesa destino' });
+    }
+    const reject = (status, message) => { throw Object.assign(new Error(message), { status }); };
+    try {
+      const order = await prisma.$transaction(async tx => {
+        const source = await tx.order.findFirst({
+          where: { id: req.params.id, restaurantId, locationId: req.locationId },
+          include: { table: true },
+        });
+        if (!source) reject(404, 'Cuenta no encontrada en esta sucursal');
+        if (source.orderType !== 'DINE_IN' || !source.tableId) {
+          reject(400, 'Solo puedes cambiar de mesa una cuenta de consumo en mesa');
+        }
+        if (source.paymentStatus === 'PAID' || !OPEN_TABLE_STATUSES.includes(source.status)) {
+          reject(409, 'La cuenta ya está pagada o cerrada');
+        }
+        // Reintento tras una respuesta perdida: ya está en su destino.
+        if (source.tableId === tableId) {
+          return tx.order.findUnique({ where: { id: source.id }, include: ORDER_DETAIL_INCLUDE });
+        }
+        if (source.tableId !== fromTableId) {
+          reject(409, 'La cuenta cambió de mesa; actualiza la pantalla');
+        }
+        const target = await tx.table.findFirst({
+          where: { id: tableId, locationId: req.locationId, isActive: true },
+        });
+        if (!target) reject(404, 'Mesa destino no encontrada en esta sucursal');
+        // UPDATE condicional: dos cambios simultáneos no pueden reservar la
+        // misma mesa. Serializable también detecta cambios en la cuenta.
+        const claimed = await tx.table.updateMany({
+          where: { id: target.id, locationId: req.locationId, isActive: true, status: 'AVAILABLE' },
+          data: { status: 'OCCUPIED' },
+        });
+        if (!claimed.count) reject(409, 'La mesa destino no está libre');
+        const occupied = await tx.order.findFirst({
+          where: { tableId: target.id, status: { in: OPEN_TABLE_STATUSES }, paymentStatus: { not: 'PAID' } },
+          select: { id: true },
+        });
+        if (occupied) reject(409, 'La mesa destino ya tiene una cuenta abierta');
+        const moved = await tx.order.update({
+          where: { id: source.id },
+          // tableId es la referencia canónica; no conservar el número anterior.
+          data: { tableId: target.id, tableNumber: null },
+          include: ORDER_DETAIL_INCLUDE,
+        });
+        const remaining = await tx.order.findFirst({
+          where: { tableId: source.tableId, status: { in: OPEN_TABLE_STATUSES }, paymentStatus: { not: 'PAID' } },
+          select: { id: true },
+        });
+        await tx.table.update({
+          where: { id: source.tableId },
+          data: { status: remaining ? 'OCCUPIED' : 'AVAILABLE' },
+        });
+        await audit.record(req, audit.AUDIT_EVENTS.TABLE_REASSIGNED, {
+          resource: `order:${source.id}`,
+          before: { tableId: source.tableId, tableName: source.table?.name || null },
+          after: { tableId: target.id, tableName: target.name },
+        }, tx);
+        return moved;
+      }, { isolationLevel: 'Serializable' });
+      const io = req.app.get('io');
+      if (io) io.to(`restaurant:${restaurantId}:location:${req.locationId}:admins`).emit('order:updated', order);
+      return res.json(order);
+    } catch (e) {
+      if (e.code === 'P2034') {
+        return res.status(409).json({ error: 'Las mesas cambiaron durante la operación; actualiza e inténtalo de nuevo' });
+      }
+      return res.status(e.status || 500).json({ error: e.status ? e.message : 'No se pudo cambiar la cuenta de mesa' });
+    }
+  });
 
 // ── PATCH /:id/name — Renombrar (etiquetar) una cuenta abierta ─────────
 // Independiente de customerName/mesa: solo escribe Order.ticketName. Enviar

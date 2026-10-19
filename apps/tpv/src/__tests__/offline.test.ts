@@ -6,7 +6,7 @@
  */
 import { apiOrQueue, shiftActionQueued, syncOfflineQueue } from "@/lib/offline";
 import useOfflineStore, { flushOfflinePersistence, mergeOfflinePersistedStates } from "@/store/useOfflineStore";
-import { getLocalOrder, getLocalOrders, loadOrder, loadOpenOrders, rememberServerOrder } from '@/lib/order-repository';
+import { getLocalOrder, getLocalOrders, loadOrder, loadOpenOrders, rememberServerOrder, reassignOrderTable } from '@/lib/order-repository';
 import { resetBackendAvailability } from "@/lib/backend-availability";
 import { getToken } from "@/lib/token-vault";
 import { useAuthStore } from "@/store/authStore";
@@ -33,7 +33,7 @@ jest.mock("@/lib/api", () => ({
   __esModule: true,
   AUTH_TOKEN_MISSING: "AUTH_TOKEN_MISSING",
   BACKEND_UNAVAILABLE: "BACKEND_UNAVAILABLE",
-  default: { post: jest.fn(), put: jest.fn(), get: jest.fn() },
+  default: { post: jest.fn(), put: jest.fn(), get: jest.fn(), patch: jest.fn() },
 }));
 
 import api from "@/lib/api";
@@ -61,6 +61,7 @@ beforeEach(() => {
   mockApi.get.mockReset().mockResolvedValue({ data: [] });
   mockApi.post.mockReset().mockResolvedValue({ data: {} });
   mockApi.put.mockReset().mockResolvedValue({ data: {} });
+  mockApi.patch.mockReset().mockResolvedValue({ data: {} });
   localStorage.setItem("restaurantId", "rest-1");
   localStorage.setItem("locationId", "loc-1");
   useAuthStore.setState({ isAuthenticated: true, employee: {
@@ -74,6 +75,46 @@ beforeEach(() => {
   resetBackendAvailability();
   mockGetToken.mockResolvedValue("test-token");
   setOnline(true);
+});
+
+describe('reasignación de mesa y copia local', () => {
+  const original = {
+    id: 'order-table', tableId: 't1', orderType: 'DINE_IN', status: 'OPEN',
+    paymentStatus: 'PENDING', total: 150, items: [{ id: 'i1', quantity: 2, subtotal: 150 }],
+  };
+  it('actualiza la referencia local solo después de la confirmación remota', async () => {
+    rememberServerOrder(original);
+    const moved = { ...original, tableId: 't2', table: { id: 't2', name: 'Mesa 2' } };
+    mockApi.patch.mockResolvedValue({ data: moved });
+    await reassignOrderTable(original.id, 't1', 't2');
+    expect(mockApi.patch).toHaveBeenCalledWith('/api/orders/order-table/table', { tableId: 't2', fromTableId: 't1' });
+    expect(getLocalOrder(original.id)).toMatchObject(moved);
+  });
+  it('conserva la mesa anterior si el servidor rechaza el cambio', async () => {
+    rememberServerOrder(original);
+    mockApi.patch.mockRejectedValue({ response: { status: 409 } });
+    await expect(reassignOrderTable(original.id, 't1', 't2')).rejects.toMatchObject({ response: { status: 409 } });
+    expect(getLocalOrder(original.id)?.tableId).toBe('t1');
+  });
+  it('bloquea cambios de mesa con rondas pendientes de sincronizar', async () => {
+    rememberServerOrder(original);
+    setOnline(false);
+    await apiOrQueue('order', 'POST', '/api/orders/order-table/items',
+      { items: [{ menuItemId: 'p1', quantity: 1 }] },
+      { localOrder: { items: [{ menuItemId: 'p1', quantity: 1, price: 20, subtotal: 20 }] } });
+    await expect(reassignOrderTable(original.id, 't1', 't2')).rejects.toThrow(/Sincroniza/);
+    expect(mockApi.patch).not.toHaveBeenCalled();
+  });
+  it('no mezcla datos si cambia la sucursal mientras llega la confirmación', async () => {
+    rememberServerOrder(original);
+    mockApi.patch.mockImplementation(async () => {
+      localStorage.setItem('locationId', 'other-location');
+      return { data: { ...original, tableId: 't2' } };
+    });
+    await expect(reassignOrderTable(original.id, 't1', 't2')).rejects.toThrow(/sucursal cambió/);
+    localStorage.setItem('locationId', 'loc-1');
+    expect(getLocalOrder(original.id)?.tableId).toBe('t1');
+  });
 });
 
 describe('cuentas locales completas', () => {
