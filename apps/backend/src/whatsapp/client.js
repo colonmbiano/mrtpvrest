@@ -60,7 +60,7 @@ async function notifyAlert(event, detail) {
 // Formato: { "5215551234567": [ { role: "user", text: "hola" }, { role: "model", text: "Hola soy el mesero" } ] }
 const chatHistory = new Map();
 const customerProfiles = new Map();
-const MAX_HISTORY_MESSAGES = 24;
+const MAX_HISTORY_MESSAGES = 12;
 
 // Mapa para guardar órdenes recientes confirmadas por número. Permite añadir items.
 // Formato: { "5215551234567": { orderId: "abc", timestamp: 123456789 } }
@@ -107,10 +107,11 @@ setInterval(() => {
 // Red de seguridad: aunque el prompt le prohíbe a Gemini mostrar los IDs
 // internos, a veces los copia al texto (clientes reales vieron
 // "PROMO kfc 2 X 110: $110 (ID: cmpvrw5xl...)"). Se limpian SIEMPRE antes
-// de enviar: tokens [ID: x]/(ID: x)/variantId/modifierId y cuids sueltos.
+// de enviar: tokens [ID: x]/(ID: x)/[V: x]/[M: x]/variantId/modifierId, @G... y cuids sueltos.
 function sanitizeReply(text) {
   return String(text)
-    .replace(/\s*[\[(]\s*(?:ID|variantId|modifierId)\s*:\s*[^\])]+[\])]/gi, '')
+    .replace(/\s*[\[(]\s*(?:ID|variantId|modifierId|V|M)\s*:\s*[^\])]+[\])]/gi, '')
+    .replace(/\s*@G\d+\b/g, '')
     .replace(/\bcomplement:[a-z0-9]+\b/gi, '')
     .replace(/\bcm[a-z0-9]{20,}\b/g, '')
     .replace(/[ \t]{2,}/g, ' ');
@@ -498,6 +499,26 @@ function initWhatsApp(io) {
       }
     };
 
+    // AHORRO DE TOKENS: Ignorar stickers, reacciones, notificaciones del sistema
+    // o mensajes eliminados. Antes un sticker tenía msg.body === '' y aun así
+    // viajaba hasta Gemini con todo el menú e historial.
+    const msgType = String(msg.type || '').toLowerCase();
+    const IGNORED_MSG_TYPES = new Set([
+      'sticker',
+      'reaction',
+      'e2e_notification',
+      'notification_template',
+      'gp2',
+      'call_log',
+      'revoked',
+      'ciphertext',
+      'poll_creation',
+    ]);
+    if (IGNORED_MSG_TYPES.has(msgType)) {
+      console.log(`[WhatsApp Bot] Mensaje tipo "${msgType}" de ${msg.from} ignorado (ahorro de tokens).`);
+      return;
+    }
+
     // Obtener texto o ubicación
     let messageText = msg.body;
     let locationData = null;
@@ -507,7 +528,7 @@ function initWhatsApp(io) {
       messageText = `[El cliente ha enviado su ubicación por GPS: latitud ${locationData.lat}, longitud ${locationData.lng}]`;
     }
 
-    console.log(`[WhatsApp Bot] Mensaje recibido de ${msg.from}: ${messageText}`);
+    console.log(`[WhatsApp Bot] Mensaje recibido de ${msg.from} (type=${msgType}): ${messageText}`);
     
     // Obtener número limpio usando la API de contactos de WhatsApp
     let phone = msg.from.replace('@c.us', '');
@@ -691,6 +712,19 @@ function initWhatsApp(io) {
       return;
     }
 
+    // AHORRO DE TOKENS: Si es imagen, documento, video o contacto SIN texto y
+    // sin pedido reciente, no llamar a Gemini con messageText="" (mandaría todo
+    // el menú para nada).
+    if (!String(messageText || '').trim()) {
+      if (msgType === 'image' || msgType === 'document' || msgType === 'video') {
+        console.log(`[WhatsApp Bot] Media (${msgType}) sin texto ni pedido activo de ${phone}; respuesta rápida sin IA.`);
+        await safeSend('Recibí tu archivo 🙌. Si deseas realizar un pedido, ¿me escribes por texto qué te gustaría ordenar?');
+      } else {
+        console.log(`[WhatsApp Bot] Mensaje vacío (${msgType}) de ${phone} ignorado sin llamar a IA.`);
+      }
+      return;
+    }
+
     // Procesar con Gemini
     console.log(`[WhatsApp Bot] Procesando con Gemini (phone=${phone}, invalid=${isInvalidPhone}, tenant=${restaurant.id})...`);
     const geminiResponse = await processWhatsAppMessage(phone, messageText, restaurant.id, history, activeOrderId, isInvalidPhone, profile, activeOrderInfo);
@@ -746,11 +780,13 @@ function initWhatsApp(io) {
         console.warn(`[WhatsApp Bot] Backend dedupeó CONFIRMED de ${phone} contra el pedido #${orderCreated.orderNumber} del mismo chat${orderCreated.correctionFlagged ? ' (posible corrección, caja avisada)' : ''}; no se duplica.`);
         recentOrders.set(phone, { orderId: orderCreated.id, orderNumber: orderCreated.orderNumber, total: orderCreated.total ?? null, summary: '', timestamp: Date.now() });
         rememberRecentOrderChat(chatKey, phone, orderCreated.id);
+        // AHORRO DE TOKENS: compactar historial tras confirmar/dedupear para no
+        // reenviar los 8-14 turnos previos de armado del carrito en mensajes posteriores.
+        history.length = 0;
         history.push({
           role: 'model',
           text: `El pedido ya estaba registrado antes: folio ${orderCreated.orderNumber}. NO se creó uno nuevo.${orderCreated.correctionFlagged ? ' Se avisó a la caja de un posible cambio.' : ''}`,
         });
-        pruneHistory(history);
         if (orderCreated.correctionFlagged) {
           await safeSend(`Ya tenía registrado tu pedido *#${orderCreated.orderNumber}* y noté cambios en lo que me enviaste 👀. Le avisé a la caja para que lo revise y ajuste — no creé un pedido duplicado. Si quieres AGREGAR algo más, dime qué y lo sumo.`);
         } else {
@@ -768,11 +804,13 @@ function initWhatsApp(io) {
         });
         const totalLine = orderCreated.total != null ? `\n💵 Total: $${orderCreated.total} (incluye envío si aplica)` : '';
         const mins = orderCreated.estimatedMinutes || 30;
+        // AHORRO DE TOKENS: limpiar los turnos anteriores del armado de pedido y
+        // dejar únicamente el resumen compacto de la orden recién creada.
+        history.length = 0;
         history.push({
           role: 'model',
           text: `Pedido registrado en TPV: folio ${orderCreated.orderNumber}, total ${orderCreated.total ?? 'pendiente'}, pago ${geminiResponse.paymentMethod || 'no especificado'}.`,
         });
-        pruneHistory(history);
         // Ticket DETALLADO con variantes (término/sabor) y extras. Vía Prisma
         // (fetchOrderTicketDetail) porque el endpoint HTTP oculta notes/modifiers.
         const detail = await fetchOrderTicketDetail(orderCreated.id, restaurant.id);
@@ -837,6 +875,11 @@ function initWhatsApp(io) {
         const addResponse = await require('./orderProcessor').addItemsToOrder(activeOrderId, geminiResponse, restaurant.id, process.env.PORT || 3001);
         if (addResponse) {
           recentOrders.set(phone, { ...recentOrder, orderId: activeOrderId, timestamp: Date.now() });
+          history.length = 0;
+          history.push({
+            role: 'model',
+            text: `Productos adicionales agregados al pedido activo #${recentOrder?.orderNumber || activeOrderId}.`,
+          });
           await safeSend(geminiResponse.replyMessage ? sanitizeReply(geminiResponse.replyMessage) : '¡Listo! Lo agregué a tu pedido. 🍔');
         } else {
           console.error(`[WhatsApp Bot] FALLO al agregar items a la orden ${activeOrderId} de ${phone}.`);

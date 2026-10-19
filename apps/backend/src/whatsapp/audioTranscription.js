@@ -68,6 +68,11 @@ function buildGeminiTranscriptionBody(mimeType, data) {
     }],
     generationConfig: {
       temperature: 0,
+      maxOutputTokens: 500,
+      // Apaga el razonamiento interno ("thinking") en gemini-2.5-flash para
+      // transcripción de audio: los thinking tokens se cobran como output caro
+      // y no aportan nada al transcribir voz a texto.
+      thinkingConfig: { thinkingBudget: 0 },
     },
   };
 }
