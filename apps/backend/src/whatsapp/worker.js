@@ -22,6 +22,7 @@
  * Env de contenedor: PUPPETEER_EXECUTABLE_PATH, WWEBJS_DATA_PATH.
  */
 
+require('dotenv').config();
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -45,15 +46,13 @@ function limpiarLocksChromium(dir) {
   }
 }
 
-// ── Validación de entorno (fail-fast y ruidoso) ──────────────────────────────
-if (!process.env.GOOGLE_AI_API_KEY) {
-  console.error('[WhatsApp Worker] Falta GOOGLE_AI_API_KEY. Abortando.');
+// ── Validación de entorno ────────────────────────────────────────────────────
+if (!process.env.GOOGLE_AI_API_KEY && !process.env.GROQ_API_KEY && process.env.OLLAMA_ENABLED === 'false') {
+  console.error('[WhatsApp Worker] Falta proveedor de IA (Ollama local, GROQ_API_KEY o GOOGLE_AI_API_KEY). Abortando.');
   process.exit(1);
 }
 if (!process.env.WHATSAPP_BOT_API_BASE) {
-  // El worker NO co-habita con el API: sin esta base, orderProcessor caería a
-  // localhost (donde no hay backend) y ninguna orden se crearía.
-  console.warn('[WhatsApp Worker] ADVERTENCIA: WHATSAPP_BOT_API_BASE no está seteada; las órdenes intentarán ir a localhost y fallarán. Apúntala al backend (p.ej. https://api.mrtpvrest.com).');
+  console.warn('[WhatsApp Worker] ADVERTENCIA: WHATSAPP_BOT_API_BASE no está seteada; las órdenes irán a localhost:3001.');
 }
 if (!process.env.WHATSAPP_BOT_RESTAURANT_ID) {
   console.warn('[WhatsApp Worker] ADVERTENCIA: WHATSAPP_BOT_RESTAURANT_ID no está seteada; el bot usaría el restaurante activo más viejo de la BD.');

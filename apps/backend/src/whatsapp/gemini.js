@@ -244,10 +244,39 @@ async function processWhatsAppMessage(phone, text, restaurantId, conversationHis
         const [menuItems, restaurant, cfg] = await Promise.all([
           prisma.menuItem.findMany({
             where: { restaurantId, isAvailable: true },
-            include: { variants: true, complements: true, modifierGroups: { include: { modifiers: true } } },
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              price: true,
+              promoPrice: true,
+              isPromo: true,
+              activeDays: true,
+              variants: { select: { id: true, name: true, price: true, isAvailable: true } },
+              complements: { select: { id: true, name: true, price: true, isAvailable: true } },
+              modifierGroups: {
+                select: {
+                  id: true,
+                  name: true,
+                  modifiers: { select: { id: true, name: true, priceAdd: true } },
+                },
+              },
+            },
           }),
           prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { name: true } }),
-          prisma.restaurantConfig.findUnique({ where: { restaurantId } }),
+          prisma.restaurantConfig.findUnique({
+            where: { restaurantId },
+            select: {
+              address: true,
+              phone: true,
+              whatsappNumber: true,
+              businessHours: true,
+              isOpen: true,
+              scheduleEnabled: true,
+              timezone: true,
+              estimatedDelivery: true,
+            },
+          }),
         ]);
 
         // Día de hoy en INGLÉS mayúsculas (MONDAY, TUESDAY…) para casar con MenuItem.activeDays
@@ -461,20 +490,158 @@ ${activeOrderInfo ? `Pedido actual: folio #${activeOrderInfo.orderNumber || '—
       },
     };
 
-    // ── PROVEEDOR DE IA: Groq (Llama) si hay GROQ_API_KEY; si no, Gemini ──────
+    // ── PROVEEDOR DE IA #1: IA LOCAL (Ollama — $0 costo, sin límites de tokens) ─
+    // En CPU local (Ryzen 7 5800X), enviar los 70+ platillos tarda ~28s de prefill.
+    // Filtramos el menú a los 14 platillos relevantes a la conversación + promos
+    // y usamos un prompt compacto (~400 tokens) para responder en ~4-6 segundos.
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let lastErr = null;
     let replyText = null;
 
-    if (process.env.GROQ_API_KEY) {
-      const messages = [
-        { role: 'system', content: systemPrompt },
-        ...recentHistory.map((m) => ({
-          role: m.role === 'user' ? 'user' : 'assistant',
-          content: truncateHistoryText(m.text),
-        })),
-        { role: 'user', content: text },
-      ];
+    const chatMessages = [
+      { role: 'system', content: systemPrompt },
+      ...recentHistory.map((m) => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: truncateHistoryText(m.text),
+      })),
+      { role: 'user', content: text },
+    ];
+
+    if (process.env.OLLAMA_ENABLED !== 'false') {
+      const ollamaBase = (process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/+$/, '');
+      const ollamaModel = process.env.OLLAMA_MODEL || 'qwen3.5:4b';
+      try {
+        // Filtrar platillos relevantes según palabras clave de la conversación
+        const convText = normalizeForQuick([text, ...recentHistory.map((m) => m.text)].join(' '));
+        const stopWords = new Set(['hola', 'quiero', 'pedir', 'para', 'con', 'sin', 'una', 'uno', 'dos', 'tres', 'por', 'favor', 'cuanto', 'seria', 'efectivo', 'tarjeta', 'transferencia', 'recoger', 'domicilio', 'enviar', 'nombre', 'gracias', 'buenas', 'tardes', 'noches', 'dias', 'que', 'tienes', 'menu', 'precio', 'total']);
+        const keywords = [...new Set(
+          convText
+            .split(' ')
+            .filter((w) => w.length >= 3 && !stopWords.has(w))
+            .map((w) => w.replace(/(es|s)$/, ''))
+        )];
+
+        const prodSplit = String(compressedMenu || '').split('\n\nProductos:\n');
+        const sharedPart = prodSplit.length > 1 ? prodSplit[0] : '';
+        const itemsPart = prodSplit.length > 1 ? prodSplit[1] : String(compressedMenu || '');
+        const itemBlocks = itemsPart.split('\n\n').filter(Boolean);
+
+        const scored = itemBlocks.map((blk, idx) => {
+          const firstLine = blk.split('\n')[0] || '';
+          const titleOnly = normalizeForQuick(firstLine.split(':')[0].replace(/\([^)]*\)/g, ''));
+          const normBlk = normalizeForQuick(blk);
+          let score = 0;
+          for (const kw of keywords) {
+            if (kw.length >= 3) {
+              if (titleOnly.includes(kw)) score += 25;
+              else if (normBlk.includes(kw)) score += 5;
+            }
+          }
+          if (blk.includes('PROMOCIÓN') || normBlk.includes('promo')) score += 3;
+          return { blk, score, idx };
+        });
+
+        scored.sort((a, b) => b.score - a.score || a.idx - b.idx);
+        const topBlocks = scored.slice(0, 8).map((x) => x.blk);
+
+        // Mapa de grupos compartidos (@G1 -> texto de la línea) para expandir solo
+        // grupos obligatorios (mín >= 1) o cuyos modificadores coincidan con lo que pidió el cliente
+        const sharedMap = new Map();
+        if (sharedPart) {
+          for (const ln of sharedPart.split('\n')) {
+            const m = ln.match(/^(@G\d+):\s*(.+)$/);
+            if (m) sharedMap.set(m[1], m[2]);
+          }
+        }
+
+        const compactLocalBlocks = topBlocks.map((blk) => {
+          const lines = blk.split('\n');
+          // Primera línea: quitar "[Categoría] " y descripciones largas entre paréntesis antes de ":"
+          const head = lines[0]
+            .replace(/^-\s*\[[^\]]+\]\s*/, '- ')
+            .replace(/\s*\([^)]*\)(?=\s*:)/g, '');
+          const kept = [head];
+
+          for (let i = 1; i < lines.length; i++) {
+            const ln = lines[i].trim();
+            if (ln.startsWith('Variantes')) {
+              kept.push(`  ${ln}`);
+            } else if (ln.startsWith('Opciones:')) {
+              const refs = ln.match(/@G\d+/g) || [];
+              for (const ref of refs) {
+                const fullGrp = sharedMap.get(ref) || '';
+                const isRequired = /elige m[ií]n [1-9]/i.test(fullGrp);
+                const normGrp = normalizeForQuick(fullGrp);
+                const matchesKw = keywords.some((kw) => kw.length >= 3 && normGrp.includes(kw));
+                if (isRequired || matchesKw) {
+                  kept.push(`  ${fullGrp}`);
+                }
+              }
+            } else if (ln.startsWith('Grupo:') || ln.startsWith('Extras/Complementos:')) {
+              const isRequired = /elige m[ií]n [1-9]/i.test(ln);
+              const normLn = normalizeForQuick(ln);
+              const matchesKw = keywords.some((kw) => kw.length >= 3 && normLn.includes(kw));
+              if (isRequired || matchesKw) {
+                kept.push(`  ${ln}`);
+              }
+            }
+          }
+          return kept.join('\n');
+        });
+
+        const localMenuSlice = compactLocalBlocks.join('\n');
+
+        const localSystemPrompt = [
+          `Cajero de ${businessName} en WhatsApp. Responde SIEMPRE en JSON válido:`,
+          `Si falta dato o conversas: {"status":"CONVERSING","replyMessage":"..."}`,
+          `Si tienes productos, entrega ("DELIVERY"|"TAKEOUT"), dirección (solo si DELIVERY) y pago ("CASH"|"TRANSFER"|"CARD"):`,
+          `{"status":"CONFIRMED","customerName":"${customerProfile?.name || 'Nombre'}","customerPhone":"${jsonCustomerPhone}","orderType":"DELIVERY","paymentMethod":"CASH","deliveryAddress":"","items":[{"menuItemId":"i1","variantId":null,"quantity":1,"modifierIds":[],"notes":""}],"replyMessage":"¡Excelente! Tu pedido ha sido confirmado y está en preparación."}`,
+          `Reglas: 1) Breve (1-3 líneas), sin mostrar [ID:i...]/[V:v...]/[M:m...]. 2) Si es TAKEOUT (recoger), SOLO pide nombre y pago (NO pidas dirección ni teléfono). 3) Si es DELIVERY, pide dirección y pago. 4) Si ya tienes todos los datos, usa CONFIRMED.`,
+          rememberedLines ? `Cliente:\n${rememberedLines}` : '',
+          activeOrderId ? `PEDIDO ACTIVO #${activeOrderInfo?.orderNumber || ''}: no uses CONFIRMED.` : '',
+          `Menú:\n${localMenuSlice}`,
+        ].filter(Boolean).join('\n');
+
+        const localMessages = [
+          { role: 'system', content: localSystemPrompt },
+          ...recentHistory.slice(-4).map((m) => ({
+            role: m.role === 'user' ? 'user' : 'assistant',
+            content: truncateHistoryText(m.text, 220),
+          })),
+          { role: 'user', content: text },
+        ];
+
+        const r = await axios.post(`${ollamaBase}/api/chat`, {
+          model: ollamaModel,
+          messages: localMessages,
+          format: 'json',
+          think: false,
+          stream: false,
+          keep_alive: '60m',
+          options: {
+            temperature: 0.2,
+            num_ctx: 2048,
+            num_predict: 220,
+            num_thread: 12,
+          },
+        }, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 45000,
+        });
+        replyText = r.data?.message?.content;
+        if (replyText) {
+          console.log(`[Ollama Local] Respuesta generada con ${ollamaModel} ($0 tokens, menu=${topBlocks.length}/${itemBlocks.length} items).`);
+        }
+      } catch (err) {
+        lastErr = err;
+        if (err?.code !== 'ECONNREFUSED' || process.env.OLLAMA_BASE_URL) {
+          console.warn(`[Ollama Local] Falló (${err?.code || err?.response?.status || err?.message}), pasando a respaldo cloud…`);
+        }
+      }
+    }
+
+    if (!replyText && process.env.GROQ_API_KEY) {
+      const messages = chatMessages;
       const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
       outerGroq:
       for (const model of GROQ_MODELS) {
@@ -556,6 +723,18 @@ ${activeOrderInfo ? `Pedido actual: folio #${activeOrderInfo.orderNumber || '—
     } catch (e) {
       console.error('Failed to parse Gemini JSON:', replyText);
       throw e;
+    }
+
+    if (parsedReply && parsedReply.status === 'CONFIRMED') {
+      if (!parsedReply.customerPhone && jsonCustomerPhone) {
+        parsedReply.customerPhone = jsonCustomerPhone;
+      }
+      if (!parsedReply.customerName && customerProfile?.name) {
+        parsedReply.customerName = customerProfile.name;
+      }
+      if (!parsedReply.paymentMethod && customerProfile?.paymentMethod) {
+        parsedReply.paymentMethod = customerProfile.paymentMethod;
+      }
     }
 
     // Re-expandir los alias cortos (i1, v1, m1) a los CUIDs reales de Prisma
