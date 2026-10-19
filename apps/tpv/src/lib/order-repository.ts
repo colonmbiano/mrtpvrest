@@ -41,6 +41,22 @@ export function mergeLocalPaidOrders(tickets: any[]): any[] {
 export function rememberServerOrder(order: any, scope: OrderScope = getTenantIds()): void {
   useOfflineStore.setState(s => ({ orders: pruneLocalOrders(cacheServerOrder(s.orders, scope, order)) }));
 }
+
+/** El cambio de mesa necesita confirmación remota para no ocuparla dos veces. */
+export async function reassignOrderTable(orderId: string, fromTableId: string, tableId: string): Promise<any> {
+  const scope = getTenantIds();
+  await waitForOfflineHydration();
+  assertScope(scope);
+  const record = findLocalOrder(useOfflineStore.getState().orders, scope, orderId);
+  if (record?.pending.length || record?.order.localPending ||
+      (!record?.serverId && orderId.startsWith('local-order-'))) {
+    throw new Error('Sincroniza los cambios pendientes de esta cuenta antes de cambiarla de mesa');
+  }
+  const { data } = await api.patch(`/api/orders/${record?.serverId ?? orderId}/table`, { tableId, fromTableId });
+  assertScope(scope);
+  rememberServerOrder(data, scope);
+  return data;
+}
 function localFallbackAllowed(error: any): boolean {
   return !error?.response || error.response.status >= 500 ||
     error.code === AUTH_TOKEN_MISSING || error.code === BACKEND_UNAVAILABLE;
