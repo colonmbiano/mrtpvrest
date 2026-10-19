@@ -27,7 +27,7 @@ const orders: DrawerOrder[] = [
 ];
 
 describe("OrdersDrawer multiselección", () => {
-  it("combina tipo y pago en cobradas y conserva el tipo al quitar el filtro de pago", async () => {
+  it("combina tipo y pago en cobradas y conserva el tipo al cambiar el pago", async () => {
     const user = userEvent.setup();
     render(<OrdersDrawer isOpen mode="paid" onClose={jest.fn()}
       orders={[
