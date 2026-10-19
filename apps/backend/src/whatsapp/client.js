@@ -422,13 +422,15 @@ function initWhatsApp(io) {
     // En prod con sesión en volumen NO debería aparecer QR salvo desvinculación:
     // avisar (throttled) para que alguien lo escanee en /qr.
     notifyAlert('QR requerido — escanéalo en /qr', null);
-    console.log('[WhatsApp Bot] Escanea este código QR con tu WhatsApp:');
-    qrcode.generate(qr, { small: true });
-
-    // Generar un link para verlo en el navegador (útil si la consola lo corta)
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-    console.log('\n[WhatsApp Bot] Si no puedes escanearlo en consola, abre este enlace en tu navegador:');
-    console.log(qrUrl, '\n');
+    if (process.env.QUIET_QR_LOG === '1') {
+      console.log('[WhatsApp Bot] Código QR actualizado (servicio en marcha en /qr).');
+    } else {
+      console.log('[WhatsApp Bot] Escanea este código QR con tu WhatsApp:');
+      qrcode.generate(qr, { small: true });
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
+      console.log('\n[WhatsApp Bot] Si no puedes escanearlo en consola, abre este enlace en tu navegador:');
+      console.log(qrUrl, '\n');
+    }
 
     // Opcional: Emitir el QR vía socket para mostrarlo en el panel TPV de Admin
     if (io) {
@@ -1050,9 +1052,17 @@ async function destroyWhatsApp() {
   }
 }
 
+function clearAllHandoffs() {
+  const count = humanHandoffs.size;
+  humanHandoffs.clear();
+  console.log(`[WhatsApp Bot] ${count} pausa(s) por intervención humana limpiadas manualmente.`);
+  return count;
+}
+
 module.exports = {
   initWhatsApp,
   destroyWhatsApp,
+  clearAllHandoffs,
   getWhatsAppClient: () => whatsappClient,
   getLatestQr: () => latestQr,
   getSessionState: () => sessionState,

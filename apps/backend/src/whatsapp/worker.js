@@ -27,7 +27,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const botConfig = require('./botConfig');
-const { initWhatsApp, destroyWhatsApp, getWhatsAppClient, getLatestQr, getSessionState, getIgnoredGroupInfo, refreshIgnoredGroup } = require('./client');
+const { initWhatsApp, destroyWhatsApp, clearAllHandoffs, getWhatsAppClient, getLatestQr, getSessionState, getIgnoredGroupInfo, refreshIgnoredGroup } = require('./client');
 
 // Al correr con volumen persistente, Chromium deja archivos Singleton* (lock del
 // perfil) en el userDataDir dentro del volumen. Como cada deploy es un contenedor
@@ -101,6 +101,11 @@ const healthServer = http.createServer((req, res) => {
   if (url === '/qr') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(qrPageHtml());
+  }
+  if (url === '/clear-handoffs') {
+    const cleared = clearAllHandoffs();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ ok: true, cleared }));
   }
   if (url === '/healthz') {
     // Healthcheck de DEPLOY de Railway: 200 mientras el PROCESO viva (no acopla
