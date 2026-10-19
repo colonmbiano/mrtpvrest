@@ -183,6 +183,22 @@ healthServer.listen(PORT, '0.0.0.0', () => {
       console.error('[WhatsApp Worker] Error en monitor de standby:', e?.message || e);
     }
   }, 15000).unref?.();
+
+  // Heartbeat cada 20s para reportar al panel admin que el bot local está en línea:
+  const rid = process.env.WHATSAPP_BOT_RESTAURANT_ID;
+  if (rid) {
+    const { prisma } = require('@mrtpvrest/database');
+    setInterval(async () => {
+      try {
+        if (getSessionState() === 'ready' && botConfig.shouldRunHere()) {
+          await prisma.integrationConfig.updateMany({
+            where: { restaurantId: rid, type: 'WHATSAPP_ASSISTANT' },
+            data: { lastSync: new Date() },
+          });
+        }
+      } catch (e) {}
+    }, 20000).unref?.();
+  }
 })();
 
 // ── Apagado limpio ───────────────────────────────────────────────────────────
