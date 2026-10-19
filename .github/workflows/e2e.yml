@@ -91,6 +91,9 @@ jobs:
       - name: Migrar BD
         run: pnpm --filter @mrtpvrest/database run db:migrate
 
+      - name: Validar migración aditiva de notas de cocina
+        run: node --test tests/integration/kitchen-note-migration.test.js
+
       - name: Seed de datos
         run: pnpm --filter @mrtpvrest/database run db:seed
         env:
@@ -121,10 +124,19 @@ jobs:
       - name: Seed retail (ferretería)
         run: node apps/backend/scripts/e2e-seed-retail.js
 
+      # El servidor dev recompila rutas en frío y puede recargar el documento.
+      # El TPV exige PIN tras una recarga: probar el build evita que Fast Refresh
+      # interrumpa una sesión real a mitad de las rondas.
+      - name: Compilar TPV para E2E
+        run: pnpm --filter @mrtpvrest/tpv build
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_API_URL: "http://localhost:3001"
+
       - name: Arrancar admin + tpv + saas + kds + moda
         run: |
           pnpm --filter @mrtpvrest/admin dev > admin.log 2>&1 &
-          pnpm --filter @mrtpvrest/tpv dev > tpv.log 2>&1 &
+          NODE_ENV=production pnpm --filter @mrtpvrest/tpv start > tpv.log 2>&1 &
           pnpm --filter @mrtpvrest/saas dev > saas.log 2>&1 &
           pnpm --filter @mrtpvrest/kds dev > kds.log 2>&1 &
           pnpm --filter @mrtpvrest/moda dev > moda.log 2>&1 &
@@ -139,7 +151,9 @@ jobs:
         run: tail -40 backend.log || true
 
       - name: Correr E2E
-        run: pnpm test:e2e
+        run: |
+          pnpm test:e2e --retries=0
+          PLAYWRIGHT_HTML_OUTPUT_DIR=tests/e2e-repeat-report pnpm test:e2e --project=meseros --repeat-each=3 --retries=0 --workers=1 --output=tests/e2e/results-repeat
         env:
           ADMIN_URL: "http://localhost:3002"
           TPV_URL: "http://localhost:3005"
@@ -176,5 +190,7 @@ jobs:
           path: |
             tests/e2e-report
             tests/e2e/results
+            tests/e2e-repeat-report
+            tests/e2e/results-repeat
           retention-days: 14
           if-no-files-found: ignore

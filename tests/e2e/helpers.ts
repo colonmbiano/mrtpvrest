@@ -11,6 +11,25 @@ function readAuth() {
   return JSON.parse(fs.readFileSync(AUTH_FILE, 'utf-8'));
 }
 
+/** Headers del admin del seed para preparar fixtures en la API de E2E. */
+export function getAdminHeaders() {
+  const auth = readAuth();
+  return {
+    Authorization: `Bearer ${auth.accessToken}`,
+    'x-restaurant-id': auth.restaurantId,
+    'x-location-id': auth.locationId,
+  };
+}
+
+/** Usa el JWT real del PIN; las cookies de navegación no autorizan la API. */
+export async function getEmployeeHeaders(page: Page) {
+  return page.evaluate(() => ({
+    Authorization: `Bearer ${sessionStorage.getItem('tpv-access-token') || localStorage.getItem('accessToken') || ''}`,
+    'x-restaurant-id': localStorage.getItem('restaurantId') || '',
+    'x-location-id': localStorage.getItem('locationId') || '',
+  }));
+}
+
 /**
  * Inyecta la sesión de admin en el browser.
  *

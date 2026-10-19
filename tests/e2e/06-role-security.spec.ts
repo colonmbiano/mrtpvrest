@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { injectTPVDevice, enterPIN, getTPVCookie } from './helpers';
+import { injectTPVDevice, enterPIN, getTPVCookie, getEmployeeHeaders } from './helpers';
 
 /**
  * Contrato de seguridad del TPV (apps/tpv/src/middleware.ts):
@@ -17,6 +17,7 @@ import { injectTPVDevice, enterPIN, getTPVCookie } from './helpers';
  * esto valida la defensa en profundidad del front.
  */
 const TPV_URL = process.env.TPV_URL ?? 'http://localhost:3005';
+const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 const WAITER_PIN = process.env.WAITER_PIN ?? '1111';   // seed: E2E Mesero
 const CASHIER_PIN = process.env.CASHIER_PIN ?? '1112'; // seed: E2E Cajero
 const KITCHEN_PIN = process.env.KITCHEN_PIN ?? '1113'; // seed: E2E Cocina
@@ -59,8 +60,17 @@ test.describe('Validación de Roles (Seguridad)', () => {
     test('NO puede entrar al cierre de caja — rebota a /hub', async ({ page }) => {
       const response = await page.request.get(`${TPV_URL}/cierre/`, { maxRedirects: 0 });
       expect(response.status()).toBe(307);
-      expect(new URL(response.headers().location).pathname).toBe('/hub');
+      expect(response.headers().location).toBeTruthy();
+      expect(new URL(response.headers().location, response.url()).pathname).toBe('/hub');
       expect(await getTPVCookie(page, 'tpv-role')).toBe('WAITER');
+    });
+
+    test('La API rechaza cerrar caja con el JWT del mesero', async ({ page }) => {
+      const response = await page.request.post(`${API_URL}/api/shifts/current/close`, {
+        headers: await getEmployeeHeaders(page), data: {},
+      });
+      expect(response.status()).toBe(403);
+      expect((await response.json()).code).toBe('CANNOT_MANAGE_SHIFTS');
     });
   });
 
@@ -95,7 +105,13 @@ test.describe('Validación de Roles (Seguridad)', () => {
 
       const response = await page.request.get(`${TPV_URL}/pos/menu/`, { maxRedirects: 0 });
       expect(response.status()).toBe(307);
-      expect(new URL(response.headers().location).pathname).toBe('/hub');
+      expect(response.headers().location).toBeTruthy();
+      expect(new URL(response.headers().location, response.url()).pathname).toBe('/hub');
+
+      const createOrder = await page.request.post(`${API_URL}/api/orders/tpv`, {
+        headers: await getEmployeeHeaders(page), data: {},
+      });
+      expect(createOrder.status()).toBe(403);
     });
   });
 

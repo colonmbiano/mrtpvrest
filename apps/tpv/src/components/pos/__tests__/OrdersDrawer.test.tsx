@@ -27,6 +27,27 @@ const orders: DrawerOrder[] = [
 ];
 
 describe("OrdersDrawer multiselección", () => {
+  it("combina tipo y pago en cobradas y conserva el tipo al quitar el filtro de pago", async () => {
+    const user = userEvent.setup();
+    render(<OrdersDrawer isOpen mode="paid" onClose={jest.fn()}
+      orders={[
+        { ...orders[0]!, status: 'PAID', paymentMethod: 'SPEI' },
+        { ...orders[1]!, status: 'PAID', paymentMethod: 'CARD_PRESENT' },
+        { ...orders[0]!, id: 'order-3', customerName: 'Rosa', status: 'PAID', paymentMethod: 'CARD' },
+      ]}
+      onShowDetail={jest.fn()} onConfirmPayment={jest.fn()} onReprintOrder={jest.fn()} />);
+    await user.click(screen.getByRole('button', { name: 'Tarjeta', exact: true }));
+    expect(screen.queryByText('Ana')).not.toBeInTheDocument();
+    expect(screen.getByText('Luis')).toBeInTheDocument();
+    expect(screen.getByText('Rosa')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Mesa', exact: true }));
+    expect(screen.queryByText('Luis')).not.toBeInTheDocument();
+    expect(screen.getByText('Rosa')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Transfer.', exact: true }));
+    expect(screen.getByText('Ana')).toBeInTheDocument();
+    expect(screen.queryByText('Rosa')).not.toBeInTheDocument();
+  });
+
   it("selecciona varios tickets y conserva el primero como cuenta final", async () => {
     const user = userEvent.setup();
     const onMergeOrders = jest.fn().mockResolvedValue(undefined);
