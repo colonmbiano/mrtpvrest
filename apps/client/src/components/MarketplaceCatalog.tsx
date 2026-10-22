@@ -4,6 +4,7 @@
 // Los enlaces a tienda son <a> de documento completo a propósito: el carrito
 // (cartStore) es un singleton en memoria y no debe viajar entre tiendas.
 import { Search, Store, Package, AlertTriangle } from 'lucide-react';
+import Link from 'next/link';
 import {
   BUSINESS_TYPE_LABELS, MAX_QUERY_LENGTH,
   catalogHref, catalogSearchParams, storeHref, totalPages, formatPrice,
@@ -128,7 +129,7 @@ function SearchForm({ state, hasFilters }: { state: CatalogState; hasFilters: bo
             <Search aria-hidden="true" className="h-5 w-5" />
             Buscar
           </button>
-          {hasFilters && <a href="/" className={LINK}>Limpiar filtros</a>}
+          {hasFilters && <Link href="/" className={LINK}>Limpiar filtros</Link>}
         </div>
       </div>
     </form>
@@ -200,7 +201,7 @@ function SectionBody<T>({
       <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6">
         <p className="font-bold">{emptyFiltered ?? emptyAll}</p>
         {emptyFiltered && (
-          <a href="/" className={`mt-2 inline-block ${LINK}`}>Limpiar filtros</a>
+          <Link href="/" className={`mt-2 inline-block ${LINK}`}>Limpiar filtros</Link>
         )}
       </div>
     );
@@ -276,7 +277,7 @@ function SectionErrorMessage({ reason, title, state }: { reason: SectionError; t
       <p className="mt-1">{ERROR_TEXT[reason]}</p>
       {reason === 'unavailable' && <RetryForm state={state} />}
       {reason === 'invalid' && (
-        <a href="/" className={`mt-3 inline-block ${LINK}`}>Limpiar búsqueda</a>
+        <Link href="/" className={`mt-3 inline-block ${LINK}`}>Limpiar búsqueda</Link>
       )}
     </div>
   );

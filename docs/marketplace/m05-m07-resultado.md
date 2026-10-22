@@ -87,9 +87,19 @@ git diff --check                                                # OK
 
 ## Pendiente y riesgos conocidos
 
-- **Sin verificación visual ni de red.** Falta abrir `/` en móvil y escritorio,
-  teclado, zoom al 200 %, lector de pantalla, y confirmar en la pestaña de red que
-  API, fuentes e imágenes no salen a producción.
+- **Verificación real del 22/oct (tras instalar con autorización del usuario):**
+  `tsc --noEmit` del client sin errores; eslint de los archivos cambiados con 0 errores
+  (los enlaces a `/` pasaron a `<Link>`; los enlaces a tienda siguen siendo `<a>`).
+  En el navegador, con backend `127.0.0.1:4100` y client `127.0.0.1:4103`: catálogo
+  vacío, búsqueda y filtro en la URL, consulta >80 caracteres, "atrás", error con
+  backend detenido y reintento que conserva filtros, error de tienda con "Volver al
+  catálogo", móvil 375 px sin scroll horizontal y foco visible por teclado. Las
+  peticiones del navegador solo fueron a `127.0.0.1:4103`.
+- **Sin probar todavía:** zoom al 200 %, lector de pantalla, catálogo con datos
+  (requiere BD con tenants sintéticos) y tráfico saliente del servidor de Next: aquí
+  no se pudo atribuir sockets por proceso. Por defecto, Next dev envía telemetría y
+  `next/font/google` descarga fuentes al compilar; ninguno de los dos es producción de
+  MRTPVREST.
 - `src/app/layout.tsx` sigue usando `next/font/google` (descarga en build) y
   preconnect a Cloudinary; no se tocó. Las imágenes permiten cualquier host HTTPS y
   la CSP es Report-Only. Decidir antes del primer arranque.

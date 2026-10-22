@@ -42,9 +42,16 @@ python -I .marketplace-local/verify.py   # falla esperada: código versionado mo
                                           # confirma original e índice preservados
 ```
 
-`npx jest` en apps/backend **no es evidencia válida** hoy: 58 de 76 suites no cargan
-porque `@mrtpvrest/database` no está instalado (no hay `node_modules`); las 222 pruebas
-que sí cargaron pasaron. Requiere la instalación descrita abajo.
+**Con dependencias instaladas** (22/oct, autorizado por el usuario; `pnpm install
+--frozen-lockfile --ignore-scripts` + `prisma generate`, sin cambios en el lockfile):
+jest del backend 635/635 y 76/76 suites (una ejecución previa tuvo una falla
+intermitente en `voice-agent.test.js` que pasa aislada y en la siguiente corrida);
+`tsc --noEmit` sin errores en client, TPV, Moda, Meseros Lite, Kiosk y SaaS. En Tokki y
+KDS hay 2 errores cada uno, ya existentes y en archivos no tocados
+(`ProductOptionsModal.tsx`, `consolidado/page.tsx`, un test). Arranque en loopback y
+verificación en navegador: ver m05-m07-resultado.md. El backend solo escucha en
+127.0.0.1 (no responde desde la IP LAN), CORS rechaza `https://mrtpvrest.com` con 403 y
+las rutas de tienda chocan con la BD bloqueada en `127.0.0.1:1`.
 
 ## Bloqueos de staging (MARKETPLACE-STAGING.md)
 
@@ -95,9 +102,9 @@ Cada paso necesita aprobación explícita: hoy están prohibidos por AGENTS.md.
 
 ## Decisiones pendientes del usuario
 
-- Autorizar (o no) los pasos 1–2 del plan: instalar dependencias y correr type-check,
-  lint y jest reales.
-- Añadir las banderas de entorno del paso 3 (los `.env` no se editaron).
+- Pasos 1–5 del plan hechos el 22/oct (instalación, comprobaciones, banderas en los
+  `.env`, catálogo vacío y error visible). Falta el paso 6 (BD de staging con datos
+  sintéticos) y completar el 7 (zoom y lector de pantalla).
 - Revisión independiente de M05/M07 (Antigravity cuando recupere cuota, o Codex).
 - Revisar también los guards de API de TPV, Tokki, Moda, Meseros Lite, KDS, Kiosk y
   SaaS: esas apps se publican como APK/OTA, y aunque el cambio no altera nada sin

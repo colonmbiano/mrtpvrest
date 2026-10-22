@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 import { MapPin, Phone, MessageCircle } from 'lucide-react';
 import { MochiTheme } from '@/components/themes/MochiTheme';
 import { BeverageTheme } from '@/components/themes/BeverageTheme';
@@ -211,9 +212,9 @@ export default async function StorefrontPage({
           )}
 
           {isMarketplaceCatalogEnabled() && (
-            <a href="/" className="mt-6 block font-bold text-[#9a3412] underline underline-offset-2">
+            <Link href="/" className="mt-6 block font-bold text-[#9a3412] underline underline-offset-2">
               Volver al catálogo
-            </a>
+            </Link>
           )}
         </div>
       </div>
@@ -252,16 +253,16 @@ export default async function StorefrontPage({
       className="min-h-screen bg-white"
     >
       {/* Marketplace: barra estática (los headers de tema son sticky y quedan
-          debajo). Enlace de documento completo para no compartir el carrito en
-          memoria con el catálogo ni con otra tienda. */}
+          debajo). Volver al catálogo puede ser navegación SPA: el catálogo no usa
+          el carrito y entra a cada tienda con documento completo, que lo reinicia. */}
       {isMarketplaceCatalogEnabled() && (
         <nav aria-label="Marketplace" className="border-b border-gray-200 bg-[#f8f8f6] px-4 py-2 text-sm">
-          <a
+          <Link
             href="/"
             className="font-bold text-[#9a3412] underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a3412]"
           >
             ← Volver al catálogo
-          </a>
+          </Link>
         </nav>
       )}
 
