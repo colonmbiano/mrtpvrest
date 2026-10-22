@@ -10,6 +10,7 @@ import {
   type StoreInfo, type StoreLocation,
 } from '@/lib/store-data';
 import { cldImage } from '@/lib/cloudinary';
+import { getStorePublicUrl, isMarketplaceCatalogEnabled, isMarketplaceIsolated } from '@/lib/config';
 import InstallPWABanner from '@/components/InstallPWABanner';
 import CartDeepLinkLoader from '@/components/CartDeepLinkLoader';
 import { DineInBanner } from '@/components/DineInBanner';
@@ -52,7 +53,9 @@ export async function generateMetadata({
   let store: StoreInfo | null = null;
   try { store = await fetchStore(slug); } catch { /* usa defaults */ }
   const name = store?.name ?? 'Tienda';
-  const base = `https://${slug}.mrtpvrest.com`;
+  // Subdominio productivo, o /<slug> del mismo origen en el marketplace; null
+  // = sin URL pública configurada, se omiten las URLs absolutas.
+  const base = getStorePublicUrl(slug);
   const description = `Haz tu pedido en línea en ${name}. Rápido y fácil, directo a tu domicilio.`;
   // store.logo ya es URL absoluta de Cloudinary. WhatsApp no resuelve relativas.
   const logo = store?.logo || undefined;
@@ -63,16 +66,18 @@ export async function generateMetadata({
   const ogImages = ogImage ? [{ url: ogImage, width: 800, height: 420, alt: name }] : undefined;
 
   return {
-    metadataBase: new URL(base),
+    metadataBase: base ? new URL(base) : undefined,
     title: `${name} | Pedidos en línea`,
     description,
     applicationName: name,
     icons: iconUrl ? { icon: iconUrl } : undefined,
-    alternates: { canonical: '/' },
+    // Canonical absoluto: con base /<slug>, un '/' relativo apuntaría a la raíz.
+    alternates: base ? { canonical: base } : undefined,
+    robots: isMarketplaceIsolated() ? { index: false, follow: false } : undefined,
     openGraph: {
       type: 'website',
       locale: 'es_MX',
-      url: base,
+      url: base ?? undefined,
       siteName: name,
       title: `${name} | Pedidos en línea`,
       description,
@@ -204,6 +209,12 @@ export default async function StorefrontPage({
               Escríbenos por WhatsApp
             </a>
           )}
+
+          {isMarketplaceCatalogEnabled() && (
+            <a href="/" className="mt-6 block font-bold text-[#9a3412] underline underline-offset-2">
+              Volver al catálogo
+            </a>
+          )}
         </div>
       </div>
     );
@@ -240,6 +251,20 @@ export default async function StorefrontPage({
       style={{ ['--color-primary' as string]: primary } as React.CSSProperties}
       className="min-h-screen bg-white"
     >
+      {/* Marketplace: barra estática (los headers de tema son sticky y quedan
+          debajo). Enlace de documento completo para no compartir el carrito en
+          memoria con el catálogo ni con otra tienda. */}
+      {isMarketplaceCatalogEnabled() && (
+        <nav aria-label="Marketplace" className="border-b border-gray-200 bg-[#f8f8f6] px-4 py-2 text-sm">
+          <a
+            href="/"
+            className="font-bold text-[#9a3412] underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a3412]"
+          >
+            ← Volver al catálogo
+          </a>
+        </nav>
+      )}
+
       {/* Llegó por el QR de mesa: que se vea desde el primer pintado, no solo
           al abrir el checkout. */}
       {dineIn && <DineInBanner table={dineIn.table} primary={primary} />}

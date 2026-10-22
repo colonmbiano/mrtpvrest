@@ -1,3 +1,5 @@
+import { isMarketplaceCatalogEnabled } from '@/lib/config';
+
 // Se muestra cuando page.tsx llama a notFound() (slug inexistente o tienda sin
 // web store). Marca genérica y en español, mucho mejor que el 404 de Next.
 export default function StoreNotFound() {
@@ -13,6 +15,11 @@ export default function StoreNotFound() {
           Esta tienda no existe o su tienda en línea no está disponible. Revisa el
           enlace con el negocio.
         </p>
+        {isMarketplaceCatalogEnabled() && (
+          <a href="/" className="mt-6 block font-bold text-[#9a3412] underline underline-offset-2">
+            Volver al catálogo
+          </a>
+        )}
       </div>
     </main>
   );

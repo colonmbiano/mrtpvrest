@@ -5,6 +5,7 @@
 // selección, así no se puede manipular el importe.
 import type { StoreProduct } from '../components/ProductModal';
 import type { AddInput, CartLine } from './cartStore';
+import { getStorePublicUrl, isMarketplaceCatalogEnabled } from './config';
 
 const COMPLEMENT_PREFIX = 'complement:';
 
@@ -105,6 +106,13 @@ export function cartShareUrl(slug: string, lines: CartLine[]): string {
     ...(l.note ? { n: l.note } : {}),
   }));
   const param = b64urlEncode(JSON.stringify(encoded));
+  // Marketplace: la tienda vive en /<slug> del mismo origen; la raíz es el
+  // catálogo y ahí el ?cart= se perdería. Nunca cae al subdominio productivo.
+  if (isMarketplaceCatalogEnabled()) {
+    const path = `/${encodeURIComponent(slug)}`;
+    const base = typeof window !== 'undefined' ? `${window.location.origin}${path}` : (getStorePublicUrl(slug) ?? path);
+    return `${base}?cart=${param}`;
+  }
   const base = typeof window !== 'undefined' ? window.location.origin : `https://${slug}.mrtpvrest.com`;
   return `${base}/?cart=${param}`;
 }

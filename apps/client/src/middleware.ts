@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 
 export function middleware(req: NextRequest) {
+  // Marketplace aislado: todas las tiendas viven en /<slug> del mismo origen
+  // loopback. Nunca reescribir por host (p. ej. [::1] no empieza con "127").
+  if (process.env.NEXT_PUBLIC_MARKETPLACE_ISOLATED === "true") {
+    return NextResponse.next()
+  }
+
   const url = req.nextUrl.clone()
   const host = req.headers.get("host") || ""
   const slug = host.split(".")[0]
