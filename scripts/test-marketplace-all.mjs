@@ -67,6 +67,8 @@ const TESTS = [
   { path: 'apps/backend/scripts/marketplace-couriers-v1.test.cjs', name: 'Backend: Repartidores Globales & Afiliaciones v1' },
   { path: 'apps/backend/scripts/marketplace-tracking-v1.test.cjs', name: 'Backend: Rastreo Geolocalizado & Privacidad GPS v1' },
   { path: 'apps/backend/scripts/marketplace-webhooks-v1.test.cjs', name: 'Backend: Webhook Durable de Mercado Pago v1' },
+  { path: 'apps/backend/scripts/marketplace-ops-dispatch-v1.test.cjs', name: 'Backend: Panel Ops de Despacho & Reasignación v1' },
+  { path: 'apps/backend/scripts/marketplace-settlements-v1.test.cjs', name: 'Backend: Liquidaciones & Reembolsos en Partida Doble v1' },
   { path: 'apps/backend/scripts/runtime-policy.test.cjs', name: 'Backend: Runtime Policy & Tenant Guard' },
 
   // ── INTEGRACIÓN MAESTRA & AISLAMIENTO ──
