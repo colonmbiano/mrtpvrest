@@ -76,6 +76,7 @@ export type CustomerOrderItem = {
 
 export type CustomerOrder = {
   id: string; orderNumber: string; status: string; orderType: string; total: number;
+  notes?: string | null;
   paymentStatus: string; pointsEarned: number; createdAt: string;
   // Contacto/entrega del pedido → "Volver a pedir" los reusa como datos guardados.
   customerName: string | null; customerPhone: string | null;
