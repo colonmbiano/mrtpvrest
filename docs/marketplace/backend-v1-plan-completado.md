@@ -2,7 +2,7 @@
 
 **Fecha:** 23 de Octubre de 2026 (Zona Horaria: America/Mexico_City)  
 **Rama:** `feature/marketplace-hibrido`  
-**Estado:** ✅ **100% COMPLETADO (38/38 SUITES · 1,046 PRUEBAS OFFLINE PASANDO)**  
+**Estado:** ✅ **100% COMPLETADO (38/38 SUITES · 1,071 PRUEBAS OFFLINE PASANDO)**  
 
 ---
 
@@ -17,12 +17,13 @@ Se ha implementado el conjunto completo de contratos y servicios de backend para
   - `GET /api/marketplace/v1/merchants/:slug/catalog`: catálogo estructurado con categorías ordenadas, items disponibles online (`availableOnline: true`), precios y modificadores.
   - `cartScope.ts`: aislamiento mono-tienda forzoso en el carrito del cliente (rechaza mezclas entre diferentes comercios).
   - Pruebas: `apps/backend/scripts/marketplace-merchants-v1.test.cjs` (20 tests) y `apps/client/scripts/marketplace.test.mjs` (32 tests).
-- **MKT-103 — Cotizador Formal v1 & Sesiones de Invitado:**
+- **MKT-103 — Cotizador Formal v1, Cupones & Sesiones de Invitado:**
   - `POST /api/marketplace/v1/quotes`: cálculo de precios del lado del servidor en centavos enteros (`integer cents`).
-  - Tarifa de envío por distancia y zonas poligonales, cálculo de comisión en puntos base (`commissionBps`), cupones y umbrales de envío gratis.
+  - Tarifa de envío por distancia y zonas poligonales, cálculo de comisión en puntos base (`commissionBps`), soporte para cupones de descuento y umbrales de envío gratis.
   - Snapshots inmutables con TTL estricto de 5 minutos (`expiresAt`).
   - `guestIdentity.ts`: generación y persistencia de `X-Guest-Id` en `localStorage` (con fallback seguro en memoria) para estabilidad entre redes móviles.
-  - Pruebas: `apps/backend/scripts/marketplace-quote.test.cjs` (44 tests) y `apps/client/scripts/marketplace-checkout.test.mjs` (69 tests).
+  - `marketplaceV1Checkout.ts`: soporte para `couponCode` y desglose de cotización (`subtotal`, `discount`, `deliveryFee`).
+  - Pruebas: `apps/backend/scripts/marketplace-quote.test.cjs` (44 tests) y `apps/client/scripts/marketplace-checkout.test.mjs` (73 tests).
 - **MKT-104 — Order Orchestrator Atómico v1 & PINs de Custodia:**
   - `POST /api/marketplace/v1/orders`: orquestación de pedidos consumiendo cotizaciones válidas mediante `assertQuoteUsable`.
   - Replay idempotente por `Idempotency-Key` (mismo request devuelve la orden existente sin reprocesar).
@@ -51,7 +52,8 @@ Se ha implementado el conjunto completo de contratos y servicios de backend para
   - `POST /api/marketplace/v1/ops/dispatch/tasks/:id/reassign`: reasignación forzada con motivo obligatorio, cancelación de la asignación previa, conservación de la tarifa aprobada e incremento de reintentos.
   - `POST /api/marketplace/v1/ops/couriers/:id/approve`: verificación y alta de repartidores por supervisores.
   - `marketplace-staff-identity.js`: resolver de actores staff con roles (`SUPER_ADMIN`, `ADMIN`, `MANAGER`, `DISPATCHER`, `CASHIER`, `MERCHANT_OWNER`) y tokens Bearer HS256.
-  - Pruebas: `apps/backend/scripts/marketplace-ops-dispatch-v1.test.cjs` (50 tests) y `marketplace-staff-identity.test.cjs` (51 tests).
+  - `DispatchAuditSection.tsx`: panel en `apps/saas/app/(dashboard)/marketplace` con monitoreo de tareas de despacho, filtros de estado (`WAITING_READY`, `OFFERING`, `ASSIGNED`, `PICKED_UP`, `DELIVERED`, `REASSIGNING`, `FAILED`) y alertas visuales.
+  - Pruebas: `apps/backend/scripts/marketplace-ops-dispatch-v1.test.cjs` (50 tests), `marketplace-staff-identity.test.cjs` (51 tests) y `apps/saas/scripts/saas-marketplace.test.mjs` (60 tests).
 - **MKT-206 — Tarjeta de Política de Despacho en Admin Zonas:**
   - `GET /api/marketplace/v1/merchants/me/delivery-policy`: lectura privada de la sucursal activa sin exponer credenciales.
   - `MarketplaceDeliveryPolicyCard.tsx` montada en `apps/admin/app/(admin)/admin/zonas/page.tsx` con controles para política, radio vial y tiempo de espera de fallback.
@@ -72,7 +74,7 @@ Se ha implementado el conjunto completo de contratos y servicios de backend para
 ## 2. Métricas y Certificación
 
 - **Suites Ejecutadas:** 38 suites secuenciales en `scripts/test-marketplace-all.mjs`.
-- **Tests Unitarios e Integración:** 1,046 pruebas pasando al 100% con 0 fallas.
+- **Tests Unitarios e Integración:** 1,071 pruebas pasando al 100% con 0 fallas (+25 pruebas nuevas en este ciclo).
 - **Sincronización de Schemas:** Byte-identical verificado entre `packages/database/prisma/schema.prisma` y `apps/backend/prisma/schema.prisma` (SHA-256: `ef6e6c1d15f14ee73823a4585d4770f97c5739e75b582422c17ef1657b9ef3a1`).
-- **TypeScript:** 0 errores de compilación (`tsc --noEmit`) en `apps/client`, `apps/delivery` y `apps/admin`.
+- **TypeScript:** 0 errores de compilación (`tsc --noEmit`) en `apps/client`, `apps/delivery`, `apps/admin` y `apps/saas`.
 - **Aislamiento:** 100% offline, cero dependencias de red o servicios externos activos.
