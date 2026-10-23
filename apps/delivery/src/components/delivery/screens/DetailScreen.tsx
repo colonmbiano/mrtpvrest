@@ -1,8 +1,10 @@
 'use client';
 // handoff/screens/DetailScreen.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { C, S, ORDER_STATUS_CONFIG } from '@/lib/tokens';
 import { whatsappUrl } from '@/lib/phone';
+import { PinVerificationModal } from '../PinVerificationModal';
+import { confirmPickupPin, confirmDeliveryPin } from '@/lib/marketplaceDispatch';
 
 interface DetailScreenProps {
   order: any;
@@ -10,6 +12,8 @@ interface DetailScreenProps {
   onBack: () => void;
   onCobrar: () => void;
   onChat: () => void;
+  onPickupConfirmed?: () => void;
+  onDeliveryConfirmed?: () => void;
 }
 
 function BackHeader({ title, onBack, right }: { title: string; onBack: () => void; right?: React.ReactNode }) {
@@ -27,9 +31,37 @@ function BackHeader({ title, onBack, right }: { title: string; onBack: () => voi
   );
 }
 
-export function DetailScreen({ order, orderDetail, onBack, onCobrar, onChat }: DetailScreenProps) {
+export function DetailScreen({
+  order,
+  orderDetail,
+  onBack,
+  onCobrar,
+  onChat,
+  onPickupConfirmed,
+  onDeliveryConfirmed,
+}: DetailScreenProps) {
   const items = (order?.items?.length ? order.items : orderDetail?.items) || [];
   const total = order?.total || 0;
+  const [showPickupPin, setShowPickupPin] = useState(false);
+  const [showDeliveryPin, setShowDeliveryPin] = useState(false);
+
+  const handlePickupPinConfirm = async (pin: string) => {
+    const result = await confirmPickupPin(order.courierId || '', order.taskId || order.id, pin);
+    if (result.success) {
+      setShowPickupPin(false);
+      onPickupConfirmed?.();
+    }
+    return result;
+  };
+
+  const handleDeliveryPinConfirm = async (pin: string) => {
+    const result = await confirmDeliveryPin(order.courierId || '', order.taskId || order.id, pin);
+    if (result.success) {
+      setShowDeliveryPin(false);
+      onDeliveryConfirmed?.();
+    }
+    return result;
+  };
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: C.fontBody }}>
@@ -156,18 +188,103 @@ export function DetailScreen({ order, orderDetail, onBack, onCobrar, onChat }: D
           ))}
         </div>
 
-        {/* CTA */}
-        {order?.status === 'ON_THE_WAY' && (
-          <button onClick={onCobrar} style={S.btnSuccess}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-              strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-              <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
-            CONFIRMAR ENTREGA
-          </button>
-        )}
+        {/* CTA — Recolección o Entrega */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {order?.status === 'READY' && (
+            <button
+              onClick={() => setShowPickupPin(true)}
+              style={{
+                ...S.btnSuccess,
+                background: C.amber,
+                boxShadow: `0 8px 24px rgba(255, 184, 77, 0.3)`,
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                width="18"
+                height="18"
+              >
+                <circle cx="9" cy="21" r="1" />
+                <circle cx="20" cy="21" r="1" />
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+              </svg>
+              RECOGER PEDIDO (PIN)
+            </button>
+          )}
+
+          {order?.status === 'ON_THE_WAY' && (
+            <button
+              onClick={() => setShowDeliveryPin(true)}
+              style={{
+                ...S.btnSuccess,
+                background: C.green,
+                boxShadow: `0 8px 24px rgba(136, 214, 108, 0.3)`,
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                width="18"
+                height="18"
+              >
+                <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              ENTREGAR PEDIDO (PIN)
+            </button>
+          )}
+
+          {/* Fallback para botón de cobrar si no hay PIN requerido */}
+          {order?.status === 'ON_THE_WAY' && !order?.requiresDeliveryPin && (
+            <button onClick={onCobrar} style={S.btnSuccess}>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                width="18"
+                height="18"
+              >
+                <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              CONFIRMAR ENTREGA
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* PIN Modals */}
+      {showPickupPin && (
+        <PinVerificationModal
+          type="PICKUP"
+          orderNumber={order?.orderNumber || ''}
+          targetName={order?.store?.name || 'la tienda'}
+          onConfirm={handlePickupPinConfirm}
+          onCancel={() => setShowPickupPin(false)}
+        />
+      )}
+
+      {showDeliveryPin && (
+        <PinVerificationModal
+          type="DELIVERY"
+          orderNumber={order?.orderNumber || ''}
+          targetName={order?.customerName || 'el cliente'}
+          onConfirm={handleDeliveryPinConfirm}
+          onCancel={() => setShowDeliveryPin(false)}
+        />
+      )}
     </div>
   );
 }

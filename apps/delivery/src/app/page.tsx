@@ -11,6 +11,7 @@ import GPSTracker from '@/components/delivery/GPSTracker';
 import { useOfflineStore } from '@/store/useOfflineStore';
 import { initBackgroundSync } from '@/lib/offline';
 import { ensureDriverPushSubscription } from '@/lib/push';
+import { updateCourierPresence } from '@/lib/marketplaceDispatch';
 import { LoginScreen }     from '@/components/delivery/screens/LoginScreen';
 import { HomeScreen }      from '@/components/delivery/screens/HomeScreen';
 import { DetailScreen }    from '@/components/delivery/screens/DetailScreen';
@@ -160,6 +161,7 @@ export default function DeliveryApp() {
   const [isOnline, setIsOnline] = useState(true);
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [isSharedCourier, setIsSharedCourier] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const selectedOrderIdRef = useRef<string | null>(null);
@@ -466,6 +468,32 @@ export default function DeliveryApp() {
     }
   }
 
+  const toggleSharedCourier = useCallback(async (enabled: boolean) => {
+    if (!driver) return;
+    setIsSharedCourier(enabled);
+    try {
+      // Actualizar presencia con el estado compartido
+      await updateCourierPresence({
+        courierId: driver.id,
+        name: driver.name,
+        lat: 0,
+        lng: 0,
+        isOnline: true,
+        isShared: enabled,
+      });
+    } catch (err) {
+      console.error('Error al actualizar presencia:', err);
+      setIsSharedCourier(!enabled); // Revertir en caso de error
+    }
+  }, [driver]);
+
+  const handleMarketplaceOfferAccepted = useCallback((result: { taskId: string; orderId: string }) => {
+    // Actualizar órdenes cuando se acepta una oferta
+    fetchOrders();
+    // Navegar a home para reflejar la nueva orden
+    setScreen('home');
+  }, []);
+
   async function saveExpense(cat: string, amount: string, desc: string, pending = false) {
     if (!amount || Number(amount) <= 0) return;
     // Clave de idempotencia estable por captura: dedupea doble-tap y replays de
@@ -580,6 +608,9 @@ export default function DeliveryApp() {
           isOnline={isOnline}
           unreadNotices={unreadNotices}
           pendingSync={useOfflineStore.getState().queue.length}
+          isSharedCourier={isSharedCourier}
+          onToggleShared={toggleSharedCourier}
+          onMarketplaceOfferAccepted={handleMarketplaceOfferAccepted}
           onSelectOrder={(order: any) => {
             setSelectedOrder(order);
             fetchOrderDetail(order.id);
@@ -602,6 +633,14 @@ export default function DeliveryApp() {
           onBack={() => setScreen('home')}
           onCobrar={() => setScreen('cobrar')}
           onChat={() => setScreen('chat')}
+          onPickupConfirmed={() => {
+            // Cambiar estado a ON_THE_WAY después de confirmar recolección
+            changeStatus(selectedOrder, 'ON_THE_WAY');
+          }}
+          onDeliveryConfirmed={() => {
+            // Cambiar estado a DELIVERED y volver a home
+            changeStatus(selectedOrder, 'DELIVERED');
+          }}
         />
       )}
 
