@@ -19,8 +19,21 @@ export interface DeliveryPinData {
   cashCollected: boolean;
 }
 
+export interface DeliveryIncidentData {
+  orderId: string;
+  taskId: string;
+  courierId: string;
+  incident: {
+    type: 'CUSTOMER_UNREACHABLE' | 'WRONG_ADDRESS' | 'DAMAGED_OR_REJECTED';
+    timestamp: number;
+    callAttempts: number;
+    notes: string;
+    photo?: string;
+  };
+}
+
 type OfflineInput =
-  | { type: 'CONFIRM_DELIVERY' | 'MARK_ERRAND_DONE' | 'LOG_EXPENSE' | 'CHAT_MESSAGE'; data: any }
+  | { type: 'CONFIRM_DELIVERY' | 'MARK_ERRAND_DONE' | 'LOG_EXPENSE' | 'CHAT_MESSAGE' | 'DELIVERY_INCIDENT'; data: any }
   | { type: 'CONFIRM_PICKUP_PIN'; data: PickupPinData; expiresAt?: number }
   | { type: 'CONFIRM_DELIVERY_PIN'; data: DeliveryPinData; expiresAt?: number };
 

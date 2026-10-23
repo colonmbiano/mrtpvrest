@@ -81,6 +81,10 @@ async function processTransaction(tx: OfflineTransaction) {
     case 'CHAT_MESSAGE':
       return api.post(`/api/delivery/orders/${data.orderId}/messages`, data);
 
+    case 'DELIVERY_INCIDENT':
+      return api.post(`/api/delivery/orders/${data.orderId}/incidents`, data,
+        data.incident?.timestamp ? { headers: { 'Idempotency-Key': `incident-${data.orderId}-${data.incident.timestamp}` } } : undefined);
+
     default:
       throw new Error('UNKNOWN_TRANSACTION_TYPE');
   }

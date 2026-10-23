@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import { C, S, ORDER_STATUS_CONFIG } from '@/lib/tokens';
 import { whatsappUrl } from '@/lib/phone';
 import { PinVerificationModal } from '../PinVerificationModal';
+import { DeliveryEvidenceModal } from '../DeliveryEvidenceModal';
+import { DeliveryIncidentModal } from '../DeliveryIncidentModal';
 import { confirmPickupPin, confirmDeliveryPin } from '@/lib/marketplaceDispatch';
 
 interface DetailScreenProps {
@@ -44,6 +46,8 @@ export function DetailScreen({
   const total = order?.total || 0;
   const [showPickupPin, setShowPickupPin] = useState(false);
   const [showDeliveryPin, setShowDeliveryPin] = useState(false);
+  const [showIncidentModal, setShowIncidentModal] = useState<'CUSTOMER_UNREACHABLE' | 'WRONG_ADDRESS' | null>(null);
+  const [showEvidenceModal, setShowEvidenceModal] = useState(false);
 
   const handlePickupPinConfirm = async (pin: string) => {
     const result = await confirmPickupPin(order.courierId || '', order.taskId || order.id, pin);
@@ -174,18 +178,30 @@ export function DetailScreen({
 
         {/* Excepciones */}
         <div style={{ display: 'flex', gap: 8 }}>
-          {[
-            { label: 'No contesta',  color: C.coral, bg: C.coralSoft, borderC: 'rgba(255,92,51,0.28)' },
-            { label: 'Dir. errónea', color: C.warn,  bg: C.warnSoft,  borderC: 'rgba(245,158,11,0.28)' },
-          ].map((e, i) => (
-            <button key={i} style={{
+          <button
+            onClick={() => setShowIncidentModal('CUSTOMER_UNREACHABLE')}
+            style={{
               flex: 1, height: 42, borderRadius: 12, cursor: 'pointer',
-              border: `1px solid ${e.borderC}`, background: e.bg,
-              fontSize: 9, fontWeight: 700, color: e.color,
+              border: `1px solid rgba(255,92,51,0.28)`, background: C.coralSoft,
+              fontSize: 9, fontWeight: 700, color: C.coral,
               letterSpacing: '0.08em', textTransform: 'uppercase',
               fontFamily: C.fontBody,
-            }}>{e.label}</button>
-          ))}
+            }}
+          >
+            No contesta
+          </button>
+          <button
+            onClick={() => setShowIncidentModal('WRONG_ADDRESS')}
+            style={{
+              flex: 1, height: 42, borderRadius: 12, cursor: 'pointer',
+              border: `1px solid rgba(245,158,11,0.28)`, background: C.warnSoft,
+              fontSize: 9, fontWeight: 700, color: C.warn,
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+              fontFamily: C.fontBody,
+            }}
+          >
+            Dir. errónea
+          </button>
         </div>
 
         {/* CTA — Recolección o Entrega */}
@@ -283,6 +299,32 @@ export function DetailScreen({
           targetName={order?.customerName || 'el cliente'}
           onConfirm={handleDeliveryPinConfirm}
           onCancel={() => setShowDeliveryPin(false)}
+        />
+      )}
+
+      {/* Evidence Modal */}
+      {showEvidenceModal && (
+        <DeliveryEvidenceModal
+          orderId={order?.id || ''}
+          onClose={() => setShowEvidenceModal(false)}
+          onSubmit={(evidence) => {
+            console.log('Evidence submitted:', evidence);
+            setShowEvidenceModal(false);
+            onDeliveryConfirmed?.();
+          }}
+        />
+      )}
+
+      {/* Incident Modal */}
+      {showIncidentModal && (
+        <DeliveryIncidentModal
+          orderId={order?.id || ''}
+          taskId={order?.taskId || order?.id || ''}
+          courierId={order?.courierId || ''}
+          onClose={() => setShowIncidentModal(null)}
+          onSubmit={() => {
+            setShowIncidentModal(null);
+          }}
         />
       )}
     </div>
