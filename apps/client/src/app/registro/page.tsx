@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import MarketplaceRegistration from '@/components/MarketplaceRegistration';
-import { isMarketplaceCatalogEnabled, isMarketplaceIsolated, isMarketplacePreviewDemo } from '@/lib/config';
+import { isMarketplaceCatalogEnabled } from '@/lib/config';
 import { parseRegistrationRole } from '@/lib/marketplace-registration';
 
 export const dynamic = 'force-dynamic';
