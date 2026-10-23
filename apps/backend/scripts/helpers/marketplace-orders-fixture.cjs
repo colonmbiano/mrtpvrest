@@ -14,6 +14,7 @@ function match(row, where = {}) {
     if (expected === undefined) return true;
     if (typeof expected !== 'object' || expected instanceof Date) return value === expected;
     if ('is' in expected) return value != null && match(value, expected.is);
+    if ('some' in expected) return Array.isArray(value) && value.some(row => match(row, expected.some));
     if ('path' in expected) return expected.path.reduce((item, part) => item?.[part], value) === expected.equals;
     return Object.entries(expected).every(([op, bound]) => ({ in: () => bound.includes(value), notIn: () => !bound.includes(value),
       not: () => value !== bound,
@@ -49,9 +50,14 @@ function fixture(serviceOptions = {}) {
   let sequence = 0; let queued = Promise.resolve(); let inTransaction = false;
   const calls = []; const hooks = {}; const providerCalls = []; const payments = new Map(); const preferences = new Map();
   function materialize(model, row) {
+    if (model === 'restaurant') return { ...row, orders: state.order.filter(item => item.restaurantId === row.id) };
     if (model === 'order') return { ...row, restaurant: state.restaurant.find(item => item.id === row.restaurantId),
       marketplacePipeline: state.marketplaceOrderPipeline.find(item => item.orderId === row.id) || null };
     if (model === 'marketplaceOrderPipeline') return { ...row, order: materialize('order', state.order.find(item => item.id === row.orderId)) };
+    if (model === 'marketplaceLedgerEntry') {
+      const payment = state.marketplacePayment.find(item => item.id === row.paymentId);
+      return { ...row, payment: payment ? { ...payment, order: materialize('order', state.order.find(item => item.id === payment.orderId)) } : null };
+    }
     return row;
   }
   function unique(model, rows) {
@@ -88,14 +94,27 @@ function fixture(serviceOptions = {}) {
           const groups = new Map();
           for (const row of state[model].filter(row => match(materialize(model, row), args.where))) {
             const key = JSON.stringify(args.by.map(field => row[field]));
-            const group = groups.get(key) || { ...Object.fromEntries(args.by.map(field => [field, row[field]])), sum: 0n };
-            const parts = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(String(row.amount));
-            if (!parts) throw new Error('Invalid mock decimal');
-            group.sum += (parts[1] ? -1n : 1n) * (BigInt(parts[2]) * 100n + BigInt((parts[3] || '').padEnd(2, '0')));
+            const group = groups.get(key) || { ...Object.fromEntries(args.by.map(field => [field, row[field]])), sum: 0n, maxCreatedAt: null };
+            if (args._sum) {
+              const parts = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(String(row.amount));
+              if (!parts) throw new Error('Invalid mock decimal');
+              group.sum += (parts[1] ? -1n : 1n) * (BigInt(parts[2]) * 100n + BigInt((parts[3] || '').padEnd(2, '0')));
+            }
+            if (args._max?.createdAt && (!group.maxCreatedAt || new Date(row.createdAt) > new Date(group.maxCreatedAt))) group.maxCreatedAt = row.createdAt;
             groups.set(key, group);
           }
-          return [...groups.values()].map(({ sum, ...keys }) => ({ ...keys,
-            _sum: { amount: `${sum < 0n ? '-' : ''}${(sum < 0n ? -sum : sum) / 100n}.${String((sum < 0n ? -sum : sum) % 100n).padStart(2, '0')}` } }));
+          let rows = [...groups.values()].map(({ sum, maxCreatedAt, ...keys }) => ({ ...keys,
+            ...(args._max ? { _max: { createdAt: structuredClone(maxCreatedAt) } } : {}),
+            ...(args._sum ? { _sum: { amount: `${sum < 0n ? '-' : ''}${(sum < 0n ? -sum : sum) / 100n}.${String((sum < 0n ? -sum : sum) % 100n).padStart(2, '0')}` } } : {}) }));
+          for (const order of [...args.orderBy || []].reverse()) {
+            const field = order._max ? 'createdAt' : Object.keys(order)[0];
+            const direction = order._max ? order._max[field] : order[field];
+            rows.sort((a, b) => { const left = order._max ? new Date(a._max[field]).getTime() : a[field];
+              const right = order._max ? new Date(b._max[field]).getTime() : b[field];
+              return left === right ? 0 : (left < right ? -1 : 1) * (direction === 'desc' ? -1 : 1); });
+          }
+          if (args.take !== undefined) rows = rows.slice(0, args.take);
+          return rows;
         },
         async create(args) {
           calls.push({ model, method: 'create', args });
@@ -128,7 +147,22 @@ function fixture(serviceOptions = {}) {
       };
     }
     api.$queryRaw = async (strings, ...values) => {
-      const sql = strings.join('?'); calls.push({ method: '$queryRaw', sql, values }); assert.match(sql, /FOR UPDATE/);
+      const sql = strings.join('?'); calls.push({ method: '$queryRaw', sql, values });
+      if (sql.includes('AS "totalOrders"')) {
+        const groups = new Map();
+        for (const row of state.order) {
+          const store = state.restaurant.find(item => item.id === row.restaurantId);
+          if (row.source !== 'MARKETPLACE' || !store || store.tenant.isDemo || store.tenant.slug === values[0]) continue;
+          const group = groups.get(row.restaurantId) || { restaurantId: row.restaurantId, totalOrders: 0n, gmvCents: 0n, invalidCurrencyCount: 0n };
+          group.totalOrders++;
+          const pipeline = state.marketplaceOrderPipeline.find(item => item.orderId === row.id && item.restaurantId === row.restaurantId);
+          if ((pipeline?.currency ?? store.config?.currency) !== 'MXN') group.invalidCurrencyCount++;
+          if (row.paymentStatus === 'PAID' && row.status !== 'CANCELLED') group.gmvCents += BigInt(Math.round(row.total * 100));
+          groups.set(row.restaurantId, group);
+        }
+        return [...groups.values()].map(({ gmvCents, ...row }) => ({ ...row, gmv: `${gmvCents / 100n}.${String(gmvCents % 100n).padStart(2, '0')}` }));
+      }
+      assert.match(sql, /FOR UPDATE/);
       const model = sql.includes('"restaurants"') ? 'restaurant' : 'order';
       return state[model].filter(row => row.id === values[0] && (model === 'restaurant' ? row.isActive : row.restaurantId === values[1] && row.source === 'MARKETPLACE')).map(row => ({ id: row.id }));
     };
