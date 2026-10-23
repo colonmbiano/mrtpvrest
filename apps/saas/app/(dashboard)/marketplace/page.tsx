@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '@/lib/api';
 import { AlertCircle } from 'lucide-react';
+import { DispatchAuditSection } from './DispatchAuditSection';
 
 interface Store {
   id: string;
@@ -139,6 +140,8 @@ export default function MarketplacePage() {
             </div>
           ))}
         </div>
+
+        <DispatchAuditSection />
 
         {/* Ledger Balance */}
         <div style={{ marginBottom: '32px' }}>
