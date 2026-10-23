@@ -178,7 +178,7 @@ nuevas transacciones por sus pagos originales; GMV y platformFees no cambian.
 
 - `node apps/backend/scripts/driver-payouts.test.cjs`: **32/32 PASS**.
 - Regresiones: balance **22/22**, ordenes **36/36**, SuperAdmin **19/19**,
-  catalogo **17/17**, incidencias/evidencia **29/29**: PASS.
+  catalogo **17/17**, incidencias/evidencia **29/29**, ledger **10/10**: PASS.
 - Sintaxis Node y validacion WASM local de ambos schemas: PASS.
 
 Las pruebas usan Prisma in-memory con rollback, unicidad y ejecucion serial,

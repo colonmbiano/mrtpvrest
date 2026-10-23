@@ -199,6 +199,7 @@ function createDriverPayoutsService({ minAmount = '0.01', maxAmount = '100000.00
       const previous = await tx.marketplaceDriverPayout.findFirst({ where: { restaurantId: rid, driverId, requestKey: idempotencyKey } });
       if (previous) {
         check(previous.requestHash === requestHash, 'IDEMPOTENCY_CONFLICT', 'Clave usada para otro retiro', 409);
+        if (previous.status === 'PAID') await verifyPosted(tx, previous);
         return { payout: payoutView(previous), idempotent: true };
       }
       const { balance, available } = await finances(tx, driverId, rid);
@@ -220,6 +221,7 @@ function createDriverPayoutsService({ minAmount = '0.01', maxAmount = '100000.00
       await merchant(tx, rid, actor, true);
       const payout = await tx.marketplaceDriverPayout.findFirst({ where: { id: payoutId, restaurantId: rid } });
       check(payout, 'PAYOUT_NOT_FOUND', 'Retiro no encontrado', 404);
+      check(payout.currency === 'MXN', 'LEDGER_INTEGRITY_ERROR', 'Moneda de liquidacion inconsistente', 503);
       await driver(tx, payout.driverId, rid, actor);
       if (payout.status === 'PAID') {
         check(payout.approvalKey === idempotencyKey && payout.approvalHash === approvalHash,

@@ -231,6 +231,7 @@ test('missing/partial/corrupted paid ledger is an integrity error on replay, nev
     f.state.marketplaceLedgerEntry = [...f.state.marketplaceLedgerEntry.filter(row => !row.payoutId), ...lines];
     const before = structuredClone(f.state.marketplaceLedgerEntry);
     await assert.rejects(f.approve(payout.id), { code: 'LEDGER_INTEGRITY_ERROR' }); assert.deepEqual(f.state.marketplaceLedgerEntry, before);
+    await assert.rejects(f.request(), { code: 'LEDGER_INTEGRITY_ERROR' });
   }
 });
 test('foreign/refunded/missing payment or source order cannot back a payout', async () => {
