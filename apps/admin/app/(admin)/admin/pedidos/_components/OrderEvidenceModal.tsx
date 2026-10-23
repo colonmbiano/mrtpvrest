@@ -62,7 +62,7 @@ export default function OrderEvidenceModal({
       onClose={onClose}
       title="Evidencia de Entrega"
       subtitle={`${order.orderNumber} · ${formatMoney(order.total ?? 0)}`}
-      className="max-w-2xl"
+      size="lg"
     >
       <div className="space-y-6">
         {loading ? (

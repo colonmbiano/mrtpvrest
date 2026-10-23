@@ -38,6 +38,7 @@ export function PayoutApprovalModal({
 
   if (!payout) return null;
 
+  const payoutId = payout.id;
   const cashWarning = (payout.cashOnHand ?? 0) > 0;
   const clabeValid = payout.clabe && /^\d{18}$/.test(payout.clabe);
 
@@ -48,7 +49,7 @@ export function PayoutApprovalModal({
     }
     setBusy(true);
     try {
-      await onApprove(payout.id, paymentRef.trim());
+      await onApprove(payoutId, paymentRef.trim());
       setMode("review");
       setPaymentRef("");
       onClose();
@@ -67,7 +68,7 @@ export function PayoutApprovalModal({
     }
     setBusy(true);
     try {
-      await onReject(payout.id, rejectReason.trim());
+      await onReject(payoutId, rejectReason.trim());
       setMode("review");
       setRejectReason("");
       onClose();
@@ -100,8 +101,7 @@ export function PayoutApprovalModal({
               <Button variant="secondary" disabled={busy} onClick={onClose}>Cerrar</Button>
               <div className="flex gap-2">
                 <Button
-                  variant="secondary"
-                  tone="warn"
+                  variant="danger"
                   disabled={busy}
                   onClick={() => setMode("reject")}
                 >
@@ -128,7 +128,7 @@ export function PayoutApprovalModal({
             : (
               <>
                 <Button variant="secondary" disabled={busy} onClick={() => setMode("review")}>Atrás</Button>
-                <Button tone="warn" disabled={busy || !rejectReason.trim()} onClick={handleReject}>
+                <Button variant="danger" disabled={busy || !rejectReason.trim()} onClick={handleReject}>
                   {busy ? "..." : "Confirmar rechazo"}
                 </Button>
               </>
