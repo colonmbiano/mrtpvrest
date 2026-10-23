@@ -171,7 +171,10 @@ app.set('json replacer', function (key, value) {
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 
 // Rutas públicas (sin tenantMiddleware)
-app.use('/api/marketplace/dispatch', require('./routes/marketplace-dispatch.routes')())
+const marketplaceDispatchRouter = require('./routes/marketplace-dispatch.routes')()
+app.use('/api/marketplace/v1', marketplaceDispatchRouter)
+app.use('/api/marketplace/dispatch', marketplaceDispatchRouter)
+app.use('/api/marketplace/v1/quotes', require('./routes/marketplace-quotes.routes')())
 app.use('/api/marketplace', require('./routes/marketplace.routes')())
 app.use('/api/public', require('./routes/menu.routes'))
 app.use('/api/store',  require('./routes/store.routes'))

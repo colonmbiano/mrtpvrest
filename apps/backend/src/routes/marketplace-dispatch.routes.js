@@ -1,212 +1,127 @@
 'use strict';
 
-const {
-  TASK_STATUS,
-  OFFER_STATUS,
-  DispatchError,
-  OfferAlreadyClaimedError,
-  OfferExpiredError,
-  InvalidPinError,
-  atomicAcceptOffer,
-  confirmPickup,
-  confirmDelivery,
-  evaluateFallback,
-  rankCandidates,
-} = require('../lib/marketplace-dispatch');
+const { DispatchError, createHybridDispatchEngine, validCoordinates } = require('../lib/marketplace-dispatch');
 
-function createMarketplaceDispatchRouter({ Router, getStore } = {}) {
+function createMarketplaceDispatchRouter({ Router, getStore, authenticate, now = () => new Date() } = {}) {
   const router = (Router || require('express').Router)();
+  const engine = createHybridDispatchEngine({ store: getStore ? getStore() : {}, now });
+  const { store } = engine;
+  const fail = (message, code, status = 403) => { throw new DispatchError(message, code, status); };
 
-  // In-memory or injected store for dispatch entities
-  const defaultStore = {
-    tasks: new Map(),
-    offers: new Map(),
-    couriers: new Map(),
-  };
+  router.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 
-  const store = getStore ? getStore() : defaultStore;
-
-  // Middleware: Cache-Control: no-store
-  router.use((req, res, next) => {
-    res.set('Cache-Control', 'no-store');
-    next();
-  });
-
-  // GET /api/marketplace/dispatch/tasks/:id
-  router.get('/tasks/:id', (req, res) => {
-    const task = store.tasks.get(req.params.id);
-    if (!task) {
-      return res.status(404).json({ error: 'Tarea de entrega no encontrada', errorCode: 'TASK_NOT_FOUND' });
+  function actor(req) {
+    const user = req.user;
+    if (!user || !user.id || user.isActive !== true || user.isDevice) fail('Sesion humana activa requerida', 'UNAUTHENTICATED', 401);
+    return user;
+  }
+  function merchantAccess(req, merchant) {
+    const user = actor(req);
+    if (!['OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) fail('Administrador requerido', 'MERCHANT_FORBIDDEN');
+    if (user.role !== 'SUPER_ADMIN' && (user.restaurantId !== merchant.restaurantId
+      || user.locationId && user.locationId !== merchant.locationId)) fail('Comercio no encontrado', 'MERCHANT_NOT_FOUND', 404);
+  }
+  function courierAccess(req) {
+    const user = actor(req);
+    const courier = store.couriers.get(user.id);
+    if (user.role !== 'DELIVERY' || !courier || courier.isActive !== true) fail('Repartidor no autorizado', 'COURIER_FORBIDDEN');
+    // Legacy clients may send an ID, but it is never the identity authority.
+    if ((req.body?.courierId !== undefined && req.body.courierId !== user.id)
+      || (req.query?.courierId !== undefined && req.query.courierId !== user.id)) fail('Identidad de repartidor incorrecta', 'COURIER_FORBIDDEN');
+    return courier;
+  }
+  function body(req, fields) {
+    const input = req.body ?? {};
+    if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !fields.includes(key))) {
+      fail('Campos de solicitud invalidos', 'INVALID_REQUEST', 422);
     }
-    return res.json({
-      id: task.id,
-      status: task.status,
-      dispatchMode: task.dispatchMode,
-      currentAssignment: task.currentAssignment || null,
-      readyAt: task.readyAt,
-      pickedUpAt: task.pickedUpAt,
-      deliveredAt: task.deliveredAt,
-    });
-  });
-
-  // POST /api/marketplace/couriers/me/presence
-  router.post('/couriers/me/presence', (req, res) => {
-    const { courierId, isOnline, lat, lng, accuracy } = req.body || {};
-    if (!courierId || typeof courierId !== 'string') {
-      return res.status(400).json({ error: 'courierId requerido', errorCode: 'INVALID_COURIER_ID' });
-    }
-    if (isOnline && (!Number.isFinite(lat) || !Number.isFinite(lng))) {
-      return res.status(400).json({ error: 'Coordenadas lat/lng requeridas', errorCode: 'INVALID_COORDINATES' });
-    }
-
-    const presence = {
-      isOnline: Boolean(isOnline),
-      lat: Number(lat),
-      lng: Number(lng),
-      accuracy: Number(accuracy) || 10,
-      lastSeenAt: new Date(),
-    };
-
-    let courier = store.couriers.get(courierId);
-    if (!courier) {
-      courier = { id: courierId, name: req.body?.name || 'Repartidor', isOnline: presence.isOnline, presence };
-      store.couriers.set(courierId, courier);
-    } else {
-      courier.isOnline = presence.isOnline;
-      courier.presence = presence;
-    }
-
-    return res.json({ success: true, presence });
-  });
-
-  // GET /api/marketplace/couriers/me/offers
-  router.get('/couriers/me/offers', (req, res) => {
-    const courierId = req.query.courierId;
-    if (!courierId || typeof courierId !== 'string') {
-      return res.status(400).json({ error: 'courierId requerido', errorCode: 'INVALID_COURIER_ID' });
-    }
-
-    const now = Date.now();
-    const activeOffers = [];
-
-    for (const offer of store.offers.values()) {
-      if (offer.courierId === courierId && offer.status === OFFER_STATUS.OFFERED) {
-        if (new Date(offer.expiresAt).getTime() > now) {
-          activeOffers.push({
-            id: offer.id,
-            taskId: offer.taskId,
-            payoutAmount: offer.payoutAmount,
-            currency: offer.currency || 'MXN',
-            source: offer.source,
-            expiresAt: offer.expiresAt,
-          });
-        } else {
-          offer.status = OFFER_STATUS.EXPIRED;
+    return input;
+  }
+  function view(task) {
+    const assignment = task.currentAssignment;
+    return { id: task.id, status: task.status, dispatchMode: task.dispatchMode, version: task.version,
+      deliveryPolicy: task.deliveryPolicy, fallbackSeconds: task.fallbackSeconds, maxDistanceKm: task.maxDistanceKm,
+      currentAssignment: assignment ? { id: assignment.id, courierId: assignment.courierId,
+        source: assignment.source, status: assignment.status } : null,
+      readyAt: task.readyAt, pickedUpAt: task.pickedUpAt, deliveredAt: task.deliveredAt };
+  }
+  function endpoint(method, paths, handler) {
+    for (const path of Array.isArray(paths) ? paths : [paths]) router[method](path, (req, res, next) => {
+      res.set('Cache-Control', 'no-store');
+      function run() {
+        try { actor(req); return handler(req, res); }
+        catch (error) {
+          if (error instanceof DispatchError) return res.status(error.statusCode).json({ error: error.message, errorCode: error.code });
+          return res.status(503).json({ error: 'Despacho temporalmente no disponible', errorCode: 'DISPATCH_UNAVAILABLE' });
         }
       }
-    }
+      // Lazy import keeps offline tests and catalog reads free of DB initialization.
+      return (authenticate || require('../middleware/auth.middleware').authenticate)(req, res, run, next);
+    });
+  }
 
-    return res.json({ offers: activeOffers });
+  endpoint('put', '/merchants/:id/delivery-policy', (req, res) => {
+    const merchant = engine.merchantFor(req.params.id); merchantAccess(req, merchant);
+    const policy = body(req, ['deliveryPolicy', 'fallbackSeconds', 'maxDistanceKm']);
+    return res.json(engine.configurePolicy({ merchantId: merchant.id, ...policy }));
   });
-
-  // POST /api/marketplace/couriers/offers/:id/accept
-  router.post('/couriers/offers/:id/accept', (req, res) => {
-    const offerId = req.params.id;
-    const { courierId } = req.body || {};
-
-    if (!courierId || typeof courierId !== 'string') {
-      return res.status(400).json({ error: 'courierId requerido', errorCode: 'INVALID_COURIER_ID' });
-    }
-
-    const offer = store.offers.get(offerId);
-    if (!offer) {
-      return res.status(404).json({ error: 'Oferta no encontrada', errorCode: 'OFFER_NOT_FOUND' });
-    }
-
-    const task = store.tasks.get(offer.taskId);
-    if (!task) {
-      return res.status(404).json({ error: 'Tarea de entrega no encontrada', errorCode: 'TASK_NOT_FOUND' });
-    }
-
-    try {
-      const result = atomicAcceptOffer({ task, offer, courierId });
-      return res.json({
-        success: true,
-        taskId: task.id,
-        assignment: result.assignment,
-      });
-    } catch (err) {
-      if (err instanceof OfferAlreadyClaimedError) {
-        return res.status(409).json({ error: err.message, errorCode: err.code });
-      }
-      if (err instanceof OfferExpiredError) {
-        return res.status(410).json({ error: err.message, errorCode: err.code });
-      }
-      if (err instanceof DispatchError) {
-        return res.status(err.statusCode).json({ error: err.message, errorCode: err.code });
-      }
-      return res.status(500).json({ error: 'Error al aceptar la oferta', errorCode: 'INTERNAL_ERROR' });
-    }
+  endpoint('post', ['/dispatch/tasks/:id/request-shared', '/tasks/:id/request-shared'], (req, res) => {
+    const task = engine.taskFor(req.params.id); merchantAccess(req, engine.merchantFor(task));
+    const input = body(req, ['expectedVersion']);
+    const result = engine.requestShared({ taskId: task.id, ...input });
+    return res.json({ success: true, task: view(result.task), idempotent: result.idempotent });
   });
-
-  // POST /api/marketplace/couriers/tasks/:id/pickup
-  router.post('/couriers/tasks/:id/pickup', (req, res) => {
-    const taskId = req.params.id;
-    const { pickupPin } = req.body || {};
-
-    const task = store.tasks.get(taskId);
-    if (!task) {
-      return res.status(404).json({ error: 'Tarea no encontrada', errorCode: 'TASK_NOT_FOUND' });
-    }
-
-    try {
-      const result = confirmPickup({ task, pickupPin });
-      return res.json({
-        success: true,
-        taskId: task.id,
-        status: task.status,
-        orderStatusUpdate: result.orderStatusUpdate,
-      });
-    } catch (err) {
-      if (err instanceof InvalidPinError) {
-        return res.status(400).json({ error: err.message, errorCode: err.code });
-      }
-      if (err instanceof DispatchError) {
-        return res.status(err.statusCode).json({ error: err.message, errorCode: err.code });
-      }
-      return res.status(500).json({ error: 'Error al confirmar recogida', errorCode: 'INTERNAL_ERROR' });
-    }
+  endpoint('post', '/dispatch/tasks/:id/assign-own', (req, res) => {
+    const task = engine.taskFor(req.params.id); merchantAccess(req, engine.merchantFor(task));
+    const input = body(req, ['courierId', 'expectedVersion']);
+    if (typeof input.courierId !== 'string' || !input.courierId) fail('courierId requerido', 'INVALID_COURIER_ID', 422);
+    const result = engine.assignOwn({ taskId: task.id, ...input });
+    return res.json({ success: true, task: view(result.task) });
   });
-
-  // POST /api/marketplace/couriers/tasks/:id/deliver
-  router.post('/couriers/tasks/:id/deliver', (req, res) => {
-    const taskId = req.params.id;
-    const { deliveryPin } = req.body || {};
-
-    const task = store.tasks.get(taskId);
-    if (!task) {
-      return res.status(404).json({ error: 'Tarea no encontrada', errorCode: 'TASK_NOT_FOUND' });
-    }
-
-    try {
-      const result = confirmDelivery({ task, deliveryPin });
-      return res.json({
-        success: true,
-        taskId: task.id,
-        status: task.status,
-        orderStatusUpdate: result.orderStatusUpdate,
-      });
-    } catch (err) {
-      if (err instanceof InvalidPinError) {
-        return res.status(400).json({ error: err.message, errorCode: err.code });
-      }
-      if (err instanceof DispatchError) {
-        return res.status(err.statusCode).json({ error: err.message, errorCode: err.code });
-      }
-      return res.status(500).json({ error: 'Error al confirmar entrega', errorCode: 'INTERNAL_ERROR' });
-    }
+  endpoint('post', '/dispatch/tasks/:id/start', (req, res) => {
+    const task = engine.taskFor(req.params.id); merchantAccess(req, engine.merchantFor(task));
+    const result = engine.startDispatch({ taskId: task.id, ...body(req, ['expectedVersion']) });
+    return res.json({ success: true, task: view(result.task) });
   });
-
+  endpoint('get', ['/dispatch/tasks/:id', '/tasks/:id'], (req, res) => {
+    const task = engine.taskFor(req.params.id);
+    if (req.user.role === 'DELIVERY') {
+      const courier = courierAccess(req);
+      if (task.currentAssignment?.courierId !== courier.id) fail('Tarea no encontrada', 'TASK_NOT_FOUND', 404);
+    } else merchantAccess(req, engine.merchantFor(task));
+    engine.tick();
+    return res.json(view(task));
+  });
+  endpoint('post', '/couriers/me/presence', (req, res) => {
+    const courier = courierAccess(req);
+    const input = body(req, ['courierId', 'isOnline', 'lat', 'lng', 'accuracy', 'acceptingShared']);
+    if (typeof input.isOnline !== 'boolean' || input.isOnline && !validCoordinates(input.lat, input.lng)
+      || input.accuracy !== undefined && (!Number.isFinite(input.accuracy) || input.accuracy < 0)
+      || input.acceptingShared !== undefined && typeof input.acceptingShared !== 'boolean') {
+      fail('Presencia invalida', 'INVALID_PRESENCE', 422);
+    }
+    courier.isOnline = input.isOnline;
+    courier.presence = { lat: input.isOnline ? input.lat : null, lng: input.isOnline ? input.lng : null,
+      accuracy: input.accuracy ?? 10, lastSeenAt: now(), acceptingShared: input.acceptingShared ?? courier.presence?.acceptingShared ?? false };
+    return res.json({ success: true, presence: courier.presence });
+  });
+  endpoint('get', '/couriers/me/offers', (req, res) => {
+    const courier = courierAccess(req);
+    const offers = engine.offersForCourier(courier.id).map(offer => ({ id: offer.id, taskId: offer.taskId,
+      payoutAmount: offer.payoutAmount, currency: offer.currency, source: offer.source, expiresAt: offer.expiresAt }));
+    return res.json({ offers });
+  });
+  endpoint('post', '/couriers/offers/:id/accept', (req, res) => {
+    const courier = courierAccess(req); body(req, ['courierId']);
+    const { task, assignment } = engine.acceptOffer({ offerId: req.params.id, courierId: courier.id });
+    return res.json({ success: true, taskId: task.id, assignment });
+  });
+  for (const kind of ['pickup', 'deliver']) endpoint('post', `/couriers/tasks/:id/${kind}`, (req, res) => {
+    const courier = courierAccess(req);
+    const input = body(req, ['courierId', kind === 'pickup' ? 'pickupPin' : 'deliveryPin', 'expectedVersion']);
+    const result = engine[kind === 'pickup' ? 'confirmPickup' : 'confirmDelivery']({ ...input, taskId: req.params.id, courierId: courier.id });
+    return res.json({ success: true, taskId: result.task.id, status: result.task.status, orderStatusUpdate: result.orderStatusUpdate });
+  });
   return router;
 }
 

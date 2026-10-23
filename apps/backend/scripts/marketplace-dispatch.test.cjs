@@ -225,7 +225,7 @@ test('evaluateFallback: OWN_THEN_SHARED waits while own offers are pending withi
   assert.equal(res.remainingSeconds, 15);
 });
 
-test('evaluateFallback: triggers fallback when all own offers are expired/settled', () => {
+test('evaluateFallback: settled own offers still respect the configured own window', () => {
   const now = new Date('2026-10-22T18:00:20Z');
   const task = { status: TASK_STATUS.OFFERING, readyAt: new Date('2026-10-22T18:00:00Z') };
   const offers = [
@@ -234,8 +234,8 @@ test('evaluateFallback: triggers fallback when all own offers are expired/settle
   ];
 
   const res = evaluateFallback({ task, offers, policy: 'OWN_THEN_SHARED', fallbackSeconds: 30, now });
-  assert.equal(res.shouldFallbackToShared, true);
-  assert.equal(res.reason, 'ALL_OWN_OFFERS_SETTLED');
+  assert.equal(res.shouldFallbackToShared, false);
+  assert.equal(res.reason, 'WAITING_OWN_WINDOW');
 });
 
 test('evaluateFallback: triggers fallback when fallbackSeconds exceeded', () => {
@@ -315,179 +315,48 @@ test('rankCandidates: filters offline, stale (>90s) and out-of-range couriers, s
 
 // ── 8. createMarketplaceDispatchRouter (HTTP & Endpoint Integration) ──────────
 
-const createMarketplaceDispatchRouter = require('../src/routes/marketplace-dispatch.routes');
+const { fixture, driver } = require('./helpers/marketplace-dispatch-fixture.cjs');
 
-function createMockRouter() {
-  const routes = [];
-  const useMiddlewares = [];
-  return {
-    routes,
-    useMiddlewares,
-    use(fn) {
-      useMiddlewares.push(fn);
-    },
-    get(path, handler) {
-      routes.push({ method: 'GET', path, handler });
-    },
-    post(path, handler) {
-      routes.push({ method: 'POST', path, handler });
-    },
-  };
-}
-
-function createMockReqRes({ params = {}, query = {}, body = {} } = {}) {
-  const headers = {};
-  let statusCode = 200;
-  let jsonBody = null;
-
-  const req = { params, query, body };
-  const res = {
-    set(key, val) {
-      headers[key.toLowerCase()] = val;
-      return res;
-    },
-    status(code) {
-      statusCode = code;
-      return res;
-    },
-    json(b) {
-      jsonBody = b;
-      return res;
-    },
-  };
-
-  return { req, res, getHeader: (k) => headers[k.toLowerCase()], getStatus: () => statusCode, getBody: () => jsonBody };
-}
-
-test('dispatch router: sets Cache-Control: no-store via middleware', async () => {
-  const router = createMarketplaceDispatchRouter({ Router: createMockRouter });
-  assert.ok(router.useMiddlewares.length > 0);
-
-  const { req, res, getHeader } = createMockReqRes();
-  let nextCalled = false;
-  await router.useMiddlewares[0](req, res, () => { nextCalled = true; });
-
-  assert.equal(nextCalled, true);
-  assert.equal(getHeader('cache-control'), 'no-store');
+test('dispatch router: sets Cache-Control: no-store via middleware', () => {
+  const f = fixture();
+  let next = false;
+  const res = { set(key, value) { assert.equal(key, 'Cache-Control'); assert.equal(value, 'no-store'); } };
+  f.middlewares[0]({}, res, () => { next = true; });
+  assert.equal(next, true);
 });
 
-test('dispatch router: courier presence updates GPS coordinates', async () => {
-  const store = { tasks: new Map(), offers: new Map(), couriers: new Map() };
-  const router = createMarketplaceDispatchRouter({ Router: createMockRouter, getStore: () => store });
-
-  const route = router.routes.find(r => r.method === 'POST' && r.path === '/couriers/me/presence');
-  assert.ok(route);
-
-  const { req, res, getStatus, getBody } = createMockReqRes({
-    body: { courierId: 'cur_juan', isOnline: true, lat: 19.4326, lng: -99.1332, accuracy: 5 },
-  });
-
-  await route.handler(req, res);
-
-  assert.equal(getStatus(), 200);
-  assert.equal(getBody().success, true);
-  assert.equal(getBody().presence.lat, 19.4326);
-
-  const saved = store.couriers.get('cur_juan');
-  assert.ok(saved);
-  assert.equal(saved.isOnline, true);
+test('dispatch router: authenticated courier presence updates GPS coordinates', async () => {
+  const f = fixture();
+  const res = await f.request('POST', '/couriers/me/presence', { user: driver('own'),
+    body: { isOnline: true, lat: 19.4326, lng: -99.1332, accuracy: 5 } });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.presence.lat, 19.4326);
+  assert.equal(f.store.couriers.get('own').isOnline, true);
 });
 
-test('dispatch router: courier accepts offer, concurrent second attempt receives 409', async () => {
-  const store = {
-    tasks: new Map([
-      ['task_http_1', { id: 'task_http_1', status: TASK_STATUS.OFFERING, currentAssignmentId: null }],
-    ]),
-    offers: new Map([
-      ['ofr_http_1', { id: 'ofr_http_1', taskId: 'task_http_1', courierId: 'cur_pablo', status: OFFER_STATUS.OFFERED, expiresAt: new Date(Date.now() + 30000) }],
-    ]),
-    couriers: new Map(),
-  };
-
-  const router = createMarketplaceDispatchRouter({ Router: createMockRouter, getStore: () => store });
-  const route = router.routes.find(r => r.method === 'POST' && r.path === '/couriers/offers/:id/accept');
-  assert.ok(route);
-
-  // First request succeeds
-  const { req: req1, res: res1, getStatus: getStatus1, getBody: getBody1 } = createMockReqRes({
-    params: { id: 'ofr_http_1' },
-    body: { courierId: 'cur_pablo' },
-  });
-  await route.handler(req1, res1);
-  assert.equal(getStatus1(), 200);
-  assert.equal(getBody1().success, true);
-  assert.ok(getBody1().assignment.id.startsWith('asgn_'));
-
-  // Second concurrent attempt receives 409 Conflict
-  const { req: req2, res: res2, getStatus: getStatus2, getBody: getBody2 } = createMockReqRes({
-    params: { id: 'ofr_http_1' },
-    body: { courierId: 'cur_pablo' },
-  });
-  await route.handler(req2, res2);
-  assert.equal(getStatus2(), 409);
-  assert.equal(getBody2().errorCode, 'OFFER_ALREADY_CLAIMED');
+test('dispatch router: acceptance succeeds once and replay receives 409', async () => {
+  const f = fixture('OWN_ONLY'); f.start();
+  const offer = f.offers().find(row => row.courierId === 'own');
+  const args = { user: driver('own'), params: { id: offer.id } };
+  const first = await f.request('POST', '/couriers/offers/:id/accept', args);
+  assert.equal(first.statusCode, 200); assert.equal(first.body.success, true);
+  assert.ok(first.body.assignment.id.startsWith('asgn_'));
+  const second = await f.request('POST', '/couriers/offers/:id/accept', args);
+  assert.equal(second.statusCode, 409); assert.equal(second.body.errorCode, 'OFFER_ALREADY_CLAIMED');
 });
 
-test('dispatch router: pickup with valid PIN returns orderStatusUpdate: ON_THE_WAY', async () => {
-  const pickupPin = '4321';
-  const store = {
-    tasks: new Map([
-      ['task_pickup_1', {
-        id: 'task_pickup_1',
-        status: TASK_STATUS.ASSIGNED,
-        pickupPinHash: hashPin(pickupPin),
-        currentAssignment: { status: 'ACTIVE' },
-      }],
-    ]),
-    offers: new Map(),
-    couriers: new Map(),
-  };
-
-  const router = createMarketplaceDispatchRouter({ Router: createMockRouter, getStore: () => store });
-  const route = router.routes.find(r => r.method === 'POST' && r.path === '/couriers/tasks/:id/pickup');
-  assert.ok(route);
-
-  const { req, res, getStatus, getBody } = createMockReqRes({
-    params: { id: 'task_pickup_1' },
-    body: { pickupPin },
-  });
-
-  await route.handler(req, res);
-
-  assert.equal(getStatus(), 200);
-  assert.equal(getBody().success, true);
-  assert.equal(getBody().status, TASK_STATUS.PICKED_UP);
-  assert.equal(getBody().orderStatusUpdate, 'ON_THE_WAY');
+test('dispatch router: valid pickup PIN updates the actual order to ON_THE_WAY', async () => {
+  const f = fixture('OWN_ONLY'); f.start(); f.accept('own');
+  const res = await f.request('POST', '/couriers/tasks/:id/pickup', { user: driver('own'), body: { pickupPin: '1234' } });
+  assert.equal(res.statusCode, 200); assert.equal(res.body.status, 'PICKED_UP');
+  assert.equal(res.body.orderStatusUpdate, 'ON_THE_WAY'); assert.equal(f.order.status, 'ON_THE_WAY');
 });
 
-test('dispatch router: delivery with valid PIN returns orderStatusUpdate: DELIVERED', async () => {
-  const deliveryPin = '8765';
-  const store = {
-    tasks: new Map([
-      ['task_deliv_1', {
-        id: 'task_deliv_1',
-        status: TASK_STATUS.PICKED_UP,
-        deliveryPinHash: hashPin(deliveryPin),
-        currentAssignment: { status: 'ACTIVE' },
-      }],
-    ]),
-    offers: new Map(),
-    couriers: new Map(),
-  };
-
-  const router = createMarketplaceDispatchRouter({ Router: createMockRouter, getStore: () => store });
-  const route = router.routes.find(r => r.method === 'POST' && r.path === '/couriers/tasks/:id/deliver');
-  assert.ok(route);
-
-  const { req, res, getStatus, getBody } = createMockReqRes({
-    params: { id: 'task_deliv_1' },
-    body: { deliveryPin },
-  });
-
-  await route.handler(req, res);
-
-  assert.equal(getStatus(), 200);
-  assert.equal(getBody().success, true);
-  assert.equal(getBody().status, TASK_STATUS.DELIVERED);
-  assert.equal(getBody().orderStatusUpdate, 'DELIVERED');
+test('dispatch router: valid delivery PIN completes assignment and order', async () => {
+  const f = fixture('OWN_ONLY'); f.start(); f.accept('own');
+  f.engine.confirmPickup({ taskId: 't1', courierId: 'own', pickupPin: '1234' });
+  const res = await f.request('POST', '/couriers/tasks/:id/deliver', { user: driver('own'), body: { deliveryPin: '5678' } });
+  assert.equal(res.statusCode, 200); assert.equal(res.body.status, 'DELIVERED');
+  assert.equal(res.body.orderStatusUpdate, 'DELIVERED'); assert.equal(f.order.status, 'DELIVERED');
+  assert.equal(f.task.currentAssignment.status, 'COMPLETED');
 });
