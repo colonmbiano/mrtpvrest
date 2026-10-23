@@ -129,7 +129,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
         Vista aislada de pruebas · Solo tiendas habilitadas; no se procesan pagos reales.
       </p>}
 
-      {previewDemo && <div id="preview-info" role="status" className="mx-auto mt-3 max-w-[1380px] px-4 sm:px-6"><p className="rounded-xl border border-[#f0cf90] bg-[#fff6df] px-4 py-3 text-sm font-semibold text-[#7c5219]"><strong>Vista de demostración:</strong> negocios, productos y precios ficticios para revisar el diseño. No admite pedidos ni pagos y no consulta la base de datos real.</p></div>}
+      {previewDemo && <div id="preview-info" role="status" className="mx-auto mt-3 max-w-[1380px] px-4 sm:px-6"><p className="rounded-xl border border-[#f0cf90] bg-[#fff6df] px-4 py-3 text-sm font-semibold text-[#7c5219]"><strong>Vista de demostración:</strong> Master Burguer’s y Tokki Boba aparecen con sus nombres reales. Los demás negocios, productos y precios son ejemplos ficticios. No se realizan pedidos ni pagos y no se consulta la base de datos real.</p></div>}
 
       <main id="contenido" className="mx-auto flex max-w-[1380px] flex-col gap-9 px-4 pb-12 pt-5 sm:gap-11 sm:px-6 sm:pt-7">
         <section aria-label="Bienvenida a MRTPVREST Marketplace" className="relative isolate overflow-hidden rounded-[1.5rem] bg-[#fff0e2] shadow-[0_12px_32px_rgba(37,56,43,.08)] sm:rounded-[1.75rem]">
