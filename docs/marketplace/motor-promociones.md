@@ -146,25 +146,29 @@ una transaccion si necesita atomicidad de lote. Un conteo mayor a uno se rechaza
 como violacion del contrato; el motor no puede deshacer una escritura incorrecta
 de un adaptador que no respete el alcance.
 
-## Aislamiento e integracion futura
+## Aislamiento e integracion
 
 El esquema actual guarda `MenuItem.isPromo/promoPrice/activeDays` globalmente por
 restaurante. `autoPromos.job.js` suma umbrales y ventas entre sucursales antes de
 escribir esos campos. **Ese job no usa este motor y no se modifico ni activo.**
 
-No se entrega un adaptador Prisma que simule aislamiento sobre `MenuItem`: antes
-de conectar persistencia real se necesita un almacenamiento de overrides por
-ubicacion y articulo, con version/origen y lectura efectiva en catalogo/cobro.
-Ese adaptador debe verificar ademas que la sucursal pertenece al tenant autorizado
-del dueno. El motor puro no autentica usuarios ni aprovisiona ese almacenamiento.
+El adaptador real de persistencia esta en `promo-adapter-prisma.js` y usa el nuevo
+modelo `LocationMenuItemPromo`, con version/origen por ubicacion y articulo.
+No escribe promociones sobre `MenuItem`. Las rutas administrativas comprueban
+restaurante, tenant y sucursal autorizados. Su contrato HTTP, el modo de simulacion
+y los requisitos de esquema estan documentados en `promo-adapter-prisma.md`.
+La lectura efectiva de estos overrides en catalogo/cobro es una integracion distinta;
+persistir una recomendacion no modifica por si solo el precio de un pedido.
+El motor puro sigue sin autenticar usuarios ni aprovisionar almacenamiento.
 
 La aplicacion solo activa/actualiza las recomendaciones recibidas. No elimina
 promociones manuales ni desactiva automaticamente articulos que dejaron de estar
 bajo el umbral. Antiguedad del articulo, limites de cantidad de promos y seleccion
 del periodo son politicas de entrada futuras; no se agregaron parametros ocultos.
 
-No se crearon modelos, rutas, jobs, migraciones ni tareas programadas. Tampoco se
-modificaron el job existente, el esquema, los entornos o las dependencias.
+El modulo puro no crea modelos, rutas, jobs ni tareas programadas. La extension
+del adaptador agrega el modelo y dos rutas locales; no se ejecutaron migraciones
+ni se modificaron el job existente, los entornos o las dependencias.
 
 ## Pruebas offline
 

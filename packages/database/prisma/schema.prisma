@@ -435,6 +435,9 @@ model Location {
   autoPromoEnabled   Boolean @default(false)
   autoPromoThreshold Int     @default(10) // Umbral: Ventas menores a X en los últimos 7 días
   autoPromoDiscount  Float   @default(15) // % de descuento automático
+  locationPromoEnabled Boolean @default(false)
+  autoPromoActiveDays String[] @default([])
+  autoPromoVersion Int @default(0)
   autoPromoMaxItems  Int     @default(0)  // Tope de platillos en promo a la vez (0 = sin tope)
 
   // Configuración de Ticket por sucursal
@@ -485,6 +488,9 @@ model Location {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  locationItemPromos LocationMenuItemPromo[]
+
+  @@unique([id, restaurantId])
   @@unique([restaurantId, slug])
   @@map("locations")
   // RETAIL · stock, ventas, traspasos y dispositivos por sucursal.
@@ -710,6 +716,9 @@ model MenuItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  locationPromos LocationMenuItemPromo[]
+
+  @@unique([id, restaurantId])
   @@index([restaurantId, isFavorite])
   @@map("menu_items")
 }
@@ -4712,4 +4721,26 @@ model MarketplaceLedgerEntry {
   @@index([restaurantId, orderId, createdAt])
   @@index([restaurantId, account, beneficiaryId, createdAt])
   @@map("marketplace_ledger_entries")
+}
+
+// Per-location overrides; never write the shared MenuItem promotional fields.
+model LocationMenuItemPromo {
+  id           String @id @default(cuid())
+  restaurantId String
+  locationId   String
+  menuItemId   String
+  location     Location @relation(fields: [locationId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  menuItem     MenuItem @relation(fields: [menuItemId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  isPromo      Boolean @default(false)
+  promoPrice   Decimal? @db.Decimal(18, 2)
+  activeDays   String[] @default([])
+  promoSource  String?
+  version      Int @default(0)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([locationId, menuItemId])
+  @@index([restaurantId, locationId])
+  @@index([menuItemId, restaurantId])
+  @@map("location_menu_item_promos")
 }

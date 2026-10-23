@@ -49,6 +49,7 @@ const SCOPED_MODELS = new Set([
   'IngredientType',
   'IntegrationConfig',
   'Location',
+  'LocationMenuItemPromo',
   'LoyaltyAccount',
   'LoyaltyReward',
   'MenuItem',

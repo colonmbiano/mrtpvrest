@@ -7,6 +7,11 @@ const { authenticate, requireAdmin, requireTenantAccess } = require('../middlewa
 const log = require('../lib/logger')('locations')
 
 const router = express.Router()
+const { createPromoLocationHandlers } = require('../lib/promo-adapter-prisma')
+const promoHandlers = createPromoLocationHandlers({ prismaClient: prisma })
+
+router.put('/:id/promo-settings', authenticate, requireTenantAccess, requireAdmin, promoHandlers.settings)
+router.post('/:id/run-promo-engine', authenticate, requireTenantAccess, requireAdmin, promoHandlers.run)
 
 const VALID_BUSINESS_TYPES = ['RESTAURANT', 'RETAIL', 'BAR', 'CAFE']
 
