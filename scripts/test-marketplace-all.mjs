@@ -59,6 +59,7 @@ const TESTS = [
   { path: 'apps/backend/scripts/marketplace-ledger.test.cjs', name: 'Backend: Ledger Contable Inmutable' },
   { path: 'apps/backend/scripts/marketplace-payments.test.cjs', name: 'Backend: Pasarela MercadoPago & Webhooks' },
   { path: 'apps/backend/scripts/marketplace-catalog.test.cjs', name: 'Backend: Catálogo Multi-Giro & Disponibilidad' },
+  { path: 'apps/backend/scripts/marketplace-merchants-v1.test.cjs', name: 'Backend: Descubrimiento & Catálogo v1' },
   { path: 'apps/backend/scripts/marketplace-quote.test.cjs', name: 'Backend: Cotización Formal & Snapshot TTL' },
   { path: 'apps/backend/scripts/marketplace-dispatch.test.cjs', name: 'Backend: Motor de Asignación y Despacho' },
   { path: 'apps/backend/scripts/marketplace-hybrid-policy.test.cjs', name: 'Backend: Políticas de Despacho Híbrido & Fallback' },
