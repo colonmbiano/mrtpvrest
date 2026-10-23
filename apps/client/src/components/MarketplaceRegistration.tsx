@@ -4,7 +4,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, ArrowRight, Bike, CheckCircle2, ChevronRight, Mail,
-  ShieldCheck, ShoppingBag, Store, UserRound, XCircle,
+  ShieldCheck, ShoppingBag, Store, UserRound,
 } from 'lucide-react';
 import {
   EMPTY_REGISTRATION_DRAFT, normalizeRegistrationDraft, validateRegistrationDraft,
