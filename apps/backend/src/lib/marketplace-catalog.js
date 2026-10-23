@@ -68,6 +68,15 @@ const STORE_CONFIG_SELECT = {
   estimatedDelivery: true, deliveryMode: true, deliveryFee: true, freeDeliveryFrom: true, minOrderAmount: true,
 };
 
+// Sólo se publican imágenes HTTPs válidas; no se aceptan datos internos ni esquemas ejecutables.
+function publicImage(value) {
+  if (typeof value !== 'string' || value.length > 2048) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password ? url.href : undefined;
+  } catch { return undefined; }
+}
+
 function finiteOrNull(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 }
@@ -100,11 +109,11 @@ function createPrismaCatalogAdapter(prisma, { now = () => new Date() } = {}) {
       const where = { ...eligibleStores(slugs), ...nameFilter(q), ...(businessType ? { businessType } : {}) };
       const [total, rows] = await Promise.all([
         prisma.restaurant.count({ where }),
-        prisma.restaurant.findMany({ where, select: { slug: true, name: true, businessType: true, config: { select: STORE_CONFIG_SELECT } },
+        prisma.restaurant.findMany({ where, select: { slug: true, name: true, businessType: true, logoUrl: true, config: { select: STORE_CONFIG_SELECT } },
           orderBy: ORDER, skip: (page - 1) * pageSize, take: pageSize }),
       ]);
       const at = now();
-      return { total, rows: rows.map(row => ({ slug: row.slug, name: row.name, businessType: row.businessType, ...storeTerms(row.config, at) })) };
+      return { total, rows: rows.map(row => ({ slug: row.slug, name: row.name, businessType: row.businessType, logoUrl: row.logoUrl, ...storeTerms(row.config, at) })) };
     },
     async listProducts({ slugs, q, page, pageSize }) {
       // At most 100 explicit stores. Resolve IDs server-side; no tenant header or query is used.
@@ -123,7 +132,7 @@ function createPrismaCatalogAdapter(prisma, { now = () => new Date() } = {}) {
       };
       const [total, rows, configs] = await Promise.all([
         prisma.menuItem.count({ where }),
-        prisma.menuItem.findMany({ where, select: { id: true, name: true, price: true,
+        prisma.menuItem.findMany({ where, select: { id: true, name: true, imageUrl: true, price: true,
           isPromo: true, promoPrice: true, promoStartTime: true, promoEndTime: true,
           restaurantId: true, category: { select: { name: true } }, _count: { select: { reactions: true } } },
         orderBy: ORDER, skip: (page - 1) * pageSize, take: pageSize }),
@@ -140,7 +149,7 @@ function createPrismaCatalogAdapter(prisma, { now = () => new Date() } = {}) {
         if (!store || !row.category || !Number.isFinite(row.price) || row.price < 0 || !CURRENCIES.has(currency)) {
           throw new Error('Invalid public product data');
         }
-        return { id: row.id, name: row.name, categoryName: row.category.name,
+        return { id: row.id, name: row.name, imageUrl: row.imageUrl, categoryName: row.category.name,
           price: row.price, promoPrice: activePromoPrice(row, config || null, at),
           likes: row._count?.reactions ?? 0, currency, store: { slug: store.slug, name: store.name } };
       }) };
@@ -161,10 +170,11 @@ function createCatalog({ getAdapter, storeSlugs = '' }) {
     // Project again at the public boundary, even if an injected adapter returns extra fields.
     const items = rows.map(row => kind === 'stores'
       ? { slug: row.slug, name: row.name, businessType: row.businessType,
+        ...(publicImage(row.logoUrl) ? { logoUrl: publicImage(row.logoUrl) } : {}),
         isOpen: row.isOpen === true, closedMessage: row.closedMessage ?? null,
         estimatedDelivery: row.estimatedDelivery ?? null, deliveryFee: row.deliveryFee ?? null,
         freeDeliveryFrom: row.freeDeliveryFrom ?? null, minOrderAmount: row.minOrderAmount ?? null }
-      : { id: row.id, name: row.name, categoryName: row.categoryName, price: row.price,
+      : { id: row.id, name: row.name, ...(publicImage(row.imageUrl) ? { imageUrl: publicImage(row.imageUrl) } : {}), categoryName: row.categoryName, price: row.price,
         promoPrice: row.promoPrice ?? null, likes: row.likes ?? 0,
         currency: row.currency, store: { slug: row.store.slug, name: row.store.name } });
     return { ...envelope, items, total };
