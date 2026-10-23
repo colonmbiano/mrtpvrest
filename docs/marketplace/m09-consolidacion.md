@@ -62,7 +62,7 @@ las rutas de tienda chocan con la BD bloqueada en `127.0.0.1:1`.
 | 3 | Jobs con efectos | **Cerrado en código** (M04), con revisión M08. Falta verlo en un arranque real. |
 | 4 | `prisma migrate deploy` en el CMD del Dockerfile | **Cerrado en código.** Con `MARKETPLACE_ISOLATED=true` el CMD omite la migración; sin la bandera es idéntico al anterior (falla si la migración falla). Validado con stubs de `pnpm`/`node`. Sigue prohibido construir el contenedor. |
 | 5 | Bind 0.0.0.0 y CORS amplio | **Cerrado en código** (M04): 127.0.0.1 y orígenes loopback exactos en modo aislado. |
-| 6 | Secretos de tenants en BD | Abierto (operativo): solo BD nueva con datos sintéticos. Ver staging-externos.md. |
+| 6 | Secretos de tenants en BD | **Resuelto para la copia local:** BD nueva en loopback con tenants sintéticos, sin dumps productivos (ver "Base de staging local"). Para un staging remoto sigue aplicando staging-externos.md. |
 | 7 | Servicios opcionales (pagos, WhatsApp, correo, OTA…) | Abierto (operativo). Lista de variables y valor esperado por servicio en staging-externos.md. |
 | 8 | Automatización remota (workflows, Railway, Vercel) | **Revisado en local** (staging-externos.md): un push de la rama no dispara workflows; un PR compila los APK de TPV, KDS y Meseros Lite. Los `vercel.json` no bloquean Preview deployments: hay que desactivarlos antes del primer push. Falta verificar los dashboards. |
 | 9 | Alcance de secretos | Sin cambios; el escaneo previo sigue vigente. |
@@ -102,9 +102,42 @@ Cada paso necesita aprobación explícita: hoy están prohibidos por AGENTS.md.
 
 ## Decisiones pendientes del usuario
 
-- Pasos 1–5 del plan hechos el 22/oct (instalación, comprobaciones, banderas en los
-  `.env`, catálogo vacío y error visible). Falta el paso 6 (BD de staging con datos
-  sintéticos) y completar el 7 (zoom y lector de pantalla).
+- Pasos 1–6 del plan hechos el 22/oct. Falta completar el 7 (zoom al 200 % y lector
+  de pantalla).
+
+## Base de staging local y prueba con datos (22/oct)
+
+- Docker no puede arrancar en esta máquina (WSL2 requiere virtualización, deshabilitada
+  en BIOS). Con autorización del usuario se usó **PostgreSQL 16.6 portátil** (zip
+  oficial de EnterpriseDB, sin instalador ni servicio; sus binarios no traen firma
+  Authenticode) en `.marketplace-local/postgres16`, datos en `.marketplace-local/pgdata`,
+  escuchando solo en `127.0.0.1:55432` (rechaza conexiones desde la LAN), usuario
+  `marketplace` con SCRAM y contraseña aleatoria en `.marketplace-local/pg-password.txt`.
+  Redis no hizo falta para el catálogo y sigue apuntando al destino bloqueado.
+- Base `mrtpvrest_marketplace_staging`: 91 migraciones aplicadas con `migrate deploy`
+  tras confirmar el destino con `migrate status`; las referencias a Supabase en
+  migraciones son comentarios.
+- `DATABASE_URL`/`DIRECT_URL` de `.env`, `apps/backend/.env` y `packages/database/.env`
+  apuntan a esa base; los originales (destino bloqueado `127.0.0.1:1`) están en
+  `.marketplace-local/env-backup-*`. `MARKETPLACE_STORE_SLUGS` lista las 14 tiendas.
+  `verify.py` ya no puede pasar su chequeo de BD bloqueada: es el cambio autorizado.
+- Seed: `node apps/backend/scripts/marketplace-seed-synthetic.js` (idempotente; se niega
+  a correr fuera de `127.0.0.1:55432` con "marketplace" en el nombre). 14 tiendas
+  ficticias (una inactiva), 18 productos con casos de exclusión.
+- **Defectos encontrados solo con BD real y corregidos:** `/products` respondía siempre
+  503 porque `lte: Number.MAX_VALUE` no cabe en `double precision`; los enlaces con
+  `#productos`/`#tiendas` no hacían scroll porque la portada llega por streaming
+  (`ScrollToHash`).
+- Verificado: 13 tiendas (inactiva excluida), paginación 12+1 e independiente por
+  sección, filtro por tipo, "Ver sus productos" (solo el producto visible de la tienda
+  02), búsqueda, proyección sin campos privados, MXN, entrar a una tienda, tienda
+  cerrada con "Volver al catálogo", canonical/`og:url` en el mismo origen, `noindex`,
+  y que el carrito de la tienda 01 no aparece en la tienda 02.
+- **Hallazgo fuera de alcance (no corregido):** el storefront existente
+  (`/api/store/menu`) agrupa en "Menú" los productos de categorías inactivas en vez de
+  ocultarlos; el catálogo sí los excluye. Decidir si es intencional.
+- Para detener la base: `.marketplace-local/postgres16/pgsql/bin/pg_ctl -D
+  .marketplace-local/pgdata stop`.
 - Revisión independiente de M05/M07 (Antigravity cuando recupere cuota, o Codex).
 - Revisar también los guards de API de TPV, Tokki, Moda, Meseros Lite, KDS, Kiosk y
   SaaS: esas apps se publican como APK/OTA, y aunque el cambio no altera nada sin

@@ -95,8 +95,12 @@ git diff --check                                                # OK
   backend detenido y reintento que conserva filtros, error de tienda con "Volver al
   catálogo", móvil 375 px sin scroll horizontal y foco visible por teclado. Las
   peticiones del navegador solo fueron a `127.0.0.1:4103`.
-- **Sin probar todavía:** zoom al 200 %, lector de pantalla, catálogo con datos
-  (requiere BD con tenants sintéticos) y tráfico saliente del servidor de Next: aquí
+- **Con datos sintéticos** (BD local, ver m09-consolidacion.md): tarjetas, paginación
+  independiente, "Ver sus productos", entrada a tienda y aislamiento del carrito
+  verificados. Se corrigió que los enlaces con `#productos`/`#tiendas` no hacían scroll
+  tras el streaming (`src/components/ScrollToHash.tsx`).
+- **Sin probar todavía:** zoom al 200 %, lector de pantalla y tráfico saliente del
+  servidor de Next: aquí
   no se pudo atribuir sockets por proceso. Por defecto, Next dev envía telemetría y
   `next/font/google` descarga fuentes al compilar; ninguno de los dos es producción de
   MRTPVREST.
