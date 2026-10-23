@@ -19,10 +19,19 @@ export function isMarketplaceIsolated(): boolean {
   return process.env.NEXT_PUBLIC_MARKETPLACE_ISOLATED === "true";
 }
 
+// Vercel Preview SOLO de esta rama de desarrollo: la home renderiza un
+// catálogo ficticio e informativo, nunca obtiene datos/secretos de producción.
+// Requiere variables de sistema de Vercel; si faltan falla cerrado.
+export function isMarketplacePreviewDemo(): boolean {
+  return process.env.VERCEL_ENV === "preview"
+    && process.env.VERCEL_GIT_COMMIT_REF === "feature/marketplace-hibrido"
+    && !isMarketplaceIsolated();
+}
+
 // La raíz muestra el catálogo solo cuando se pide explícitamente; sin ninguna
 // bandera conserva la redirección histórica del storefront productivo.
 export function isMarketplaceCatalogEnabled(): boolean {
-  return isMarketplaceIsolated() || process.env.NEXT_PUBLIC_MARKETPLACE_CATALOG === "true";
+  return isMarketplaceIsolated() || isMarketplacePreviewDemo() || process.env.NEXT_PUBLIC_MARKETPLACE_CATALOG === "true";
 }
 
 // Normaliza a origen exacto (sin path, query ni credenciales) o null.

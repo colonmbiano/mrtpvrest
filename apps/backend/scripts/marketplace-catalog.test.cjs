@@ -140,6 +140,12 @@ test('query rules reject structured, duplicate, out-of-range and malformed value
   assert.equal(parseQuery({ q: ' '.repeat(90), store: '' }, 'products').q, '');
 });
 
+test('hardware and autoparts remain valid marketplace store filters', () => {
+  for (const businessType of ['HARDWARE', 'AUTOPARTS']) {
+    assert.equal(parseQuery({ businessType }, 'stores').businessType, businessType);
+  }
+});
+
 test('stores exclude private, inactive, non-web and demo tenants with explicit public projection', async () => {
   const { catalog } = catalogFixture();
   assert.deepEqual(await catalog.listStores({}), { page: 1, pageSize: 12, total: 2, items: [
@@ -148,6 +154,21 @@ test('stores exclude private, inactive, non-web and demo tenants with explicit p
   ] });
   assert.deepEqual((await catalog.listStores({ businessType: 'GROCERY', q: '  TIEN  ' })).items.map(row => row.slug), ['beta']);
   assert.equal((await catalog.listStores({ q: 'none' })).total, 0);
+});
+
+test('only safe https public photos are projected for stores and products', async () => {
+  const { prisma, stores, items } = fixtures();
+  stores[0].logoUrl = 'https://cdn.example.com/brand.png';
+  stores[1].logoUrl = 'javascript:alert(1)';
+  items[0].imageUrl = 'https://cdn.example.com/burger.png';
+  items[1].imageUrl = 'data:image/svg+xml,unsafe';
+  const catalog = createCatalog({ storeSlugs: 'alpha,beta', getAdapter: () => createPrismaCatalogAdapter(prisma) });
+  const shop = await catalog.listStores({});
+  assert.equal(shop.items[0].logoUrl, 'https://cdn.example.com/brand.png');
+  assert.equal(shop.items[1].logoUrl, undefined);
+  const products = await catalog.listProducts({});
+  assert.equal(products.items[0].imageUrl, 'https://cdn.example.com/burger.png');
+  assert.equal(products.items[1].imageUrl, undefined);
 });
 
 test('store pagination counts after filters and uses id to break tied names', async () => {
@@ -186,6 +207,7 @@ test('Prisma adapter sends explicit eligibility, scopes, narrow selects and DB p
     slug: true,
     name: true,
     businessType: true,
+    logoUrl: true,
     config: {
       select: {
         isOpen: true,
@@ -220,6 +242,7 @@ test('Prisma adapter sends explicit eligibility, scopes, narrow selects and DB p
   assert.deepEqual(product.select, {
     id: true,
     name: true,
+    imageUrl: true,
     price: true,
     isPromo: true,
     promoPrice: true,

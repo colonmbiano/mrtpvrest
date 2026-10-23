@@ -27,6 +27,7 @@ const CURRENCY_RE = /^[A-Z]{3}$/;
 export type StoreSummary = {
   slug: string;
   name: string;
+  logoUrl?: string;
   businessType: BusinessType;
   isOpen: boolean;
   closedMessage: string | null;
@@ -40,6 +41,7 @@ export type StoreSummary = {
 export type ProductSummary = {
   id: string;
   name: string;
+  imageUrl?: string;
   categoryName: string;
   price: number;
   promoPrice: number | null; // solo si la promo está vigente ahora
@@ -149,6 +151,14 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function isPublicImage(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password;
+  } catch { return false; }
+}
+
 function isAmount(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
@@ -160,6 +170,7 @@ function isAmountOrNull(value: unknown): value is number | null {
 export function isStoreSummary(value: unknown): value is StoreSummary {
   return isRecord(value) && isValidSlug(value.slug) && isNonEmptyString(value.name)
     && isBusinessType(value.businessType)
+    && (value.logoUrl === undefined || isPublicImage(value.logoUrl))
     && typeof value.isOpen === 'boolean'
     && (value.closedMessage === null || typeof value.closedMessage === 'string')
     && (value.estimatedDelivery === null || (Number.isInteger(value.estimatedDelivery) && (value.estimatedDelivery as number) > 0))
@@ -169,6 +180,7 @@ export function isStoreSummary(value: unknown): value is StoreSummary {
 export function isProductSummary(value: unknown): value is ProductSummary {
   return isRecord(value) && isNonEmptyString(value.id) && isNonEmptyString(value.name)
     && typeof value.categoryName === 'string'
+    && (value.imageUrl === undefined || isPublicImage(value.imageUrl))
     && isAmount(value.price)
     && (value.promoPrice === null || (isAmount(value.promoPrice) && value.promoPrice < value.price))
     && Number.isInteger(value.likes) && (value.likes as number) >= 0

@@ -4867,3 +4867,91 @@ model MarketplaceOrderPipeline {
   @@index([restaurantId, createdAt])
   @@map("marketplace_order_pipelines")
 }
+
+
+// Marketplace v2 identities: global, never scoped to one restaurant.
+// Registration does NOT create SaaS tenants or authorize courier dispatch.
+enum MarketplaceSignupRole {
+  BUYER
+  MERCHANT
+  COURIER
+}
+
+enum MarketplaceApplicationStatus {
+  PENDING_EMAIL
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum MarketplaceTokenPurpose {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+model MarketplaceAccount {
+  id              String    @id @default(cuid())
+  email           String    @unique @db.VarChar(254)
+  fullName        String    @db.VarChar(120)
+  phone           String    @db.VarChar(20)
+  city            String    @db.VarChar(120)
+  passwordHash    String
+  emailVerifiedAt DateTime? @db.Timestamptz(3)
+  disabledAt      DateTime? @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
+  applications    MarketplaceApplication[]
+  authTokens      MarketplaceAuthToken[]
+  sessions        MarketplaceSession[]
+
+  @@map("marketplace_accounts")
+}
+
+model MarketplaceApplication {
+  id               String @id @default(cuid())
+  accountId        String
+  account          MarketplaceAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  role             MarketplaceSignupRole
+  status           MarketplaceApplicationStatus @default(PENDING_EMAIL)
+  businessName     String? @db.VarChar(120)
+  businessType     String? @db.VarChar(40)
+  deliveryMode     String? @db.VarChar(20)
+  vehicle          String? @db.VarChar(20)
+  network          String? @db.VarChar(20)
+  reviewedByUserId String?
+  reviewedAt       DateTime? @db.Timestamptz(3)
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([accountId, role])
+  @@index([role, status, createdAt])
+  @@map("marketplace_applications")
+}
+
+model MarketplaceAuthToken {
+  id         String @id @default(cuid())
+  accountId  String
+  account    MarketplaceAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tokenHash  String @unique @db.Char(64)
+  purpose    MarketplaceTokenPurpose
+  expiresAt  DateTime @db.Timestamptz(3)
+  consumedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([accountId, purpose, expiresAt])
+  @@map("marketplace_auth_tokens")
+}
+
+model MarketplaceSession {
+  id        String @id @default(cuid())
+  accountId String
+  account   MarketplaceAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tokenHash String @unique @db.Char(64)
+  expiresAt DateTime @db.Timestamptz(3)
+  revokedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([accountId, expiresAt])
+  @@map("marketplace_sessions")
+}

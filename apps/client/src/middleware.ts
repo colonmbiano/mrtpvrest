@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server"
 export function middleware(req: NextRequest) {
   // Marketplace aislado: todas las tiendas viven en /<slug> del mismo origen
   // loopback. Nunca reescribir por host (p. ej. [::1] no empieza con "127").
-  if (process.env.NEXT_PUBLIC_MARKETPLACE_ISOLATED === "true") {
+  if (process.env.NEXT_PUBLIC_MARKETPLACE_ISOLATED === "true" ||
+      (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_GIT_COMMIT_REF === "feature/marketplace-hibrido")) {
     return NextResponse.next()
   }
 

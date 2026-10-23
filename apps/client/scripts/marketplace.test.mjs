@@ -21,8 +21,9 @@ import {
 } from '../src/lib/marketplace.ts';
 import {
   BLOCKED_API_URL, getApiUrl, getMarketplaceApiUrl, getStorePublicUrl,
-  isMarketplaceCatalogEnabled, parseOrigin,
+  isMarketplaceCatalogEnabled, isMarketplacePreviewDemo, parseOrigin,
 } from '../src/lib/config.ts';
+import { loadPreviewCatalog } from '../src/lib/marketplace-preview.ts';
 
 const API = 'http://127.0.0.1:4100';
 const STORE = { slug: 'tienda-a', name: 'Tienda A', businessType: 'RESTAURANT', isOpen: true, closedMessage: null,
@@ -46,7 +47,7 @@ function recordingFetch(handler) {
 
 function withEnv(vars, fn) {
   const keys = ['NEXT_PUBLIC_MARKETPLACE_ISOLATED', 'NEXT_PUBLIC_MARKETPLACE_CATALOG', 'NEXT_PUBLIC_API_URL',
-    'API_URL', 'NEXT_PUBLIC_SITE_URL', 'NODE_ENV'];
+    'API_URL', 'NEXT_PUBLIC_SITE_URL', 'NODE_ENV', 'VERCEL_ENV', 'VERCEL_GIT_COMMIT_REF'];
   const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   for (const key of keys) delete process.env[key];
   Object.assign(process.env, vars);
@@ -139,6 +140,14 @@ test('isProductSummary: precio finito no negativo, moneda ISO y tienda válida',
   assert.equal(isProductSummary({ ...PRODUCT, currency: 'mxn' }), false);
   assert.equal(isProductSummary({ ...PRODUCT, store: { slug: 'x/y', name: 'X' } }), false);
   assert.equal(isProductSummary({ ...PRODUCT, store: undefined }), false);
+});
+
+test('imagen pública opcional: solo URL HTTPS válida', () => {
+  assert.equal(isStoreSummary({ ...STORE, logoUrl: 'https://cdn.example.com/store.jpg' }), true);
+  assert.equal(isStoreSummary({ ...STORE, logoUrl: 'javascript:alert(1)' }), false);
+  assert.equal(isProductSummary({ ...PRODUCT, imageUrl: 'https://cdn.example.com/item.png' }), true);
+  assert.equal(isProductSummary({ ...PRODUCT, imageUrl: 'data:image/svg+xml;base64,xxx' }), false);
+  assert.equal(isProductSummary({ ...PRODUCT, imageUrl: 'http://localhost/private.jpg' }), false);
 });
 
 test('totalPages y formatPrice', () => {
@@ -237,6 +246,73 @@ test('parseOrigin: origen exacto; https fuera de loopback', () => {
   for (const bad of ['http://127.0.0.1:4100/api', 'http://u:p@127.0.0.1', 'http://127.0.0.1?x=1', 'ftp://127.0.0.1', 'nope', undefined]) {
     assert.equal(parseOrigin(bad, { loopbackOnly: false }), null, String(bad));
   }
+});
+
+test('Vercel Preview de la rama Marketplace habilita solo demo y no producción', () => {
+  withEnv({ VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'feature/marketplace-hibrido' }, () => {
+    assert.equal(isMarketplacePreviewDemo(), true);
+    assert.equal(isMarketplaceCatalogEnabled(), true);
+    assert.equal(getMarketplaceApiUrl(), null);
+    const result = loadPreviewCatalog(base, false);
+    assert.equal(result.stores.status, 'ok');
+    assert.equal(result.products.status, 'ok');
+    assert.ok(result.stores.data.items.length > 0);
+    assert.ok(result.products.data.items.every(p => p.store.slug.startsWith('demo-')));
+  });
+  for (const vars of [
+    { VERCEL_ENV: 'production', VERCEL_GIT_COMMIT_REF: 'feature/marketplace-hibrido' },
+    { VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'master' },
+    { VERCEL_ENV: 'preview' },
+  ]) withEnv(vars, () => {
+    assert.equal(isMarketplacePreviewDemo(), false);
+    assert.equal(isMarketplaceCatalogEnabled(), false);
+  });
+});
+
+test('Master Burguer’s y Tokki Boba aparecen primero como fichas de muestra', () => {
+  const result = loadPreviewCatalog(base, false);
+  assert.equal(result.stores.status, 'ok');
+  if (result.stores.status !== 'ok') return;
+  assert.deepEqual(result.stores.data.items.slice(0, 2).map(s => [s.slug, s.name]), [
+    ['master-burguer-s', 'Master Burguer’s'],
+    ['tokki-bobba', 'Tokki Boba'],
+  ]);
+  const searchMaster = loadPreviewCatalog({ ...base, q: 'master' }, false);
+  const searchTokki = loadPreviewCatalog({ ...base, q: 'tokki' }, false);
+  assert.equal(searchMaster.stores.status, 'ok');
+  assert.equal(searchTokki.stores.status, 'ok');
+  if (searchMaster.stores.status === 'ok' && searchTokki.stores.status === 'ok') {
+    assert.deepEqual(searchMaster.stores.data.items.map(s => s.slug), ['master-burguer-s']);
+    assert.deepEqual(searchTokki.stores.data.items.map(s => s.slug), ['tokki-bobba']);
+  }
+  const restaurantFilter = loadPreviewCatalog({ ...base, type: 'RESTAURANT' }, false);
+  assert.equal(restaurantFilter.stores.status, 'ok');
+  if (restaurantFilter.stores.status === 'ok') {
+    const slugs = restaurantFilter.stores.data.items.map(s => s.slug);
+    assert.ok(slugs.includes('master-burguer-s'));
+    assert.ok(slugs.includes('tokki-bobba'));
+  }
+  // El preview no inventa precios, horario ni productos de estos negocios reales.
+  assert.equal(result.products.status, 'ok');
+  if (result.products.status === 'ok') {
+    assert.ok(!result.products.data.items.some(p => ['master-burguer-s', 'tokki-bobba'].includes(p.store.slug)));
+  }
+});
+
+test('demo de portada respeta búsqueda, giro, tienda y página sin tocar la API', () => {
+  const noResults = loadPreviewCatalog({ ...base, q: 'esta tienda no existe' }, false);
+  assert.equal(noResults.stores.data.total, 0);
+  assert.equal(noResults.products.data.total, 0);
+  const hardware = loadPreviewCatalog({ ...base, type: 'HARDWARE' }, false);
+  assert.equal(hardware.stores.data.items.length, 1);
+  assert.equal(hardware.stores.data.items[0].businessType, 'HARDWARE');
+  const filtered = loadPreviewCatalog({ ...base, store: 'demo-hamburguesas' }, false);
+  assert.ok(filtered.products.data.items.length > 0);
+  assert.ok(filtered.products.data.items.every(p => p.store.slug === 'demo-hamburguesas'));
+  const paged = loadPreviewCatalog({ ...base, storesPage: 2 }, false);
+  assert.equal(paged.stores.data.items.length, 0);
+  assert.ok(paged.stores.data.total > 0);
+  assert.equal(loadPreviewCatalog(base, true).stores.status, 'error');
 });
 
 test('modo aislado: nunca usa producción; sin config apunta al destino bloqueado', () => {

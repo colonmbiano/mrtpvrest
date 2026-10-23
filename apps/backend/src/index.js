@@ -183,6 +183,20 @@ app.use('/api/marketplace/v1/webhooks', require('./routes/marketplace-webhooks-v
 app.use('/api/marketplace/v1/ops', require('./routes/marketplace-ops-dispatch-v1.routes')())
 app.use('/api/marketplace/v1', require('./routes/marketplace-settlements-v1.routes')())
 app.use('/api/marketplace', require('./routes/marketplace.routes')())
+
+// Signup v2 stays OFF by default. Even with the flag, refuse a production DB
+// and external calls unless a dedicated staging environment is configured.
+if (process.env.MARKETPLACE_IDENTITY_ENABLED === 'true') {
+  const database = (() => { try { return new URL(process.env.DATABASE_URL || ''); } catch { return null; } })();
+  if (process.env.MARKETPLACE_IDENTITY_MODE !== 'staging'
+    || !database || !/marketplace.*staging/i.test(decodeURIComponent(database.pathname))
+    || !process.env.RESEND_API_KEY || !process.env.TURNSTILE_SECRET_KEY
+    || !/^https:\/\//.test(process.env.MARKETPLACE_IDENTITY_ORIGIN || '')) {
+    throw new Error('Marketplace identity can only run in configured isolated staging');
+  }
+  const { createMarketplaceIdentityRouter } = require('./routes/marketplace-identity.routes');
+  app.use('/api/marketplace/identity', createMarketplaceIdentityRouter());
+}
 app.use('/api/public', require('./routes/menu.routes'))
 app.use('/api/store',  require('./routes/store.routes'))
 app.use('/api/bot-alert', require('./routes/bot-alert.routes'))
