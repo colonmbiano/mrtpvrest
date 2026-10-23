@@ -5,7 +5,39 @@ const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const { localDayRange } = require('../utils/dayRange');
 const { sendPushToDriver, notifyDriversNewDeliveryOrder, notifyOrderStatus } = require('../services/notifications.service');
+const { createDeliveryIncidentsService, DeliveryIncidentError } = require('../lib/delivery-incidents');
 const router = express.Router();
+const deliveryIncidents = createDeliveryIncidentsService();
+
+function incidentError(req, res, error) {
+  if (error instanceof DeliveryIncidentError) {
+    return res.status(error.statusCode).json({ error: error.message, code: error.code });
+  }
+  // Do not log request bodies, Prisma arguments, photos or signatures.
+  console.error('[delivery] operation_failed', { method: req.method, code: error.code || 'INTERNAL_ERROR' });
+  return res.status(500).json({ error: 'Error interno' });
+}
+
+router.post('/orders/:orderId/incidents', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    res.json(await deliveryIncidents.logIncident({ orderId: req.params.orderId, body: req.body,
+      idempotencyKey: req.get('Idempotency-Key'), actor: req.user, restaurantId: req.restaurantId,
+      prismaClient: prisma, io: req.app.get('io') }));
+  } catch (error) { incidentError(req, res, error); }
+});
+
+router.get('/orders/:orderId/incidents', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const rawLimit = req.query.limit;
+    if (rawLimit !== undefined && (typeof rawLimit !== 'string' || !/^\d{1,3}$/.test(rawLimit))) {
+      throw new DeliveryIncidentError('INVALID_LIMIT', 'Limite invalido');
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json(await deliveryIncidents.listIncidents({ orderId: req.params.orderId, actor: req.user,
+      restaurantId: req.restaurantId, prismaClient: prisma, limit: rawLimit === undefined ? 50 : Number(rawLimit),
+      cursor: req.query.cursor }));
+  } catch (error) { incidentError(req, res, error); }
+});
 
 const STAFF_ROLES = ['CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'];
 
@@ -447,87 +479,23 @@ router.put('/unassign', authenticate, requireTenantAccess, requireRole(...STAFF_
 
 router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAccess, async (req, res) => {
   try {
-    const driver = await assertDriverAccess(req, res);
-    if (!driver) return;
-    const existing = await findDriverOrder(req, req.params.orderId, driver.id);
-    if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
-
-    const { status, paymentMethod } = req.body;
-    // El repartidor solo puede mover el pedido a estados válidos de su flujo.
-    const ALLOWED_DRIVER_STATUSES = ['ON_THE_WAY', 'DELIVERED'];
-    if (!ALLOWED_DRIVER_STATUSES.includes(status)) {
-      return res.status(400).json({ error: 'Estado no permitido' });
-    }
-    // Sin envío asignado no sale NI se cierra: al cerrar en DELIVERED con
-    // efectivo se genera el INCOME del corte con order.total — si el envío
-    // sigue en $0, el corte queda corto. La app captura el fee y reintenta.
-    if (shippingFeePending(existing)) {
-      return res.status(409).json({
-        error: 'Este pedido no tiene envío asignado. Captura el costo de envío antes de continuar.',
-        code: 'SHIPPING_FEE_PENDING',
-      });
-    }
-    const data = { status };
-    if (paymentMethod) data.paymentMethod = paymentMethod;
-    if (status === 'DELIVERED') {
-      if (paymentMethod === 'CASH') {
-        // Entregado con efectivo: el repartidor trae el dinero, pero el cobro
-        // queda PENDING hasta que la caja lo concilie (PUT /orders/:id/confirm-cash).
-        data.paymentStatus = 'PENDING';
-        data.cashCollected = false;
-        data.paidAt = null;
-      } else if (paymentMethod === 'TRANSFER_PENDING') {
-        // Transferencia que el repartidor REPORTA pero que aún no confirma que
-        // haya llegado: se guarda como "por cobrar" (no entra a caja) recordando
-        // que el método es transferencia. Aparece en "Pendientes de cobro" y la
-        // caja la liquida con PUT /orders/:id/confirm-cash {paymentMethod:'TRANSFER'}
-        // cuando el banco la refleje. No marcar PAID aquí evita contar como
-        // venta cobrada un dinero que nunca entró. (TRANSFER_PENDING no es un
-        // valor del enum PaymentMethod; se persiste como TRANSFER.)
-        data.paymentMethod = 'TRANSFER';
-        data.paymentStatus = 'PENDING';
-        data.cashCollected = false;
-        data.paidAt = null;
-      } else if (paymentMethod === 'PENDING' || !paymentMethod) {
-        // Entregado SIN cobrar (por cobrar / fiado): no entró dinero. El pedido
-        // queda abierto y aparece en "Pendientes de cobro" del admin hasta que
-        // la caja confirme el cobro.
-        data.paymentStatus = 'PENDING';
-        data.cashCollected = false;
-        data.paidAt = null;
-      } else {
-        // Transferencia/tarjeta confirmada por el repartidor en el momento.
-        data.paymentStatus = 'PAID';
-        data.paidAt = new Date();
-      }
-    }
-    const order = await prisma.order.update({
-      where: { id: existing.id },
-      data,
-      include: { items: { include: { menuItem: true } }, user: true },
+    const { order, changed } = await deliveryIncidents.updateStatus({
+      orderId: req.params.orderId, driverId: req.params.driverId, body: req.body,
+      actor: req.user, restaurantId: req.restaurantId, prismaClient: prisma,
     });
-
-    if (order.status === 'DELIVERED') await ensureCashOnDeliveryMovement(order);
-
     const io = req.app.get('io');
     if (io) {
-      // Emitimos SOLO al room de la sucursal del pedido para no cruzar avisos
-      // entre sucursales: la entrega únicamente la ve la caja de esa ubicación.
-      // El TPV se une a este room vía `join:location:admin` con su locationId
-      // (ver useNotifications.ts), así que la notificación llega a su caja.
-      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
-      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
+      try {
+        // Only this location's cashier; private evidence images never leave the audit table.
+        io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
+        io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
+      } catch { console.warn('[delivery] order_socket_unavailable', { orderId: order.id }); }
     }
-
-    // Avisar al cliente el cambio (en camino / entregado). Solo si el estado
-    // realmente cambió, para no repetir push/WhatsApp. Best-effort.
-    if (existing.status !== order.status) {
-      notifyOrderStatus(order, order.status).catch((err) =>
-        console.error('[delivery] notifyOrderStatus:', err.message));
+    if (changed) {
+      notifyOrderStatus(order, order.status).catch(() => console.warn('[delivery] order_notification_unavailable', { orderId: order.id }));
     }
-
     res.json(order);
-  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+  } catch (error) { incidentError(req, res, error); }
 });
 
 router.get('/orders/:orderId/messages', authenticate, requireTenantAccess, async (req, res) => {

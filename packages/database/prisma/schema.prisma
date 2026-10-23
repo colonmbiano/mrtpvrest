@@ -939,6 +939,8 @@ model Order {
   payments      PaymentTransaction[]
   marketplacePayments MarketplacePayment[]
   marketplacePipeline MarketplaceOrderPipeline?
+  deliveryIncidents DeliveryIncident[]
+  deliveryEvidence DeliveryEvidence?
   packingChecks OrderPackingCheck[]
 
   // FASE NÓMINA · si la orden se cobró "a cuenta de empleado", aquí cuelga el
@@ -2853,6 +2855,51 @@ model DeliveryMessage {
   fromDriver Boolean  @default(false)
   message    String
   createdAt  DateTime @default(now())
+}
+
+/// Immutable route incident audit. The composite FK prevents cross-restaurant links.
+model DeliveryIncident {
+  id String @id @default(cuid())
+  restaurantId String
+  orderId String
+  order Order @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict, onUpdate: Restrict)
+  courierId String
+  actorId String
+  type String
+  reason String @db.VarChar(500)
+  notes String @db.VarChar(4000)
+  callAttempts Int @default(0)
+  occurredAt DateTime @db.Timestamptz(3)
+  loggedAt DateTime @default(now()) @db.Timestamptz(3)
+  photoBase64 String? @db.Text
+  photoMimeType String? @db.VarChar(32)
+  photoBytes Int?
+  idempotencyKey String? @db.VarChar(200)
+  requestHash String @db.Char(64)
+
+  @@unique([restaurantId, orderId, idempotencyKey])
+  @@index([restaurantId, orderId, loggedAt, id])
+  @@index([orderId, restaurantId])
+  @@map("delivery_incidents")
+}
+
+/// One immutable proof per order; images stay private and never enter socket payloads.
+model DeliveryEvidence {
+  id String @id @default(cuid())
+  restaurantId String
+  orderId String @unique
+  order Order @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict, onUpdate: Restrict)
+  courierId String
+  actorId String
+  photoBase64 String? @db.Text
+  signatureBase64 String? @db.Text
+  deliveredAt DateTime @db.Timestamptz(3)
+  recordedAt DateTime @default(now()) @db.Timestamptz(3)
+  requestHash String @db.Char(64)
+
+  @@index([restaurantId, orderId])
+  @@index([orderId, restaurantId])
+  @@map("delivery_evidence")
 }
 
 model DriverCashMovement {
