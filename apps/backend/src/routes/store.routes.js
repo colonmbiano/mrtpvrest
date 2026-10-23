@@ -315,7 +315,12 @@ router.get('/menu', async (req, res) => {
         select: { id: true, name: true, description: true, imageUrl: true, sortOrder: true },
       }),
       prisma.menuItem.findMany({
-        where: { restaurantId: restaurant.id, isAvailable: true, ...(requestIsKiosk(req) ? { availableOnKiosk: true } : { availableOnline: true }) },
+        // Desactivar una categoría la oculta junto con sus productos (también en
+        // kiosko), igual que el catálogo del marketplace.
+        where: {
+          restaurantId: restaurant.id, isAvailable: true, category: { is: { isActive: true } },
+          ...(requestIsKiosk(req) ? { availableOnKiosk: true } : { availableOnline: true }),
+        },
         select: {
           id: true, name: true, description: true, price: true,
           isPromo: true, promoPrice: true, imageUrl: true,
@@ -376,9 +381,10 @@ router.get('/menu', async (req, res) => {
       items: items.filter(i => i.categoryId === cat.id),
     }));
 
-    // Items disponibles que NO quedaron en ninguna categoría activa (categoría
-    // inactiva, eliminada o sin categoría). Sin esto, los temas que solo
-    // renderizan category.items los ocultaban → "la tienda no muestra productos".
+    // Items disponibles con categoría activa que NO quedaron en ninguna categoría
+    // de esta lista (dato inconsistente, p. ej. categoría de otro restaurante).
+    // Sin esto, los temas que solo renderizan category.items los ocultaban →
+    // "la tienda no muestra productos". Los de categoría inactiva ya no llegan aquí.
     const shownIds = new Set(categoriesWithItems.flatMap(c => c.items.map(i => i.id)));
     const orphanItems = items.filter(i => !shownIds.has(i.id));
     if (orphanItems.length > 0) {
