@@ -43,3 +43,76 @@ No existe un botón que finja haber creado una cuenta. El prototipo no envía so
 ## Fase 3
 
 Conectar el frontend real a los endpoints completos únicamente en un ambiente staging separado, con flag explícito. La revisión del formulario nunca debe transformarse silenciosamente en un POST a la API de producción. Finalmente activar por fases y medir abandono de registro, verificaciones, aprobaciones y primera compra/entrega.
+
+
+---
+
+## Fase 2, entrega de backend (23/oct/2026)
+
+**Se implementó código y se añadieron las tablas en ambos schemas de Prisma** sin ejecutar migraciones en producción ni habilitar registros públicos.
+
+Migración pendiente de aplicar únicamente en staging:
+`packages/database/prisma/migrations/20261023000000_marketplace_identity/migration.sql`.
+
+Tablas independientes:
+
+- `marketplace_accounts`: identidad global, correo único normalizado, hash bcrypt, estado de verificación.
+- `marketplace_applications`: perfil BUYER, MERCHANT o COURIER, aprobación individual y auditoría de SuperAdmin.
+- `marketplace_auth_tokens`: tokens de correo y restablecimiento almacenados solo como SHA-256, de un solo uso, con caducidad.
+- `marketplace_sessions`: sesión aleatoria de 256 bits, solo hash en base, revocable y expira en siete días.
+
+No se modifican `Tenant`, `Restaurant`, `User`, `Customer` ni `Employee`.
+Un perfil aprobado no publica ningún negocio, no habilita repartidores, no permite cobrar ni crea suscripciones.
+
+### Endpoints implementados (apagados por defecto)
+
+Base: `/api/marketplace/identity`.
+
+| Método | Ruta | Contrato |
+| --- | --- | --- |
+| POST | `/register` | Registro por `role`: BUYER, MERCHANT, COURIER; requiere clave 12–128 caracteres y CAPTCHA; respuesta genérica 202 |
+| POST | `/verify-email` | Token de 64 hex (en el body), de un solo uso |
+| POST | `/resend-verification` | Respuesta genérica 202; CAPTCHA y limitador |
+| POST | `/login` | Sesión HttpOnly Secure SameSite=Strict, no retorna token en JSON |
+| GET | `/me` | Información mínima de identidad y perfiles del titular |
+| POST | `/logout` | Revoca el token y elimina cookie |
+| POST | `/password/forgot` | Envío genérico de recuperación con CAPTCHA |
+| POST | `/password/reset` | Token y contraseña nueva; revoca todas las sesiones |
+| POST | `/applications` | Solicitud de MERCHANT o COURIER por usuario verificado |
+| GET | `/admin/applications?status=PENDING_REVIEW` | Listado solo con JWT de SUPER_ADMIN SaaS |
+| POST | `/admin/applications/:id/decision` | APPROVED/REJECTED, validación SUPER_ADMIN y estado pendiente |
+
+Seguridad implementada: no retorno de secretos ni tokens de verificación en la API, hash y expiración, anti-enumeración de cuentas, bloqueo de orígenes para operaciones mutables, rate limit por IP para staging, Turnstile, confirmación de correo y cookies host-only.
+Los enlaces de correo usan fragmentos `#token=…` para no incluir tokens en registros HTTP; faltan las vistas que consumen ese fragmento.
+
+### Activación con varias barreras (solo staging)
+
+**NO establecer estas variables en producción** ni mezclar con bases reales.
+
+```dotenv
+# Predeterminado: apagado. Configuración de prueba, no activar sin preparar staging.
+MARKETPLACE_IDENTITY_ENABLED=false
+MARKETPLACE_IDENTITY_MODE=staging
+MARKETPLACE_IDENTITY_ORIGIN=https://marketplace-staging.example.invalid
+# Requiere DATABASE_URL/DIRECT_URL a BD AISLADA cuyo nombre contenga marketplace...staging.
+# Requiere RESEND_API_KEY y TURNSTILE_SECRET_KEY exclusivos de staging.
+```
+
+El proceso solo monta estas rutas con `MARKETPLACE_IDENTITY_ENABLED=true`, `MARKETPLACE_IDENTITY_MODE=staging`, URL PostgreSQL con nombre de BD que incluya `marketplace` y `staging`, correo y CAPTCHA configurados, y origen HTTPS.
+No cambiar la bandera hasta aprovisionar esa base e integrar las vistas y correos.
+
+### Pendientes para permitir altas reales
+
+1. Ejecutar revisión formal y migración SQL **solo en PostgreSQL de staging** (sin dumps/secretos reales); verificar índices, rollback y aislamiento.
+2. Añadir el origen web único / proxy de API en staging, para que la cookie strict funcione en el mismo dominio y el CAPTCHA esté disponible.
+3. Conectar los tres formularios al API mediante flag distinto del preview de demostración; solicitar contraseña y confirmarla, y pantallas que consuman verificación/restablecimiento sin dejar tokens en URL HTTP.
+4. Probar E2E en navegador, correo Resend sandbox, caducidad, concurrencia, recuperación, rate limiting distribuido y aprobación de solicitudes por SuperAdmin.
+5. Elaborar el alta canónica real de comerciantes (vinculación a Tenant/Restaurant ya existentes, verificación de titular, contrato), y dar de alta repartidores globales sin permitirles acceder a pedidos de otras tiendas por solo estar registrados.
+6. Política legal de privacidad, consentimiento, tratamiento de documentos y validación de identidad; no solicitar archivos sensibles hasta tener almacenamiento y ACL seguros.
+7. Desplegar progresivamente detrás de feature flags con métricas de fallos, idempotencia y alertas.
+
+### Evidencia de CI
+
+`.github/workflows/ci-backend.yml` incluye `node --test apps/backend/scripts/marketplace-identity.test.cjs`.
+La suite prueba validación de roles, correos, hashes, verificación, sesiones, logout, reset, solicitudes, aprobación y seguridad de rutas con Express/supertest y almacenamiento simulado.
+El CI backend genera Prisma y ejecuta Jest aparte; **no son pruebas de una migración ni un flujo HTTP contra PostgreSQL real**.
