@@ -2898,7 +2898,7 @@ model DeliveryEvidence {
   requestHash String @db.Char(64)
 
   @@index([restaurantId, orderId])
-  @@index([orderId, restaurantId])
+  @@unique([orderId, restaurantId])
   @@map("delivery_evidence")
 }
 
