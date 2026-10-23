@@ -10,6 +10,7 @@ import DeviceStep from './steps/DeviceStep';
 import { useAuthStore } from '@/store/authStore';
 import { useHydrated } from '@/hooks/useClientValue';
 import { useThemeStore } from '@/store/themeStore';
+import { setTenant, getTenantIds } from '@/lib/tenant';
 
 type SetupStep = 'login' | 'location' | 'device' | 'saving';
 
@@ -77,6 +78,7 @@ export default function SetupPage() {
       const response = await axios.post('/api/auth/login', { email, password });
       const token = response.data.accessToken;
       const role = response.data.user?.role;
+      const userRestaurantId = response.data.user?.restaurantId;
       setAuthToken(token);
 
       let restaurantData = null;
@@ -113,7 +115,8 @@ export default function SetupPage() {
           headers: { Authorization: `Bearer ${token}` },
         });
         restaurantData = {
-          ...restResponse.data,
+          id: userRestaurantId || restResponse.data.id,
+          name: restResponse.data.name,
           locations: locResponse.data.filter((l: any) => l.isActive !== false)
         };
       }
@@ -141,9 +144,17 @@ export default function SetupPage() {
         headers: { Authorization: `Bearer ${authToken}` },
       });
 
+      const location = locResponse.data;
+
+      setTenant({
+        restaurantId: state.selectedRestaurant.id,
+        locationId: location.id,
+        locationName: location.name,
+      });
+
       setState((s) => ({
         ...s,
-        selectedLocation: locResponse.data,
+        selectedLocation: location,
       }));
 
       setStep('device');
@@ -176,18 +187,18 @@ export default function SetupPage() {
 
       const { deviceToken, deviceId, name: deviceName } = response.data;
 
-      // Mapear deviceType del UI ("CAJA"/"MESERO") a roles canónicos
-      // que coinciden con Device.type del schema Prisma ("POS"/"WAITER").
-      // KDS se vincula desde la app independiente apps/kds, no aquí.
       const deviceRole = deviceType === 'MESERO' ? 'WAITER' : 'POS';
 
-      // Save device info
       localStorage.setItem('deviceToken', deviceToken);
       localStorage.setItem('deviceId', deviceId);
       localStorage.setItem('deviceRole', deviceRole);
       if (deviceName) localStorage.setItem('deviceName', deviceName);
-      localStorage.setItem('locationId', state.selectedLocation.id);
-      localStorage.setItem('restaurantId', state.selectedRestaurant.id);
+
+      setTenant({
+        restaurantId: state.selectedRestaurant.id,
+        locationId: state.selectedLocation.id,
+        locationName: state.selectedLocation.name,
+      });
 
       // Fetch and cache employees (offline cache para validar PINs en tareas).
       const empResponse = await axios.get('/api/employees/sync', {

@@ -8,6 +8,7 @@ import VersionTag from "@/components/VersionTag";
 import { useAuthStore } from "@/store/authStore";
 import { initBackgroundSync } from "@/lib/offline";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { getTenantIds } from "@/lib/tenant";
 import api from "@/lib/api";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -29,7 +30,11 @@ export default function LockedPage() {
 
   useEffect(() => {
     const checkDevice = () => {
-      const deviceLinked = document.cookie.includes("tpv-device-linked=true");
+      const hasDeviceCookie = document.cookie.includes("tpv-device-linked=true");
+      const { restaurantId, locationId } = getTenantIds();
+      const hasStorageTenant = restaurantId && locationId;
+      const deviceLinked = hasDeviceCookie || hasStorageTenant;
+
       if (!deviceLinked) {
         router.replace("/setup");
         return;
