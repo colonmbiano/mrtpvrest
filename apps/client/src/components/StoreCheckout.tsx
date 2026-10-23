@@ -24,18 +24,12 @@ type StoreCheckoutProps = {
   delivery?: DeliveryConfig | null;
   minOrderAmount?: number;
   onlinePayment?: boolean;
-  // Tipo de pedido preseleccionado (ej. el toggle Entrega/Recoger del tema).
-  // Si la sucursal no lo permite, el efecto de `allowed` lo corrige a uno válido.
   initialOrderType?: OrderType;
   whatsappOrder?: { enabled: boolean; number: string | null };
-  // Menú QR en mesa: cuando llega de un QR, el pedido queda fijo en DINE_IN con
-  // esa mesa y sucursal (sin selector de tipo, mesa bloqueada).
-  // `lockedTable` es solo la ETIQUETA que ve el comensal; lo que ata el pedido a
-  // la mesa es `lockedTableToken` (firmado por el backend, ver lib/table-qr.js).
-  // Los QR viejos traen etiqueta sin token y el backend los resuelve por número.
   lockedTable?: string | null;
   lockedTableToken?: string | null;
   lockedLocationId?: string | null;
+  collectorId?: string;
 };
 
 const STATUS_LABEL: Record<string, { t: string; c: string }> = {
@@ -51,7 +45,7 @@ const STATUS_LABEL: Record<string, { t: string; c: string }> = {
 export default function StoreCheckout({
   open, onClose, slug, primary, locations = [], delivery, minOrderAmount = 0, onlinePayment = false,
   initialOrderType = 'DELIVERY', whatsappOrder,
-  lockedTable = null, lockedTableToken = null, lockedLocationId = null,
+  lockedTable = null, lockedTableToken = null, lockedLocationId = null, collectorId,
 }: StoreCheckoutProps) {
   // Llegó por QR de mesa. Con token firmado la mesa puede no tener número en el
   // nombre ("Barra"), así que el candado NO puede depender de la etiqueta.
@@ -326,19 +320,47 @@ export default function StoreCheckout({
       // Pago en línea: crear checkout en la pasarela y redirigir.
       if (paymentMethod === 'ONLINE') {
         try {
-          const payRes = await fetch(`${API}/api/store/payment/create?r=${encodeURIComponent(slug)}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderId: data.id, returnUrl: typeof window !== 'undefined' ? window.location.origin + '/' : undefined }),
+          const isMarketplace = !!collectorId;
+          const endpoint = isMarketplace
+            ? `${API}/api/marketplace/payments/checkout`
+            : `${API}/api/store/payment/create?r=${encodeURIComponent(slug)}`;
+
+          const payload = isMarketplace
+            ? {
+                orderId: data.id,
+                subtotal: total,
+                deliveryFee,
+                tip,
+                collectorId,
+                returnUrl: typeof window !== 'undefined' ? window.location.href : undefined,
+              }
+            : {
+                orderId: data.id,
+                returnUrl: typeof window !== 'undefined' ? window.location.origin + '/' : undefined,
+              };
+
+          const payRes = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
           });
           const pay = await payRes.json().catch(() => ({}));
           if (payRes.ok && pay.checkoutUrl) { clear(); window.location.href = pay.checkoutUrl; return; }
-          // Si falla la pasarela, el pedido ya existe: lo mostramos como pendiente de pago.
           setError(pay?.error || 'No se pudo iniciar el pago en línea. Tu pedido quedó registrado, paga en la tienda.');
           setSuccess(data); setLiveStatus(data.status || 'PENDING'); clear();
         } catch {
           setError('No se pudo abrir la pasarela. Tu pedido quedó registrado.');
           setSuccess(data); setLiveStatus(data.status || 'PENDING'); clear();
         }
+        return;
+      }
+
+      // Pago en efectivo: informar sobre PIN de entrega para domicilios
+      if (paymentMethod === 'CASH' && isDelivery) {
+        const delPinMsg = 'El repartidor solicitará un código de 4 dígitos para entrega segura. Confirma con el vendedor.';
+        setSuccess({ ...data, deliveryNote: delPinMsg });
+        setLiveStatus(data.status || 'PENDING');
+        clear();
         return;
       }
 
@@ -395,6 +417,12 @@ export default function StoreCheckout({
             </p>
           </div>
           <p className="text-xs text-gray-400 mb-5">El estado se actualiza automáticamente.</p>
+
+          {success.deliveryNote && (
+            <div className="rounded-2xl bg-blue-50 border border-blue-200 p-3 mb-5">
+              <p className="text-xs text-blue-900 font-bold">{success.deliveryNote}</p>
+            </div>
+          )}
 
           {isWa && (
             <a href={waUrl} target="_blank" rel="noopener noreferrer" className="block w-full py-4 text-white rounded-2xl font-black uppercase tracking-widest mb-3 bg-[#25D366] shadow-lg hover:brightness-105 active:scale-95 transition-all flex justify-center items-center gap-2">
