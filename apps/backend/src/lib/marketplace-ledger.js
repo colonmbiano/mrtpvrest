@@ -12,6 +12,7 @@
 const crypto = require('crypto');
 
 const ACCOUNT_TYPES = Object.freeze({
+  PAYOUT_CLEARING: 'PAYOUT_CLEARING',         // Contrapartida de liquidaciones externas confirmadas
   GATEWAY_ESCROW: 'GATEWAY_ESCROW',         // Fondos retenidos por Mercado Pago / pasarela
   CUSTOMER_RECEIVABLE: 'CUSTOMER_RECEIVABLE', // Cargo cobrado al cliente final
   MERCHANT_PAYABLE: 'MERCHANT_PAYABLE',       // Pasivo por pagar a la tienda / comercio

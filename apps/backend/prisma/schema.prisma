@@ -327,6 +327,7 @@ model Restaurant {
   coupons          Coupon[]
   integrations     IntegrationConfig[]
   orders           Order[]
+  driverPayouts     MarketplaceDriverPayout[]
   customers        Customer[]
   suppliers        Supplier[]
   whatsappSessions WhatsappSession[]
@@ -2036,6 +2037,7 @@ model Employee {
   charges      EmployeeCharge[]
   // Pagos de sueldo asignados a este empleado (gastos categoría SUELDOS).
   salaryPayments OperatingExpense[] @relation("EmployeeSalaryExpense")
+  marketplacePayouts MarketplaceDriverPayout[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -4681,6 +4683,7 @@ enum MarketplaceLedgerAccount {
   COURIER_PAYABLE
   PLATFORM_FEES
   PLATFORM_PROMO_SUBSIDY
+  PAYOUT_CLEARING
 }
 
 enum MarketplaceLedgerEntryType {
@@ -4743,6 +4746,8 @@ model MarketplaceLedgerEntry {
   orderId      String
   paymentId    String
   payment      MarketplacePayment @relation(fields: [paymentId, restaurantId, orderId], references: [id, restaurantId, orderId], onDelete: Restrict, onUpdate: Restrict)
+  payoutId String?
+  payout MarketplaceDriverPayout? @relation(fields: [payoutId, restaurantId], references: [id, restaurantId], onDelete: Restrict, onUpdate: Restrict)
 
   // Shared by all lines produced by createLedgerTransaction; not unique per line.
   transactionId   String
@@ -4766,9 +4771,46 @@ model MarketplaceLedgerEntry {
   // No updatedAt: corrections are new compensating transactions, never edits.
   @@unique([paymentId, idempotencyKey, lineNumber])
   @@index([transactionId])
+  @@index([payoutId, restaurantId])
   @@index([restaurantId, orderId, createdAt])
   @@index([restaurantId, account, beneficiaryId, createdAt])
   @@map("marketplace_ledger_entries")
+}
+
+enum MarketplaceDriverPayoutStatus {
+  PENDING
+  PAID
+}
+
+/// Pending requests reserve ledger liability; approval atomically records a confirmed external payment.
+model MarketplaceDriverPayout {
+  id String @id @default(cuid())
+  restaurantId String
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  driverId String
+  driver Employee @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  amount Decimal @db.Decimal(18, 2)
+  currency String @default("MXN") @db.Char(3)
+  status MarketplaceDriverPayoutStatus @default(PENDING)
+  requestKey String @db.VarChar(200)
+  requestHash String @db.Char(64)
+  requestedBy String
+  requestedAt DateTime @default(now()) @db.Timestamptz(3)
+  approvedBy String?
+  approvalKey String? @db.VarChar(200)
+  approvalHash String? @db.Char(64)
+  paymentReference String? @db.VarChar(200)
+  paidAt DateTime? @db.Timestamptz(3)
+  ledgerEntries MarketplaceLedgerEntry[]
+
+  @@unique([id, restaurantId])
+  @@unique([restaurantId, driverId, requestKey])
+  @@unique([restaurantId, approvalKey])
+  @@unique([restaurantId, paymentReference])
+  @@index([restaurantId, driverId, status])
+  @@index([restaurantId, driverId, requestedAt, id])
+  @@index([driverId])
+  @@map("marketplace_driver_payouts")
 }
 
 // Per-location overrides; never write the shared MenuItem promotional fields.

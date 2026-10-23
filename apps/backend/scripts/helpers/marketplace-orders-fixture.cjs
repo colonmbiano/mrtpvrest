@@ -12,7 +12,8 @@ function match(row, where = {}) {
     const value = row?.[key];
     if (expected === null) return value == null;
     if (expected === undefined) return true;
-    if (typeof expected !== 'object' || expected instanceof Date) return value === expected;
+    if (expected instanceof Date) return value instanceof Date && value.getTime() === expected.getTime();
+    if (typeof expected !== 'object') return value === expected;
     if ('is' in expected) return value != null && match(value, expected.is);
     if ('some' in expected) return Array.isArray(value) && value.some(row => match(row, expected.some));
     if ('path' in expected) return expected.path.reduce((item, part) => item?.[part], value) === expected.equals;
@@ -46,10 +47,12 @@ function fixture(serviceOptions = {}) {
     integrationConfig: ['r1', 'r2'].map(restaurantId => ({ restaurantId, enabled: true, type: 'MERCADOPAGO', mode: 'sandbox',
       config: JSON.stringify({ accessToken: 'offline-fixture-credential', collectorId: restaurantId === 'r1' ? '123' : '456', marketplaceCommissionRate: 0.05 }) })),
     order: [], orderItem: [], marketplaceOrderPipeline: [], marketplacePayment: [], marketplaceLedgerEntry: [], counter: [], deliveryZone: [],
+    employee: [], marketplaceDriverPayout: [],
   };
   let sequence = 0; let queued = Promise.resolve(); let inTransaction = false;
   const calls = []; const hooks = {}; const providerCalls = []; const payments = new Map(); const preferences = new Map();
   function materialize(model, row) {
+    if (model === 'employee') return { ...row, location: state.location.find(item => item.id === row.locationId) || null };
     if (model === 'restaurant') return { ...row, orders: state.order.filter(item => item.restaurantId === row.id) };
     if (model === 'order') return { ...row, restaurant: state.restaurant.find(item => item.id === row.restaurantId),
       marketplacePipeline: state.marketplaceOrderPipeline.find(item => item.orderId === row.id) || null };
@@ -61,6 +64,12 @@ function fixture(serviceOptions = {}) {
     return row;
   }
   function unique(model, rows) {
+    if (model === 'marketplaceDriverPayout' && rows.some((row, index) => rows.some((other, i) => i !== index
+      && row.restaurantId === other.restaurantId && (row.driverId === other.driverId && row.requestKey === other.requestKey
+        || row.approvalKey != null && row.approvalKey === other.approvalKey
+        || row.paymentReference != null && row.paymentReference === other.paymentReference)))) {
+      throw Object.assign(new Error('Unique payout request or confirmation'), { code: 'P2002' });
+    }
     if (model === 'marketplacePayment' && rows.some((row, index) => rows.some((other, i) => i !== index
       && (row.idempotencyKey === other.idempotencyKey || row.providerPaymentId != null && row.provider === other.provider && row.providerPaymentId === other.providerPaymentId)))) {
       throw Object.assign(new Error('Unique provider payment'), { code: 'P2002' });
@@ -120,6 +129,7 @@ function fixture(serviceOptions = {}) {
           calls.push({ model, method: 'create', args });
           if (hooks.beforeWrite) await hooks.beforeWrite(model, 'create', args);
           const row = { id: `db-${++sequence}`, createdAt: new Date(date), providerPaymentId: null, checkoutUrl: null, dispatch: null,
+            ...(model === 'marketplaceDriverPayout' ? { approvalKey: null, approvalHash: null, paymentReference: null, paidAt: null } : {}),
             ...(model === 'order' ? { cashCollected: false, deliveryDriverId: null, updatedAt: new Date(date) } : {}),
             paymentProviderId: null, paymentProviderRef: null, ...structuredClone(args.data) };
           if (model === 'order') { state.orderItem.push(...row.items.create.map(item => ({ ...item, orderId: row.id }))); delete row.items; }

@@ -58,6 +58,7 @@ const SCOPED_MODELS = new Set([
   'MarketplacePayment',
   'MarketplaceLedgerEntry',
   'MarketplaceOrderPipeline',
+  'MarketplaceDriverPayout',
   'ModifierIngredient',
   'OperatingExpense',
   'OperatingExpenseCategory',

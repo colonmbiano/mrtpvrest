@@ -114,14 +114,14 @@ async function pendingCash(tx, driverId, restaurantId) {
   let cash = 0n; let count = 0; let after; const seen = new Set();
   for (;;) {
     const rows = await tx.order.findMany({ where: { ...assignedOrders(driverId, restaurantId),
-      status: 'DELIVERED', paymentMethod: 'CASH', cashCollected: false, ...(after ? { id: { gt: after } } : {}) },
+      status: 'DELIVERED', paymentMethod: { in: ['CASH', 'CASH_ON_DELIVERY'] }, cashCollected: false, ...(after ? { id: { gt: after } } : {}) },
     select: { id: true, restaurantId: true, total: true, cashCollected: true, status: true, paymentMethod: true,
       marketplacePipeline: { select: { currency: true } }, restaurant: { select: { config: { select: { currency: true } } } } },
     orderBy: { id: 'asc' }, take: CASH_PAGE_SIZE });
     check(Array.isArray(rows) && rows.length <= CASH_PAGE_SIZE, 'INVALID_FINANCIAL_DATA', 'Pagina de efectivo invalida', 503);
     for (const row of rows) {
       check(typeof row.id === 'string' && row.id && !seen.has(row.id) && row.restaurantId === restaurantId
-        && row.cashCollected === false && row.status === 'DELIVERED' && row.paymentMethod === 'CASH',
+        && row.cashCollected === false && row.status === 'DELIVERED' && ['CASH', 'CASH_ON_DELIVERY'].includes(row.paymentMethod),
       'INVALID_FINANCIAL_DATA', 'Entrega fuera del alcance esperado', 503);
       check(currency(row) === 'MXN', 'UNSUPPORTED_CURRENCY', 'No se pueden mezclar monedas en el saldo', 503);
       seen.add(row.id); cash += amount(row.total); count++;
@@ -168,7 +168,7 @@ async function getDriverDeliveryHistory({ driverId, limit = 50, prismaClient, re
       currency: currency(row), paymentMethod: row.paymentMethod, paymentStatus: row.paymentStatus,
       total: safeNumber(amount(row.total)) / 100, deliveryFee: safeNumber(amount(row.deliveryFee)) / 100,
       tip: safeNumber(amount(row.tip)) / 100, cashCollected: row.cashCollected,
-      cashPending: row.paymentMethod === 'CASH' && !row.cashCollected ? safeNumber(amount(row.total)) / 100 : 0,
+      cashPending: ['CASH', 'CASH_ON_DELIVERY'].includes(row.paymentMethod) && !row.cashCollected ? safeNumber(amount(row.total)) / 100 : 0,
       updatedAt: new Date(row.updatedAt).toISOString() };
   });
 }

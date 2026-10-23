@@ -99,7 +99,7 @@ test('no earnings and overpaid balances are reported honestly without clamping t
 test('cash uses delivered CASH orders without a cut, including shared marketplace assignments', async () => {
   const f = setup(); await balance(f);
   const query = f.calls.find(call => call.model === 'order' && call.method === 'findMany').args;
-  assert.equal(query.where.status, 'DELIVERED'); assert.equal(query.where.paymentMethod, 'CASH'); assert.equal(query.where.cashCollected, false);
+  assert.equal(query.where.status, 'DELIVERED'); assert.deepEqual(query.where.paymentMethod, { in: ['CASH', 'CASH_ON_DELIVERY'] }); assert.equal(query.where.cashCollected, false);
   assert.equal(query.where.restaurantId, 'r1'); assert.equal(query.where.orderType, 'DELIVERY'); assert.equal(query.take, 200);
   assert.equal(query.where.OR[1].marketplacePipeline.is.restaurantId, 'r1');
   assert.deepEqual(query.where.OR[1].marketplacePipeline.is.dispatch, { path: ['task', 'currentAssignment', 'courierId'], equals: 'd1' });

@@ -3,7 +3,7 @@
 const { InvalidQuery, createCatalog, createPrismaCatalogAdapter } = require('../lib/marketplace-catalog');
 
 function createMarketplaceRouter({ Router, getAdapter, storeSlugs = process.env.MARKETPLACE_STORE_SLUGS || '',
-  getPrisma = () => require('@mrtpvrest/database').prisma, orderOptions = {}, authenticate, ledgerStore } = {}) {
+  getPrisma = () => require('@mrtpvrest/database').prisma, orderOptions = {}, authenticate, ledgerStore, payoutOptions = {} } = {}) {
   const router = (Router || require('express').Router)();
   const catalog = createCatalog({ storeSlugs, getAdapter: getAdapter || (() => {
     // Deliberately lazy: an empty allowlist never loads or accesses the database.
@@ -99,6 +99,58 @@ function createMarketplaceRouter({ Router, getAdapter, storeSlugs = process.env.
   }
   router.get('/drivers/:id/balance', driverAuthentication, driverHandler('balance'));
   router.get('/drivers/:id/history', driverAuthentication, driverHandler('history'));
+  let payouts;
+  function payoutHandler(kind) {
+    return async (req, res) => {
+      res.set('Cache-Control', 'no-store');
+      const { createDriverPayoutsService, DriverPayoutError } = require('../lib/marketplace-driver-payouts');
+      try {
+        const user = req.user;
+        const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+        const isSelf = user?.role === 'DELIVERY' && user.id === req.params.id;
+        if (!user || user.isActive !== true || user.isDevice) throw new DriverPayoutError('UNAUTHENTICATED', 'Identidad humana activa requerida', 401);
+        if (!(kind === 'approve' ? isAdmin : kind === 'request' ? isSelf : isSelf || isAdmin)) {
+          throw new DriverPayoutError('PAYOUT_FORBIDDEN', 'Operacion de retiro no autorizada', 403);
+        }
+        const query = req.query || {};
+        const allowed = kind === 'list' ? ['restaurantId', 'limit', 'cursor'] : ['restaurantId'];
+        if (Object.keys(query).some(field => !allowed.includes(field))
+          || Object.values(query).some(value => typeof value !== 'string')) {
+          throw new DriverPayoutError('INVALID_QUERY', 'Parametros invalidos');
+        }
+        const body = req.body;
+        const fields = kind === 'request' ? ['amount', 'currency'] : ['paymentReference', 'confirmPaid'];
+        if (kind !== 'list' && (!body || typeof body !== 'object' || Array.isArray(body)
+          || Object.keys(body).some(field => !fields.includes(field)))) {
+          throw new DriverPayoutError('INVALID_REQUEST', 'Solicitud invalida');
+        }
+        let limit = 50;
+        if (query.limit !== undefined) {
+          if (!/^[1-9]\d{0,2}$/.test(query.limit) || Number(query.limit) > 100) throw new DriverPayoutError('INVALID_LIMIT', 'Limite invalido');
+          limit = Number(query.limit);
+        }
+        const service = payouts ||= createDriverPayoutsService(payoutOptions);
+        const args = { actor: user, restaurantId: query.restaurantId, prismaClient: getPrisma() };
+        const result = kind === 'list' ? await service.listDriverPayouts({ ...args, driverId: req.params.id, limit, cursor: query.cursor })
+          : kind === 'request' ? await service.requestDriverPayout({ ...args, driverId: req.params.id,
+            ...body, idempotencyKey: req.headers?.['idempotency-key'] })
+            : await service.approveDriverPayout({ ...args, payoutId: req.params.payoutId,
+              ...body, idempotencyKey: req.headers?.['idempotency-key'] });
+        return res.status(kind === 'request' && !result.idempotent ? 201 : 200).json(result);
+      } catch (error) {
+        if (error instanceof DriverPayoutError && error.statusCode < 500) {
+          return res.status(error.statusCode).json({ error: error.message, errorCode: error.code });
+        }
+        if (['P2002', 'P2034', 'P2028'].includes(error?.code)) {
+          return res.status(409).json({ error: 'El retiro cambio; repite con el mismo Idempotency-Key', errorCode: 'PAYOUT_CONFLICT' });
+        }
+        return res.status(503).json({ error: 'Retiros temporalmente no disponibles', errorCode: 'PAYOUT_UNAVAILABLE' });
+      }
+    };
+  }
+  router.post('/drivers/:id/payout-request', driverAuthentication, payoutHandler('request'));
+  router.get('/drivers/:id/payouts', driverAuthentication, payoutHandler('list'));
+  router.post('/payouts/:payoutId/approve', driverAuthentication, payoutHandler('approve'));
   return router;
 }
 
