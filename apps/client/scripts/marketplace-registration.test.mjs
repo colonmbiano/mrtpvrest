@@ -27,10 +27,11 @@ test('tres perfiles válidos con los campos correspondientes', () => {
 });
 
 test('validación de teléfono de México, correo y localidad', () => {
-  for (const phone of ['abc','123','+52 722 123 4567', '5521234567x', '+15521234567']) {
+  for (const phone of ['abc','123','5521234567x', '+15521234567']) {
     assert.ok(validateRegistrationDraft('cliente', { ...base, phone }).phone, phone);
   }
   assert.deepEqual(validateRegistrationDraft('cliente', { ...base, phone: '+527221234567' }), {});
+  assert.deepEqual(validateRegistrationDraft('cliente', { ...base, phone: '+52 722 123 4567' }), {});
   assert.ok(validateRegistrationDraft('cliente', { ...base, email: 'mal@' }).email);
   assert.ok(validateRegistrationDraft('cliente', { ...base, city: '' }).city);
   assert.ok(validateRegistrationDraft('cliente', { ...base, name: ' ' }).name);
