@@ -1,7 +1,7 @@
 'use strict';
 
 // Formal marketplace quote (plan §5-6). Pricing runs server-side in integer cents.
-// Ports are injected and speak cents: catalog.loadMerchant / catalog.loadListings,
+// Ports are injected and speak cents: catalog.loadMerchant / loadMerchantBySlug / loadListings,
 // addresses.resolve and quoteStore.save / findByIdempotencyKey. No Prisma or network
 // import here, so the rules are testable offline. Without a real store the service
 // fails closed (503) instead of pricing without persistence.
@@ -12,6 +12,7 @@ const { findZoneForPoint } = require('./delivery-fee');
 const TTL_MS = 5 * 60 * 1000;
 const MAX_ITEMS = 50;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{32,128}$/;
+const MERCHANT_SLUG = /^[a-z0-9-]{1,100}$/;
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 
 class MarketplaceQuoteError extends Error {
@@ -34,8 +35,11 @@ function plain(value, keys) {
 
 // The client never sends money. Any extra field (total, price, fee) fails the whole request.
 function normalize(body) {
-  check(plain(body, ['merchantId', 'items', 'fulfillment', 'deliveryAddressId']), 'INVALID_QUOTE_REQUEST', 'Solicitud invalida');
-  check(text(body.merchantId, 64), 'INVALID_QUOTE_REQUEST', 'Comercio invalido');
+  check(plain(body, ['merchantId', 'merchantSlug', 'items', 'fulfillment', 'deliveryAddressId']), 'INVALID_QUOTE_REQUEST', 'Solicitud invalida');
+  const byId = body.merchantId !== undefined;
+  const bySlug = body.merchantSlug !== undefined;
+  check(byId !== bySlug && (byId ? text(body.merchantId, 64)
+    : typeof body.merchantSlug === 'string' && MERCHANT_SLUG.test(body.merchantSlug)), 'INVALID_QUOTE_REQUEST', 'Indica merchantId o merchantSlug valido');
   check(['DELIVERY', 'PICKUP'].includes(body.fulfillment), 'INVALID_QUOTE_REQUEST', 'Tipo de entrega invalido');
   if (body.fulfillment === 'DELIVERY') check(text(body.deliveryAddressId, 64), 'ADDRESS_REQUIRED', 'Direccion requerida');
   else check(body.deliveryAddressId === undefined, 'INVALID_QUOTE_REQUEST', 'PICKUP no admite direccion');
@@ -50,7 +54,8 @@ function normalize(body) {
     seen.add(item.menuItemId);
     return { menuItemId: item.menuItemId, quantity: item.quantity };
   }).sort((a, b) => (a.menuItemId < b.menuItemId ? -1 : a.menuItemId > b.menuItemId ? 1 : 0));
-  return { merchantId: body.merchantId, fulfillment: body.fulfillment, deliveryAddressId: body.deliveryAddressId ?? null, items };
+  return { ...(byId ? { merchantId: body.merchantId } : { merchantSlug: body.merchantSlug }),
+    fulfillment: body.fulfillment, deliveryAddressId: body.deliveryAddressId ?? null, items };
 }
 
 // Prices the basket from server data only. Listings from other merchants are dropped
@@ -142,12 +147,17 @@ function createQuoteService({ catalog, addresses, quoteStore, now = () => new Da
     const idempotencyKeyHash = digest(`${accountId}:${idempotencyKey}`);
     const existing = await quoteStore.findByIdempotencyKey(idempotencyKeyHash);
     if (existing) return replay(existing, requestHash);
-    const merchant = await catalog.loadMerchant(request.merchantId);
-    const listings = await catalog.loadListings(request.merchantId, request.items.map(item => item.menuItemId));
+    const bySlug = request.merchantSlug !== undefined;
+    if (bySlug) check(typeof catalog.loadMerchantBySlug === 'function', 'QUOTES_UNAVAILABLE', 'Resolucion de comercio por slug no disponible', 503);
+    const merchant = bySlug ? await catalog.loadMerchantBySlug(request.merchantSlug) : await catalog.loadMerchant(request.merchantId);
+    check(merchant && text(merchant.id, 64) && (bySlug ? merchant.slug === request.merchantSlug : merchant.id === request.merchantId)
+      && merchant.status === 'ACTIVE', 'MERCHANT_NOT_FOUND', 'Comercio no encontrado', 404);
+    const resolvedRequest = { ...request, merchantId: merchant.id };
+    const listings = await catalog.loadListings(merchant.id, request.items.map(item => item.menuItemId));
     const address = request.fulfillment === 'DELIVERY' ? await addresses.resolve(accountId, request.deliveryAddressId) : null;
-    const priced = price({ merchant, listings, request, address });
+    const priced = price({ merchant, listings, request: resolvedRequest, address });
     const quote = {
-      id: crypto.randomUUID(), accountId, merchantId: request.merchantId, fulfillment: request.fulfillment,
+      id: crypto.randomUUID(), accountId, merchantId: merchant.id, fulfillment: request.fulfillment,
       deliveryAddressId: request.deliveryAddressId, status: 'ACTIVE', currency: 'MXN',
       itemsSnapshot: priced.lines,
       priceSnapshot: {

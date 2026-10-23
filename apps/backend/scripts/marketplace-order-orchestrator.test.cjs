@@ -515,6 +515,43 @@ test('authenticated HTTP without persistence ports returns a controlled 503', as
   const res = await request({ body: f.input() }); assert.equal(res.statusCode, 503); assert.equal(res.body.errorCode, 'ORDERS_UNAVAILABLE');
 });
 
+test('default order route accepts a cryptographically verified buyer Bearer token', async () => {
+  const f = await fixture();
+  const secret = 'offline-order-bridge-jwt-key-at-least-32-bytes';
+  const token = require('jsonwebtoken').sign({ accountId: ACCOUNT, role: 'BUYER', exp: NOW.getTime() / 1000 + 60 }, secret);
+  const request = http(f, { resolveAccount: undefined, buyerOptions: { jwtSecret: () => secret, now: () => NOW } });
+  const res = await request({ headers: { authorization: `Bearer ${token}`, 'idempotency-key': KEY } });
+  assert.equal(res.statusCode, 201); assert.equal(f.state.pipelines[0].settlement.orchestration.accountId, ACCOUNT);
+});
+
+test('default order route accepts X-Buyer-Id for its guest quote and keeps replay scoped to that session', async () => {
+  const f = await fixture({ fulfillment: 'PICKUP' });
+  const { createBuyerAccountResolver } = require('../src/lib/marketplace-buyer-identity');
+  const accountId = await createBuyerAccountResolver({ allowGuest: true })({ headers: { 'x-guest-id': 'guest-session-1' } });
+  f.quote.accountId = accountId;
+  const request = http(f, { resolveAccount: undefined });
+  const headers = { 'x-buyer-id': 'guest-session-1', 'idempotency-key': KEY };
+  const created = await request({ headers }); const replay = await request({ headers });
+  assert.equal(created.statusCode, 201); assert.equal(replay.statusCode, 200); assert.equal(created.body.orderId, replay.body.orderId);
+  const other = await request({ headers: { ...headers, 'x-buyer-id': 'guest-session-2' } });
+  assert.equal(other.statusCode, 404); assert.equal(f.state.orders.length, 1);
+});
+
+test('an unsigned X-Buyer-Id cannot impersonate a registered buyer or consume their quote', async () => {
+  const f = await fixture(); const request = http(f, { resolveAccount: undefined });
+  const res = await request({ headers: { 'idempotency-key': KEY, 'x-buyer-id': ACCOUNT } });
+  assert.equal(res.statusCode, 404); assert.equal(res.body.errorCode, 'QUOTE_NOT_FOUND'); assert.equal(f.state.orders.length, 0);
+});
+
+test('default orders do not accept a quote-only guest fingerprint or invalid Bearer downgrade', async () => {
+  const f = await fixture(); const request = http(f, { resolveAccount: undefined,
+    buyerOptions: { jwtSecret: () => 'offline-jwt-key-with-at-least-32-bytes' } });
+  const missing = await request({ headers: { 'idempotency-key': KEY, 'x-guest-id': 'guest-session' }, ip: '127.0.0.1' });
+  assert.equal(missing.statusCode, 401);
+  const invalid = await request({ headers: { 'idempotency-key': KEY, authorization: 'Bearer forged-token', 'x-buyer-id': 'guest-session' } });
+  assert.equal(invalid.statusCode, 401); assert.equal(invalid.body.errorCode, 'INVALID_BUYER_IDENTITY'); assert.equal(f.state.orders.length, 0);
+});
+
 test('schemas remain byte-identical with both new states and an unapplied additive SQL migration', () => {
   const root = path.resolve(__dirname, '../../..');
   const canonical = fs.readFileSync(path.join(root, 'packages/database/prisma/schema.prisma'));

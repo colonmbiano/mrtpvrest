@@ -6,6 +6,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createQuoteService, assertQuoteUsable, MarketplaceQuoteError, TTL_MS } = require('../src/lib/marketplace-quote');
 const createRouter = require('../src/routes/marketplace-quotes.routes');
+const { BuyerIdentityError, createBuyerAccountResolver } = require('../src/lib/marketplace-buyer-identity');
+const jwt = require('jsonwebtoken');
 
 // A regression must fail offline rather than reach a provider or a database.
 globalThis.fetch = async () => { throw new Error('Network forbidden by offline suite'); };
@@ -310,12 +312,12 @@ test('missing ports fail closed with 503', async () => {
   await rejects(service.createQuote({ accountId: ACCOUNT, idempotencyKey: KEY, body: request() }), 'QUOTES_UNAVAILABLE', 503);
 });
 
-test('route: anonymous request is 401 with no-store and no pricing', async () => {
+test('route: guest request resolves an identity and missing pricing adapters still fail closed with 503', async () => {
   const handlers = new Map();
   createRouter({ Router: () => ({ post: (p, fn) => handlers.set(`POST ${p}`, fn) }) });
   const res = await invoke(handlers.get('POST /'), { body: request(), headers: { 'idempotency-key': KEY } });
-  assert.equal(res.statusCode, 401);
-  assert.equal(res.body.errorCode, 'UNAUTHENTICATED');
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.errorCode, 'QUOTES_UNAVAILABLE');
   assert.equal(res.headers['Cache-Control'], 'no-store');
 });
 
@@ -366,6 +368,128 @@ async function invoke(handler, req) {
     set(key, value) { this.headers[key] = value; return this; },
     status(code) { this.statusCode = code; return this; },
     json(payload) { this.body = payload; return this; } };
-  await handler({ body: req.body, headers: req.headers || {} }, res);
+  await handler({ ...req, body: req.body, headers: req.headers || {} }, res);
   return res;
 }
+
+test('merchantSlug resolves the server merchant ID and preserves exact pricing snapshots', async () => {
+  const w = world(); w.state.merchant.slug = 'store-one';
+  const requestedSlugs = [];
+  w.catalog.loadMerchantBySlug = async slug => { requestedSlugs.push(slug); return structuredClone(w.state.merchant); };
+  const result = await quote(w, request({ merchantId: undefined, merchantSlug: 'store-one' }));
+  assert.equal(result.merchantId, 'm1'); assert.equal(result.total, '100.02');
+  assert.deepEqual(requestedSlugs, ['store-one']); assert.equal(w.store.saved.get(result.quoteId).merchantId, 'm1');
+  w.catalog.loadMerchantBySlug = () => { throw new Error('Replay must not resolve/reprice again'); };
+  assert.equal((await quote(w, request({ merchantId: undefined, merchantSlug: 'store-one' }))).quoteId, result.quoteId);
+});
+
+test('merchantSlug is strictly an alternative and never a caller-controlled merchant ID', async () => {
+  for (const merchantSlug of ['', '../other', 'Bad_Slug', ['store-one'], 'x'.repeat(101), null]) {
+    const w = world(); await rejects(quote(w, request({ merchantId: undefined, merchantSlug })), 'INVALID_QUOTE_REQUEST', 400);
+  }
+  const w = world();
+  await rejects(quote(w, request({ merchantSlug: 'store-one' })), 'INVALID_QUOTE_REQUEST', 400);
+  await rejects(quote(w, request({ merchantId: undefined, merchantSlug: 'store-one' })), 'QUOTES_UNAVAILABLE', 503);
+  assert.equal(w.store.saved.size, 0);
+});
+
+test('unknown or mismatched slug resolution fails without pricing a different merchant', async () => {
+  const w = world();
+  for (const merchant of [null, { ...w.state.merchant, slug: 'other-slug' }, { ...w.state.merchant, slug: 'store-one', status: 'SUSPENDED' }]) {
+    w.catalog.loadMerchantBySlug = async () => merchant;
+    await rejects(quote(w, request({ merchantId: undefined, merchantSlug: 'store-one' })), 'MERCHANT_NOT_FOUND', 404);
+  }
+  assert.equal(w.store.saved.size, 0);
+});
+
+test('slug requests still reject client money and cross-merchant items', async () => {
+  const w = world(); w.catalog.loadMerchantBySlug = async () => ({ ...w.state.merchant, slug: 'store-one' });
+  await rejects(quote(w, request({ merchantId: undefined, merchantSlug: 'store-one', total: 1 })), 'INVALID_QUOTE_REQUEST', 400);
+  await rejects(quote(w, request({ merchantId: undefined, merchantSlug: 'store-one', items: [{ menuItemId: 'foreign', quantity: 1 }] })), 'ITEM_NOT_AVAILABLE', 409);
+});
+
+const BUYER_SECRET = 'offline-buyer-jwt-test-key-with-at-least-32-bytes';
+const buyerOptions = { jwtSecret: () => BUYER_SECRET, now: () => NOW };
+const signedBuyer = (patch = {}, options = {}) => jwt.sign({ userId: ACCOUNT, role: 'CUSTOMER', exp: NOW.getTime() / 1000 + 60, ...patch }, BUYER_SECRET, options);
+
+test('default quote route verifies a storefront Bearer JWT and resolves its real buyer ID', async () => {
+  const w = world(); const handler = routeHandler({ service: w.service, buyerOptions });
+  const result = await invoke(handler, { body: request(), headers: { 'idempotency-key': KEY, authorization: `Bearer ${signedBuyer()}` } });
+  assert.equal(result.statusCode, 201); assert.equal(w.store.saved.get(result.body.quoteId).accountId, ACCOUNT);
+});
+
+test('verified Bearer identity takes precedence over unsigned buyer or guest headers', async () => {
+  const resolve = createBuyerAccountResolver({ ...buyerOptions, allowGuest: true });
+  assert.equal(await resolve({ headers: { authorization: `Bearer ${signedBuyer()}`, 'x-buyer-id': 'untrusted-other', 'x-guest-id': 'guest' } }), ACCOUNT);
+});
+
+test('invalid, expired, untrusted, device and staff JWTs never downgrade to a guest identity', async () => {
+  const handler = routeHandler({ buyerOptions, service: { createQuote: () => { throw new Error('must not price'); } } });
+  const tokens = ['invalid', signedBuyer({ exp: NOW.getTime() / 1000 - 1 }), signedBuyer({ nbf: NOW.getTime() / 1000 + 60 }),
+    signedBuyer({ role: 'SUPER_ADMIN' }), signedBuyer({ isDevice: true }), signedBuyer({ isActive: false }),
+    signedBuyer({}, { algorithm: 'HS384' }), jwt.sign({ userId: ACCOUNT, role: 'CUSTOMER' }, BUYER_SECRET),
+    jwt.sign({ userId: ACCOUNT, role: 'CUSTOMER', exp: NOW.getTime() / 1000 + 60 }, 'other-secret')];
+  for (const token of tokens) {
+    const res = await invoke(handler, { body: request(), headers: { authorization: `Bearer ${token}`, 'x-buyer-id': 'guest', 'x-guest-id': 'guest' } });
+    assert.equal(res.statusCode, 401); assert.equal(res.body.errorCode, 'INVALID_BUYER_IDENTITY');
+  }
+});
+
+test('Bearer requires a configured signing secret and never prints verifier errors or tokens', async () => {
+  const handler = routeHandler({ buyerOptions: { jwtSecret: () => undefined }, service: {} });
+  const res = await invoke(handler, { headers: { authorization: `Bearer ${signedBuyer()}` } });
+  assert.equal(res.statusCode, 503); assert.equal(res.body.errorCode, 'BUYER_AUTH_UNAVAILABLE');
+  assert.equal(JSON.stringify(res.body).includes(BUYER_SECRET), false); assert.equal(JSON.stringify(res.body).includes(signedBuyer()), false);
+});
+
+test('X-Buyer-Id and X-Guest-Id share an isolated stable guest namespace, not registered accounts', async () => {
+  const quotes = createBuyerAccountResolver({ allowGuest: true }); const orders = createBuyerAccountResolver();
+  const a = await quotes({ headers: { 'x-guest-id': 'synthetic-browser-session' } });
+  const b = await orders({ headers: { 'x-buyer-id': 'synthetic-browser-session' } });
+  assert.equal(a, b); assert.match(a, /^guest:[a-f0-9]{58}$/); assert.equal(a.length, 64);
+  const spoofedRegistered = await orders({ headers: { 'x-buyer-id': ACCOUNT } });
+  assert.notEqual(spoofedRegistered, ACCOUNT); assert.notEqual(spoofedRegistered, a);
+  assert.equal(await orders({ headers: { 'x-guest-id': 'synthetic-browser-session' } }), null);
+});
+
+test('default quote route prices real guest requests without 401 and preserves per-guest idempotency', async () => {
+  for (const header of ['x-buyer-id', 'x-guest-id']) {
+    const w = world(); const handler = routeHandler({ service: w.service });
+    const req = { body: request({ fulfillment: 'PICKUP', deliveryAddressId: undefined }), headers: { 'idempotency-key': KEY, [header]: 'synthetic-session' } };
+    const first = await invoke(handler, req); const replay = await invoke(handler, req);
+    assert.equal(first.statusCode, 201); assert.equal(replay.body.quoteId, first.body.quoteId);
+    assert.match(w.store.saved.get(first.body.quoteId).accountId, /^guest:/);
+    const other = await invoke(handler, { ...req, headers: { ...req.headers, [header]: 'another-session' } });
+    assert.equal(other.statusCode, 201); assert.notEqual(other.body.quoteId, first.body.quoteId);
+  }
+});
+
+test('IP/UA guest fallback is stable for quoting, bounded and unavailable for placing orders', async () => {
+  const quotes = createBuyerAccountResolver({ allowGuest: true }); const orders = createBuyerAccountResolver();
+  const req = { ip: '127.0.0.9', socket: { remoteAddress: '127.0.0.1' }, headers: { 'user-agent': 'Offline Browser', 'x-forwarded-for': 'attacker' } };
+  const first = await quotes(req);
+  assert.equal(await quotes(req), first); assert.equal(await orders(req), null);
+  assert.notEqual(await quotes({ ...req, headers: { 'user-agent': 'Another Browser' } }), first);
+  assert.equal(await quotes({ ...req, headers: { ...req.headers, 'x-forwarded-for': 'other' } }), first);
+  assert.equal(first.includes('127.0.0.1'), false);
+  assert.notEqual(await quotes({ headers: {} }), await quotes({ headers: {} }));
+});
+
+test('IP/UA fallback reaches the real quote service as a guest instead of rejecting anonymous buyers', async () => {
+  const w = world(); const handler = routeHandler({ service: w.service });
+  const req = { ip: '127.0.0.1', headers: { 'idempotency-key': KEY, 'user-agent': 'Offline Browser' },
+    body: request({ fulfillment: 'PICKUP', deliveryAddressId: undefined }) };
+  const res = await invoke(handler, req); const replay = await invoke(handler, req);
+  assert.equal(res.statusCode, 201); assert.equal(replay.body.quoteId, res.body.quoteId);
+});
+
+test('malformed explicit credentials fail closed and injected identity resolvers retain precedence', async () => {
+  const resolve = createBuyerAccountResolver({ allowGuest: true });
+  for (const headers of [{ authorization: ['Bearer token'] }, { authorization: 'Basic token' }, { authorization: 'Bearer ' },
+    { 'x-buyer-id': '' }, { 'x-buyer-id': ['other'] }, { 'x-guest-id': '\r\ninvalid' }, { 'x-guest-id': 'x'.repeat(129) }]) {
+    await assert.rejects(resolve({ headers }), error => error instanceof BuyerIdentityError && error.statusCode === 401);
+  }
+  const w = world(); const handler = routeHandler({ service: w.service, resolveAccount: () => ACCOUNT });
+  const res = await invoke(handler, { body: request(), headers: { authorization: 'invalid', 'idempotency-key': KEY } });
+  assert.equal(res.statusCode, 201);
+});

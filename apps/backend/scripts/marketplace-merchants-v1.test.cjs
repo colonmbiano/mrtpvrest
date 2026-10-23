@@ -100,7 +100,8 @@ test('discovery items expose exactly the public whitelist and no contact or inte
   const result = await service().listMerchants({});
   const item = result.items.find(row => row.slug === 'taqueria-centro');
   assert.deepEqual(Object.keys(item).sort(), ['banner', 'categories', 'deliveryZones', 'distanceKm', 'estimatedReadyMinutes',
-    'logo', 'minOrder', 'name', 'open', 'rating', 'slug']);
+    'id', 'logo', 'minOrder', 'name', 'open', 'rating', 'slug']);
+  assert.equal(item.id, 'm1');
   assert.deepEqual(item.deliveryZones, [{ id: 'z1', name: 'Centro', fee: '30.00' }]);
   assert.equal(item.minOrder, '50.00');
   assert.equal(item.rating, null);
@@ -156,6 +157,7 @@ test('invalid query parameters are rejected with 400', () => {
 
 test('detail returns zones with polygons, pickup, hours and enabled payment methods, without contact data', async () => {
   const detail = await service().getMerchant('taqueria-centro');
+  assert.equal(detail.id, 'm1');
   assert.equal(detail.slug, 'taqueria-centro');
   assert.deepEqual(detail.deliveryZones, [{ id: 'z1', name: 'Centro', fee: '30.00', polygon: square(19.40, -99.17, 19.44, -99.13) }]);
   assert.deepEqual(detail.businessHours, HOURS);
@@ -179,7 +181,7 @@ test('detail rejects a repo answer whose slug does not match the request', async
 
 test('catalog groups online-available items by public category, ordered by position', async () => {
   const catalog = await service().getMerchantCatalog('taqueria-centro');
-  assert.deepEqual(catalog.merchant, { slug: 'taqueria-centro', name: 'Taqueria Centro', open: true });
+  assert.deepEqual(catalog.merchant, { id: 'm1', slug: 'taqueria-centro', name: 'Taqueria Centro', open: true });
   assert.deepEqual(catalog.categories.map(category => category.name), ['Bebidas', 'Tacos']);
   const [drinks, tacos] = catalog.categories;
   assert.deepEqual(drinks.items.map(item => item.id), ['refresco']);

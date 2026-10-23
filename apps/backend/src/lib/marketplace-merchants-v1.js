@@ -72,6 +72,7 @@ function zoneView(zone) {
 
 function discoverView(merchant, distanceKm) {
   return {
+    id: merchant.id,
     slug: merchant.slug,
     name: merchant.name,
     logo: text(merchant.logo),
@@ -144,7 +145,7 @@ function catalogView(merchant, catalog) {
       promoPrice: promoPrice(item), modifiers: modifierGroups(item.modifierGroups) });
   }
   return {
-    merchant: { slug: merchant.slug, name: merchant.name, open: merchant.open === true },
+    merchant: { id: merchant.id, slug: merchant.slug, name: merchant.name, open: merchant.open === true },
     categories: [...buckets.values()].filter(bucket => bucket.items.length > 0),
   };
 }
