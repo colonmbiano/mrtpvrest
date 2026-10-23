@@ -5,6 +5,10 @@ const SLUG = /^[a-z0-9-]{1,100}$/;
 const BUSINESS_TYPES = new Set(['RESTAURANT', 'RETAIL', 'GROCERY']);
 const CURRENCIES = new Set(Intl.supportedValuesOf('currency'));
 const ORDER = [{ name: 'asc' }, { id: 'asc' }];
+// Finite upper bound for public prices. It keeps Infinity and NaN (NaN sorts above
+// every number in PostgreSQL) out of the catalog. Number.MAX_VALUE cannot be used:
+// Prisma serializes it as a decimal that PostgreSQL rejects as out of range.
+const MAX_PUBLIC_PRICE = 1e12;
 
 class InvalidQuery extends Error {}
 
@@ -78,7 +82,7 @@ function createPrismaCatalogAdapter(prisma) {
         isAvailable: true, availableOnline: true,
         // Both ownership checks are needed even for inconsistent cross-store category links.
         OR: ids.map(restaurantId => ({ restaurantId, category: { is: { restaurantId, isActive: true } } })),
-        price: { gte: 0, lte: Number.MAX_VALUE },
+        price: { gte: 0, lte: MAX_PUBLIC_PRICE },
         ...nameFilter(q),
       };
       const [total, rows, configs] = await Promise.all([

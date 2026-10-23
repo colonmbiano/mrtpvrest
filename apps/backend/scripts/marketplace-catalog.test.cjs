@@ -316,6 +316,8 @@ test('createPrismaCatalogAdapter: listProducts enforces availableOnline, valid p
   // Verifies availability filters
   assert.equal(menuItemWhere.isAvailable, true);
   assert.equal(menuItemWhere.availableOnline, true);
+  // Finite bound PostgreSQL accepts (Number.MAX_VALUE is rejected as out of range)
+  assert.deepEqual(menuItemWhere.price, { gte: 0, lte: 1e12 });
   // Verifies category belongs to the same restaurant and is active
   assert.deepEqual(menuItemWhere.OR, [
     { restaurantId: 'rest-1', category: { is: { restaurantId: 'rest-1', isActive: true } } },
