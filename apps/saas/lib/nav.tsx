@@ -74,6 +74,13 @@ export const IconKey: Ico = (p) => (
     <path d="M9.5 9.5L14 14M12 12.5v2M10.5 14h2" />
   </svg>
 );
+export const IconShop: Ico = (p) => (
+  <svg {...svgBase} {...p}>
+    <path d="M2 5.5h12l-.5-2H2.5zM2 5.5h12v6.5a1.5 1.5 0 01-1.5 1.5H3.5A1.5 1.5 0 012 12V5.5z" />
+    <line x1="5.5" y1="8" x2="5.5" y2="11.5" />
+    <line x1="10.5" y1="8" x2="10.5" y2="11.5" />
+  </svg>
+);
 
 // ── Estructura ──────────────────────────────────────────────────────────────
 export interface NavItem {
@@ -99,6 +106,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/marcas",      label: "Marcas",      Icon: IconStar,     primary: true },
       { href: "/demos",       label: "Demos",       Icon: IconRocket,   primary: true },
+      { href: "/marketplace", label: "Marketplace", Icon: IconShop },
       { href: "/planes",      label: "Planes",      Icon: IconSettings },
       { href: "/facturacion", label: "Facturación", short: "Facturas", Icon: IconReceipt, primary: true },
     ],
