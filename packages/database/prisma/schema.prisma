@@ -928,6 +928,7 @@ model Order {
   statusHistory OrderStatusHistory[]
   rounds        OrderRound[]
   payments      PaymentTransaction[]
+  marketplacePayments MarketplacePayment[]
   packingChecks OrderPackingCheck[]
 
   // FASE NÓMINA · si la orden se cobró "a cuenta de empleado", aquí cuelga el
@@ -938,6 +939,8 @@ model Order {
   updatedAt DateTime @updatedAt
 
   @@unique([restaurantId, orderNumber])
+  // Composite reference keeps marketplace payments in the order restaurant.
+  @@unique([id, restaurantId])
   @@index([tableId])
   @@index([customerId])
   @@index([createdById])
@@ -4608,3 +4611,105 @@ model AdminDailyReport {
   @@map("admin_daily_reports")
 }
 
+// ---------------------------------------------------------------------------
+// MARKETPLACE FINANCE - schema only; no payment or ledger persistence is active.
+// Monetary amounts use exact decimals, never Float. Entries are append-only by
+// contract; balance/immutability need transactional writers and DB constraints.
+// ---------------------------------------------------------------------------
+
+enum MarketplaceLedgerAccount {
+  GATEWAY_ESCROW
+  CUSTOMER_RECEIVABLE
+  MERCHANT_PAYABLE
+  COURIER_PAYABLE
+  PLATFORM_FEES
+  PLATFORM_PROMO_SUBSIDY
+}
+
+enum MarketplaceLedgerEntryType {
+  DEBIT
+  CREDIT
+}
+
+enum MarketplaceLedgerEventType {
+  ORDER_CAPTURED
+  ORDER_SETTLED
+  ORDER_REFUNDED
+  PAYOUT_DISBURSED
+  MANUAL_ADJUSTMENT
+}
+
+enum MarketplacePaymentStatus {
+  PENDING
+  CAPTURED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+/// One provider payment attempt for a single-store order; retries may create new attempts.
+model MarketplacePayment {
+  id           String @id @default(cuid())
+  restaurantId String
+  orderId      String
+  order        Order  @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict, onUpdate: Restrict)
+
+  provider          String @default("MERCADOPAGO")
+  // Null only before the provider assigns an ID. Never store OAuth tokens here.
+  providerPaymentId String? @map("provider_payment_id")
+  providerStatus    String?
+  // Stable server-issued key for creating a payment attempt, not a webhook delivery ID.
+  idempotencyKey    String @unique
+  status            MarketplacePaymentStatus @default(PENDING)
+  amount            Decimal @db.Decimal(18, 2)
+  currency          String  @default("MXN") @db.Char(3)
+
+  capturedAt DateTime? @db.Timestamptz(3)
+  refundedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+
+  ledgerEntries MarketplaceLedgerEntry[]
+
+  @@unique([provider, providerPaymentId])
+  // Referenced by ledger lines to prevent cross-payment/order/restaurant links.
+  @@unique([id, restaurantId, orderId])
+  @@index([orderId, restaurantId])
+  @@index([restaurantId, status, createdAt])
+  @@map("marketplace_payments")
+}
+
+/// One debit/credit line. All lines of a transaction must be persisted atomically.
+model MarketplaceLedgerEntry {
+  id           String @id @default(uuid())
+  restaurantId String
+  orderId      String
+  paymentId    String
+  payment      MarketplacePayment @relation(fields: [paymentId, restaurantId, orderId], references: [id, restaurantId, orderId], onDelete: Restrict, onUpdate: Restrict)
+
+  // Shared by all lines produced by createLedgerTransaction; not unique per line.
+  transactionId   String
+  transactionHash String @db.Char(64)
+  // Stable key for this accounting event; capture, settlement and refund differ.
+  idempotencyKey  String
+  lineNumber      Int
+  eventType       MarketplaceLedgerEventType
+  account         MarketplaceLedgerAccount
+  // Snapshot of restaurant/driver identity for payable accounts; no contact data.
+  beneficiaryId   String?
+  type            MarketplaceLedgerEntryType
+  amount          Decimal @db.Decimal(18, 2)
+  currency        String  @default("MXN") @db.Char(3)
+  referenceId     String?
+  description     String  @default("")
+  // Allowlisted audit data only, never raw provider payloads, credentials or PII.
+  metadata        Json?
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+
+  // No updatedAt: corrections are new compensating transactions, never edits.
+  @@unique([paymentId, idempotencyKey, lineNumber])
+  @@index([transactionId])
+  @@index([restaurantId, orderId, createdAt])
+  @@index([restaurantId, account, beneficiaryId, createdAt])
+  @@map("marketplace_ledger_entries")
+}
