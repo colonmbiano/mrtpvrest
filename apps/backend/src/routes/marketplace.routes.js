@@ -2,7 +2,8 @@
 
 const { InvalidQuery, createCatalog, createPrismaCatalogAdapter } = require('../lib/marketplace-catalog');
 
-function createMarketplaceRouter({ Router, getAdapter, storeSlugs = process.env.MARKETPLACE_STORE_SLUGS || '' } = {}) {
+function createMarketplaceRouter({ Router, getAdapter, storeSlugs = process.env.MARKETPLACE_STORE_SLUGS || '',
+  getPrisma = () => require('@mrtpvrest/database').prisma, orderOptions = {} } = {}) {
   const router = (Router || require('express').Router)();
   const catalog = createCatalog({ storeSlugs, getAdapter: getAdapter || (() => {
     // Deliberately lazy: an empty allowlist never loads or accesses the database.
@@ -23,7 +24,54 @@ function createMarketplaceRouter({ Router, getAdapter, storeSlugs = process.env.
   }
   router.get('/stores', handler(catalog.listStores));
   router.get('/products', handler(catalog.listProducts));
+  let orders;
+  function orderService() {
+    return orders ||= require('../lib/marketplace-orders').createMarketplaceOrdersService({ ...orderOptions, storeSlugs });
+  }
+  function orderError(res, error) {
+    const { MarketplaceOrderError } = require('../lib/marketplace-orders');
+    if (error instanceof MarketplaceOrderError) return res.status(error.statusCode).json({ error: error.message,
+      errorCode: error.code, ...(error.recovery ? { recovery: error.recovery } : {}) });
+    if (['P2002', 'P2034', 'P2028'].includes(error?.code)) return res.status(409).json({
+      error: 'La orden cambio; repite con el mismo Idempotency-Key', errorCode: 'ORDER_CONFLICT' });
+    return res.status(503).json({ error: 'Ordenes temporalmente no disponibles', errorCode: 'ORDERS_UNAVAILABLE' });
+  }
+  router.post('/orders', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      const key = req.headers?.['idempotency-key'];
+      const fields = ['storeSlug', 'restaurantId', 'items', 'deliveryAddress', 'customer', 'paymentMethod', 'deliveryFee', 'tip'];
+      if (typeof key !== 'string' || !/^[A-Za-z0-9_-]{32,128}$/.test(key)
+        || !req.body || typeof req.body !== 'object' || Array.isArray(req.body)
+        || Object.keys(req.body).some(field => !fields.includes(field))) {
+        return res.status(400).json({ error: 'Solicitud o Idempotency-Key invalidos', errorCode: 'INVALID_ORDER_REQUEST' });
+      }
+      // Empty publication policy is checked before loading Prisma.
+      const { parseStoreSlugs } = require('../lib/marketplace-catalog');
+      if (!parseStoreSlugs(storeSlugs).includes(req.body.storeSlug)) {
+        return res.status(404).json({ error: 'Tienda no encontrada', errorCode: 'STORE_NOT_FOUND' });
+      }
+      const result = await orderService().createMarketplaceOrder({ ...req.body, idempotencyKey: key, prismaClient: getPrisma() });
+      return res.status(201).json(result);
+    } catch (error) { return orderError(res, error); }
+  });
+  router.get('/orders/:id/status', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      const trackingToken = req.headers?.['x-marketplace-order-token'];
+      if (!/^[a-f0-9]{64}$/.test(typeof trackingToken === 'string' ? trackingToken : '')
+        || !parseStoreSlugsForStatus(storeSlugs)) {
+        return res.status(404).json({ error: 'Orden no encontrada', errorCode: 'ORDER_NOT_FOUND' });
+      }
+      return res.json(await orderService().getMarketplaceOrderStatus({ orderId: req.params.id,
+        trackingToken, prismaClient: getPrisma() }));
+    } catch (error) { return orderError(res, error); }
+  });
   return router;
+}
+
+function parseStoreSlugsForStatus(value) {
+  return require('../lib/marketplace-catalog').parseStoreSlugs(value).length > 0;
 }
 
 module.exports = createMarketplaceRouter;

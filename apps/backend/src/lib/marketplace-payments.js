@@ -138,19 +138,32 @@ function createPaymentPreference({
   currency = 'MXN',
   customerEmail = 'customer@example.com',
   description = '',
+  gateway,
+  idempotencyKey,
+  settlementSnapshot,
 } = {}) {
   if (!orderId || !collectorId) {
     throw new PaymentError('orderId y collectorId son obligatorios', 'INVALID_PAYMENT_PARAMS');
   }
 
   // Calcular desglose contable
-  const settlement = calculateOrderSettlement({
+  const settlement = gateway && settlementSnapshot ? settlementSnapshot : calculateOrderSettlement({
     subtotal,
     deliveryFee,
     tip,
     commissionRate,
     commissionFixed,
   });
+
+  if (gateway && settlementSnapshot) {
+    const { cents } = require('./marketplace-order-money');
+    if (cents(settlement.subtotal) !== cents(subtotal) || cents(settlement.deliveryFee) !== cents(deliveryFee)
+      || cents(settlement.tip) !== cents(tip) || cents(settlement.customerTotal) !== cents(subtotal) + cents(deliveryFee) + cents(tip)
+      || cents(settlement.merchantPayout) + cents(settlement.platformFee) !== cents(subtotal)
+      || cents(settlement.courierPayout) !== cents(deliveryFee) + cents(tip)) {
+      throw new PaymentError('Desglose de pago inconsistente', 'INVALID_SETTLEMENT');
+    }
+  }
 
   const { customerTotal, platformFee } = settlement;
   const cleanTotal = roundCents(customerTotal);
@@ -185,6 +198,11 @@ function createPaymentPreference({
       unit_price: tip,
       currency_id: currency,
     });
+  }
+
+  // The persistent orders pipeline always supplies an authenticated merchant gateway.
+  if (gateway) {
+    return gateway.createPreference({ orderId, items, marketplaceFee: cleanFee, idempotencyKey });
   }
 
   // Preferencia simulada (sin request real a Mercado Pago)

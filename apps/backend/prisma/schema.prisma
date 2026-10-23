@@ -938,6 +938,7 @@ model Order {
   rounds        OrderRound[]
   payments      PaymentTransaction[]
   marketplacePayments MarketplacePayment[]
+  marketplacePipeline MarketplaceOrderPipeline?
   packingChecks OrderPackingCheck[]
 
   // FASE NÓMINA · si la orden se cobró "a cuenta de empleado", aquí cuelga el
@@ -4621,7 +4622,7 @@ model AdminDailyReport {
 }
 
 // ---------------------------------------------------------------------------
-// MARKETPLACE FINANCE - schema only; no payment or ledger persistence is active.
+// MARKETPLACE FINANCE - persistent pipeline; applying this schema is a separate operation.
 // Monetary amounts use exact decimals, never Float. Entries are append-only by
 // contract; balance/immutability need transactional writers and DB constraints.
 // ---------------------------------------------------------------------------
@@ -4743,4 +4744,34 @@ model LocationMenuItemPromo {
   @@index([restaurantId, locationId])
   @@index([menuItemId, restaurantId])
   @@map("location_menu_item_promos")
+}
+
+
+/// Durable order orchestration snapshot. Dispatch transitions lock the parent Order.
+model MarketplaceOrderPipeline {
+  orderId String @id
+  restaurantId String
+  order Order @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict, onUpdate: Restrict)
+  storeSlug String
+  requestHash String @db.Char(64)
+  trackingTokenHash String @db.Char(64)
+  trackingExpiresAt DateTime @db.Timestamptz(3)
+  pinKeyId String
+  pickupPinHash String @db.Char(64)
+  deliveryPinHash String @db.Char(64)
+  paymentMethod String
+  collectorId String?
+  currency String @default("MXN") @db.Char(3)
+  // Immutable settlement in INTEGER CENTS, including the chosen commission rate.
+  settlement Json
+  // Bounded task + one current shared offer, including assignment after acceptance.
+  // Never store plaintext PINs, GPS, customer contact data or access tokens here.
+  dispatch Json?
+  checkoutUrl String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([orderId, restaurantId])
+  @@index([restaurantId, createdAt])
+  @@map("marketplace_order_pipelines")
 }

@@ -241,9 +241,9 @@ function buildOrderSettlementTransaction({ orderId, referenceId, settlement, cur
   const entries = [
     // El procesador libera los fondos retenidos
     { account: ACCOUNT_TYPES.GATEWAY_ESCROW, type: ENTRY_TYPES.DEBIT, amount: customerTotal },
-    // Se acredita al comercio su venta neta
-    { account: ACCOUNT_TYPES.MERCHANT_PAYABLE, type: ENTRY_TYPES.CREDIT, amount: merchantPayout },
   ];
+
+  if (merchantPayout > 0) entries.push({ account: ACCOUNT_TYPES.MERCHANT_PAYABLE, type: ENTRY_TYPES.CREDIT, amount: merchantPayout });
 
   // Se acredita al repartidor si hay entrega
   if (courierPayout > 0) {
@@ -378,6 +378,58 @@ function createInMemoryLedgerStore() {
   };
 }
 
+/** Persist every line of one balanced event, joining the caller's transaction when supplied.
+ * No upserts, partial duplicate suppression or mutations of existing ledger lines.
+ */
+async function recordLedgerTransaction({ transaction, paymentId, restaurantId, idempotencyKey, courierId, prismaClient }) {
+  const { cents, decimal } = require('./marketplace-order-money');
+  const fail = () => { throw new LedgerError('Asiento persistente invalido o inconsistente', 'LEDGER_INTEGRITY_ERROR'); };
+  if (!prismaClient || !paymentId || !restaurantId || typeof idempotencyKey !== 'string' || !idempotencyKey
+    || !transaction || !EVENT_TYPES[transaction.eventType] || transaction.currency !== 'MXN'
+    || !Array.isArray(transaction.entries) || transaction.entries.length < 2 || transaction.entries.length > 20
+    || !/^[a-f0-9]{64}$/.test(transaction.hash) || !Number.isFinite(Date.parse(transaction.createdAt))) fail();
+  let debit = 0; let credit = 0;
+  for (const entry of transaction.entries) {
+    if (!ACCOUNT_TYPES[entry.account] || !ENTRY_TYPES[entry.type] || cents(entry.amount) <= 0) fail();
+    if (entry.type === 'DEBIT') debit += cents(entry.amount); else credit += cents(entry.amount);
+    if (entry.account === 'COURIER_PAYABLE' && (typeof courierId !== 'string' || !courierId)) fail();
+  }
+  const expectedHash = crypto.createHash('sha256').update(`${transaction.id}:${transaction.orderId}:${transaction.eventType}:${transaction.totalAmount}:${transaction.createdAt}`).digest('hex');
+  if (debit !== credit || debit !== cents(transaction.totalAmount) || expectedHash !== transaction.hash) fail();
+  const work = async tx => {
+    const payment = await tx.marketplacePayment.findFirst({ where: { id: paymentId, restaurantId, orderId: transaction.orderId },
+      select: { id: true, restaurantId: true, orderId: true, currency: true, amount: true, status: true } });
+    if (!payment || payment.restaurantId !== restaurantId || payment.orderId !== transaction.orderId
+      || payment.currency !== transaction.currency || payment.status !== 'CAPTURED' || cents(payment.amount) !== debit) fail();
+    const existing = await tx.marketplaceLedgerEntry.findMany({ where: { paymentId, restaurantId,
+      orderId: transaction.orderId, idempotencyKey }, orderBy: { lineNumber: 'asc' } });
+    const lines = transaction.entries.map((entry, index) => ({ id: entry.id, restaurantId,
+      orderId: transaction.orderId, paymentId, transactionId: transaction.id, transactionHash: transaction.hash,
+      idempotencyKey, lineNumber: index + 1, eventType: transaction.eventType, account: entry.account,
+      beneficiaryId: entry.account === 'MERCHANT_PAYABLE' ? restaurantId : entry.account === 'COURIER_PAYABLE' ? courierId : null,
+      type: entry.type, amount: decimal(cents(entry.amount)), currency: transaction.currency,
+      referenceId: transaction.referenceId, description: transaction.description, createdAt: new Date(transaction.createdAt) }));
+    if (existing.length) {
+      if (existing.length !== lines.length) fail();
+      for (let i = 0; i < lines.length; i++) {
+        const saved = existing[i]; const line = lines[i];
+        if (['restaurantId', 'orderId', 'paymentId', 'idempotencyKey', 'lineNumber', 'eventType', 'account', 'beneficiaryId', 'type', 'currency', 'referenceId']
+          .some(key => saved[key] !== line[key]) || cents(saved.amount) !== cents(line.amount)
+          || saved.transactionId !== existing[0].transactionId || saved.transactionHash !== existing[0].transactionHash) fail();
+      }
+      const head = existing[0];
+      const hash = crypto.createHash('sha256').update(`${head.transactionId}:${head.orderId}:${head.eventType}:${debit / 100}:${new Date(head.createdAt).toISOString()}`).digest('hex');
+      if (hash !== head.transactionHash || existing.some(line => new Date(line.createdAt).getTime() !== new Date(head.createdAt).getTime())) fail();
+      return { transactionId: head.transactionId, idempotent: true };
+    }
+    const created = await tx.marketplaceLedgerEntry.createMany({ data: lines });
+    if (created.count !== lines.length) fail();
+    return { transactionId: transaction.id, idempotent: false };
+  };
+  return typeof prismaClient.$transaction === 'function'
+    ? prismaClient.$transaction(work, { isolationLevel: 'Serializable', maxWait: 5000, timeout: 15000 }) : work(prismaClient);
+}
+
 module.exports = {
   ACCOUNT_TYPES,
   ENTRY_TYPES,
@@ -392,4 +444,5 @@ module.exports = {
   buildOrderSettlementTransaction,
   buildOrderRefundTransaction,
   createInMemoryLedgerStore,
+  recordLedgerTransaction,
 };

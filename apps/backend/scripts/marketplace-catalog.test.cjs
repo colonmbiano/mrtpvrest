@@ -91,7 +91,7 @@ function catalogFixture(slugs = 'alpha,beta,inactive,no-web,demo') {
 
 function httpFixture(options = {}) {
   const routes = {};
-  createRouter({ Router: () => ({ get(path, handler) { routes[path] = handler; } }), ...options });
+  createRouter({ Router: () => ({ get(path, handler) { routes[path] = handler; }, post() {} }), ...options });
   return async (path, query = {}, extra = {}) => {
     const res = { statusCode: 200, headers: {},
       set(key, value) { this.headers[key] = value; return this; },
@@ -306,9 +306,9 @@ test('router import and empty-policy handlers never require Express or database 
     };
     const createRouter = require(${JSON.stringify(require.resolve('../src/routes/marketplace.routes'))});
     const routes = {};
-    createRouter({ storeSlugs: '', Router: () => ({ get(path, fn) { routes[path] = fn; } }) });
+    createRouter({ storeSlugs: '', Router: () => ({ get(path, fn) { routes[path] = fn; }, post() {} }) });
     const res = { set() {}, json(body) { if (body.total !== 0) throw new Error('Unexpected data'); }, status() { throw new Error('Unexpected error'); } };
-    Promise.all(Object.values(routes).map(fn => fn({ query: {} }, res))).catch(() => { process.exitCode = 1; });
+    Promise.all(['/stores', '/products'].map(path => routes[path]({ query: {} }, res))).catch(() => { process.exitCode = 1; });
   `;
   const result = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);

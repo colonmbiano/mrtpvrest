@@ -80,7 +80,7 @@ function hashPin(pin) {
 }
 
 function verifyPin(inputPin, expectedHash) {
-  if (!inputPin || !expectedHash) return false;
+  if (typeof inputPin !== 'string' || !/^\d{4,6}$/.test(inputPin) || !/^[a-f0-9]{64}$/.test(expectedHash)) return false;
   const inputHash = crypto.createHash('sha256').update(String(inputPin).trim()).digest('hex');
   return crypto.timingSafeEqual(Buffer.from(inputHash), Buffer.from(expectedHash));
 }
@@ -118,12 +118,12 @@ function atomicAcceptOffer({ task, offer, courierId, now = new Date() }) {
   const currentTime = now instanceof Date ? now.getTime() : new Date(now).getTime();
   const expiresTime = new Date(offer.expiresAt).getTime();
 
-  if (currentTime > expiresTime) {
+  if (!Number.isFinite(currentTime) || !Number.isFinite(expiresTime) || currentTime >= expiresTime) {
     offer.status = OFFER_STATUS.EXPIRED;
     throw new OfferExpiredError();
   }
 
-  if (offer.courierId !== courierId) {
+  if (typeof courierId !== 'string' || !courierId || (offer.courierId !== courierId && !(offer.courierId === null && offer.source === 'SHARED'))) {
     throw new DispatchError('Esta oferta no pertenece al repartidor', 'OFFER_COURIER_MISMATCH', 403);
   }
 
@@ -136,6 +136,7 @@ function atomicAcceptOffer({ task, offer, courierId, now = new Date() }) {
   // Atomic state change
   task.status = TASK_STATUS.ASSIGNED;
   offer.status = OFFER_STATUS.ACCEPTED;
+  offer.courierId = courierId;
 
   const assignment = {
     id: `asgn_${crypto.randomUUID().slice(0, 12)}`,
@@ -269,6 +270,23 @@ function rankCandidates({ couriers = [], pickupLat, pickupLng, maxDistanceKm = 1
     .sort((a, b) => a.distanceKm - b.distanceKm);
 }
 
+/** Build a shared-network offer and task; persistence belongs to the order transaction.
+ * Only PIN hashes enter the dispatch payload. All times use JSON-safe ISO snapshots.
+ */
+function createOffer({ orderId, restaurantId, payoutAmount, pickupPinHash, deliveryPinHash, now = new Date(), ttlSeconds = 30 }) {
+  if (typeof orderId !== 'string' || !orderId || typeof restaurantId !== 'string' || !restaurantId
+    || !Number.isFinite(payoutAmount) || payoutAmount < 0 || Math.round(payoutAmount * 100) / 100 !== payoutAmount
+    || !/^[a-f0-9]{64}$/.test(pickupPinHash) || !/^[a-f0-9]{64}$/.test(deliveryPinHash)
+    || !(now instanceof Date) || !Number.isFinite(now.getTime()) || !Number.isInteger(ttlSeconds) || ttlSeconds < 1 || ttlSeconds > 300) {
+    throw new DispatchError('Oferta marketplace invalida', 'INVALID_OFFER', 400);
+  }
+  const task = { id: crypto.randomUUID(), orderId, restaurantId, status: TASK_STATUS.OFFERING,
+    dispatchMode: 'SHARED', pickupPinHash, deliveryPinHash, createdAt: now.toISOString(), updatedAt: now.toISOString() };
+  const offer = { id: crypto.randomUUID(), taskId: task.id, courierId: null, status: OFFER_STATUS.OFFERED,
+    source: 'SHARED', payoutAmount, currency: 'MXN', createdAt: now.toISOString(), expiresAt: new Date(now.getTime() + ttlSeconds * 1000).toISOString() };
+  return { task, offer };
+}
+
 module.exports = {
   DISPATCH_MODES,
   DELIVERY_POLICIES,
@@ -289,4 +307,5 @@ module.exports = {
   confirmDelivery,
   evaluateFallback,
   rankCandidates,
+  createOffer,
 };
