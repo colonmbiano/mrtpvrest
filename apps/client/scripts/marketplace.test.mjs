@@ -141,6 +141,14 @@ test('isProductSummary: precio finito no negativo, moneda ISO y tienda válida',
   assert.equal(isProductSummary({ ...PRODUCT, store: undefined }), false);
 });
 
+test('imagen pública opcional: solo URL HTTPS válida', () => {
+  assert.equal(isStoreSummary({ ...STORE, logoUrl: 'https://cdn.example.com/store.jpg' }), true);
+  assert.equal(isStoreSummary({ ...STORE, logoUrl: 'javascript:alert(1)' }), false);
+  assert.equal(isProductSummary({ ...PRODUCT, imageUrl: 'https://cdn.example.com/item.png' }), true);
+  assert.equal(isProductSummary({ ...PRODUCT, imageUrl: 'data:image/svg+xml;base64,xxx' }), false);
+  assert.equal(isProductSummary({ ...PRODUCT, imageUrl: 'http://localhost/private.jpg' }), false);
+});
+
 test('totalPages y formatPrice', () => {
   assert.equal(totalPages(page([], { total: 0 })), 1);
   assert.equal(totalPages(page([], { total: 25 })), 3);
