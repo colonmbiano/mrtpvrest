@@ -30,7 +30,7 @@ const corsOptions = {
   origin: createCorsOriginCheck(runtimePolicy),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-restaurant-id', 'x-location-id', 'x-restaurant-slug', 'x-location-slug', 'Idempotency-Key', 'x-correlation-id'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-restaurant-id', 'x-location-id', 'x-restaurant-slug', 'x-location-slug', 'Idempotency-Key', 'x-correlation-id', 'X-Marketplace-Order-Token', 'X-Buyer-Id', 'X-Guest-Id'],
   exposedHeaders: ['x-correlation-id']
 };
 

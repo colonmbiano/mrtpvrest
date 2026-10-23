@@ -340,7 +340,7 @@ const catalogState = (over = {}) => ({ q: '', type: '', store: '', storesPage: 1
 
 test('v1 merchant maps to the store summary and needs a known business type', () => {
   assert.deepEqual(storeFromV1(v1Item()), { slug: 'taqueria-centro', name: 'Taqueria Centro', businessType: 'RESTAURANT',
-    isOpen: true, closedMessage: null, estimatedDelivery: 20, deliveryFee: null, freeDeliveryFrom: null, minOrderAmount: 50 });
+    isOpen: true, closedMessage: null, estimatedDelivery: 20, deliveryFee: null, freeDeliveryFrom: null, minOrderAmount: 50, merchantId: null });
   assert.equal(storeFromV1(v1Item({ categories: ['TACOS'] })), null);
   assert.equal(storeFromV1(v1Item({ slug: 'Bad Slug' })), null);
   assert.equal(storeFromV1(v1Item({ minOrder: 50 })).minOrderAmount, null, 'money must arrive as a decimal string');
@@ -398,4 +398,19 @@ test('bindCartToStore keeps lines for the same or an unbound cart and drops them
   assert.deepEqual(bindCartToStore('tienda-a', 'tienda-b'), { storeSlug: 'tienda-b', clearLines: true });
   assert.throws(() => bindCartToStore('tienda-a', 'Tienda B'), /invalido/);
   assert.throws(() => bindCartToStore('tienda-a', ''), /invalido/);
+});
+
+// ── Referencia del comercio (id) para el checkout de la tienda ────────────────
+import { fetchMerchantRef } from '../src/lib/marketplace.ts';
+
+test('fetchMerchantRef returns the merchant id, falls back to null id, and rejects other slugs', async () => {
+  const detail = (json, status = 200) => async () => new Response(JSON.stringify(json), { status, headers: { 'content-type': 'application/json' } });
+  assert.deepEqual(await fetchMerchantRef('https://a', 'taqueria', { fetchImpl: detail({ id: 'm-1', slug: 'taqueria', name: 'T' }) }),
+    { merchantId: 'm-1', slug: 'taqueria' });
+  assert.deepEqual(await fetchMerchantRef('https://a', 'taqueria', { fetchImpl: detail({ slug: 'taqueria', name: 'T' }) }),
+    { merchantId: null, slug: 'taqueria' }, 'without an id the slug is still usable');
+  assert.equal(await fetchMerchantRef('https://a', 'taqueria', { fetchImpl: detail({ slug: 'otra', name: 'O', id: 'x' }) }), null);
+  assert.equal(await fetchMerchantRef('https://a', 'taqueria', { fetchImpl: detail({}, 404) }), null, 'a tenant store is not a marketplace merchant');
+  assert.equal(await fetchMerchantRef(null, 'taqueria'), null);
+  assert.equal(await fetchMerchantRef('https://a', 'Bad Slug'), null);
 });

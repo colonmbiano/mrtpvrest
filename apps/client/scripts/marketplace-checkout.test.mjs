@@ -404,10 +404,10 @@ test('carts with variants, modifiers or combos cannot be quoted in v1', () => {
 });
 
 test('the quote body sends ids, quantities and empty modifiers; delivery needs an address, pickup omits it', () => {
-  const delivery = buildQuoteBody({ merchantId: 'm1', lines: [cartLine()], fulfillment: 'DELIVERY', deliveryAddressId: 'addr-1' });
+  const delivery = buildQuoteBody({ merchant: { merchantId: 'm1', slug: 'taqueria' }, lines: [cartLine()], fulfillment: 'DELIVERY', deliveryAddressId: 'addr-1' });
   assert.deepEqual(delivery, { merchantId: 'm1', fulfillment: 'DELIVERY', deliveryAddressId: 'addr-1',
     items: [{ menuItemId: 'burger', quantity: 2, modifiers: [] }] });
-  const pickup = buildQuoteBody({ merchantId: 'm1', lines: [cartLine()], fulfillment: 'PICKUP', deliveryAddressId: 'addr-1' });
+  const pickup = buildQuoteBody({ merchant: { merchantId: 'm1', slug: 'taqueria' }, lines: [cartLine()], fulfillment: 'PICKUP', deliveryAddressId: 'addr-1' });
   assert.equal('deliveryAddressId' in pickup, false);
 });
 
@@ -516,4 +516,14 @@ test('fetchTracking maps 401, 5xx, malformed and missing config without leaking 
   assert.equal((await fetchTracking('https://a', 'o1', TOKEN, async () => jsonResponse({ nope: 1 }))).reason, 'unavailable');
   assert.equal((await fetchTracking(null, 'o1', TOKEN)).reason, 'config');
   assert.equal((await fetchTracking('https://a', 'o1', 'short')).reason, 'rejected');
+});
+
+// ── Referencia del comercio para el cotizador: id, o slug como fallback ───────
+test('the quote sends merchantId when the server exposes it, and merchantSlug otherwise', () => {
+  const withId = buildQuoteBody({ merchant: { merchantId: 'm-123', slug: 'taqueria' }, lines: [cartLine()], fulfillment: 'PICKUP' });
+  assert.equal(withId.merchantId, 'm-123');
+  assert.equal('merchantSlug' in withId, false, 'only one merchant reference is sent');
+  const withSlug = buildQuoteBody({ merchant: { merchantId: null, slug: 'taqueria' }, lines: [cartLine()], fulfillment: 'PICKUP' });
+  assert.equal(withSlug.merchantSlug, 'taqueria');
+  assert.equal('merchantId' in withSlug, false);
 });

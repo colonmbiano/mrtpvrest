@@ -11,7 +11,9 @@ import {
   type StoreInfo, type StoreLocation,
 } from '@/lib/store-data';
 import { cldImage } from '@/lib/cloudinary';
-import { getStorePublicUrl, isMarketplaceCatalogEnabled, isMarketplaceIsolated } from '@/lib/config';
+import { getMarketplaceApiUrl, getStorePublicUrl, isMarketplaceCatalogEnabled, isMarketplaceIsolated } from '@/lib/config';
+import { fetchMerchantRef } from '@/lib/marketplace';
+import { MarketplaceMerchantProvider } from '@/components/MarketplaceMerchantProvider';
 import InstallPWABanner from '@/components/InstallPWABanner';
 import CartDeepLinkLoader from '@/components/CartDeepLinkLoader';
 import { DineInBanner } from '@/components/DineInBanner';
@@ -247,8 +249,11 @@ export default async function StorefrontPage({
   const data = { info, menu, locations };
   // Menú aplanado para el deep-link de carrito (rehidratar `?cart=`).
   const allItems = (menu?.categories || []).flatMap((c: any) => c.items || []);
+  // Comercio del marketplace (id o slug para el checkout v1). Solo con la bandera activa.
+  const marketplaceMerchant = isMarketplaceCatalogEnabled() ? await fetchMerchantRef(getMarketplaceApiUrl(), slug) : null;
 
   return (
+    <MarketplaceMerchantProvider value={marketplaceMerchant}>
     <div
       style={{ ['--color-primary' as string]: primary } as React.CSSProperties}
       className="min-h-screen bg-white"
@@ -274,5 +279,6 @@ export default async function StorefrontPage({
         accentColor={primary}
       />
     </div>
+    </MarketplaceMerchantProvider>
   );
 }

@@ -36,14 +36,18 @@ export function newIdempotencyKey(): string {
   return crypto.randomUUID();
 }
 
+// El cotizador acepta merchantId o merchantSlug; se envía uno solo (el id cuando la API lo expone).
 export function buildQuoteBody(input: {
-  merchantId: string;
+  merchant: { merchantId: string | null; slug: string };
   lines: CartLine[];
   fulfillment: Fulfillment;
   deliveryAddressId?: string;
 }): Record<string, unknown> {
+  const merchant = input.merchant.merchantId
+    ? { merchantId: input.merchant.merchantId }
+    : { merchantSlug: input.merchant.slug };
   const body: Record<string, unknown> = {
-    merchantId: input.merchantId,
+    ...merchant,
     fulfillment: input.fulfillment,
     items: input.lines.map(line => ({ menuItemId: line.menuItemId, quantity: line.quantity, modifiers: [] })),
   };

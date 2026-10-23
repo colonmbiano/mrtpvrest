@@ -9,6 +9,7 @@ import {
   buildOrderBody, buildQuoteBody, checkCustomer, checkMarketplaceEligibility, newIdempotencyKey, placeOrder, requestQuote,
 } from '../lib/marketplaceV1Checkout';
 import MarketplaceTrackingModal from './MarketplaceTrackingModal';
+import { useMarketplaceMerchant } from './MarketplaceMerchantProvider';
 import { computeDeliveryPreview, type DeliveryConfig } from '../lib/delivery';
 import { MapLocationPicker } from './MapLocationPicker';
 import { useMoney } from './StoreLocaleContext';
@@ -34,8 +35,6 @@ type StoreCheckoutProps = {
   lockedTableToken?: string | null;
   lockedLocationId?: string | null;
   collectorId?: string;
-  // Id del comercio en el marketplace (API v1). Solo las tiendas del marketplace lo traen.
-  marketplaceMerchantId?: string | null;
 };
 
 const STATUS_LABEL: Record<string, { t: string; c: string }> = {
@@ -52,7 +51,6 @@ export default function StoreCheckout({
   open, onClose, slug, primary, locations = [], delivery, minOrderAmount = 0, onlinePayment = false,
   initialOrderType = 'DELIVERY', whatsappOrder,
   lockedTable = null, lockedTableToken = null, lockedLocationId = null, collectorId,
-  marketplaceMerchantId = null,
 }: StoreCheckoutProps) {
   // Llegó por QR de mesa. Con token firmado la mesa puede no tener número en el
   // nombre ("Barra"), así que el candado NO puede depender de la etiqueta.
@@ -276,9 +274,12 @@ export default function StoreCheckout({
   };
 
   // Marketplace: la bandera activa Y la tienda es del marketplace. Nunca cae al legacy en silencio.
-  const useMarketplaceV1 = isMarketplaceCatalogEnabled() && !!marketplaceMerchantId;
+  // Mesa (QR) y tiendas sin ficha de marketplace siguen en el flujo legacy.
+  const marketplaceMerchant = useMarketplaceMerchant();
+  const useMarketplaceV1 = isMarketplaceCatalogEnabled() && !!marketplaceMerchant && !fromTableQr;
 
   const submitMarketplaceV1 = async () => {
+    if (!marketplaceMerchant) return;
     const apiUrl = getMarketplaceApiUrl();
     const eligibility = checkMarketplaceEligibility({ orderType, paymentMethod, lines });
     if (!eligibility.ok) { setError(eligibility.message); return; }
@@ -286,7 +287,7 @@ export default function StoreCheckout({
     const customerError = checkCustomer(customer);
     if (customerError) { setError(customerError); return; }
     const notes = orderNotes.trim() || undefined;
-    const signature = JSON.stringify({ merchantId: marketplaceMerchantId, lines: lines.map(l => [l.menuItemId, l.quantity]),
+    const signature = JSON.stringify({ merchant: marketplaceMerchant, lines: lines.map(l => [l.menuItemId, l.quantity]),
       customer, notes, method: eligibility.paymentMethod });
     if (!v1Attempt.current || v1Attempt.current.signature !== signature) {
       v1Attempt.current = { key: newIdempotencyKey(), signature };
@@ -294,7 +295,7 @@ export default function StoreCheckout({
     const base = v1Attempt.current.key;
     setIsSubmitting(true);
     try {
-      const quote = await requestQuote(apiUrl, buildQuoteBody({ merchantId: marketplaceMerchantId as string, lines,
+      const quote = await requestQuote(apiUrl, buildQuoteBody({ merchant: marketplaceMerchant, lines,
         fulfillment: eligibility.fulfillment }), `${base}-q`);
       if ('ok' in quote) { setError(quote.message); return; }
       const order = await placeOrder(apiUrl, buildOrderBody({ quoteId: quote.quoteId, fulfillment: eligibility.fulfillment,

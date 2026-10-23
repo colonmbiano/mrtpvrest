@@ -34,6 +34,8 @@ export type StoreSummary = {
   deliveryFee: number | null; // null = depende de la distancia
   freeDeliveryFrom: number | null;
   minOrderAmount: number | null;
+  // Id del comercio en el marketplace (API v1). Solo llega desde la fuente v1.
+  merchantId?: string | null;
 };
 export type ProductSummary = {
   id: string;
@@ -280,7 +282,8 @@ export function storeFromV1(item: unknown): StoreSummary | null {
   return { slug: item.slug, name: item.name, businessType, isOpen: item.open, closedMessage: null,
     estimatedDelivery: eta,
     // La tarifa v1 depende de la zona y la dirección: no se promete aquí (null).
-    deliveryFee: null, freeDeliveryFrom: null, minOrderAmount: minOrder };
+    deliveryFee: null, freeDeliveryFrom: null, minOrderAmount: minOrder,
+    merchantId: typeof item.id === 'string' && item.id.length > 0 ? item.id : null };
 }
 
 function paginateStores(stores: StoreSummary[], state: CatalogState): CatalogPage<StoreSummary> {
@@ -312,5 +315,30 @@ export async function fetchV1Stores(
     return { status: 'ok', data: paginateStores(stores, state) };
   } catch {
     return { status: 'error', reason: 'unavailable' };
+  }
+}
+
+// Referencia del comercio para el checkout v1: el id cuando la API lo expone; si no, el slug
+// (el cotizador acepta merchantSlug). Null cuando la tienda no es de marketplace.
+export type MarketplaceMerchantRef = { merchantId: string | null; slug: string };
+
+export async function fetchMerchantRef(
+  apiUrl: string | null,
+  slug: string,
+  { fetchImpl = fetch, timeoutMs = 8000 }: { fetchImpl?: FetchLike; timeoutMs?: number } = {},
+): Promise<MarketplaceMerchantRef | null> {
+  if (!apiUrl || !isValidSlug(slug)) return null;
+  try {
+    const res = await fetchImpl(`${apiUrl}/api/marketplace/v1/merchants/${encodeURIComponent(slug)}`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) return null;
+    const json: unknown = await res.json();
+    if (!isRecord(json) || json.slug !== slug || typeof json.name !== 'string') return null;
+    return { merchantId: typeof json.id === 'string' && json.id.length > 0 ? json.id : null, slug };
+  } catch {
+    return null;
   }
 }
