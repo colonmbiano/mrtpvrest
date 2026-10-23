@@ -3,7 +3,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import {
   ArrowRight, Bike, ChevronLeft, ChevronRight, Clock3, Heart,
-  LayoutGrid, MapPin, Menu, Search, ShoppingBag, Store, Tag, Truck,
+  LayoutGrid, MapPin, Menu, Search, ShoppingBag, Store, Tag, Truck, UserRound,
 } from 'lucide-react';
 import ScrollToHash from '@/components/ScrollToHash';
 import { productEmoji } from '@/lib/productEmoji';
@@ -97,6 +97,9 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
               <a href="#productos" className={'hidden items-center gap-2 text-sm font-semibold text-[#374e45] hover:text-[#e65320] sm:flex ' + focus}>
                 <ShoppingBag className="h-5 w-5" aria-hidden="true" /> Productos
               </a>
+              <Link href="/registro" className={'inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#f15a24] px-3 py-2 text-sm font-extrabold text-white hover:bg-[#dd4c16] sm:px-4 ' + focus}>
+                <UserRound className="h-4 w-4" aria-hidden="true" /><span className="hidden sm:inline">Registrarme</span><span className="sm:hidden">Registro</span>
+              </Link>
               <a href="#categorias" className={'grid h-11 w-11 place-items-center rounded-xl border border-[#edf0eb] text-[#384b43] md:hidden ' + focus} aria-label="Ver categorías">
                 <Menu className="h-6 w-6" aria-hidden="true" />
               </a>
@@ -230,7 +233,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
 
         <footer className="grid gap-6 border-t border-[#dfe9e1] pt-8 text-sm text-[#647268] sm:grid-cols-3">
           <div><strong className="font-display text-lg text-[#176f3d]">MRTPVREST <span className="text-[#f15a24]">Marketplace</span></strong><p className="mt-2">Todo lo que necesitas, más cerca de ti.</p></div>
-          <div><h3 className="font-bold text-[#243b30]">Explorar</h3><a className={'mt-2 block w-fit ' + link} href="#tiendas">Tiendas</a><a className={'mt-2 block w-fit ' + link} href="#productos">Productos</a></div>
+          <div><h3 className="font-bold text-[#243b30]">Explorar</h3><a className={'mt-2 block w-fit ' + link} href="#tiendas">Tiendas</a><a className={'mt-2 block w-fit ' + link} href="#productos">Productos</a><Link className={'mt-2 block w-fit ' + link} href="/registro">Registro de usuarios</Link></div>
           <div><h3 className="font-bold text-[#243b30]">Compra con claridad</h3><p className="mt-2">Los precios, métodos de pago y condiciones de entrega se confirman en cada tienda.</p></div>
         </footer>
       </main>
@@ -239,7 +242,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
         <Link href="/" className={'flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-bold text-[#ed5821] ' + focus}><Store className="h-5 w-5" aria-hidden="true" /> Inicio</Link>
         <a href="#categorias" className={'flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-semibold text-[#54635a] ' + focus}><LayoutGrid className="h-5 w-5" aria-hidden="true" /> Categorías</a>
         <a href="#tiendas" className={'flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-semibold text-[#54635a] ' + focus}><ShoppingBag className="h-5 w-5" aria-hidden="true" /> Tiendas</a>
-        <a href="#productos" className={'flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-semibold text-[#54635a] ' + focus}><Search className="h-5 w-5" aria-hidden="true" /> Productos</a>
+        <Link href="/registro" className={'flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-semibold text-[#54635a] ' + focus}><UserRound className="h-5 w-5" aria-hidden="true" /> Registro</Link>
       </nav>
     </div>
   );
