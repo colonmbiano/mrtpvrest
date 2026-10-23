@@ -61,7 +61,7 @@ function validPinData(tx: { type: string; data: any }): boolean {
   if (!data || typeof data !== 'object' || typeof data.courierId !== 'string' || !data.courierId.trim()
     || typeof data.taskId !== 'string' || !data.taskId.trim()) return false;
   const pin = tx.type === 'CONFIRM_PICKUP_PIN' ? data.pickupPin : data.deliveryPin;
-  return typeof pin === 'string' && /^\d{4}$/.test(pin.trim()) && (tx.type !== 'CONFIRM_DELIVERY_PIN'
+  return typeof pin === 'string' && /^\d{4,6}$/.test(pin.trim()) && (tx.type !== 'CONFIRM_DELIVERY_PIN'
     || (['CASH', 'TRANSFER', 'CARD_ONLINE'].includes(data.paymentMethod) && typeof data.cashCollected === 'boolean'));
 }
 

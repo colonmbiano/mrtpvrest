@@ -6,7 +6,7 @@
  * Cliente de despacho híbrido para la app de repartidores MRTPVREST.
  * Permite a los repartidores conectarse a la red compartida del marketplace,
  * recibir ofertas de múltiples tiendas, aceptar pedidos con CAS atómico y
- * validar la recolección y entrega con PIN de 4 dígitos.
+ * validar la recolección y entrega con PIN de 4 a 6 dígitos.
  */
 
 import api from './api';
@@ -131,7 +131,7 @@ export async function acceptMarketplaceOffer(
 }
 
 /**
- * Confirma la recolección en el comercio mediante PIN de 4 dígitos proporcionado por la tienda.
+ * Confirma la recolección en el comercio mediante PIN de 4 a 6 dígitos proporcionado por la tienda.
  * Invariante de seguridad: Order.status pasa a 'ON_THE_WAY' solo si el PIN es verificado.
  */
 export async function confirmPickupPin(
@@ -139,8 +139,8 @@ export async function confirmPickupPin(
   taskId: string,
   pickupPin: string
 ): Promise<{ success: boolean; data?: PinConfirmResult; error?: string; queued?: boolean; queueId?: string }> {
-  if (typeof pickupPin !== 'string' || !/^\d{4}$/.test(pickupPin.trim())) {
-    return { success: false, error: 'El PIN de recolección debe ser de 4 dígitos.' };
+  if (typeof pickupPin !== 'string' || !/^\d{4,6}$/.test(pickupPin.trim())) {
+    return { success: false, error: 'El PIN de recolección debe ser de 4 a 6 dígitos.' };
   }
   const payload = { courierId, taskId, pickupPin: pickupPin.trim() };
   if (isOffline()) return queuedPin('CONFIRM_PICKUP_PIN', payload);
@@ -159,7 +159,7 @@ export async function confirmPickupPin(
 }
 
 /**
- * Confirma la entrega al cliente final mediante PIN de 4 dígitos proporcionado por el comprador.
+ * Confirma la entrega al cliente final mediante PIN de 4 a 6 dígitos proporcionado por el comprador.
  * Invariante de seguridad: Order.status pasa a 'DELIVERED' y se desbloquea la liquidación contable.
  */
 export async function confirmDeliveryPin(
@@ -169,8 +169,8 @@ export async function confirmDeliveryPin(
   paymentMethod: 'CASH' | 'TRANSFER' | 'CARD_ONLINE' = 'CARD_ONLINE',
   cashCollected: boolean = false
 ): Promise<{ success: boolean; data?: PinConfirmResult; error?: string; queued?: boolean; queueId?: string }> {
-  if (typeof deliveryPin !== 'string' || !/^\d{4}$/.test(deliveryPin.trim())) {
-    return { success: false, error: 'El PIN de entrega debe ser de 4 dígitos.' };
+  if (typeof deliveryPin !== 'string' || !/^\d{4,6}$/.test(deliveryPin.trim())) {
+    return { success: false, error: 'El PIN de entrega debe ser de 4 a 6 dígitos.' };
   }
   const payload = { courierId, taskId, deliveryPin: deliveryPin.trim(), paymentMethod, cashCollected };
   if (isOffline()) return queuedPin('CONFIRM_DELIVERY_PIN', payload);

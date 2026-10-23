@@ -201,13 +201,68 @@ test('accept: CAS conflict 409, expired offer 410 and network failure never enqu
 });
 
 test('PINs: reject non-numeric or wrong-length input before API or queue', async () => {
-  const h = harness(); h.navigator.onLine = false;
-  for (const pin of ['12', '', 'abcd', '12 3', '12345', null, 1234]) {
-    assert.equal((await h.dispatch.confirmPickupPin('c1', 't1', pin)).success, false);
-    assert.equal((await h.dispatch.confirmDeliveryPin('c1', 't1', pin)).success, false);
+  for (const online of [true, false]) {
+    const h = harness(); h.navigator.onLine = online;
+    for (const pin of ['12', '123', '', 'abcd', '12 3', '1234567', '12a45', '1234.5', '１２３４', null, 1234]) {
+      for (const result of [await h.dispatch.confirmPickupPin('c1', 't1', pin), await h.dispatch.confirmDeliveryPin('c1', 't1', pin)]) {
+        assert.equal(result.success, false); assert.match(result.error, /4 a 6 dígitos/);
+      }
+      assert.throws(() => h.offline.addToQueue({ ...pickup(), data: { ...pickup().data, pickupPin: pin } }), /INVALID_PIN_ACTION/);
+      assert.throws(() => h.offline.addToQueue({ ...deliver(), data: { ...deliver().data, deliveryPin: pin } }), /INVALID_PIN_ACTION/);
+    }
+    assert.equal(h.requests.length, 0); assert.equal(h.offline.queue.length, 0);
   }
-  assert.equal(h.requests.length, 0); assert.equal(h.offline.queue.length, 0);
 });
+
+for (const pin of ['0123', '01234', '012345']) {
+  test(`online PINs: pickup and delivery accept ${pin.length} digits and preserve leading zeroes`, async () => {
+    const h = harness();
+    h.post(async (url, body) => {
+      const isPickup = url.endsWith('/pickup');
+      assert.equal(body[isPickup ? 'pickupPin' : 'deliveryPin'], pin);
+      return { data: { ok: true, status: isPickup ? 'PICKED_UP' : 'DELIVERED',
+        orderStatusUpdate: isPickup ? 'ON_THE_WAY' : 'DELIVERED' } };
+    });
+    const first = await h.dispatch.confirmPickupPin('c1', 't1', ` ${pin} `);
+    const second = await h.dispatch.confirmDeliveryPin('c1', 't1', ` ${pin} `, 'CASH', true);
+    assert.equal(first.success, true); assert.equal(first.data.orderStatusUpdate, 'ON_THE_WAY');
+    assert.equal(second.success, true); assert.equal(second.data.orderStatusUpdate, 'DELIVERED');
+    assert.equal(h.requests.length, 2); assert.equal(h.offline.queue.length, 0);
+    assert.equal(h.requests[1].data.cashCollected, true);
+  });
+
+  test(`offline PINs: ${pin.length} digits survive enqueue, reload and ordered server replay`, async () => {
+    const h = harness(); h.navigator.onLine = false;
+    h.delivery.setOrders([{ id: 'o1', status: 'PREPARING' }]);
+    const first = await h.dispatch.confirmPickupPin('c1', 't1', ` ${pin} `);
+    const second = await h.dispatch.confirmDeliveryPin('c1', 't1', ` ${pin} `, 'CASH', true);
+    for (const result of [first, second]) {
+      assert.equal(result.success, false); assert.equal(result.queued, true); assert.ok(result.queueId);
+    }
+    assert.equal(h.requests.length, 0); assert.equal(h.delivery.orders[0].status, 'PREPARING');
+    assert.equal(h.offline.queue[0].data.pickupPin, pin); assert.equal(h.offline.queue[1].data.deliveryPin, pin);
+    const reloaded = harness(h.saved);
+    assert.equal(reloaded.offline.getUnsynced().length, 2);
+    await reloaded.sync.performSync();
+    assert.deepEqual(reloaded.requests.map(req => req.url), [`${BASE}/tasks/t1/pickup`, `${BASE}/tasks/t1/deliver`]);
+    assert.equal(reloaded.requests[0].data.pickupPin, pin); assert.equal(reloaded.requests[1].data.deliveryPin, pin);
+    assert.equal(reloaded.requests[0].config.headers['Idempotency-Key'], first.queueId);
+    assert.equal(reloaded.requests[1].config.headers['Idempotency-Key'], second.queueId);
+    assert.equal(reloaded.requests[1].data.cashCollected, true);
+    assert.equal(reloaded.offline.queue.length, 0);
+    assert.ok(!reloaded.saved.get('delivery-offline-storage').includes(pin));
+  });
+
+  test(`network fallback: ${pin.length}-digit PINs enqueue after a failed online request`, async () => {
+    const h = harness(); h.post(async () => { throw Object.assign(new Error('Lost connection'), { code: 'ERR_NETWORK' }); });
+    const first = await h.dispatch.confirmPickupPin('c1', 't1', pin);
+    const second = await h.dispatch.confirmDeliveryPin('c1', 't1', pin);
+    assert.equal(first.queued, true); assert.equal(second.queued, true);
+    assert.equal(first.success, false); assert.equal(second.success, false);
+    assert.equal(h.requests.length, 2); assert.equal(h.offline.queue.length, 2);
+    assert.equal(h.offline.queue[0].data.pickupPin, pin); assert.equal(h.offline.queue[1].data.deliveryPin, pin);
+  });
+}
 
 test('pickup: only server acknowledgement confirms the PIN and ON_THE_WAY result', async () => {
   const h = harness();

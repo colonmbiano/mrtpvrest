@@ -21,24 +21,24 @@ export function PinVerificationModal({
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const isPinValid = /^\d{4,6}$/.test(pin);
 
   const isPickup = type === 'PICKUP';
   const title = isPickup ? 'Confirmar Recolección' : 'Confirmar Entrega';
   const subtitle = isPickup
-    ? `Solicita el PIN de 4 dígitos en ${targetName}`
-    : `Solicita el PIN de 4 dígitos a ${targetName}`;
+    ? `Solicita el PIN de 4 a 6 dígitos en ${targetName}`
+    : `Solicita el PIN de 4 a 6 dígitos a ${targetName}`;
 
   const handleDigit = (digit: string) => {
-    if (loading || pin.length >= 4) return;
+    if (loading || !/^\d$/.test(digit)) return;
     setErrorMsg('');
-    const newPin = pin + digit;
-    setPin(newPin);
+    setPin(current => current.length >= 6 ? current : current + digit);
   };
 
   const handleDelete = () => {
     if (loading || pin.length === 0) return;
     setErrorMsg('');
-    setPin(pin.slice(0, -1));
+    setPin(current => current.slice(0, -1));
   };
 
   const handleClear = () => {
@@ -48,7 +48,7 @@ export function PinVerificationModal({
   };
 
   const handleSubmit = async () => {
-    if (pin.length !== 4 || loading) return;
+    if (!isPinValid || loading) return;
     setLoading(true);
     setErrorMsg('');
     try {
@@ -132,20 +132,21 @@ export function PinVerificationModal({
         {/* Cajas de dígitos del PIN */}
         <div
           style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: 14,
-            margin: '28px 0 10px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+            gap: 8,
+            width: '100%',
+            maxWidth: 360,
+            margin: '28px auto 10px',
           }}
         >
-          {[0, 1, 2, 3].map((index) => {
+          {[0, 1, 2, 3, 4, 5].map((index) => {
             const digit = pin[index];
             const isFilled = digit !== undefined;
             return (
               <div
                 key={index}
                 style={{
-                  width: 58,
                   height: 68,
                   borderRadius: 16,
                   background: isFilled ? 'rgba(255, 184, 77, 0.12)' : 'rgba(255, 255, 255, 0.04)',
@@ -230,21 +231,21 @@ export function PinVerificationModal({
         {/* Botón de confirmación */}
         <button
           onClick={handleSubmit}
-          disabled={pin.length !== 4 || loading}
+          disabled={!isPinValid || loading}
           style={{
             width: '100%',
             height: 64,
             borderRadius: 20,
-            background: pin.length === 4 ? (isPickup ? C.amber : C.green) : 'rgba(255, 255, 255, 0.1)',
+            background: isPinValid ? (isPickup ? C.amber : C.green) : 'rgba(255, 255, 255, 0.1)',
             border: 'none',
-            color: pin.length === 4 ? '#090909' : 'rgba(255, 255, 255, 0.3)',
+            color: isPinValid ? '#090909' : 'rgba(255, 255, 255, 0.3)',
             fontSize: 13,
             fontWeight: 800,
             letterSpacing: '0.14em',
             textTransform: 'uppercase',
-            cursor: pin.length === 4 && !loading ? 'pointer' : 'not-allowed',
+            cursor: isPinValid && !loading ? 'pointer' : 'not-allowed',
             boxShadow:
-              pin.length === 4
+              isPinValid
                 ? `0 10px 30px ${isPickup ? 'rgba(255, 184, 77, 0.35)' : 'rgba(136, 214, 108, 0.35)'}`
                 : 'none',
             transition: 'all 0.2s ease',
