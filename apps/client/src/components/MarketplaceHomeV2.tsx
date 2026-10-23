@@ -2,8 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight, Bike, ChevronLeft, ChevronRight, Clock3, Heart,
-  LayoutGrid, MapPin, Menu, PackageCheck, Search, ShoppingBag,
-  Sparkles, Store, Tag, Truck, UserRound,
+  LayoutGrid, MapPin, Menu, Search, ShoppingBag, Store, Tag, Truck,
 } from 'lucide-react';
 import ScrollToHash from '@/components/ScrollToHash';
 import { productEmoji } from '@/lib/productEmoji';
@@ -86,7 +85,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated }:
                 <MapPin className="h-4 w-4 text-[#f05c25]" aria-hidden="true" />
                 Tiendas locales
               </a>
-              <SearchForm state={state} compact />
+              <SearchForm state={state} inputId="search-desktop" />
             </div>
 
             <nav aria-label="Accesos principales" className="flex items-center gap-2 sm:gap-5">
@@ -103,7 +102,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated }:
           </div>
 
           <div className="pb-3 md:hidden">
-            <SearchForm state={state} compact />
+            <SearchForm state={state} inputId="search-mobile" />
           </div>
 
           <nav aria-label="Categorías de negocios" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-3 sm:-mx-6 sm:px-6">
@@ -242,12 +241,12 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated }:
   );
 }
 
-function SearchForm({ state, compact }: { state: CatalogState; compact?: boolean }) {
-  return <form method="get" action="/" role="search" aria-label="Buscar tiendas y productos" className={'flex min-w-0 flex-1 items-stretch gap-2 ' + (compact ? '' : 'flex-col')}>
-    <label htmlFor={compact ? 'marketplace-search' : 'marketplace-search-full'} className="sr-only">Buscar tiendas o productos</label>
+function SearchForm({ state, inputId }: { state: CatalogState; inputId: string }) {
+  return <form method="get" action="/" role="search" aria-label="Buscar tiendas y productos" className="flex min-w-0 flex-1 items-stretch gap-2">
+    <label htmlFor={inputId} className="sr-only">Buscar tiendas o productos</label>
     <div className="relative min-w-0 flex-1">
       <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#87968b]" aria-hidden="true" />
-      <input id={compact ? 'marketplace-search' : 'marketplace-search-full'} name="q" type="search" maxLength={MAX_QUERY_LENGTH}
+      <input id={inputId} name="q" type="search" maxLength={MAX_QUERY_LENGTH}
         defaultValue={state.q} placeholder="Buscar productos, tiendas o categorías..."
         className={'h-11 w-full rounded-xl border border-[#e3e8e4] bg-[#f7f8f7] pl-12 pr-3 text-base text-[#273d31] placeholder:text-[#9ca7a0] md:h-12 ' + focus} />
     </div>
