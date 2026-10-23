@@ -265,7 +265,7 @@ export default async function StorefrontPage({
       {theme === 'ANTOJITOS' && <AntojitosTheme data={data} />}
 
       {/* Rehidrata el carrito si la URL trae ?cart= (deep-link compartible). */}
-      <CartDeepLinkLoader products={allItems} />
+      <CartDeepLinkLoader products={allItems} slug={slug} />
 
       {/* PWA — banner flotante de instalación con branding del tenant */}
       <InstallPWABanner

@@ -327,3 +327,75 @@ test('nuevos tipos de negocio: HARDWARE y AUTOPARTS', () => {
   const storeLink = storeHref(hardwareStore.slug);
   assert.equal(storeLink, '/ferreteria-1');
 });
+
+// ── Catálogo v1 y alcance mono-tienda del carrito ─────────────────────────────
+import { storeFromV1, fetchV1Stores, V1_MERCHANTS_LIMIT } from '../src/lib/marketplace.ts';
+import { bindCartToStore } from '../src/lib/cartScope.ts';
+
+const v1Item = (over = {}) => ({ slug: 'taqueria-centro', name: 'Taqueria Centro', categories: ['RESTAURANT', 'TACOS'],
+  open: true, estimatedReadyMinutes: 20, minOrder: '50.00', ...over });
+const v1Json = items => new Response(JSON.stringify({ items, total: items.length, limit: V1_MERCHANTS_LIMIT }),
+  { status: 200, headers: { 'content-type': 'application/json' } });
+const catalogState = (over = {}) => ({ q: '', type: '', store: '', storesPage: 1, productsPage: 1, ...over });
+
+test('v1 merchant maps to the store summary and needs a known business type', () => {
+  assert.deepEqual(storeFromV1(v1Item()), { slug: 'taqueria-centro', name: 'Taqueria Centro', businessType: 'RESTAURANT',
+    isOpen: true, closedMessage: null, estimatedDelivery: 20, deliveryFee: null, freeDeliveryFrom: null, minOrderAmount: 50 });
+  assert.equal(storeFromV1(v1Item({ categories: ['TACOS'] })), null);
+  assert.equal(storeFromV1(v1Item({ slug: 'Bad Slug' })), null);
+  assert.equal(storeFromV1(v1Item({ minOrder: 50 })).minOrderAmount, null, 'money must arrive as a decimal string');
+  assert.equal(storeFromV1(v1Item({ estimatedReadyMinutes: null })).estimatedDelivery, null);
+});
+
+test('fetchV1Stores calls the v1 merchants endpoint with the server limit and category', async () => {
+  let url = '';
+  const result = await fetchV1Stores('https://api.example', catalogState({ type: 'HARDWARE' }),
+    { fetchImpl: async u => { url = u; return v1Json([]); } });
+  assert.equal(url, `https://api.example/api/marketplace/v1/merchants?limit=${V1_MERCHANTS_LIMIT}&category=HARDWARE`);
+  assert.equal(result.status, 'ok');
+});
+
+test('fetchV1Stores applies text search and pagination on the client', async () => {
+  const items = Array.from({ length: 15 }, (_, i) => v1Item({ slug: `tienda-${i}`, name: `Tienda ${i}` }));
+  items.push(v1Item({ slug: 'otra', name: 'Panaderia Sol' }));
+  const first = await fetchV1Stores('https://api.example', catalogState(), { fetchImpl: async () => v1Json(items) });
+  assert.equal(first.data.items.length, 12);
+  assert.equal(first.data.total, 16);
+  const second = await fetchV1Stores('https://api.example', catalogState({ storesPage: 2 }), { fetchImpl: async () => v1Json(items) });
+  assert.equal(second.data.items.length, 4);
+  const search = await fetchV1Stores('https://api.example', catalogState({ q: 'sol' }), { fetchImpl: async () => v1Json(items) });
+  assert.deepEqual(search.data.items.map(s => s.slug), ['otra']);
+});
+
+test('fetchV1Stores maps 400, 5xx, malformed and missing config to section errors', async () => {
+  assert.deepEqual(await fetchV1Stores(null, catalogState()), { status: 'error', reason: 'config' });
+  const reason = async fetchImpl => (await fetchV1Stores('https://a', catalogState(), { fetchImpl })).reason;
+  assert.equal(await reason(async () => new Response('{}', { status: 400 })), 'invalid');
+  assert.equal(await reason(async () => new Response('{}', { status: 503 })), 'unavailable');
+  assert.equal(await reason(async () => new Response('{"x":1}', { status: 200 })), 'unavailable');
+  assert.equal(await reason(async () => { throw new Error('network'); }), 'unavailable');
+});
+
+test('loadCatalog uses the v1 stores source only when asked and keeps the products section', async () => {
+  const urls = [];
+  const fetchImpl = async u => {
+    urls.push(u);
+    return u.includes('/api/marketplace/v1/merchants') ? v1Json([])
+      : new Response(JSON.stringify({ items: [], page: 1, pageSize: 12, total: 0 }), { status: 200 });
+  };
+  await loadCatalog('https://a', catalogState(), false, { fetchImpl, storesSource: 'v1' });
+  assert.ok(urls.some(u => u.includes('/api/marketplace/v1/merchants?')));
+  assert.ok(urls.some(u => u.includes('/api/marketplace/products?')), 'products stay on the legacy API');
+  urls.length = 0;
+  await loadCatalog('https://a', catalogState(), false, { fetchImpl });
+  assert.ok(urls.some(u => u.includes('/api/marketplace/stores?')));
+  assert.equal(urls.some(u => u.includes('/v1/')), false);
+});
+
+test('bindCartToStore keeps lines for the same or an unbound cart and drops them when the store changes', () => {
+  assert.deepEqual(bindCartToStore(null, 'tienda-a'), { storeSlug: 'tienda-a', clearLines: false });
+  assert.deepEqual(bindCartToStore('tienda-a', 'tienda-a'), { storeSlug: 'tienda-a', clearLines: false });
+  assert.deepEqual(bindCartToStore('tienda-a', 'tienda-b'), { storeSlug: 'tienda-b', clearLines: true });
+  assert.throws(() => bindCartToStore('tienda-a', 'Tienda B'), /invalido/);
+  assert.throws(() => bindCartToStore('tienda-a', ''), /invalido/);
+});

@@ -28,7 +28,9 @@ export default async function RootPage({
   }
 
   const { state, queryTooLong } = parseCatalogParams(await searchParams);
-  const { stores, products } = await loadCatalog(getMarketplaceApiUrl(), state, queryTooLong);
+  // Tiendas desde la API v1 solo con la bandera activa; por defecto, la API legacy.
+  const storesSource = process.env.NEXT_PUBLIC_MARKETPLACE_STORES_V1 === 'true' ? 'v1' : 'legacy';
+  const { stores, products } = await loadCatalog(getMarketplaceApiUrl(), state, queryTooLong, { storesSource });
 
   return (
     <MarketplaceCatalog

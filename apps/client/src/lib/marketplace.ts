@@ -239,20 +239,78 @@ export async function loadCatalog(
   apiUrl: string | null,
   state: CatalogState,
   queryTooLong: boolean,
-  options?: { fetchImpl?: FetchLike; timeoutMs?: number },
+  options?: { fetchImpl?: FetchLike; timeoutMs?: number; storesSource?: 'legacy' | 'v1' },
 ): Promise<{ stores: SectionResult<StoreSummary>; products: SectionResult<ProductSummary> }> {
   if (queryTooLong) {
     const invalid = { status: 'error', reason: 'invalid' } as const;
     return { stores: invalid, products: invalid };
   }
   // El filtro de tipo solo aplica a tiendas y el de tienda solo a productos.
-  const [stores, products] = await Promise.all([
-    fetchCatalogSection(apiUrl, 'stores',
+  // Tiendas: legacy por defecto; 'v1' usa /api/marketplace/v1/merchants.
+  const storesRequest = options?.storesSource === 'v1'
+    ? fetchV1Stores(apiUrl, state, options)
+    : fetchCatalogSection(apiUrl, 'stores',
       { q: state.q, businessType: state.type, page: state.storesPage, pageSize: PAGE_SIZE },
-      isStoreSummary, options),
+      isStoreSummary, options);
+  const [stores, products] = await Promise.all([
+    storesRequest,
     fetchCatalogSection(apiUrl, 'products',
       { q: state.q, store: state.store, page: state.productsPage, pageSize: PAGE_SIZE },
       isProductSummary, options),
   ]);
   return { stores, products };
+}
+
+// Descubrimiento v1 (/api/marketplace/v1/merchants). El contrato v1 no tiene búsqueda
+// de texto ni paginación por página: pide hasta el máximo del servidor y el texto y
+// la página se aplican aquí. Por eso solo ve los primeros V1_MERCHANTS_LIMIT comercios.
+export const V1_MERCHANTS_LIMIT = 50;
+const V1_BUSINESS_TYPES: ReadonlySet<string> = new Set(Object.keys(BUSINESS_TYPE_LABELS));
+
+// Traduce un comercio v1 a la forma de tienda del catálogo. Sin tipo de negocio
+// reconocible o con datos fuera de contrato, el comercio se omite.
+export function storeFromV1(item: unknown): StoreSummary | null {
+  if (!isRecord(item) || !isValidSlug(item.slug) || typeof item.name !== 'string' || typeof item.open !== 'boolean') return null;
+  const categories = Array.isArray(item.categories) ? item.categories : [];
+  const businessType = categories.find((c): c is BusinessType => typeof c === 'string' && V1_BUSINESS_TYPES.has(c));
+  if (!businessType) return null;
+  const minOrder = typeof item.minOrder === 'string' && /^\d+(?:\.\d{2})?$/.test(item.minOrder) ? Number(item.minOrder) : null;
+  const eta = Number.isInteger(item.estimatedReadyMinutes) && (item.estimatedReadyMinutes as number) > 0
+    ? item.estimatedReadyMinutes as number : null;
+  return { slug: item.slug, name: item.name, businessType, isOpen: item.open, closedMessage: null,
+    estimatedDelivery: eta,
+    // La tarifa v1 depende de la zona y la dirección: no se promete aquí (null).
+    deliveryFee: null, freeDeliveryFrom: null, minOrderAmount: minOrder };
+}
+
+function paginateStores(stores: StoreSummary[], state: CatalogState): CatalogPage<StoreSummary> {
+  const needle = state.q.toLocaleLowerCase();
+  const matches = stores.filter(store => !needle || store.name.toLocaleLowerCase().includes(needle));
+  const start = (state.storesPage - 1) * PAGE_SIZE;
+  return { items: matches.slice(start, start + PAGE_SIZE), page: state.storesPage, pageSize: PAGE_SIZE, total: matches.length };
+}
+
+export async function fetchV1Stores(
+  apiUrl: string | null,
+  state: CatalogState,
+  { fetchImpl = fetch, timeoutMs = 8000 }: { fetchImpl?: FetchLike; timeoutMs?: number } = {},
+): Promise<SectionResult<StoreSummary>> {
+  if (!apiUrl) return { status: 'error', reason: 'config' };
+  const params = new URLSearchParams({ limit: String(V1_MERCHANTS_LIMIT) });
+  if (state.type) params.set('category', state.type);
+  try {
+    const res = await fetchImpl(`${apiUrl}/api/marketplace/v1/merchants?${params.toString()}`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (res.status === 400) return { status: 'error', reason: 'invalid' };
+    if (!res.ok) return { status: 'error', reason: 'unavailable' };
+    const json: unknown = await res.json();
+    if (!isRecord(json) || !Array.isArray(json.items)) return { status: 'error', reason: 'unavailable' };
+    const stores = json.items.map(storeFromV1).filter((s): s is StoreSummary => s !== null);
+    return { status: 'ok', data: paginateStores(stores, state) };
+  } catch {
+    return { status: 'error', reason: 'unavailable' };
+  }
 }

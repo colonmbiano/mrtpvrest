@@ -383,3 +383,84 @@ test('completeness: marketplace split requerido para checkout online', () => {
     assert.ok(collectorId.length > 0);
   }
 });
+
+// ── Checkout v1 (cotización + orquestador) y carrito mono-tienda ──────────────
+import {
+  unsupportedReason, buildQuoteBody, buildOrderBody, checkCustomer, requestQuote, placeOrder, newIdempotencyKey,
+} from '../src/lib/marketplaceV1Checkout.ts';
+
+
+const cartLine = (over = {}) => ({ id: 'k1', menuItemId: 'burger', name: 'Hamburguesa', price: 100, quantity: 2,
+  variantId: null, modifierIds: [], ...over });
+const KEY = 'checkout-key-0123456789abcdef0123456789';
+const jsonResponse = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+test('carts with variants, modifiers or combos cannot be quoted in v1', () => {
+  assert.equal(unsupportedReason([cartLine()]), null);
+  assert.match(unsupportedReason([cartLine({ variantId: 'xl' })]), /variante/);
+  assert.match(unsupportedReason([cartLine({ modifierIds: ['queso'] })]), /modificadores/);
+  assert.match(unsupportedReason([cartLine({ comboSelections: [{ componentId: 'c', optionId: 'o' }] })]), /combo/);
+  assert.match(unsupportedReason([cartLine({ menuItemId: '' })]), /identificador/);
+});
+
+test('the quote body sends ids, quantities and empty modifiers; delivery needs an address, pickup omits it', () => {
+  const delivery = buildQuoteBody({ merchantId: 'm1', lines: [cartLine()], fulfillment: 'DELIVERY', deliveryAddressId: 'addr-1' });
+  assert.deepEqual(delivery, { merchantId: 'm1', fulfillment: 'DELIVERY', deliveryAddressId: 'addr-1',
+    items: [{ menuItemId: 'burger', quantity: 2, modifiers: [] }] });
+  const pickup = buildQuoteBody({ merchantId: 'm1', lines: [cartLine()], fulfillment: 'PICKUP', deliveryAddressId: 'addr-1' });
+  assert.equal('deliveryAddressId' in pickup, false);
+});
+
+test('the order body carries only the quote, payment, customer and notes', () => {
+  const body = buildOrderBody({ quoteId: 'q1', fulfillment: 'PICKUP', paymentMethod: 'CASH',
+    customer: { name: 'Ana', phone: '5512345678' }, notes: 'Sin cebolla' });
+  assert.deepEqual(body, { quoteId: 'q1', paymentMethod: 'CASH', customer: { name: 'Ana', phone: '5512345678' }, notes: 'Sin cebolla' });
+  assert.equal('total' in body, false, 'the client never sends money');
+});
+
+test('customer checks reject blank names, short phones and bad emails', () => {
+  assert.equal(checkCustomer({ name: 'Ana', phone: '5512345678' }), null);
+  assert.match(checkCustomer({ name: '  ', phone: '5512345678' }), /nombre/);
+  assert.match(checkCustomer({ name: 'Ana', phone: '123' }), /tel/);
+  assert.match(checkCustomer({ name: 'Ana', phone: '5512345678', email: 'nope' }), /correo/);
+});
+
+test('requestQuote sends the idempotency key and parses the server quote', async () => {
+  let sent;
+  const result = await requestQuote('https://api.example', { merchantId: 'm1' }, KEY, async (url, init) => {
+    sent = { url, init };
+    return jsonResponse({ quoteId: 'q1', expiresAt: '2026-10-23T12:05:00.000Z', total: '100.02' }, 201);
+  });
+  assert.equal(sent.url, 'https://api.example/api/marketplace/v1/quotes');
+  assert.equal(sent.init.method, 'POST');
+  assert.equal(sent.init.headers['Idempotency-Key'], KEY);
+  assert.deepEqual(result, { quoteId: 'q1', expiresAt: '2026-10-23T12:05:00.000Z', total: '100.02' });
+});
+
+test('a 401 or 4xx from the server is a rejection carrying the server message', async () => {
+  const result = await requestQuote('https://api.example', {}, KEY,
+    async () => jsonResponse({ error: 'Cuenta requerida', errorCode: 'UNAUTHENTICATED' }, 401));
+  assert.deepEqual(result, { ok: false, reason: 'rejected', message: 'Cuenta requerida' });
+});
+
+test('server 5xx and network errors are unavailable, and a missing api url is a config failure', async () => {
+  assert.equal((await requestQuote('https://api.example', {}, KEY, async () => new Response('x', { status: 503 }))).reason, 'unavailable');
+  assert.equal((await requestQuote('https://api.example', {}, KEY, async () => { throw new Error('offline'); })).reason, 'unavailable');
+  assert.equal((await placeOrder(null, {}, KEY)).reason, 'config');
+});
+
+test('an invalid idempotency key is refused before any request', async () => {
+  let called = false;
+  const result = await placeOrder('https://api.example', {}, 'short', async () => { called = true; return jsonResponse({}); });
+  assert.equal(result.reason, 'rejected');
+  assert.equal(called, false);
+  assert.match(newIdempotencyKey(), /^[A-Za-z0-9_-]{32,128}$/);
+});
+
+test('placeOrder parses the order and the idempotent flag; malformed responses are unavailable', async () => {
+  const ok = await placeOrder('https://api.example', {}, KEY,
+    async () => jsonResponse({ orderId: 'o1', quoteId: 'q1', idempotent: true }, 200));
+  assert.deepEqual(ok, { orderId: 'o1', quoteId: 'q1', idempotent: true });
+  const bad = await placeOrder('https://api.example', {}, KEY, async () => jsonResponse({ quoteId: 'q1' }, 201));
+  assert.equal(bad.reason, 'unavailable');
+});
