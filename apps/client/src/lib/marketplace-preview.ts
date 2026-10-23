@@ -15,6 +15,11 @@ const base: Omit<StoreSummary, 'slug' | 'name' | 'businessType'> = {
 };
 
 const demoStores: StoreSummary[] = [
+  // Negocios existentes que el usuario eligió destacar en la demostración.
+  // Solo se muestra su identidad pública; NO cargamos inventario, precios,
+  // horarios, productos ni pedidos de sus bases de datos reales.
+  { ...base, slug: 'master-burguer-s', name: "Master Burguer’s", businessType: 'RESTAURANT' },
+  { ...base, slug: 'tokki-bobba', name: 'Tokki Boba', businessType: 'RESTAURANT' },
   { ...base, slug: 'demo-hamburguesas', name: 'Hamburguesas Demo', businessType: 'RESTAURANT' },
   { ...base, slug: 'demo-super', name: 'Súper La Esquina · Demo', businessType: 'GROCERY' },
   { ...base, slug: 'demo-cafe', name: 'Cafecito Local · Demo', businessType: 'RESTAURANT' },
