@@ -191,3 +191,39 @@ test('verified buyers may request merchant profile without a duplicate global ac
   const list=await x.service.listApplications();
   assert.equal(list.applications.length,1);
 });
+
+test('HTTP routes require exact Origin and keep bearer JWT distinct from buyer cookies', async () => {
+  const express = require('express');
+  const request = require('supertest');
+  const { createMarketplaceIdentityRouter } = require('../src/routes/marketplace-identity.routes');
+  const x = fixture();
+  const origin = 'https://marketplace-staging.example.net';
+  const app = express();
+  app.use(express.json());
+  app.use('/api/marketplace/identity', createMarketplaceIdentityRouter({
+    prisma: x.prisma, sendEmail: async (to, subject, html) => x.emails.push({to,subject,html}),
+    origin, captchaCheck: async () => ({ok:true}),
+    authenticateAdmin: (req, res, next) => {
+      if(req.headers.authorization !== 'Bearer valid-superadmin-token') return res.sendStatus(401);
+      req.user={ id:'superadmin-1', role:'SUPER_ADMIN' }; next();
+    },
+  }));
+  const path='/api/marketplace/identity';
+  assert.equal((await request(app).post(path+'/register').send(buyer)).status,403);
+  assert.equal((await request(app).post(path+'/register').set('Origin',origin).send(buyer)).status,202);
+  assert.equal(x.accounts.length,1);
+  const raw=extractToken(x.emails[0].html);
+  assert.equal((await request(app).post(path+'/verify-email').set('Origin',origin).send({token:raw})).status,200);
+  const login=await request(app).post(path+'/login').set('Origin',origin).send({email:buyer.email,password:buyer.password});
+  assert.equal(login.status,200);
+  assert.ok(!JSON.stringify(login.body).includes('token'));
+  const rawCookie=login.headers['set-cookie']?.[0];
+  assert.match(rawCookie, /HttpOnly/);
+  assert.match(rawCookie, /Secure/);
+  assert.match(rawCookie, /SameSite=Strict/);
+  assert.equal((await request(app).get(path+'/me').set('Cookie',rawCookie)).status,200);
+  assert.equal((await request(app).get(path+'/admin/applications')).status,401);
+  assert.equal((await request(app).get(path+'/admin/applications').set('Authorization','Bearer valid-superadmin-token')).status,200);
+  assert.equal((await request(app).post(path+'/logout').set('Origin',origin).set('Cookie',rawCookie)).status,200);
+  assert.equal((await request(app).get(path+'/me').set('Cookie',rawCookie)).status,401);
+});
