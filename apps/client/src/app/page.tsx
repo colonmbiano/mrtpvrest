@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import MarketplaceCatalog from "@/components/MarketplaceCatalog";
+import MarketplaceHomeV2 from "@/components/MarketplaceHomeV2";
 import { getMarketplaceApiUrl, isMarketplaceCatalogEnabled, isMarketplaceIsolated } from "@/lib/config";
 import { loadCatalog, parseCatalogParams } from "@/lib/marketplace";
 
@@ -31,7 +31,7 @@ export default async function RootPage({
   const { stores, products } = await loadCatalog(getMarketplaceApiUrl(), state, queryTooLong);
 
   return (
-    <MarketplaceCatalog
+    <MarketplaceHomeV2
       state={state}
       stores={stores}
       products={products}
