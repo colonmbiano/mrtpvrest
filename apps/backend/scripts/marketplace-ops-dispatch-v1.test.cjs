@@ -368,10 +368,12 @@ test('HTTP routes register the exact Ops paths and set no-store on every result'
   for (const res of [list, reassigned, approved]) assert.equal(res.headers['cache-control'], 'no-store');
 });
 
-test('HTTP default actor resolution ignores client roles and staff req.user', async () => {
+test('HTTP default actor resolution accepts middleware staff and ignores client roles', async () => {
   const f = fixture(); const api = http(f, { resolveActor: undefined });
-  const res = await api.request('POST', '/dispatch/tasks/:id/reassign', { user: ADMIN, body: { reason: REASON, role: 'SUPER_ADMIN' }, query: { role: 'SUPER_ADMIN' } });
-  assert.equal(res.statusCode, 401); assert.equal(res.body.errorCode, 'UNAUTHENTICATED'); assert.equal(f.calls.length, 0);
+  const denied = await api.request('GET', '/dispatch', { body: { role: 'SUPER_ADMIN' }, query: { role: 'SUPER_ADMIN' } });
+  assert.equal(denied.statusCode, 401); assert.equal(denied.body.errorCode, 'UNAUTHENTICATED'); assert.equal(f.calls.length, 0);
+  const res = await api.request('POST', '/dispatch/tasks/:id/reassign', { user: ADMIN, body: { reason: REASON } });
+  assert.equal(res.statusCode, 200); assert.equal(f.state.tasks.get('t1').auditTrail.at(-1).actorId, ADMIN.id);
 });
 
 test('HTTP reports 403, 404, 409, 422 and generic 503 without leaking adapter details', async () => {

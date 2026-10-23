@@ -5,7 +5,7 @@
  * scripts/test-marketplace-all.mjs
  *
  * Suite maestra ejecutadora de todas las pruebas del marketplace piloto.
- * Ejecuta 27 suites de forma secuencial, valida schemas y verifica TODOs.
+ * Ejecuta las suites de forma secuencial, valida schemas y verifica TODOs.
  *
  * Uso: node scripts/test-marketplace-all.mjs
  */
@@ -69,6 +69,7 @@ const TESTS = [
   { path: 'apps/backend/scripts/marketplace-webhooks-v1.test.cjs', name: 'Backend: Webhook Durable de Mercado Pago v1' },
   { path: 'apps/backend/scripts/marketplace-ops-dispatch-v1.test.cjs', name: 'Backend: Panel Ops de Despacho & Reasignación v1' },
   { path: 'apps/backend/scripts/marketplace-settlements-v1.test.cjs', name: 'Backend: Liquidaciones & Reembolsos en Partida Doble v1' },
+  { path: 'apps/backend/scripts/marketplace-staff-identity.test.cjs', name: 'Backend: Identidad Staff & JWT HS256' },
   { path: 'apps/backend/scripts/runtime-policy.test.cjs', name: 'Backend: Runtime Policy & Tenant Guard' },
 
   // ── INTEGRACIÓN MAESTRA & AISLAMIENTO ──
