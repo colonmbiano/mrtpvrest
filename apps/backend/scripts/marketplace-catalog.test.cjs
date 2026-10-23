@@ -134,6 +134,12 @@ test('query rules reject structured, duplicate, out-of-range and malformed value
   assert.equal(parseQuery({ q: ' '.repeat(90), store: '' }, 'products').q, '');
 });
 
+test('hardware and autoparts remain valid marketplace store filters', () => {
+  for (const businessType of ['HARDWARE', 'AUTOPARTS']) {
+    assert.equal(parseQuery({ businessType }, 'stores').businessType, businessType);
+  }
+});
+
 test('stores exclude private, inactive, non-web and demo tenants with explicit public projection', async () => {
   const { catalog } = catalogFixture();
   assert.deepEqual(await catalog.listStores({}), { page: 1, pageSize: 12, total: 2, items: [
