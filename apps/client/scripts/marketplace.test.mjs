@@ -21,8 +21,9 @@ import {
 } from '../src/lib/marketplace.ts';
 import {
   BLOCKED_API_URL, getApiUrl, getMarketplaceApiUrl, getStorePublicUrl,
-  isMarketplaceCatalogEnabled, parseOrigin,
+  isMarketplaceCatalogEnabled, isMarketplacePreviewDemo, parseOrigin,
 } from '../src/lib/config.ts';
+import { loadPreviewCatalog } from '../src/lib/marketplace-preview.ts';
 
 const API = 'http://127.0.0.1:4100';
 const STORE = { slug: 'tienda-a', name: 'Tienda A', businessType: 'RESTAURANT', isOpen: true, closedMessage: null,
@@ -46,7 +47,7 @@ function recordingFetch(handler) {
 
 function withEnv(vars, fn) {
   const keys = ['NEXT_PUBLIC_MARKETPLACE_ISOLATED', 'NEXT_PUBLIC_MARKETPLACE_CATALOG', 'NEXT_PUBLIC_API_URL',
-    'API_URL', 'NEXT_PUBLIC_SITE_URL', 'NODE_ENV'];
+    'API_URL', 'NEXT_PUBLIC_SITE_URL', 'NODE_ENV', 'VERCEL_ENV', 'VERCEL_GIT_COMMIT_REF'];
   const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   for (const key of keys) delete process.env[key];
   Object.assign(process.env, vars);
@@ -243,6 +244,43 @@ test('parseOrigin: origen exacto; https fuera de loopback', () => {
   for (const bad of ['http://127.0.0.1:4100/api', 'http://u:p@127.0.0.1', 'http://127.0.0.1?x=1', 'ftp://127.0.0.1', 'nope', undefined]) {
     assert.equal(parseOrigin(bad, { loopbackOnly: false }), null, String(bad));
   }
+});
+
+test('Vercel Preview de la rama Marketplace habilita solo demo y no producción', () => {
+  withEnv({ VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'feature/marketplace-hibrido' }, () => {
+    assert.equal(isMarketplacePreviewDemo(), true);
+    assert.equal(isMarketplaceCatalogEnabled(), true);
+    assert.equal(getMarketplaceApiUrl(), null);
+    const result = loadPreviewCatalog(base, false);
+    assert.equal(result.stores.status, 'ok');
+    assert.equal(result.products.status, 'ok');
+    assert.ok(result.stores.data.items.length > 0);
+    assert.ok(result.products.data.items.every(p => p.store.slug.startsWith('demo-')));
+  });
+  for (const vars of [
+    { VERCEL_ENV: 'production', VERCEL_GIT_COMMIT_REF: 'feature/marketplace-hibrido' },
+    { VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'master' },
+    { VERCEL_ENV: 'preview' },
+  ]) withEnv(vars, () => {
+    assert.equal(isMarketplacePreviewDemo(), false);
+    assert.equal(isMarketplaceCatalogEnabled(), false);
+  });
+});
+
+test('demo de portada respeta búsqueda, giro, tienda y página sin tocar la API', () => {
+  const noResults = loadPreviewCatalog({ ...base, q: 'esta tienda no existe' }, false);
+  assert.equal(noResults.stores.data.total, 0);
+  assert.equal(noResults.products.data.total, 0);
+  const hardware = loadPreviewCatalog({ ...base, type: 'HARDWARE' }, false);
+  assert.equal(hardware.stores.data.items.length, 1);
+  assert.equal(hardware.stores.data.items[0].businessType, 'HARDWARE');
+  const filtered = loadPreviewCatalog({ ...base, store: 'demo-hamburguesas' }, false);
+  assert.ok(filtered.products.data.items.length > 0);
+  assert.ok(filtered.products.data.items.every(p => p.store.slug === 'demo-hamburguesas'));
+  const paged = loadPreviewCatalog({ ...base, storesPage: 2 }, false);
+  assert.equal(paged.stores.data.items.length, 0);
+  assert.ok(paged.stores.data.total > 0);
+  assert.equal(loadPreviewCatalog(base, true).stores.status, 'error');
 });
 
 test('modo aislado: nunca usa producción; sin config apunta al destino bloqueado', () => {
