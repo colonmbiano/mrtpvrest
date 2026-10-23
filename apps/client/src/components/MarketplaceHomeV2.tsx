@@ -318,22 +318,35 @@ function StoreCard({ store, state, previewDemo }: { store: StoreSummary; state: 
   const href = storeHref(store.slug);
   const eta = etaWindow(store.estimatedDelivery);
   const hasFee = store.deliveryFee !== null;
-  return <li className="min-w-0 rounded-[1.25rem] border border-[#e8eee9] bg-white p-3 shadow-[0_7px_18px_rgba(34,54,42,.05)] transition hover:-translate-y-0.5 hover:shadow-lg sm:p-4">
+  const previewMaster = previewDemo && store.slug === 'master-burguer-s';
+  const previewTokki = previewDemo && store.slug === 'tokki-bobba';
+  const featuredPreview = previewMaster || previewTokki;
+  const brandBackdrop: CSSProperties = previewMaster
+    ? { background: 'radial-gradient(circle at 70% 5%, #a94d17 0%, #36251f 45%, #171717 100%)' }
+    : previewTokki
+      ? { background: 'radial-gradient(circle at 80% 15%, #fcebf8 0%, #e4c9ed 52%, #c1e6d9 100%)' }
+      : cardTint(store.slug);
+  const brandGlyph = previewMaster ? '🍔' : previewTokki ? '🐼🧋' : businessEmoji(store.businessType);
+  const subtitle = previewMaster ? 'Hamburguesas, tacos y más' : previewTokki ? 'Bubble tea y bebidas' : BUSINESS_TYPE_LABELS[store.businessType];
+  return <li className={'min-w-0 rounded-[1.25rem] border bg-white p-3 shadow-[0_7px_18px_rgba(34,54,42,.05)] transition hover:-translate-y-0.5 hover:shadow-lg sm:p-4 ' + (featuredPreview ? 'border-[#f8bc91] ring-1 ring-[#ffeee4]' : 'border-[#e8eee9]')}>
     <a href={previewDemo ? '#preview-info' : href ?? '#tiendas'} aria-label={previewDemo ? 'Ver aviso de demostración de ' + store.name : 'Visitar ' + store.name} className={'flex h-full flex-col gap-2.5 ' + focus}>
-      <div className="relative grid aspect-[5/4] place-items-center overflow-hidden rounded-[1rem]" style={cardTint(store.slug)}>
-        <span className="text-6xl drop-shadow-xl" aria-hidden="true">{businessEmoji(store.businessType)}</span>
+      <div className="relative grid aspect-[5/4] place-items-center overflow-hidden rounded-[1rem]" style={brandBackdrop}>
+        <span className={featuredPreview ? 'text-5xl drop-shadow-xl sm:text-6xl' : 'text-6xl drop-shadow-xl'} aria-hidden="true">{brandGlyph}</span>
+        {featuredPreview && <span className={'absolute right-2 top-2 rounded-full px-2 py-1 text-[10px] font-extrabold ' + (previewMaster ? 'bg-[#fb741e] text-white' : 'bg-white text-[#7f428a]')}>DESTACADO</span>}
         {store.logoUrl && <Image src={store.logoUrl} alt="" fill unoptimized sizes="(max-width: 640px) 50vw, 16vw" className="bg-white object-contain p-3" />}
         <span className={'absolute bottom-2 left-2 rounded-full px-2 py-1 text-[10px] font-extrabold ' + (store.isOpen ? 'bg-white text-[#168045]' : 'bg-[#34443a] text-white')}>{previewDemo ? 'Demostración' : store.isOpen ? 'Disponible' : 'Cerrada'}</span>
       </div>
       <strong className="line-clamp-2 text-sm leading-snug sm:text-base">{store.name}</strong>
-      <span className="text-[11px] font-semibold text-[#7b8b80]">{BUSINESS_TYPE_LABELS[store.businessType]}</span>
+      <span className="text-[11px] font-semibold text-[#7b8b80]">{subtitle}</span>
       <span className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-[#5d7565]">
-        {eta && <span className="inline-flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" />{eta}</span>}
-        <span className="inline-flex items-center gap-1"><Bike className="h-3.5 w-3.5" aria-hidden="true" />{hasFee ? store.deliveryFee === 0 ? 'Gratis' : formatPrice(store.deliveryFee!, 'MXN') : 'Según zona'}</span>
+        {previewDemo ? <span className="inline-flex items-center gap-1 text-[#7c6a48]"><Store className="h-3.5 w-3.5" aria-hidden="true" />Ficha de demostración</span> : <>
+          {eta && <span className="inline-flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" />{eta}</span>}
+          <span className="inline-flex items-center gap-1"><Bike className="h-3.5 w-3.5" aria-hidden="true" />{hasFee ? store.deliveryFee === 0 ? 'Gratis' : formatPrice(store.deliveryFee!, 'MXN') : 'Según zona'}</span>
+        </>}
       </span>
       <span className="mt-1 inline-flex items-center gap-1 text-xs font-extrabold text-[#e75821]">{previewDemo ? 'Solo ejemplo' : 'Ver tienda'} <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
     </a>
-    <a href={catalogHref(state, { store: store.slug, productsPage: 1 }, 'productos')} className={'mt-3 block border-t border-[#edf0ea] pt-2 text-center text-[11px] font-bold text-[#496b54] hover:text-[#d5541f] ' + focus}>Ver sus productos</a>
+    {previewDemo && featuredPreview ? <p className="mt-3 border-t border-[#edf0ea] pt-2 text-center text-[11px] font-semibold text-[#846c54]">Catálogo real aún sin conectar</p> : <a href={catalogHref(state, { store: store.slug, productsPage: 1 }, 'productos')} className={'mt-3 block border-t border-[#edf0ea] pt-2 text-center text-[11px] font-bold text-[#496b54] hover:text-[#d5541f] ' + focus}>Ver sus productos</a>}
   </li>;
 }
 
