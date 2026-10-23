@@ -267,6 +267,36 @@ test('Vercel Preview de la rama Marketplace habilita solo demo y no producción'
   });
 });
 
+test('Master Burguer’s y Tokki Boba aparecen primero como fichas de muestra', () => {
+  const result = loadPreviewCatalog(base, false);
+  assert.equal(result.stores.status, 'ok');
+  if (result.stores.status !== 'ok') return;
+  assert.deepEqual(result.stores.data.items.slice(0, 2).map(s => [s.slug, s.name]), [
+    ['master-burguer-s', 'Master Burguer’s'],
+    ['tokki-bobba', 'Tokki Boba'],
+  ]);
+  const searchMaster = loadPreviewCatalog({ ...base, q: 'master' }, false);
+  const searchTokki = loadPreviewCatalog({ ...base, q: 'tokki' }, false);
+  assert.equal(searchMaster.stores.status, 'ok');
+  assert.equal(searchTokki.stores.status, 'ok');
+  if (searchMaster.stores.status === 'ok' && searchTokki.stores.status === 'ok') {
+    assert.deepEqual(searchMaster.stores.data.items.map(s => s.slug), ['master-burguer-s']);
+    assert.deepEqual(searchTokki.stores.data.items.map(s => s.slug), ['tokki-bobba']);
+  }
+  const restaurantFilter = loadPreviewCatalog({ ...base, type: 'RESTAURANT' }, false);
+  assert.equal(restaurantFilter.stores.status, 'ok');
+  if (restaurantFilter.stores.status === 'ok') {
+    const slugs = restaurantFilter.stores.data.items.map(s => s.slug);
+    assert.ok(slugs.includes('master-burguer-s'));
+    assert.ok(slugs.includes('tokki-bobba'));
+  }
+  // El preview no inventa precios, horario ni productos de estos negocios reales.
+  assert.equal(result.products.status, 'ok');
+  if (result.products.status === 'ok') {
+    assert.ok(!result.products.data.items.some(p => ['master-burguer-s', 'tokki-bobba'].includes(p.store.slug)));
+  }
+});
+
 test('demo de portada respeta búsqueda, giro, tienda y página sin tocar la API', () => {
   const noResults = loadPreviewCatalog({ ...base, q: 'esta tienda no existe' }, false);
   assert.equal(noResults.stores.data.total, 0);
