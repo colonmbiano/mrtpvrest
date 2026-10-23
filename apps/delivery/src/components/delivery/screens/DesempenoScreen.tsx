@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { C, S } from '@/lib/tokens';
+import { PayoutRequestModal } from '../PayoutRequestModal';
 
 interface HistoryOrder {
   id: string;
@@ -14,17 +15,37 @@ interface HistoryOrder {
   updatedAt: string | Date;
 }
 
+interface PayoutRequest {
+  id: string;
+  amount: number;
+  bankAccount: string;
+  accountType: 'CLABE' | 'DEBIT';
+  status: 'PENDING' | 'APPROVED' | 'TRANSFERRED';
+  createdAt: string | Date;
+}
+
 interface DesempenoScreenProps {
   history: HistoryOrder[];
+  payoutHistory?: PayoutRequest[];
   onBack: () => void;
   offline?: boolean;
+  onPayoutRequest?: (data: { amount: number; bankAccount: string; accountType: 'CLABE' | 'DEBIT' }) => Promise<void>;
+  driverId?: string;
 }
 
 const CACHE_KEY = 'delivery:balance:history';
 
-export function DesempenoScreen({ history, onBack, offline = false }: DesempenoScreenProps) {
+export function DesempenoScreen({
+  history,
+  payoutHistory = [],
+  onBack,
+  offline = false,
+  onPayoutRequest,
+  driverId,
+}: DesempenoScreenProps) {
   const [cachedHistory, setCachedHistory] = useState<HistoryOrder[]>(history);
   const [isOffline, setIsOffline] = useState(offline);
+  const [payoutModalOpen, setPayoutModalOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -120,6 +141,13 @@ export function DesempenoScreen({ history, onBack, offline = false }: DesempenoS
               ${todayAvailable.toFixed(2)}
             </div>
             <div style={{ fontSize: 9, color: C.textMuted, marginTop: 4 }}>Pagos con tarjeta y transferencias</div>
+            {todayAvailable > 0 && onPayoutRequest && (
+              <button onClick={() => setPayoutModalOpen(true)} style={{
+                width: '100%', marginTop: 12, height: 38, borderRadius: 10, border: '1px solid rgba(59,130,246,0.3)',
+                background: 'rgba(59,130,246,0.12)', fontSize: 10, fontWeight: 700, color: '#3b82f6',
+                letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: C.fontBody, cursor: 'pointer',
+              }}>Solicitar retiro</button>
+            )}
           </div>
 
           {/* Efectivo Pendiente */}
@@ -184,7 +212,72 @@ export function DesempenoScreen({ history, onBack, offline = false }: DesempenoS
             </div>
           )}
         </div>
+
+        {/* Historial de Retiros */}
+        {payoutHistory && payoutHistory.length > 0 && (
+          <>
+            <div style={S.sectionLabel}>Historial de retiros</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {payoutHistory.map(payout => {
+                const statusColor = payout.status === 'PENDING' ? C.amber : payout.status === 'APPROVED' ? C.iris : C.green;
+                const statusLabel = payout.status === 'PENDING' ? 'Pendiente' : payout.status === 'APPROVED' ? 'Aprobado' : 'Transferido';
+                return (
+                  <div key={payout.id} style={{
+                    background: C.surf1, border: `1px solid ${C.border}`,
+                    borderRadius: 16, padding: '14px 16px',
+                    display: 'flex', flexDirection: 'column', gap: 8,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        <div style={{
+                          width: 38, height: 38, borderRadius: 12, background: `${statusColor}20`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', color: statusColor,
+                          fontSize: 16,
+                        }}>
+                          {payout.status === 'PENDING' ? '⏳' : payout.status === 'APPROVED' ? '✓' : '💰'}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+                            ${payout.amount.toFixed(2)}
+                          </div>
+                          <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
+                            {new Date(payout.createdAt).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: statusColor, textTransform: 'uppercase' }}>
+                          {statusLabel}
+                        </div>
+                        <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
+                          {payout.accountType === 'CLABE' ? 'CLABE' : 'Débito'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
+
+      {/* Modal de solicitud de retiro */}
+      {driverId && (
+        <PayoutRequestModal
+          isOpen={payoutModalOpen}
+          driverId={driverId}
+          availableBalance={todayAvailable}
+          pendingCashInHand={todayCash}
+          onClose={() => setPayoutModalOpen(false)}
+          onSubmit={async (data) => {
+            if (onPayoutRequest) {
+              await onPayoutRequest(data);
+              setPayoutModalOpen(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
