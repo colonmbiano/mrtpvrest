@@ -218,6 +218,18 @@ const tests = [
       });
     },
   },
+  {
+    name: "OrderCard PIN: prioriza pickupPin del pipeline sobre hash local",
+    fn: () => {
+      const orderConPin = { id: "order-777", pickupPin: "654321" };
+      const displayPin1 = orderConPin.pickupPin || getCollectionPin(orderConPin.id);
+      assert.strictEqual(displayPin1, "654321", "Debe usar el pickupPin del servidor");
+
+      const orderSinPin = { id: "order-777" };
+      const displayPin2 = orderSinPin.pickupPin || getCollectionPin(orderSinPin.id);
+      assert.match(displayPin2, /^\d{4}$/, "Debe generar fallback de 4 digitos");
+    },
+  },
 ];
 
 let passed = 0;

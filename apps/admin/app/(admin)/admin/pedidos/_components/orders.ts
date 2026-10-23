@@ -42,6 +42,7 @@ export interface Order {
   createdAt: string; updatedAt: string;
   items?: OrderItem[]; deliveryAddress?: string; notes?: string;
   deliveryDriverId?: string;
+  pickupPin?: string;
   deliveryIncidents?: Array<{ id: string; type: string; loggedAt: string }>;
 }
 

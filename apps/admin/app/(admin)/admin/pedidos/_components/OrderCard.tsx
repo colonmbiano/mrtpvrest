@@ -62,7 +62,7 @@ export default function OrderCard({
             </Pill>
             {["READY", "PREPARING"].includes(order.status) && (
               <Pill tone="info" className="font-mono text-[10px] font-bold">
-                PIN: {getCollectionPin(order.id)}
+                PIN: {order.pickupPin || getCollectionPin(order.id)}
               </Pill>
             )}
             {order.status === "ON_THE_WAY" && hasActiveIncident(order.deliveryIncidents) && (
