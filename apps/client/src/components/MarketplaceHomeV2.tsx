@@ -19,6 +19,7 @@ type Props = {
   stores: SectionResult<StoreSummary>;
   products: SectionResult<ProductSummary>;
   isolated: boolean;
+  previewDemo?: boolean;
 };
 
 type Category = {
@@ -57,7 +58,7 @@ function patchPage(key: 'storesPage' | 'productsPage', page: number): Partial<Ca
   return key === 'storesPage' ? { storesPage: page } : { productsPage: page };
 }
 
-export default function MarketplaceHomeV2({ state, stores, products, isolated }: Props) {
+export default function MarketplaceHomeV2({ state, stores, products, isolated, previewDemo = false }: Props) {
   const promotions = products.status === 'ok'
     ? products.data.items.filter((p) => p.promoPrice !== null)
     : [];
@@ -128,6 +129,8 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated }:
         Vista aislada de pruebas · Solo tiendas habilitadas; no se procesan pagos reales.
       </p>}
 
+      {previewDemo && <div id="preview-info" role="status" className="mx-auto mt-3 max-w-[1380px] px-4 sm:px-6"><p className="rounded-xl border border-[#f0cf90] bg-[#fff6df] px-4 py-3 text-sm font-semibold text-[#7c5219]"><strong>Vista de demostración:</strong> negocios, productos y precios ficticios para revisar el diseño. No admite pedidos ni pagos y no consulta la base de datos real.</p></div>}
+
       <main id="contenido" className="mx-auto flex max-w-[1380px] flex-col gap-9 px-4 pb-12 pt-5 sm:gap-11 sm:px-6 sm:pt-7">
         <section aria-label="Bienvenida a MRTPVREST Marketplace" className="relative isolate overflow-hidden rounded-[1.5rem] bg-[#fff0e2] shadow-[0_12px_32px_rgba(37,56,43,.08)] sm:rounded-[1.75rem]">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,#fff9eb,transparent_60%)]" aria-hidden="true" />
@@ -159,7 +162,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated }:
           result={stores} pageKey="storesPage" singular="tienda" plural="tiendas"
           empty="Todavía no hay tiendas publicadas en el marketplace.">
           {(items) => <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-            {items.map((s) => <StoreCard key={s.slug} store={s} state={state} />)}
+            {items.map((s) => <StoreCard key={s.slug} store={s} state={state} previewDemo={previewDemo} />)}
           </ul>}
         </CatalogSection>
 
@@ -168,13 +171,13 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated }:
             <div>
               <p className="mb-1 text-xs font-extrabold uppercase tracking-[.12em] text-[#ef5b2a]">AHORRA EN TUS COMPRAS</p>
               <h2 id="promos-title" className="font-display text-2xl font-extrabold sm:text-3xl">🔥 Promociones</h2>
-              <p className="mt-1 text-sm text-[#6b7c73]">Ofertas vigentes publicadas por los negocios</p>
+              <p className="mt-1 text-sm text-[#6b7c73]">{previewDemo ? 'Precios ilustrativos, sin venta ni pedidos' : 'Ofertas vigentes publicadas por los negocios'}</p>
             </div>
             <a href="#productos" className={link + ' inline-flex items-center gap-1 text-sm'}>Ver todos los productos <ArrowRight className="h-4 w-4" aria-hidden="true" /></a>
           </div>
           {promotions.length ? (
             <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {promotions.slice(0, 5).map((p) => <ProductCard key={p.id} product={p} />)}
+              {promotions.slice(0, 5).map((p) => <ProductCard key={p.id} product={p} previewDemo={previewDemo} />)}
             </ul>
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e9f1e8] bg-white p-5">
@@ -221,7 +224,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated }:
           result={products} pageKey="productsPage" singular="producto" plural="productos"
           empty="Todavía no hay productos publicados en el marketplace.">
           {(items) => <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {items.map((p) => <ProductCard key={p.id} product={p} />)}
+            {items.map((p) => <ProductCard key={p.id} product={p} previewDemo={previewDemo} />)}
           </ul>}
         </CatalogSection>
 
@@ -311,16 +314,16 @@ function Pagination({ data, state, id, pageKey, plural }: {
   </nav>;
 }
 
-function StoreCard({ store, state }: { store: StoreSummary; state: CatalogState }) {
+function StoreCard({ store, state, previewDemo }: { store: StoreSummary; state: CatalogState; previewDemo: boolean }) {
   const href = storeHref(store.slug);
   const eta = etaWindow(store.estimatedDelivery);
   const hasFee = store.deliveryFee !== null;
   return <li className="min-w-0 rounded-[1.25rem] border border-[#e8eee9] bg-white p-3 shadow-[0_7px_18px_rgba(34,54,42,.05)] transition hover:-translate-y-0.5 hover:shadow-lg sm:p-4">
-    <a href={href ?? '#tiendas'} aria-label={'Visitar ' + store.name} className={'flex h-full flex-col gap-2.5 ' + focus}>
+    <a href={previewDemo ? '#preview-info' : href ?? '#tiendas'} aria-label={previewDemo ? 'Ver aviso de demostración de ' + store.name : 'Visitar ' + store.name} className={'flex h-full flex-col gap-2.5 ' + focus}>
       <div className="relative grid aspect-[5/4] place-items-center overflow-hidden rounded-[1rem]" style={cardTint(store.slug)}>
         <span className="text-6xl drop-shadow-xl" aria-hidden="true">{businessEmoji(store.businessType)}</span>
         {store.logoUrl && <Image src={store.logoUrl} alt="" fill unoptimized sizes="(max-width: 640px) 50vw, 16vw" className="bg-white object-contain p-3" />}
-        <span className={'absolute bottom-2 left-2 rounded-full px-2 py-1 text-[10px] font-extrabold ' + (store.isOpen ? 'bg-white text-[#168045]' : 'bg-[#34443a] text-white')}>{store.isOpen ? 'Disponible' : 'Cerrada'}</span>
+        <span className={'absolute bottom-2 left-2 rounded-full px-2 py-1 text-[10px] font-extrabold ' + (store.isOpen ? 'bg-white text-[#168045]' : 'bg-[#34443a] text-white')}>{previewDemo ? 'Demostración' : store.isOpen ? 'Disponible' : 'Cerrada'}</span>
       </div>
       <strong className="line-clamp-2 text-sm leading-snug sm:text-base">{store.name}</strong>
       <span className="text-[11px] font-semibold text-[#7b8b80]">{BUSINESS_TYPE_LABELS[store.businessType]}</span>
@@ -328,17 +331,17 @@ function StoreCard({ store, state }: { store: StoreSummary; state: CatalogState 
         {eta && <span className="inline-flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" />{eta}</span>}
         <span className="inline-flex items-center gap-1"><Bike className="h-3.5 w-3.5" aria-hidden="true" />{hasFee ? store.deliveryFee === 0 ? 'Gratis' : formatPrice(store.deliveryFee!, 'MXN') : 'Según zona'}</span>
       </span>
-      <span className="mt-1 inline-flex items-center gap-1 text-xs font-extrabold text-[#e75821]">Ver tienda <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
+      <span className="mt-1 inline-flex items-center gap-1 text-xs font-extrabold text-[#e75821]">{previewDemo ? 'Solo ejemplo' : 'Ver tienda'} <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
     </a>
     <a href={catalogHref(state, { store: store.slug, productsPage: 1 }, 'productos')} className={'mt-3 block border-t border-[#edf0ea] pt-2 text-center text-[11px] font-bold text-[#496b54] hover:text-[#d5541f] ' + focus}>Ver sus productos</a>
   </li>;
 }
 
-function ProductCard({ product }: { product: ProductSummary }) {
+function ProductCard({ product, previewDemo }: { product: ProductSummary; previewDemo: boolean }) {
   const href = storeHref(product.store.slug);
   const off = discountPercent(product);
   return <li className="min-w-0 overflow-hidden rounded-[1.2rem] border border-[#e8eee9] bg-white p-2.5 shadow-[0_7px_18px_rgba(34,54,42,.045)] transition hover:-translate-y-0.5 hover:shadow-lg sm:p-3">
-    <a href={href ?? '#productos'} className={'group flex h-full flex-col gap-2 ' + focus} aria-label={'Ver ' + product.name + ' en ' + product.store.name}>
+    <a href={previewDemo ? '#preview-info' : href ?? '#productos'} className={'group flex h-full flex-col gap-2 ' + focus} aria-label={previewDemo ? 'Producto de demostración: ' + product.name : 'Ver ' + product.name + ' en ' + product.store.name}>
       <span className="relative grid aspect-[5/4] place-items-center overflow-hidden rounded-[.9rem]" style={cardTint(product.store.slug)}>
         <span className="text-6xl drop-shadow-lg transition-transform group-hover:scale-110" aria-hidden="true">{productEmoji(product.name)}</span>
         {product.imageUrl && <Image src={product.imageUrl} alt="" fill unoptimized sizes="(max-width: 640px) 50vw, 20vw" className="object-cover transition-transform group-hover:scale-105" />}
@@ -351,7 +354,7 @@ function ProductCard({ product }: { product: ProductSummary }) {
         {product.promoPrice !== null && <s className="text-xs tabular-nums text-[#96a19a]">{formatPrice(product.price, product.currency)}</s>}
       </span>
       <span className="mt-auto flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#f85c25] px-2 py-2 text-xs font-bold text-white group-hover:bg-[#d64e1c]">
-        Ver en tienda <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        {previewDemo ? 'Vista de ejemplo' : 'Ver en tienda'} <ArrowRight className="h-4 w-4" aria-hidden="true" />
       </span>
     </a>
   </li>;
