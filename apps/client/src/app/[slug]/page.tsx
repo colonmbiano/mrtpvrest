@@ -15,6 +15,7 @@ import { getStorePublicUrl, isMarketplaceCatalogEnabled, isMarketplaceIsolated }
 import InstallPWABanner from '@/components/InstallPWABanner';
 import CartDeepLinkLoader from '@/components/CartDeepLinkLoader';
 import { DineInBanner } from '@/components/DineInBanner';
+import MarketplaceStoreBar from '@/components/MarketplaceStoreBar';
 
 // Normaliza un número a dígitos para construir el link de wa.me.
 function waLink(number?: string | null): string | null {
@@ -252,19 +253,7 @@ export default async function StorefrontPage({
       style={{ ['--color-primary' as string]: primary } as React.CSSProperties}
       className="min-h-screen bg-white"
     >
-      {/* Marketplace: barra estática (los headers de tema son sticky y quedan
-          debajo). Volver al catálogo puede ser navegación SPA: el catálogo no usa
-          el carrito y entra a cada tienda con documento completo, que lo reinicia. */}
-      {isMarketplaceCatalogEnabled() && (
-        <nav aria-label="Marketplace" className="border-b border-gray-200 bg-[#f8f8f6] px-4 py-2 text-sm">
-          <Link
-            href="/"
-            className="font-bold text-[#9a3412] underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a3412]"
-          >
-            ← Volver al catálogo
-          </Link>
-        </nav>
-      )}
+      {isMarketplaceCatalogEnabled() && <MarketplaceStoreBar store={store} />}
 
       {/* Llegó por el QR de mesa: que se vea desde el primer pintado, no solo
           al abrir el checkout. */}

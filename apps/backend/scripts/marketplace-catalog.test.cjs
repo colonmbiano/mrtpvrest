@@ -4,7 +4,9 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const { spawnSync } = require('node:child_process');
-const { InvalidQuery, parseQuery, parseStoreSlugs, createCatalog, createPrismaCatalogAdapter } = require('../src/lib/marketplace-catalog');
+const {
+  InvalidQuery, parseQuery, parseStoreSlugs, createCatalog, createPrismaCatalogAdapter, storeTerms, activePromoPrice,
+} = require('../src/lib/marketplace-catalog');
 const createRouter = require('../src/routes/marketplace.routes');
 
 // A small relational fixture driver evaluates the adapter's actual where/select/order/skip/take.
@@ -129,6 +131,10 @@ test('query rules reject structured, duplicate, out-of-range and malformed value
     ]) assert.throws(() => parseQuery(query, kind), InvalidQuery, JSON.stringify(query));
   }
   for (const value of ['RETAIL ', 'retail', 'BAR']) assert.throws(() => parseQuery({ businessType: value }, 'stores'), InvalidQuery);
+  // Every type the client offers as a filter must be accepted (empty result, never 400).
+  for (const value of ['RESTAURANT', 'RETAIL', 'GROCERY', 'HARDWARE', 'AUTOPARTS']) {
+    assert.equal(parseQuery({ businessType: value }, 'stores').businessType, value);
+  }
   for (const value of ['A', 'a/b', '../a', 'a?x', 'a'.repeat(101)]) assert.throws(() => parseQuery({ store: value }, 'products'), InvalidQuery);
   assert.equal(parseQuery({ q: '  taco  ', page: '10000', pageSize: '24', harmless: 'ignored' }, 'products').q, 'taco');
   assert.equal(parseQuery({ q: ' '.repeat(90), store: '' }, 'products').q, '');
@@ -317,4 +323,32 @@ test('router import and empty-policy handlers never require Express or database 
 test('new router is mounted publicly before tenant middleware without importing the app', () => {
   const source = readFileSync(require.resolve('../src/index.js'), 'utf8');
   assert.ok(source.indexOf("app.use('/api/marketplace', require('./routes/marketplace.routes')())") < source.indexOf('app.use(tenantMiddleware)'));
+});
+
+// Delivery terms and promo rules shown on the buyer-facing catalog cards.
+test('storeTerms: FLAT exposes a fee, DISTANCE promises none, closed stores keep their message', () => {
+  const base = { isOpen: true, scheduleEnabled: false, businessHours: '[]', timezone: 'America/Mexico_City',
+    closedMessage: 'Volvemos pronto', estimatedDelivery: 30, deliveryMode: 'FLAT', deliveryFee: 19,
+    freeDeliveryFrom: 250, minOrderAmount: 80 };
+  assert.deepEqual(storeTerms(base), { isOpen: true, closedMessage: null, estimatedDelivery: 30, deliveryFee: 19,
+    freeDeliveryFrom: 250, minOrderAmount: 80 });
+  assert.equal(storeTerms({ ...base, deliveryMode: 'DISTANCE' }).deliveryFee, null);
+  assert.equal(storeTerms({ ...base, isOpen: false }).isOpen, false);
+  assert.equal(storeTerms({ ...base, isOpen: false }).closedMessage, 'Volvemos pronto');
+  assert.equal(storeTerms({ ...base, deliveryFee: Number.NaN }).deliveryFee, null);
+  assert.equal(storeTerms({ ...base, estimatedDelivery: 0 }).estimatedDelivery, null);
+  assert.deepEqual(storeTerms(null), { isOpen: false, closedMessage: null, estimatedDelivery: null, deliveryFee: null,
+    freeDeliveryFrom: null, minOrderAmount: null });
+});
+
+test('activePromoPrice: only real discounts inside their time window', () => {
+  const noon = new Date('2026-10-22T18:00:00Z'); // 12:00 in Mexico City
+  const cfg = { promoStartTime: null, promoEndTime: null, timezone: 'America/Mexico_City' };
+  const item = { isPromo: true, promoPrice: 80, price: 100, promoStartTime: null, promoEndTime: null };
+  assert.equal(activePromoPrice(item, cfg, noon), 80);
+  assert.equal(activePromoPrice({ ...item, isPromo: false }, cfg, noon), null);
+  assert.equal(activePromoPrice({ ...item, promoPrice: 120 }, cfg, noon), null);
+  assert.equal(activePromoPrice({ ...item, promoPrice: null }, cfg, noon), null);
+  assert.equal(activePromoPrice({ ...item, promoStartTime: '18:00', promoEndTime: '22:00' }, cfg, noon), null);
+  assert.equal(activePromoPrice({ ...item, promoStartTime: '11:00', promoEndTime: '14:00' }, cfg, noon), 80);
 });

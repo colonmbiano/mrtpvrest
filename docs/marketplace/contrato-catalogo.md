@@ -93,3 +93,29 @@ y etiquetas lo explican. Errores y vacios independientes. Enlaces locales de
 documento completo para evitar compartir el carrito en memoria entre tiendas.
 No requiere imagenes externas ni datos ficticios. Integracion visual pendiente
 hasta cerrar los requisitos de arranque.
+
+## Extensión aditiva para la portada estilo app (22–23 oct)
+
+Campos nuevos, todos públicos y derivados de lo que ya expone `/api/store/info`;
+los clientes anteriores los ignoran. El cliente los valida estrictamente.
+
+StoreSummary agrega:
+
+- `isOpen`: misma regla que `/api/store/info` (`computeOpenState`: override manual
+  y horario automático). Sin `RestaurantConfig`, la tienda está cerrada.
+- `closedMessage`: mensaje de horario o el manual; `null` si está abierta.
+- `estimatedDelivery`: minutos enteros > 0, o `null`. El cliente muestra ±5 min.
+- `deliveryFee`: solo con `deliveryMode` FLAT; `null` en DISTANCE/ZONES porque
+  depende de la dirección ("Envío según distancia").
+- `freeDeliveryFrom`, `minOrderAmount`: montos finitos ≥ 0 o `null`.
+
+ProductSummary agrega:
+
+- `promoPrice`: solo si `isPromo`, es menor que `price` y su ventana horaria
+  (`itemPromoWindowOpen`, override por producto o global de la tienda) está
+  abierta ahora; si no, `null`. El precio final lo sigue calculando la tienda.
+- `likes`: conteo de reacciones ("me gusta") del producto.
+
+`businessType` acepta además HARDWARE y AUTOPARTS, que el cliente ofrece como
+filtros; sin tiendas de ese tipo la respuesta es 200 con `items=[]`.
+No se exponen contacto, horario completo, tarifas por km ni datos de tenant.

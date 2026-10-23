@@ -144,8 +144,10 @@ test('isProductSummary: precio finito no negativo, moneda ISO y tienda válida',
 test('totalPages y formatPrice', () => {
   assert.equal(totalPages(page([], { total: 0 })), 1);
   assert.equal(totalPages(page([], { total: 25 })), 3);
-  assert.match(formatPrice(25, 'MXN'), /25\.00/);
-  assert.equal(formatPrice(25, 'ZZZZ'), '25.00 ZZZZ');
+  assert.match(formatPrice(25, 'MXN'), /^\$25$/);
+  assert.match(formatPrice(49.5, 'MXN'), /^\$49\.50$/);
+  assert.equal(formatPrice(25, 'ZZZZ'), '25 ZZZZ');
+  assert.equal(formatPrice(49.5, 'ZZZZ'), '49.50 ZZZZ');
 });
 
 // ── Fetch por sección ──────────────────────────────────────────────────────

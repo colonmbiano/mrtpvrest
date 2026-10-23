@@ -129,11 +129,13 @@ export function totalPages(page: CatalogPage<unknown>): number {
   return Math.min(MAX_PAGE, Math.max(1, Math.ceil(page.total / page.pageSize)));
 }
 
+// Sin centavos cuando el monto es entero ("$19"), con dos decimales si no ("$49.50").
 export function formatPrice(price: number, currency: string): string {
+  const digits = Number.isInteger(price) ? 0 : 2;
   try {
-    return new Intl.NumberFormat('es-MX', { style: 'currency', currency }).format(price);
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(price);
   } catch {
-    return `${price.toFixed(2)} ${currency}`;
+    return `${price.toFixed(digits)} ${currency}`;
   }
 }
 

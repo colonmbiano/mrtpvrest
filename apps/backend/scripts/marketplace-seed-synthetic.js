@@ -46,6 +46,30 @@ const PRODUCTS = {
   ],
 };
 
+// Condiciones de entrega por tienda (índice = tienda - 1). Cubren envío fijo,
+// gratis, por distancia, una tienda cerrada a mano y una sin configuración
+// (el storefront y el catálogo la muestran cerrada). La 14 está inactiva.
+const TERMS = [
+  { estimatedDelivery: 30, deliveryFee: 19, freeDeliveryFrom: 250, minOrderAmount: 80 },
+  { estimatedDelivery: 25, deliveryFee: 0, freeDeliveryFrom: null, minOrderAmount: 100 },
+  { estimatedDelivery: 35, deliveryFee: 25, freeDeliveryFrom: 300, minOrderAmount: 120 },
+  { estimatedDelivery: 20, deliveryFee: 15, freeDeliveryFrom: 180, minOrderAmount: 60 },
+  { estimatedDelivery: 40, deliveryFee: 29, freeDeliveryFrom: 350, minOrderAmount: 150, isOpen: false, closedMessage: 'Abrimos mañana a las 11:00' },
+  { estimatedDelivery: 45, deliveryFee: 35, freeDeliveryFrom: 400, minOrderAmount: 150 },
+  { estimatedDelivery: 30, deliveryFee: 0, freeDeliveryFrom: null, minOrderAmount: 90 },
+  { estimatedDelivery: 25, deliveryFee: 19, freeDeliveryFrom: 220, minOrderAmount: 90 },
+  { estimatedDelivery: 35, deliveryFee: 25, freeDeliveryFrom: null, minOrderAmount: 100 },
+  { estimatedDelivery: 50, deliveryFee: 39, freeDeliveryFrom: 500, minOrderAmount: 200 },
+  { estimatedDelivery: 28, deliveryFee: 20, freeDeliveryFrom: 250, minOrderAmount: 70 },
+  { estimatedDelivery: 35, deliveryMode: 'DISTANCE', deliveryBaseFee: 15, deliveryPerKm: 6, minOrderAmount: 100 },
+  null,
+  null,
+];
+
+// Promos vigentes (precio especial) y "me gusta" sintéticos por producto.
+const PROMOS = { 'Taco campechano': 25, 'Agua de horchata': 39 };
+const LIKES = { 'Taco al pastor': 42, 'Taco de suadero': 18, 'Agua de horchata': 9, 'Pan dulce surtido': 12 };
+
 async function upsertStore(store) {
   const tenant = await prisma.tenant.upsert({
     where: { slug: store.slug },
@@ -76,10 +100,18 @@ async function seedProducts(restaurant, groups) {
       const data = {
         restaurantId: restaurant.id, categoryId: category.id, name, price,
         isAvailable: group.isAvailable !== false, availableOnline: group.availableOnline !== false,
+        isPromo: name in PROMOS, promoPrice: PROMOS[name] ?? null,
       };
       const existing = await prisma.menuItem.findFirst({ where: { restaurantId: restaurant.id, name } });
-      if (existing) await prisma.menuItem.update({ where: { id: existing.id }, data });
-      else await prisma.menuItem.create({ data });
+      const item = existing
+        ? await prisma.menuItem.update({ where: { id: existing.id }, data })
+        : await prisma.menuItem.create({ data });
+      if (LIKES[name]) {
+        await prisma.dishReaction.createMany({
+          data: Array.from({ length: LIKES[name] }, (_, i) => ({ restaurantId: restaurant.id, menuItemId: item.id, clientId: `seed-${i}` })),
+          skipDuplicates: true,
+        });
+      }
     }
   }
 }
@@ -90,13 +122,18 @@ async function main() {
       const restaurant = await upsertStore(store);
       if (PRODUCTS[store.slug]) await seedProducts(restaurant, PRODUCTS[store.slug]);
     }
-    // Configuración (abierta, MXN) solo en las tiendas con productos. Las demás
-    // quedan sin config: el catálogo usa el default MXN y el storefront las
-    // muestra cerradas, lo que cubre también esa rama.
-    for (const slug of Object.keys(PRODUCTS)) {
-      const restaurant = await prisma.restaurant.findUnique({ where: { slug } });
-      const config = await prisma.restaurantConfig.findFirst({ where: { restaurantId: restaurant.id } });
-      if (!config) await prisma.restaurantConfig.create({ data: { restaurantId: restaurant.id, currency: 'MXN' } });
+    // Configuración de entrega (MXN) según TERMS. Sin entrada, la tienda queda
+    // sin config y se muestra cerrada, lo que cubre también esa rama.
+    for (const [i, store] of STORES.entries()) {
+      const terms = TERMS[i];
+      if (!terms) continue;
+      const restaurant = await prisma.restaurant.findUnique({ where: { slug: store.slug } });
+      const data = { currency: 'MXN', isOpen: true, closedMessage: null, deliveryMode: 'FLAT', ...terms };
+      await prisma.restaurantConfig.upsert({
+        where: { restaurantId: restaurant.id },
+        update: data,
+        create: { restaurantId: restaurant.id, ...data },
+      });
     }
   });
   console.log(`Seed sintético aplicado: ${STORES.length} tiendas (1 inactiva).`);
