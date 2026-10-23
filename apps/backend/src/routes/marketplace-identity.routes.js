@@ -38,8 +38,8 @@ function createMarketplaceIdentityRouter({
     // Do not log plaintext passwords, tokens, email addresses or user payloads.
     return res.status(503).json({ error: 'Servicio de registro temporalmente no disponible', code: 'IDENTITY_UNAVAILABLE' });
   };
-  const guarded = fn => async (req, res) => {
-    try { return await fn(req, res); } catch (e) { return sendError(res, e); }
+  const guarded = fn => async (req, res, next) => {
+    try { return await fn(req, res, next); } catch (e) { return sendError(res, e); }
   };
   const verifyOrigin = (req, res, next) => {
     // Fail closed: no Origin header is accepted for browser account mutations.
