@@ -6,7 +6,7 @@
 const { computeOpenState } = require('../utils/storeHours');
 const { itemPromoWindowOpen } = require('./promo-window');
 const SLUG = /^[a-z0-9-]{1,100}$/;
-const BUSINESS_TYPES = new Set(['RESTAURANT', 'RETAIL', 'GROCERY']);
+const BUSINESS_TYPES = new Set(['RESTAURANT', 'RETAIL', 'GROCERY', 'HARDWARE', 'AUTOPARTS']);
 const CURRENCIES = new Set(Intl.supportedValuesOf('currency'));
 const ORDER = [{ name: 'asc' }, { id: 'asc' }];
 // Finite upper bound for public prices. It keeps Infinity and NaN (NaN sorts above
