@@ -85,7 +85,7 @@ function prepareDispatch({ orderId, quote, merchant, paymentMethod, pickupPinHas
   // Own candidates are selected by dispatch once its transactional adapter loads
   // affiliations/presence. An order request cannot supply courier identities.
   if (!offering || source !== 'SHARED') result.offer = null;
-  else result.offer.dispatchVersion = result.task.version;
+  else Object.assign(result.offer, { dispatchVersion: result.task.version, merchantId: merchant.id, restaurantId: merchant.restaurantId });
   return result;
 }
 
@@ -112,6 +112,7 @@ function createMarketplaceOrderOrchestrator({ quoteStore, prismaClient, merchant
     return new Date(value);
   }
   function credentials(orderId, accountId, keyId) {
+    check(text(keyId), 'PIN_KEY_UNAVAILABLE', 'Identificador de clave de PIN invalido', 503);
     const secret = pinSecrets ? pinSecrets[keyId] : keyId === activePinKeyId ? process.env.MARKETPLACE_PIN_SECRET : undefined;
     check(typeof secret === 'string' && Buffer.byteLength(secret) >= 32, 'PIN_KEY_UNAVAILABLE', 'Clave de PIN no disponible', 503);
     const hmac = purpose => crypto.createHmac('sha256', secret).update(JSON.stringify(['marketplace-order-v1', purpose, accountId, orderId])).digest();
@@ -126,6 +127,7 @@ function createMarketplaceOrderOrchestrator({ quoteStore, prismaClient, merchant
       && order?.source === 'MARKETPLACE' && order.restaurantId === row.restaurantId && order.id === row.orderId,
     'ORDER_INTEGRITY_ERROR', 'Orden persistente inconsistente', 503);
     check(row.requestHash === requestHash, 'IDEMPOTENCY_CONFLICT', 'La clave ya pertenece a otra solicitud', 409);
+    check(order.clientOrderId === `marketplace-v1:${requestKeyHash}`, 'ORDER_INTEGRITY_ERROR', 'Idempotencia persistente inconsistente', 503);
     const c = credentials(order.id, accountId, row.pinKeyId);
     check(hashPin(c.pickupPin) === row.pickupPinHash && hashPin(c.deliveryPin) === row.deliveryPinHash
       && hash(c.trackingToken) === row.trackingTokenHash, 'PIN_KEY_UNAVAILABLE', 'Clave original de PIN no disponible', 503);
@@ -167,6 +169,7 @@ function createMarketplaceOrderOrchestrator({ quoteStore, prismaClient, merchant
           const loaded = await quoteStore.findById({ quoteId: request.quoteId, accountId, tx });
           check(loaded && loaded.id === request.quoteId && loaded.accountId === accountId, 'QUOTE_NOT_FOUND', 'Cotizacion no encontrada', 404);
           const quote = json(loaded);
+          check(quote.status !== 'EXPIRED', 'QUOTE_EXPIRED', 'La cotizacion expiro; solicita una nueva', 409);
           assertQuoteUsable(quote, at()); assertSnapshot(quote);
           check(quote.fulfillment === 'DELIVERY' ? request.deliveryAddressId === quote.deliveryAddressId && text(request.deliveryAddressId)
             : request.deliveryAddressId === null && quote.deliveryAddressId === null, 'QUOTE_ADDRESS_MISMATCH', 'La direccion no coincide con la cotizacion', 409);
@@ -199,10 +202,19 @@ function createMarketplaceOrderOrchestrator({ quoteStore, prismaClient, merchant
           const dispatch = quote.fulfillment === 'DELIVERY' ? await dispatchEngine.prepareTask({ orderId, quote: json(quote), merchant: json(merchant),
             paymentMethod: request.paymentMethod, ...pinHashes, at: date, tx }) : null;
           if (quote.fulfillment === 'DELIVERY') {
+            const task = dispatch?.task; const offer = dispatch?.offer;
             check(dispatch?.task?.orderId === orderId && dispatch.task.restaurantId === merchant.restaurantId
+              && task.merchantId === merchant.id && task.locationId === merchant.locationId
               && text(dispatch.task.id) && [TASK_STATUS.WAITING_READY, TASK_STATUS.OFFERING].includes(dispatch.task.status)
               && (request.paymentMethod === 'CASH' || dispatch.task.status === TASK_STATUS.WAITING_READY)
-              && dispatch.task.pickupPinHash === pinHashes.pickupPinHash && dispatch.task.deliveryPinHash === pinHashes.deliveryPinHash,
+              && !task.currentAssignmentId && !task.currentAssignment && !task.pickedUpAt
+              && task.payoutAmount === s.courierPayoutCents / 100 && task.currency === quote.currency
+              && task.pickupPinHash === pinHashes.pickupPinHash && task.deliveryPinHash === pinHashes.deliveryPinHash
+              && (!offer || task.status === TASK_STATUS.OFFERING && task.dispatchMode === 'SHARED'
+                && offer.taskId === task.id && offer.merchantId === merchant.id && offer.restaurantId === merchant.restaurantId
+                && offer.source === 'SHARED' && offer.status === 'OFFERED' && offer.currency === quote.currency
+                && offer.payoutAmount === s.courierPayoutCents / 100 && offer.dispatchVersion === task.version
+                && new Date(offer.expiresAt) > date),
             'DISPATCH_INTEGRITY_ERROR', 'Tarea de despacho inconsistente', 503);
           }
           const event = { id: `marketplace-order:${orderId}:created`, type: 'MarketplaceOrderCreated', status: 'PENDING',

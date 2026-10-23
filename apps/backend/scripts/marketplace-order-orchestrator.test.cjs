@@ -264,6 +264,13 @@ test('one millisecond before expiry is usable and invalid expiry dates are rejec
   await assert.rejects(g.create(), checkCode('QUOTE_EXPIRED', 409));
 });
 
+test('expired and revoked quote statuses cannot be consumed', async () => {
+  for (const [status, expected] of [['EXPIRED', 'QUOTE_EXPIRED'], ['REVOKED', 'QUOTE_NOT_ACTIVE']]) {
+    const f = await fixture(); f.quote.status = status;
+    await assert.rejects(f.create(), checkCode(expected, 409)); assert.equal(f.state.orders.length, 0);
+  }
+});
+
 test('a quote that expires during preparation or writes rolls everything back', async () => {
   for (const name of ['merchant.resolve', 'pipeline.create']) {
     const f = await fixture(); f.hooks[name] = () => f.advance(TTL_MS);
@@ -374,6 +381,15 @@ test('validation of account, key, quote, payment, customer and notes is strict a
   assert.equal(f.calls.length, 0);
 });
 
+test('non-object order bodies and invalid address IDs fail with controlled validation errors', async () => {
+  const f = await fixture();
+  for (const body of [null, undefined, [], 'invalid', 1]) {
+    await assert.rejects(f.create({}, { body }), checkCode('INVALID_ORDER_REQUEST', 422));
+  }
+  for (const deliveryAddressId of [null, 1, [], ' ']) await assert.rejects(f.create({ deliveryAddressId }), checkCode('INVALID_ADDRESS', 422));
+  assert.equal(f.calls.length, 0);
+});
+
 test('address must match quote and still belong to the authenticated account', async () => {
   const f = await fixture(); await assert.rejects(f.create({ deliveryAddressId: 'other' }), checkCode('QUOTE_ADDRESS_MISMATCH', 409));
   f.savedAddress.accountId = 'another'; await assert.rejects(f.create(), checkCode('ADDRESS_NOT_FOUND', 404));
@@ -428,6 +444,14 @@ test('missing PIN keys or invalid clock fail without consuming a quote or creati
     await assert.rejects(f.create(), checkCode(service.now ? 'INVALID_CLOCK' : 'PIN_KEY_UNAVAILABLE', 503));
     assert.equal(f.state.orders.length, 0); assert.equal(f.quote.status, 'ACTIVE');
   }
+});
+
+test('PIN derivation preserves leading zeros in six-digit codes', async () => {
+  const orderId = Array.from({ length: 1000 }, (_, index) => `leading-${index}`).find(id =>
+    crypto.createHmac('sha256', SECRET).update(JSON.stringify(['marketplace-order-v1', 'pickup', ACCOUNT, id])).digest().readUInt32BE(0) % 1000000 < 100000);
+  assert.ok(orderId);
+  const f = await fixture({ service: { newId: () => orderId } }); const result = await f.create();
+  assert.match(result.pickupPin, /^0\d{5}$/); assert.equal(verifyPin(result.pickupPin, f.state.pipelines[0].pickupPinHash), true);
 });
 
 test('injected dispatch port failures roll back and cannot skip pickup or initialize an assigned task', async () => {
