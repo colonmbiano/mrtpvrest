@@ -642,3 +642,41 @@ test('no code is shown when the matching PIN is missing or the fulfillment is un
   assert.equal(pinForFulfillment(null, { pickupPin: '123456', deliveryPin: '654321' }), null);
   assert.equal(pinForFulfillment(undefined, { pickupPin: '123456' }), null);
 });
+
+// ── Cotización con cupón y desglose de montos ─────────────────────────────────
+test('buildQuoteBody sends couponCode only when the buyer typed one', () => {
+  const base = { merchant: { merchantId: 'm1', slug: 'taqueria' }, lines: [cartLine()], fulfillment: 'PICKUP' };
+  assert.equal(buildQuoteBody(base).couponCode, undefined);
+  assert.equal('couponCode' in buildQuoteBody({ ...base, couponCode: '   ' }), false, 'blank coupons are not sent');
+  assert.equal(buildQuoteBody({ ...base, couponCode: '  VERANO10 ' }).couponCode, 'VERANO10', 'the code is trimmed');
+});
+
+test('requestQuote sends the coupon in the body and maps the amount breakdown', async () => {
+  let sentBody;
+  const body = buildQuoteBody({ merchant: { merchantId: 'm1', slug: 'taqueria' }, lines: [cartLine()], fulfillment: 'PICKUP', couponCode: 'VERANO10' });
+  const quote = await requestQuote('https://api.example', body, KEY, async (url, init) => {
+    sentBody = JSON.parse(init.body);
+    return jsonResponse({ quoteId: 'q1', expiresAt: '2026-10-23T12:05:00.000Z', total: '180.00',
+      subtotal: '200.00', discount: '20.00', deliveryFee: '0.00' }, 201);
+  });
+  assert.equal(sentBody.couponCode, 'VERANO10');
+  assert.deepEqual(quote, { quoteId: 'q1', expiresAt: '2026-10-23T12:05:00.000Z', total: '180.00',
+    subtotal: '200.00', discount: '20.00', deliveryFee: '0.00' });
+});
+
+test('a quote without a breakdown keeps the base shape, and malformed amounts are left out', async () => {
+  const plain = await requestQuote('https://api.example', {}, KEY, async () => jsonResponse({ quoteId: 'q1', expiresAt: 'x', total: '10.00' }, 201));
+  assert.deepEqual(plain, { quoteId: 'q1', expiresAt: 'x', total: '10.00' });
+  for (const bad of [1.5, '1.5', '-1.00', 12, '10.000', null]) {
+    const quote = await requestQuote('https://api.example', {}, KEY, async () =>
+      jsonResponse({ quoteId: 'q1', expiresAt: 'x', total: '10.00', discount: bad, subtotal: bad, deliveryFee: bad }, 201));
+    assert.equal('discount' in quote || 'subtotal' in quote || 'deliveryFee' in quote, false, `amount ${JSON.stringify(bad)}`);
+  }
+});
+
+test('the mapped breakdown reconciles in cents: subtotal - discount + delivery fee equals the total', async () => {
+  const quote = await requestQuote('https://api.example', {}, KEY, async () =>
+    jsonResponse({ quoteId: 'q1', expiresAt: 'x', total: '95.02', subtotal: '70.02', discount: '5.00', deliveryFee: '30.00' }, 201));
+  const cents = value => Math.round(Number(value) * 100);
+  assert.equal(cents(quote.subtotal) - cents(quote.discount) + cents(quote.deliveryFee), cents(quote.total));
+});

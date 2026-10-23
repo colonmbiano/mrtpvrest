@@ -35,7 +35,7 @@ function plain(value, keys) {
 
 // The client never sends money. Any extra field (total, price, fee) fails the whole request.
 function normalize(body) {
-  check(plain(body, ['merchantId', 'merchantSlug', 'items', 'fulfillment', 'deliveryAddressId']), 'INVALID_QUOTE_REQUEST', 'Solicitud invalida');
+  check(plain(body, ['merchantId', 'merchantSlug', 'items', 'fulfillment', 'deliveryAddressId', 'couponCode']), 'INVALID_QUOTE_REQUEST', 'Solicitud invalida');
   const byId = body.merchantId !== undefined;
   const bySlug = body.merchantSlug !== undefined;
   check(byId !== bySlug && (byId ? text(body.merchantId, 64)
@@ -43,6 +43,11 @@ function normalize(body) {
   check(['DELIVERY', 'PICKUP'].includes(body.fulfillment), 'INVALID_QUOTE_REQUEST', 'Tipo de entrega invalido');
   if (body.fulfillment === 'DELIVERY') check(text(body.deliveryAddressId, 64), 'ADDRESS_REQUIRED', 'Direccion requerida');
   else check(body.deliveryAddressId === undefined, 'INVALID_QUOTE_REQUEST', 'PICKUP no admite direccion');
+  let couponCode = null;
+  if (body.couponCode !== undefined) {
+    check(typeof body.couponCode === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(body.couponCode), 'INVALID_COUPON', 'Codigo de cupon invalido');
+    couponCode = body.couponCode;
+  }
   check(Array.isArray(body.items) && body.items.length > 0 && body.items.length <= MAX_ITEMS, 'INVALID_ITEMS', 'Articulos invalidos');
   const seen = new Set();
   const items = body.items.map(item => {
@@ -55,7 +60,7 @@ function normalize(body) {
     return { menuItemId: item.menuItemId, quantity: item.quantity };
   }).sort((a, b) => (a.menuItemId < b.menuItemId ? -1 : a.menuItemId > b.menuItemId ? 1 : 0));
   return { ...(byId ? { merchantId: body.merchantId } : { merchantSlug: body.merchantSlug }),
-    fulfillment: body.fulfillment, deliveryAddressId: body.deliveryAddressId ?? null, items };
+    fulfillment: body.fulfillment, deliveryAddressId: body.deliveryAddressId ?? null, items, couponCode };
 }
 
 // Prices the basket from server data only. Listings from other merchants are dropped

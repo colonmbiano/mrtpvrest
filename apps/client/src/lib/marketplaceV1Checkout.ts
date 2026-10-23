@@ -11,6 +11,7 @@ const PHONE_RE = /^\+?[0-9 ()-]{7,25}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TRACKING_TOKEN_RE = /^[a-f0-9]{64}$/;
 const PIN_RE = /^\d{6}$/;
+const MONEY_RE = /^\d+\.\d{2}$/;
 
 export type Fulfillment = 'DELIVERY' | 'PICKUP';
 export type PaymentMethod = 'ONLINE' | 'CASH';
@@ -19,7 +20,15 @@ export type V1Failure = {
   reason: 'config' | 'unavailable' | 'rejected' | 'unsupported';
   message: string;
 };
-export type V1Quote = { quoteId: string; expiresAt: string; total: string };
+// Desglose opcional de la cotización. Montos como cadenas de dos decimales, tal como los da el servidor.
+export type V1Quote = {
+  quoteId: string;
+  expiresAt: string;
+  total: string;
+  discount?: string;
+  subtotal?: string;
+  deliveryFee?: string;
+};
 export type V1Order = {
   orderId: string;
   quoteId: string;
@@ -74,11 +83,13 @@ export function pinForFulfillment(fulfillment: Fulfillment | null | undefined,
 }
 
 // El cotizador acepta merchantId o merchantSlug; se envía uno solo (el id cuando la API lo expone).
+// couponCode es opcional: solo viaja si el comprador escribió un cupón.
 export function buildQuoteBody(input: {
   merchant: { merchantId: string | null; slug: string };
   lines: CartLine[];
   fulfillment: Fulfillment;
   deliveryAddressId?: string;
+  couponCode?: string;
 }): Record<string, unknown> {
   const merchant = input.merchant.merchantId
     ? { merchantId: input.merchant.merchantId }
@@ -88,6 +99,8 @@ export function buildQuoteBody(input: {
     fulfillment: input.fulfillment,
     items: input.lines.map(line => ({ menuItemId: line.menuItemId, quantity: line.quantity, modifiers: [] })),
   };
+  const coupon = input.couponCode?.trim();
+  if (coupon) body.couponCode = coupon;
   if (input.fulfillment === 'DELIVERY') body.deliveryAddressId = input.deliveryAddressId;
   return body;
 }
@@ -158,7 +171,13 @@ export async function requestQuote(apiUrl: string | null, body: unknown, key: st
   if (!isRecord(json) || typeof json.quoteId !== 'string' || typeof json.total !== 'string' || typeof json.expiresAt !== 'string') {
     return failure('unavailable', 'Respuesta de cotización fuera de contrato.');
   }
-  return { quoteId: json.quoteId, expiresAt: json.expiresAt, total: json.total };
+  const quote: V1Quote = { quoteId: json.quoteId, expiresAt: json.expiresAt, total: json.total };
+  // El desglose es opcional: un monto fuera de formato se omite en lugar de mostrarse mal.
+  for (const field of ['discount', 'subtotal', 'deliveryFee'] as const) {
+    const value = json[field];
+    if (typeof value === 'string' && MONEY_RE.test(value)) quote[field] = value;
+  }
+  return quote;
 }
 
 export async function placeOrder(apiUrl: string | null, body: unknown, key: string,
