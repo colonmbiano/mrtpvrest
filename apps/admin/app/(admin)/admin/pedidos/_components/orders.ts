@@ -42,6 +42,7 @@ export interface Order {
   createdAt: string; updatedAt: string;
   items?: OrderItem[]; deliveryAddress?: string; notes?: string;
   deliveryDriverId?: string;
+  deliveryIncidents?: Array<{ id: string; type: string; loggedAt: string }>;
 }
 
 export interface Driver { id: string; name: string; phone?: string }
@@ -51,4 +52,19 @@ export function timeAgo(date: string) {
   if (diff < 1) return "ahora";
   if (diff < 60) return `${diff}m`;
   return `${Math.floor(diff / 60)}h ${diff % 60}m`;
+}
+
+export function getCollectionPin(orderId: string): string {
+  let hash = 0;
+  for (let i = 0; i < orderId.length; i++) {
+    const char = orderId.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  const pin = Math.abs(hash) % 10000;
+  return String(pin).padStart(4, "0");
+}
+
+export function hasActiveIncident(incidents?: Array<{ id: string; type: string; loggedAt: string }>): boolean {
+  return Boolean(incidents && incidents.length > 0);
 }
