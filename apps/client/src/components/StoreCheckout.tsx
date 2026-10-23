@@ -1,10 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCart } from '../lib/cartStore';
 import { authHeader } from '../lib/customerAuth';
 import { cartShareUrl } from '../lib/cartLink';
-import { getApiUrl } from '../lib/config';
+import { getApiUrl, getMarketplaceApiUrl, isMarketplaceCatalogEnabled } from '../lib/config';
+import {
+  buildOrderBody, buildQuoteBody, checkCustomer, checkMarketplaceEligibility, newIdempotencyKey, placeOrder, requestQuote,
+} from '../lib/marketplaceV1Checkout';
+import MarketplaceTrackingModal from './MarketplaceTrackingModal';
 import { computeDeliveryPreview, type DeliveryConfig } from '../lib/delivery';
 import { MapLocationPicker } from './MapLocationPicker';
 import { useMoney } from './StoreLocaleContext';
@@ -30,6 +34,8 @@ type StoreCheckoutProps = {
   lockedTableToken?: string | null;
   lockedLocationId?: string | null;
   collectorId?: string;
+  // Id del comercio en el marketplace (API v1). Solo las tiendas del marketplace lo traen.
+  marketplaceMerchantId?: string | null;
 };
 
 const STATUS_LABEL: Record<string, { t: string; c: string }> = {
@@ -46,6 +52,7 @@ export default function StoreCheckout({
   open, onClose, slug, primary, locations = [], delivery, minOrderAmount = 0, onlinePayment = false,
   initialOrderType = 'DELIVERY', whatsappOrder,
   lockedTable = null, lockedTableToken = null, lockedLocationId = null, collectorId,
+  marketplaceMerchantId = null,
 }: StoreCheckoutProps) {
   // Llegó por QR de mesa. Con token firmado la mesa puede no tener número en el
   // nombre ("Barra"), así que el candado NO puede depender de la etiqueta.
@@ -61,6 +68,11 @@ export default function StoreCheckout({
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
+  const [orderNotes, setOrderNotes] = useState('');
+  // Pedido v1 aceptado: abre el seguimiento en lugar de la pantalla legacy.
+  const [v1Tracking, setV1Tracking] = useState<{ orderId: string; orderNumber?: string; trackingToken: string } | null>(null);
+  // Clave de idempotencia del intento actual. Un reintento con los mismos datos reusa la clave.
+  const v1Attempt = useRef<{ key: string; signature: string } | null>(null);
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [geoStatus, setGeoStatus] = useState<'' | 'loading' | 'ok' | 'error'>('');
@@ -263,9 +275,48 @@ export default function StoreCheckout({
     } catch { setLoyaltyMsg('No se pudo identificar'); }
   };
 
+  // Marketplace: la bandera activa Y la tienda es del marketplace. Nunca cae al legacy en silencio.
+  const useMarketplaceV1 = isMarketplaceCatalogEnabled() && !!marketplaceMerchantId;
+
+  const submitMarketplaceV1 = async () => {
+    const apiUrl = getMarketplaceApiUrl();
+    const eligibility = checkMarketplaceEligibility({ orderType, paymentMethod, lines });
+    if (!eligibility.ok) { setError(eligibility.message); return; }
+    const customer = { name: customerName.trim(), phone: customerPhone.trim(), email: customerEmail.trim() || undefined };
+    const customerError = checkCustomer(customer);
+    if (customerError) { setError(customerError); return; }
+    const notes = orderNotes.trim() || undefined;
+    const signature = JSON.stringify({ merchantId: marketplaceMerchantId, lines: lines.map(l => [l.menuItemId, l.quantity]),
+      customer, notes, method: eligibility.paymentMethod });
+    if (!v1Attempt.current || v1Attempt.current.signature !== signature) {
+      v1Attempt.current = { key: newIdempotencyKey(), signature };
+    }
+    const base = v1Attempt.current.key;
+    setIsSubmitting(true);
+    try {
+      const quote = await requestQuote(apiUrl, buildQuoteBody({ merchantId: marketplaceMerchantId as string, lines,
+        fulfillment: eligibility.fulfillment }), `${base}-q`);
+      if ('ok' in quote) { setError(quote.message); return; }
+      const order = await placeOrder(apiUrl, buildOrderBody({ quoteId: quote.quoteId, fulfillment: eligibility.fulfillment,
+        paymentMethod: eligibility.paymentMethod, customer, notes }), `${base}-o`);
+      if ('ok' in order) { setError(order.message); return; }
+      v1Attempt.current = null;
+      clear();
+      if (!order.trackingToken) {
+        // La orden existe; sin token no podemos abrir su seguimiento. Se le pide al cliente guardar el número.
+        setError(`Tu pedido${order.orderNumber ? ` #${order.orderNumber}` : ''} quedó registrado, pero no pudimos abrir su seguimiento.`);
+        return;
+      }
+      setV1Tracking({ orderId: order.orderId, orderNumber: order.orderNumber, trackingToken: order.trackingToken });
+    } catch {
+      setError('Error de red al enviar el pedido.');
+    } finally { setIsSubmitting(false); }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (useMarketplaceV1) { await submitMarketplaceV1(); return; }
     if (!customerName.trim()) { setError('Tu nombre es requerido.'); return; }
     if (customerEmail.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail.trim())) {
       setError('El correo no tiene un formato válido.'); return;
@@ -385,6 +436,13 @@ export default function StoreCheckout({
     return () => { stop = true; clearInterval(id); };
   }, [success, slug]);
 
+  if (v1Tracking) {
+    return (
+      <MarketplaceTrackingModal orderId={v1Tracking.orderId} orderNumber={v1Tracking.orderNumber}
+        trackingToken={v1Tracking.trackingToken} apiUrl={getMarketplaceApiUrl()} primary={primary}
+        onClose={() => { setV1Tracking(null); onClose(); }} />
+    );
+  }
   if (!open) return null;
 
   // ── Pantalla de éxito + seguimiento ──────────────────────────────────────
@@ -541,6 +599,9 @@ export default function StoreCheckout({
               <input required autoComplete="name" placeholder="Tu nombre" className={field} value={customerName} onChange={e => setCustomerName(e.target.value)} />
               <input type="tel" inputMode="tel" autoComplete="tel" placeholder={isDineIn ? 'Tu teléfono (opcional, para tus puntos)' : 'Tu teléfono'} className={field} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
               <input type="email" inputMode="email" autoComplete="email" placeholder="Tu correo (opcional, para tu confirmación)" className={field} value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
+              {useMarketplaceV1 && (
+                <textarea rows={2} maxLength={1000} placeholder="Notas para la tienda (opcional)" aria-label="Notas para la tienda" className={field} value={orderNotes} onChange={e => setOrderNotes(e.target.value)} />
+              )}
               {isDelivery && (
                 <>
                   <textarea required placeholder="Dirección de entrega" className={`${field} h-20`} value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} />

@@ -17,7 +17,8 @@ export type V1Failure = {
   message: string;
 };
 export type V1Quote = { quoteId: string; expiresAt: string; total: string };
-export type V1Order = { orderId: string; quoteId: string; idempotent: boolean };
+export type V1Order = { orderId: string; quoteId: string; idempotent: boolean; trackingToken?: string; orderNumber?: string };
+const TRACKING_TOKEN_RE = /^[a-f0-9]{64}$/;
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 // Primer motivo por el que el carrito no puede cotizarse en v1; null si todas las líneas son simples.
@@ -124,5 +125,55 @@ export async function placeOrder(apiUrl: string | null, body: unknown, key: stri
   if (!isRecord(json) || typeof json.orderId !== 'string' || typeof json.quoteId !== 'string') {
     return failure('unavailable', 'Respuesta de orden fuera de contrato.');
   }
-  return { orderId: json.orderId, quoteId: json.quoteId, idempotent: json.idempotent === true };
+  const order: V1Order = { orderId: json.orderId, quoteId: json.quoteId, idempotent: json.idempotent === true };
+  if (typeof json.trackingToken === 'string' && TRACKING_TOKEN_RE.test(json.trackingToken)) order.trackingToken = json.trackingToken;
+  if (typeof json.orderNumber === 'number' || typeof json.orderNumber === 'string') order.orderNumber = String(json.orderNumber);
+  return order;
+}
+
+// Elegibilidad del checkout v1 (solo recogida; ver el comentario del módulo). Devuelve el
+// motivo cuando el pedido no puede enviarse por v1: en ese caso no se usa el legacy.
+export type CheckoutEligibility =
+  | { ok: true; fulfillment: 'PICKUP'; paymentMethod: PaymentMethod }
+  | { ok: false; message: string };
+
+export function checkMarketplaceEligibility(input: {
+  orderType: 'DELIVERY' | 'TAKEOUT' | 'DINE_IN';
+  paymentMethod: string;
+  lines: CartLine[];
+}): CheckoutEligibility {
+  if (input.orderType === 'DELIVERY') return { ok: false, message: 'Entrega a domicilio aún no está disponible en la tienda del marketplace. Elige recoger en tienda.' };
+  if (input.orderType === 'DINE_IN') return { ok: false, message: 'Pedidos de mesa no están disponibles en el marketplace.' };
+  if (input.paymentMethod !== 'CASH' && input.paymentMethod !== 'ONLINE') {
+    return { ok: false, message: 'Este método de pago no está disponible en el marketplace. Usa efectivo o pago en línea.' };
+  }
+  const reason = unsupportedReason(input.lines);
+  if (reason) return { ok: false, message: `Este pedido no puede pagarse en línea: ${reason}.` };
+  return { ok: true, fulfillment: 'PICKUP', paymentMethod: input.paymentMethod };
+}
+
+// Seguimiento v1 de una orden. El token viaja solo en cabecera, nunca en la URL.
+export type V1Tracking = { orderId: string; status: string; taskStatus: string | null; isStale: boolean };
+
+export function parseTracking(json: unknown): V1Tracking | null {
+  if (!isRecord(json) || typeof json.orderId !== 'string' || typeof json.status !== 'string') return null;
+  const taskStatus = typeof json.taskStatus === 'string' ? json.taskStatus : null;
+  return { orderId: json.orderId, status: json.status, taskStatus, isStale: json.isStale === true };
+}
+
+export async function fetchTracking(apiUrl: string | null, orderId: string, trackingToken: string, fetchImpl: FetchLike = fetch): Promise<V1Tracking | V1Failure> {
+  if (!apiUrl) return failure('config', 'El seguimiento no está disponible en este entorno.');
+  if (!TRACKING_TOKEN_RE.test(trackingToken)) return failure('rejected', 'Token de seguimiento inválido.');
+  try {
+    const res = await fetchImpl(`${apiUrl}/api/marketplace/v1/orders/${encodeURIComponent(orderId)}/tracking`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json', 'X-Marketplace-Order-Token': trackingToken },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return failure(res.status >= 500 ? 'unavailable' : 'rejected', 'No pudimos consultar el seguimiento.');
+    const tracking = parseTracking(await res.json().catch(() => null));
+    return tracking ?? failure('unavailable', 'Respuesta de seguimiento fuera de contrato.');
+  } catch {
+    return failure('unavailable', 'No pudimos consultar el seguimiento.');
+  }
 }

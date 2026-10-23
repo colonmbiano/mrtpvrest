@@ -464,3 +464,56 @@ test('placeOrder parses the order and the idempotent flag; malformed responses a
   const bad = await placeOrder('https://api.example', {}, KEY, async () => jsonResponse({ quoteId: 'q1' }, 201));
   assert.equal(bad.reason, 'unavailable');
 });
+
+// ── Elegibilidad, seguimiento v1 y token de la orden ──────────────────────────
+import { checkMarketplaceEligibility, parseTracking, fetchTracking } from '../src/lib/marketplaceV1Checkout.ts';
+
+const TOKEN = 'a'.repeat(64);
+
+test('marketplace checkout is pickup-only, cash or online, and never silently uses another path', () => {
+  const plain = [cartLine()];
+  assert.deepEqual(checkMarketplaceEligibility({ orderType: 'TAKEOUT', paymentMethod: 'CASH', lines: plain }),
+    { ok: true, fulfillment: 'PICKUP', paymentMethod: 'CASH' });
+  assert.deepEqual(checkMarketplaceEligibility({ orderType: 'TAKEOUT', paymentMethod: 'ONLINE', lines: plain }),
+    { ok: true, fulfillment: 'PICKUP', paymentMethod: 'ONLINE' });
+  assert.match(checkMarketplaceEligibility({ orderType: 'DELIVERY', paymentMethod: 'CASH', lines: plain }).message, /domicilio/);
+  assert.match(checkMarketplaceEligibility({ orderType: 'DINE_IN', paymentMethod: 'CASH', lines: plain }).message, /mesa/);
+  assert.match(checkMarketplaceEligibility({ orderType: 'TAKEOUT', paymentMethod: 'TRANSFER', lines: plain }).message, /pago/);
+  assert.match(checkMarketplaceEligibility({ orderType: 'TAKEOUT', paymentMethod: 'CASH', lines: [cartLine({ modifierIds: ['x'] })] }).message, /modificadores/);
+});
+
+test('placeOrder keeps the tracking token and order number when the server returns them', async () => {
+  const withToken = await placeOrder('https://api.example', {}, KEY, async () =>
+    jsonResponse({ orderId: 'o1', quoteId: 'q1', idempotent: false, trackingToken: TOKEN, orderNumber: 42 }, 201));
+  assert.equal(withToken.trackingToken, TOKEN);
+  assert.equal(withToken.orderNumber, '42');
+  const malformed = await placeOrder('https://api.example', {}, KEY, async () =>
+    jsonResponse({ orderId: 'o1', quoteId: 'q1', trackingToken: 'not-hex' }, 201));
+  assert.equal('trackingToken' in malformed, false, 'an invalid token is dropped, never trusted');
+});
+
+test('parseTracking projects only the public tracking fields', () => {
+  assert.deepEqual(parseTracking({ orderId: 'o1', status: 'READY', taskStatus: null, isStale: false, courierId: 'secret' }),
+    { orderId: 'o1', status: 'READY', taskStatus: null, isStale: false });
+  assert.equal(parseTracking({ orderId: 'o1' }), null);
+});
+
+test('fetchTracking sends the token in a header only, never in the url', async () => {
+  let sent;
+  const result = await fetchTracking('https://api.example', 'o1', TOKEN, async (url, init) => {
+    sent = { url, init };
+    return jsonResponse({ orderId: 'o1', status: 'PREPARING', taskStatus: null, isStale: false });
+  });
+  assert.equal(sent.url, 'https://api.example/api/marketplace/v1/orders/o1/tracking');
+  assert.equal(sent.url.includes(TOKEN), false);
+  assert.equal(sent.init.headers['X-Marketplace-Order-Token'], TOKEN);
+  assert.equal(result.status, 'PREPARING');
+});
+
+test('fetchTracking maps 401, 5xx, malformed and missing config without leaking details', async () => {
+  assert.equal((await fetchTracking('https://a', 'o1', TOKEN, async () => new Response('{}', { status: 401 }))).reason, 'rejected');
+  assert.equal((await fetchTracking('https://a', 'o1', TOKEN, async () => new Response('x', { status: 503 }))).reason, 'unavailable');
+  assert.equal((await fetchTracking('https://a', 'o1', TOKEN, async () => jsonResponse({ nope: 1 }))).reason, 'unavailable');
+  assert.equal((await fetchTracking(null, 'o1', TOKEN)).reason, 'config');
+  assert.equal((await fetchTracking('https://a', 'o1', 'short')).reason, 'rejected');
+});
