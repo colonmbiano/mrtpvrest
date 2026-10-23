@@ -26,7 +26,10 @@ export type V1Order = {
   idempotent: boolean;
   trackingToken?: string;
   orderNumber?: string;
-  // Código de entrega de seis dígitos. Se muestra solo en memoria, nunca se persiste.
+  // Códigos de seis dígitos. Solo viven en memoria: nunca se persisten.
+  // pickupPin lo muestra el comprador en la tienda; deliveryPin se dicta al repartidor.
+  fulfillment?: Fulfillment;
+  pickupPin?: string;
   deliveryPin?: string;
 };
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -49,6 +52,25 @@ export function newIdempotencyKey(): string {
 
 export function isDeliveryPin(value: unknown): value is string {
   return typeof value === 'string' && PIN_RE.test(value);
+}
+
+export type PinDisplay = { label: string; code: string; instruction: string };
+
+// Código que el comprador debe mostrar según cómo recibe el pedido: recogida usa el pickupPin
+// (se muestra en la tienda); entrega usa el deliveryPin (se dicta al repartidor).
+export function pinForFulfillment(fulfillment: Fulfillment | null | undefined,
+  pins: { pickupPin?: string | null; deliveryPin?: string | null }): PinDisplay | null {
+  if (fulfillment === 'PICKUP') {
+    return isDeliveryPin(pins.pickupPin)
+      ? { label: 'Código de recogida', code: pins.pickupPin, instruction: 'Muéstralo en la tienda para recoger tu pedido.' }
+      : null;
+  }
+  if (fulfillment === 'DELIVERY') {
+    return isDeliveryPin(pins.deliveryPin)
+      ? { label: 'Código de entrega', code: pins.deliveryPin, instruction: 'Díctaselo al repartidor al recibir tu pedido.' }
+      : null;
+  }
+  return null;
 }
 
 // El cotizador acepta merchantId o merchantSlug; se envía uno solo (el id cuando la API lo expone).
@@ -150,6 +172,8 @@ export async function placeOrder(apiUrl: string | null, body: unknown, key: stri
   const order: V1Order = { orderId: json.orderId, quoteId: json.quoteId, idempotent: json.idempotent === true };
   if (typeof json.trackingToken === 'string' && TRACKING_TOKEN_RE.test(json.trackingToken)) order.trackingToken = json.trackingToken;
   if (typeof json.orderNumber === 'number' || typeof json.orderNumber === 'string') order.orderNumber = String(json.orderNumber);
+  if (json.fulfillment === 'PICKUP' || json.fulfillment === 'DELIVERY') order.fulfillment = json.fulfillment;
+  if (isDeliveryPin(json.pickupPin)) order.pickupPin = json.pickupPin;
   if (isDeliveryPin(json.deliveryPin)) order.deliveryPin = json.deliveryPin;
   return order;
 }

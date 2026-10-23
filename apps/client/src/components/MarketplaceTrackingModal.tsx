@@ -4,7 +4,7 @@
 // token en cabecera y se actualiza cada 15 s. El token y el código de entrega solo viven en
 // memoria del componente; no se guardan en el navegador.
 import { useEffect, useState } from 'react';
-import { fetchTracking, isDeliveryPin, type V1Tracking } from '../lib/marketplaceV1Checkout';
+import { fetchTracking, pinForFulfillment, type Fulfillment, type V1Tracking } from '../lib/marketplaceV1Checkout';
 
 const POLL_MS = 15000;
 
@@ -23,13 +23,15 @@ type Props = {
   orderId: string;
   orderNumber?: string;
   trackingToken: string;
+  fulfillment?: Fulfillment | null;
+  pickupPin?: string | null;
   deliveryPin?: string | null;
   apiUrl: string | null;
   primary: string;
   onClose: () => void;
 };
 
-export default function MarketplaceTrackingModal({ orderId, orderNumber, trackingToken, deliveryPin, apiUrl, primary, onClose }: Props) {
+export default function MarketplaceTrackingModal({ orderId, orderNumber, trackingToken, fulfillment, pickupPin, deliveryPin, apiUrl, primary, onClose }: Props) {
   const [tracking, setTracking] = useState<V1Tracking | null>(null);
   const [error, setError] = useState('');
 
@@ -48,7 +50,8 @@ export default function MarketplaceTrackingModal({ orderId, orderNumber, trackin
   }, [apiUrl, orderId, trackingToken]);
 
   const label = tracking ? (STATUS_LABEL[tracking.status] ?? 'Actualizando') : 'Consultando…';
-  const showPin = isDeliveryPin(deliveryPin) && tracking?.status !== 'CANCELLED';
+  // Código que el comprador necesita según cómo recibe el pedido. Una orden cancelada no muestra ninguno.
+  const pin = tracking?.status === 'CANCELLED' ? null : pinForFulfillment(fulfillment, { pickupPin, deliveryPin });
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Seguimiento del pedido" className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center">
@@ -60,11 +63,11 @@ export default function MarketplaceTrackingModal({ orderId, orderNumber, trackin
           </div>
           <button type="button" onClick={onClose} className="rounded-lg px-3 py-1 text-sm font-bold text-gray-600 hover:bg-gray-100">Cerrar</button>
         </div>
-        {showPin && deliveryPin && (
-          <section aria-label={`Código de entrega ${deliveryPin.split('').join(' ')}`} className="mb-4 rounded-2xl border-2 p-5 text-center" style={{ borderColor: primary }}>
-            <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Código de entrega</p>
-            <p className="mt-2 font-mono text-4xl font-extrabold tracking-[0.3em] text-gray-900" aria-hidden="true">{deliveryPin}</p>
-            <p className="mt-3 text-sm text-gray-700">Díctaselo al repartidor al recibir tu pedido. No lo compartas antes.</p>
+        {pin && (
+          <section aria-label={`${pin.label} ${pin.code.split('').join(' ')}`} className="mb-4 rounded-2xl border-2 p-5 text-center" style={{ borderColor: primary }}>
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-500">{pin.label}</p>
+            <p className="mt-2 font-mono text-4xl font-extrabold tracking-[0.3em] text-gray-900" aria-hidden="true">{pin.code}</p>
+            <p className="mt-3 text-sm text-gray-700">{pin.instruction}</p>
           </section>
         )}
         {tracking?.isStale && (

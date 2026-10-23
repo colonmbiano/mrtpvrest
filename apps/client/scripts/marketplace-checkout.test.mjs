@@ -395,6 +395,7 @@ register(`data:text/javascript,${encodeURIComponent(`
     return next(specifier, context);
   }
 `)}`);
+const { pinForFulfillment } = await import('../src/lib/marketplaceV1Checkout.ts');
 const {
   unsupportedReason, buildQuoteBody, buildOrderBody, checkCustomer, requestQuote, placeOrder, newIdempotencyKey,
 } = await import('../src/lib/marketplaceV1Checkout.ts');
@@ -606,4 +607,38 @@ test('placeOrder keeps a six-digit delivery PIN and drops anything else', async 
 test('isDeliveryPin accepts exactly six digits', () => {
   assert.equal(isDeliveryPin('004512'), true);
   for (const value of ['12345', '1234567', 'abc123', 12345, undefined]) assert.equal(isDeliveryPin(value), false, String(value));
+});
+
+// ── Código de recogida vs. código de entrega según fulfillment ────────────────
+test('placeOrder carries fulfillment and the pickup PIN alongside the delivery PIN', async () => {
+  const order = await placeOrder('https://api.example', {}, KEY, async () =>
+    jsonResponse({ orderId: 'o1', quoteId: 'q1', fulfillment: 'PICKUP', pickupPin: '123456', deliveryPin: '654321' }, 201), GUEST);
+  assert.equal(order.fulfillment, 'PICKUP');
+  assert.equal(order.pickupPin, '123456');
+  assert.equal(order.deliveryPin, '654321');
+});
+
+test('placeOrder drops an unknown fulfillment and malformed PINs', async () => {
+  const order = await placeOrder('https://api.example', {}, KEY, async () =>
+    jsonResponse({ orderId: 'o1', quoteId: 'q1', fulfillment: 'SHIPPING', pickupPin: 12, deliveryPin: 'abc' }, 201), GUEST);
+  assert.equal('fulfillment' in order, false);
+  assert.equal('pickupPin' in order, false);
+  assert.equal('deliveryPin' in order, false);
+});
+
+test('a PICKUP order shows the pickup code and never the delivery code', () => {
+  const pin = pinForFulfillment('PICKUP', { pickupPin: '123456', deliveryPin: '654321' });
+  assert.deepEqual(pin, { label: 'Código de recogida', code: '123456', instruction: 'Muéstralo en la tienda para recoger tu pedido.' });
+});
+
+test('a DELIVERY order shows the delivery code and never the pickup code', () => {
+  const pin = pinForFulfillment('DELIVERY', { pickupPin: '123456', deliveryPin: '654321' });
+  assert.deepEqual(pin, { label: 'Código de entrega', code: '654321', instruction: 'Díctaselo al repartidor al recibir tu pedido.' });
+});
+
+test('no code is shown when the matching PIN is missing or the fulfillment is unknown', () => {
+  assert.equal(pinForFulfillment('PICKUP', { pickupPin: null, deliveryPin: '654321' }), null);
+  assert.equal(pinForFulfillment('DELIVERY', { pickupPin: '123456', deliveryPin: undefined }), null);
+  assert.equal(pinForFulfillment(null, { pickupPin: '123456', deliveryPin: '654321' }), null);
+  assert.equal(pinForFulfillment(undefined, { pickupPin: '123456' }), null);
 });
