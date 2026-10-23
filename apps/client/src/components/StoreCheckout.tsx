@@ -68,7 +68,7 @@ export default function StoreCheckout({
   const [customerEmail, setCustomerEmail] = useState('');
   const [orderNotes, setOrderNotes] = useState('');
   // Pedido v1 aceptado: abre el seguimiento en lugar de la pantalla legacy.
-  const [v1Tracking, setV1Tracking] = useState<{ orderId: string; orderNumber?: string; trackingToken: string } | null>(null);
+  const [v1Tracking, setV1Tracking] = useState<{ orderId: string; orderNumber?: string; trackingToken: string; deliveryPin?: string } | null>(null);
   // Clave de idempotencia del intento actual. Un reintento con los mismos datos reusa la clave.
   const v1Attempt = useRef<{ key: string; signature: string } | null>(null);
   const [deliveryAddress, setDeliveryAddress] = useState('');
@@ -308,7 +308,7 @@ export default function StoreCheckout({
         setError(`Tu pedido${order.orderNumber ? ` #${order.orderNumber}` : ''} quedó registrado, pero no pudimos abrir su seguimiento.`);
         return;
       }
-      setV1Tracking({ orderId: order.orderId, orderNumber: order.orderNumber, trackingToken: order.trackingToken });
+      setV1Tracking({ orderId: order.orderId, orderNumber: order.orderNumber, trackingToken: order.trackingToken, deliveryPin: order.deliveryPin });
     } catch {
       setError('Error de red al enviar el pedido.');
     } finally { setIsSubmitting(false); }
@@ -440,7 +440,7 @@ export default function StoreCheckout({
   if (v1Tracking) {
     return (
       <MarketplaceTrackingModal orderId={v1Tracking.orderId} orderNumber={v1Tracking.orderNumber}
-        trackingToken={v1Tracking.trackingToken} apiUrl={getMarketplaceApiUrl()} primary={primary}
+        trackingToken={v1Tracking.trackingToken} deliveryPin={v1Tracking.deliveryPin ?? null} apiUrl={getMarketplaceApiUrl()} primary={primary}
         onClose={() => { setV1Tracking(null); onClose(); }} />
     );
   }

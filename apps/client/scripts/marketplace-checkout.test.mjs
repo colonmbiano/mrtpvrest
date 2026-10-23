@@ -385,11 +385,19 @@ test('completeness: marketplace split requerido para checkout online', () => {
 });
 
 // ── Checkout v1 (cotización + orquestador) y carrito mono-tienda ──────────────
-import {
+import { register } from 'node:module';
+// Los módulos de la app importan './x' sin extensión; el hook añade '.ts' solo a esos especificadores.
+register(`data:text/javascript,${encodeURIComponent(`
+  export async function resolve(specifier, context, next) {
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && !/[.][cm]?[jt]sx?$/.test(specifier)) {
+      return next(specifier + '.ts', context);
+    }
+    return next(specifier, context);
+  }
+`)}`);
+const {
   unsupportedReason, buildQuoteBody, buildOrderBody, checkCustomer, requestQuote, placeOrder, newIdempotencyKey,
-} from '../src/lib/marketplaceV1Checkout.ts';
-
-
+} = await import('../src/lib/marketplaceV1Checkout.ts');
 const cartLine = (over = {}) => ({ id: 'k1', menuItemId: 'burger', name: 'Hamburguesa', price: 100, quantity: 2,
   variantId: null, modifierIds: [], ...over });
 const KEY = 'checkout-key-0123456789abcdef0123456789';
@@ -466,8 +474,7 @@ test('placeOrder parses the order and the idempotent flag; malformed responses a
 });
 
 // ── Elegibilidad, seguimiento v1 y token de la orden ──────────────────────────
-import { checkMarketplaceEligibility, parseTracking, fetchTracking } from '../src/lib/marketplaceV1Checkout.ts';
-
+const { checkMarketplaceEligibility, parseTracking, fetchTracking } = await import('../src/lib/marketplaceV1Checkout.ts');
 const TOKEN = 'a'.repeat(64);
 
 test('marketplace checkout is pickup-only, cash or online, and never silently uses another path', () => {
@@ -526,4 +533,77 @@ test('the quote sends merchantId when the server exposes it, and merchantSlug ot
   const withSlug = buildQuoteBody({ merchant: { merchantId: null, slug: 'taqueria' }, lines: [cartLine()], fulfillment: 'PICKUP' });
   assert.equal(withSlug.merchantSlug, 'taqueria');
   assert.equal('merchantId' in withSlug, false);
+});
+
+// ── Identidad de invitado estable (X-Guest-Id) y código de entrega ────────────
+const { getOrCreateGuestId, isGuestId, GUEST_ID_STORAGE_KEY, randomHexId } = await import('../src/lib/guestIdentity.ts');
+const { isDeliveryPin } = await import('../src/lib/marketplaceV1Checkout.ts');
+const GUEST = 'guest-0123456789abcdef';
+const memoryStorage = (seed = {}) => {
+  const data = new Map(Object.entries(seed));
+  return { data, getItem: key => (data.has(key) ? data.get(key) : null), setItem: (key, value) => { data.set(key, String(value)); } };
+};
+const blockedStorage = { getItem() { throw new Error('storage blocked'); }, setItem() { throw new Error('storage blocked'); } };
+
+test('the guest id is created once, persisted under its key, and reused on the next visit', () => {
+  const storage = memoryStorage();
+  const first = getOrCreateGuestId(storage);
+  assert.equal(isGuestId(first), true);
+  assert.equal(storage.data.get(GUEST_ID_STORAGE_KEY), first);
+  assert.equal(getOrCreateGuestId(storage), first, 'the same browser keeps the same identity');
+});
+
+test('an existing valid guest id is kept, and a malformed stored value is replaced', () => {
+  assert.equal(getOrCreateGuestId(memoryStorage({ [GUEST_ID_STORAGE_KEY]: GUEST })), GUEST);
+  const storage = memoryStorage({ [GUEST_ID_STORAGE_KEY]: 'x' });
+  const replaced = getOrCreateGuestId(storage);
+  assert.notEqual(replaced, 'x');
+  assert.equal(isGuestId(replaced), true);
+  assert.equal(storage.data.get(GUEST_ID_STORAGE_KEY), replaced);
+});
+
+test('blocked or missing storage falls back to an in-memory id that stays stable', () => {
+  const blocked = getOrCreateGuestId(blockedStorage);
+  assert.equal(isGuestId(blocked), true);
+  assert.equal(getOrCreateGuestId(blockedStorage), blocked);
+  const none = getOrCreateGuestId(null);
+  assert.equal(getOrCreateGuestId(null), none);
+});
+
+test('generated ids are 32 hex characters and differ between fresh generations', () => {
+  assert.match(randomHexId(), /^[0-9a-f]{32}$/);
+  assert.notEqual(randomHexId(), randomHexId());
+});
+
+test('X-Guest-Id travels on quote, order and tracking with the same identity', async () => {
+  const seen = [];
+  const capture = async (url, init) => { seen.push({ url, headers: init.headers }); return jsonResponse({ quoteId: 'q1', expiresAt: 'x', total: '1.00', orderId: 'o1', status: 'PENDING_PAYMENT' }, 201); };
+  await requestQuote('https://api.example', {}, KEY, capture, GUEST);
+  await placeOrder('https://api.example', {}, KEY, capture, GUEST);
+  await fetchTracking('https://api.example', 'o1', TOKEN, capture, GUEST);
+  assert.equal(seen.length, 3);
+  for (const call of seen) assert.equal(call.headers['X-Guest-Id'], GUEST);
+});
+
+test('a default call sends a valid guest id, and an invalid explicit one is refused before any request', async () => {
+  let header;
+  await requestQuote('https://api.example', {}, KEY, async (url, init) => { header = init.headers['X-Guest-Id']; return jsonResponse({ quoteId: 'q', expiresAt: 'x', total: '1' }, 201); });
+  assert.equal(isGuestId(header), true);
+  let called = false;
+  const refused = await placeOrder('https://api.example', {}, KEY, async () => { called = true; return jsonResponse({}, 201); }, 'bad id!');
+  assert.equal(refused.reason, 'rejected');
+  assert.equal(called, false);
+});
+
+test('placeOrder keeps a six-digit delivery PIN and drops anything else', async () => {
+  const pin = async value => placeOrder('https://api.example', {}, KEY, async () => jsonResponse({ orderId: 'o1', quoteId: 'q1', deliveryPin: value }, 201), GUEST);
+  assert.equal((await pin('004512')).deliveryPin, '004512', 'leading zeros are kept');
+  assert.equal('deliveryPin' in await pin('45'), false);
+  assert.equal('deliveryPin' in await pin(4512), false, 'a number is not a PIN');
+  assert.equal('deliveryPin' in await pin('12345a'), false);
+});
+
+test('isDeliveryPin accepts exactly six digits', () => {
+  assert.equal(isDeliveryPin('004512'), true);
+  for (const value of ['12345', '1234567', 'abc123', 12345, undefined]) assert.equal(isDeliveryPin(value), false, String(value));
 });
