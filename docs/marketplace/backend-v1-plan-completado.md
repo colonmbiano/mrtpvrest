@@ -78,3 +78,25 @@ Se ha implementado el conjunto completo de contratos y servicios de backend para
 - **Sincronización de Schemas:** Byte-identical verificado entre `packages/database/prisma/schema.prisma` y `apps/backend/prisma/schema.prisma` (SHA-256: `ef6e6c1d15f14ee73823a4585d4770f97c5739e75b582422c17ef1657b9ef3a1`).
 - **TypeScript:** 0 errores de compilación (`tsc --noEmit`) en `apps/client`, `apps/delivery`, `apps/admin` y `apps/saas`.
 - **Aislamiento:** 100% offline, cero dependencias de red o servicios externos activos.
+
+---
+
+## 3. Matriz de Trazabilidad de los 12 Tests de Bloqueo (Plan Técnico §9)
+
+Cada invariante de seguridad, concurrencia y dinero exigido por el Checklist de Bloqueo del Plan Técnico v1.0 cuenta con verificación automatizada en memoria:
+
+| # | Invariante de Bloqueo (§9) | Regla de Arquitectura | Suite de Prueba Responsable | Resultado |
+|---|---|---|---|:---:|
+| 1 | **Aislamiento de lectura** | Pedido sale al tenant/sucursal correcta; ningún otro puede leerlo | `marketplace-staff-identity.test.cjs` + `runtime-policy.test.cjs` | ✅ PASS |
+| 2 | **Idempotencia de checkout** | Reintentos concurrentes generan exactamente una orden de cocina | `marketplace-orders.test.cjs` + `marketplace-order-orchestrator.test.cjs` | ✅ PASS |
+| 3 | **Carrera de aceptación CAS** | Dos couriers aceptan a la vez: 1 gana, el otro recibe `409 Conflict` | `marketplace-dispatch.test.cjs` + `marketplace-hybrid-policy.test.cjs` | ✅ PASS |
+| 4 | **Frontera de repartidor propio** | Courier propio no toma órdenes ajenas sin habilitación expresa de red | `marketplace-couriers-v1.test.cjs` | ✅ PASS |
+| 5 | **Tarifas y TTL de cotización** | Cambio de tarifa o expiración de TTL bloquea cobros inconsistentes | `marketplace-quote.test.cjs` | ✅ PASS |
+| 6 | **IDOR y falsificación de IDs** | Modificar IDs en headers o body no otorga acceso indebido | `marketplace-staff-identity.test.cjs` + `marketplace-merchants-v1.test.cjs` | ✅ PASS |
+| 7 | **Webhooks repetidos o falsos** | Firmas HMAC SHA256 y deduplicación por evento previenen doble abono | `marketplace-webhooks-v1.test.cjs` | ✅ PASS |
+| 8 | **Resiliencia de outbox** | Falla de notificación tras pago exitoso se recupera vía outbox | `marketplace-webhooks-v1.test.cjs` + `marketplace-pilot-e2e.test.mjs` | ✅ PASS |
+| 9 | **Privacidad y TTL de GPS** | Señales GPS $\ge 90$s se descartan; cliente no ve ubicación antes de pickup | `marketplace-tracking-v1.test.cjs` | ✅ PASS |
+| 10 | **Operación offline de repartidor** | Sincronización diferida idempotente con resolución explícita de conflictos | `delivery-dispatch.test.mjs` | ✅ PASS |
+| 11 | **Cancelaciones y compensación** | Cancelación antes/después de pickup revierte asientos contables | `marketplace-settlements-v1.test.cjs` | ✅ PASS |
+| 12 | **Partida doble y precisión exacta** | Asientos contables (`DEBIT = CREDIT`) en centavos enteros sin redondeos Float | `marketplace-ledger.test.cjs` + `marketplace-settlements-v1.test.cjs` | ✅ PASS |
+
