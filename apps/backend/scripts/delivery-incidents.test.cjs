@@ -162,6 +162,19 @@ test('optional key allows distinct incidents; normalized photoBase64 alias repla
   await f.log({ body }); assert.equal(f.state.deliveryIncident.length, 1);
   await f.log({ idempotencyKey: undefined }); assert.equal(f.state.deliveryIncident.length, 2);
 });
+test('idempotency survives service recreation and keys remain scoped to their order and restaurant', async () => {
+  const f = setup(); const first = await f.log();
+  const restarted = createDeliveryIncidentsService({ now: () => new Date(NOW.getTime() + 1000) });
+  const replay = await restarted.logIncident({ ...f.args, body: f.incident(), io: f.io, idempotencyKey: 'incident-o1-123' });
+  assert.deepEqual(replay, first); assert.equal(f.events.length, 1);
+  f.state.order.push({ ...structuredClone(f.state.order[0]), id: 'o2', restaurantId: 'r2', locationId: 'l2',
+    restaurant: { tenantId: 't2' }, deliveryDriverId: 'd2' });
+  const actor = { ...DRIVER, id: 'd2', restaurantId: 'r2', tenantId: 't2', locationId: 'l2' };
+  await f.log({ orderId: 'o2', restaurantId: 'r2', actor, body: { ...f.incident(), orderId: 'o2', courierId: 'd2' } });
+  assert.equal(f.state.deliveryIncident.length, 2);
+  assert.equal((await f.list()).length, 1);
+  assert.equal(f.events[1].room, 'restaurant:r2:location:l2:admins');
+});
 test('invalid inputs fail with 400 and no persistence or event', async () => {
   const bad = [{ type: 'OTHER' }, { callAttempts: -1 }, { callAttempts: 1.5 }, { callAttempts: '2' },
     { notes: 'x'.repeat(4001) }, { timestamp: 'bad' }, { timestamp: NOW.getTime() + 600001 },
@@ -209,6 +222,10 @@ test('socket outage cannot undo a persisted incident or expose media in errors',
   const f = setup(); f.hooks.socketError = true;
   assert.equal((await f.log()).success, true); assert.equal(f.state.deliveryIncident.length, 1);
   assert.equal(f.warnings.length, 1); assert.ok(!JSON.stringify(f.warnings).includes('base64'));
+});
+test('orders without a legacy location notify only the authenticated restaurant admin room', async () => {
+  const f = setup(); f.state.order[0].locationId = null; await f.log();
+  assert.equal(f.events[0].room, 'restaurant:r1:admins');
 });
 test('photo and signature persist atomically with status, audit and pending cash', async () => {
   const f = setup(); const evidence = { photoBase64: PNG, signatureBase64: PNG, deliveredAt: NOW.getTime() - 60000 };
@@ -272,6 +289,14 @@ test('pending shipping fee, inactive driver, unauthorized driver and cancelled o
     assert.equal(f.state.deliveryEvidence.length, 0);
   }
 });
+test('evidence rejects foreign restaurant, tenant, branch, driver and device before any write', async () => {
+  for (const overrides of [{ restaurantId: 'r2' }, { actor: { ...DRIVER, tenantId: 't2' } },
+    { actor: { ...OWNER, locationId: 'l2' } }, { driverId: 'd2' }, { actor: { ...DRIVER, isDevice: true } }]) {
+    const f = setup(); await assert.rejects(f.status({ status: 'DELIVERED', evidence: { photoBase64: PNG } }, overrides));
+    assert.equal(f.state.deliveryEvidence.length, 0); assert.equal(f.state.order[0].status, 'ON_THE_WAY');
+    assert.equal(f.state.driverCashMovement.length, 0);
+  }
+});
 test('assignment is rechecked under the order lock rather than trusting a stale client', async () => {
   const f = setup(); f.hooks.beforeLock = () => { f.state.order[0].deliveryDriverId = 'd2'; };
   await assert.rejects(f.log(), { code: 'COURIER_FORBIDDEN' }); assert.equal(f.events.length, 0);
@@ -296,6 +321,10 @@ test('HTTP routes run actual authenticate and tenant middleware; forged/missing/
   for (const route of h.routes.filter(row => row.route.includes('/incidents') || row.route.endsWith('/status'))) {
     assert.equal(route.handlers[0], h.auth.authenticate); assert.equal(route.handlers[1], h.auth.requireTenantAccess);
   }
+  assert.equal((await h.request('get', '/orders/:orderId/incidents', { headers: { authorization: 'Bearer outsider' } })).statusCode, 403);
+  assert.equal((await h.request('put', '/:driverId/orders/:orderId/status', { headers: { authorization: 'Bearer outsider' },
+    body: { status: 'DELIVERED', evidence: { photoBase64: PNG } } })).statusCode, 403);
+  assert.equal(f.state.deliveryEvidence.length, 0);
 });
 test('HTTP incident response, safe list, validation and immutable delivery evidence work through real handlers', async () => {
   const f = setup(); const h = http(f);
@@ -322,4 +351,20 @@ test('schemas are byte-identical and include tenant-bound incident/evidence rela
   assert.match(source, /@@unique\(\[restaurantId, orderId, idempotencyKey\]\)/);
   const { SCOPED_MODELS } = require('../../../packages/database/tenant-guard');
   assert.ok(SCOPED_MODELS.has('DeliveryIncident')); assert.ok(SCOPED_MODELS.has('DeliveryEvidence'));
+});
+test('tenant guard enforces explicit restaurant scope for every incident/evidence CRUD operation', async () => {
+  const { tenantGuard, runWithTenant, SCOPED_MODELS } = require('../../../packages/database/tenant-guard');
+  const schema = fs.readFileSync(path.join(__dirname, '../../../packages/database/prisma/schema.prisma'), 'utf8');
+  const scoped = [...schema.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)\n\}/gm)]
+    .filter(match => /\n\s*restaurantId\s+String/.test(match[2])).map(match => match[1]);
+  assert.deepEqual(new Set(scoped), SCOPED_MODELS);
+  const guard = tenantGuard({ mode: 'enforce' }).query.$allModels.$allOperations;
+  for (const model of ['DeliveryIncident', 'DeliveryEvidence']) {
+    await runWithTenant({ restaurantId: 'r1' }, async () => {
+      const received = await guard({ model, operation: 'findMany', args: { where: { orderId: 'o1' } }, query: args => args });
+      assert.equal(received.where.restaurantId, 'r1');
+      const created = await guard({ model, operation: 'create', args: { data: { orderId: 'o1' } }, query: args => args });
+      assert.equal(created.data.restaurantId, 'r1');
+    });
+  }
 });

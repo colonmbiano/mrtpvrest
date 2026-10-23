@@ -137,9 +137,11 @@ function createDeliveryIncidentsService({ now = () => new Date(), logger = conso
       return { row, order, created: true };
     }, TX);
     // Socket.IO is a best-effort notice after commit. Polling GET remains authoritative.
-    if (result.created && io && result.order.locationId) {
+    if (result.created && io) {
       try {
-        io.to(`restaurant:${scope}:location:${result.order.locationId}:admins`).emit('delivery:incident', {
+        const room = result.order.locationId ? `restaurant:${scope}:location:${result.order.locationId}:admins`
+          : `restaurant:${scope}:admins`;
+        io.to(room).emit('delivery:incident', {
           ...receipt(result.row), orderId, courierId, type: result.row.type,
           restaurantId: scope, locationId: result.order.locationId });
       } catch { logger.warn('[delivery] incident_socket_unavailable', { incidentId: result.row.id }); }
