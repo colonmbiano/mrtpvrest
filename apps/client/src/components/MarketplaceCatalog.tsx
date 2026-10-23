@@ -5,6 +5,7 @@
 // (cartStore) es un singleton en memoria y no debe viajar entre tiendas.
 import { Search, Store, Package, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
+import ScrollToHash from '@/components/ScrollToHash';
 import {
   BUSINESS_TYPE_LABELS, MAX_QUERY_LENGTH,
   catalogHref, catalogSearchParams, storeHref, totalPages, formatPrice,
@@ -28,6 +29,7 @@ export default function MarketplaceCatalog({ state, stores, products, isolated }
 
   return (
     <div className="min-h-[100dvh] bg-[#f8f8f6] text-[#1a1a1a]">
+      <ScrollToHash />
       <a href="#contenido" className={`sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 ${LINK}`}>
         Saltar al contenido
       </a>
