@@ -28,7 +28,10 @@ function fixture() {
   };
   prisma.marketplaceApplication = {
     findUnique: async ({ where }) => {
-      if (where.id) return applications.find(x => x.id === where.id) || null;
+      if (where.id) {
+        const app = applications.find(x => x.id === where.id);
+        return app ? { ...app, account: accounts.find(a => a.id === app.accountId) } : null;
+      }
       return applications.find(x => x.accountId === where.accountId_role.accountId && x.role === where.accountId_role.role) || null;
     },
     create: async ({ data }) => {
