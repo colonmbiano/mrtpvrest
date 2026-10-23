@@ -14,7 +14,9 @@ function match(row, where = {}) {
     if (expected === undefined) return true;
     if (typeof expected !== 'object' || expected instanceof Date) return value === expected;
     if ('is' in expected) return value != null && match(value, expected.is);
+    if ('path' in expected) return expected.path.reduce((item, part) => item?.[part], value) === expected.equals;
     return Object.entries(expected).every(([op, bound]) => ({ in: () => bound.includes(value), notIn: () => !bound.includes(value),
+      not: () => value !== bound,
       gt: () => value > bound, gte: () => value >= bound, lt: () => value < bound, lte: () => value <= bound })[op]());
   });
 }
@@ -47,7 +49,8 @@ function fixture(serviceOptions = {}) {
   let sequence = 0; let queued = Promise.resolve(); let inTransaction = false;
   const calls = []; const hooks = {}; const providerCalls = []; const payments = new Map(); const preferences = new Map();
   function materialize(model, row) {
-    if (model === 'order') return { ...row, restaurant: state.restaurant.find(item => item.id === row.restaurantId) };
+    if (model === 'order') return { ...row, restaurant: state.restaurant.find(item => item.id === row.restaurantId),
+      marketplacePipeline: state.marketplaceOrderPipeline.find(item => item.orderId === row.id) || null };
     if (model === 'marketplaceOrderPipeline') return { ...row, order: materialize('order', state.order.find(item => item.id === row.orderId)) };
     return row;
   }
@@ -71,17 +74,34 @@ function fixture(serviceOptions = {}) {
           const orders = args.orderBy ? Array.isArray(args.orderBy) ? args.orderBy : [args.orderBy] : [];
           if (orders.length) rows.sort((a, b) => { for (const order of orders) {
             const [key, direction] = Object.entries(order)[0];
-            if (a[key] !== b[key]) return (a[key] < b[key] ? -1 : 1) * (direction === 'asc' ? 1 : -1);
+            const left = a[key] instanceof Date ? a[key].getTime() : a[key];
+            const right = b[key] instanceof Date ? b[key].getTime() : b[key];
+            if (left !== right) return (left < right ? -1 : 1) * (direction === 'asc' ? 1 : -1);
           } return 0; });
           if (args.take !== undefined) rows = rows.slice(0, args.take);
           return rows.map(row => project(row, args.select));
         },
         async findFirst(args) { return (await api[model].findMany(args))[0] || null; },
         async count(args) { return (await api[model].findMany(args)).length; },
+        async groupBy(args) {
+          calls.push({ model, method: 'groupBy', args });
+          const groups = new Map();
+          for (const row of state[model].filter(row => match(materialize(model, row), args.where))) {
+            const key = JSON.stringify(args.by.map(field => row[field]));
+            const group = groups.get(key) || { ...Object.fromEntries(args.by.map(field => [field, row[field]])), sum: 0n };
+            const parts = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(String(row.amount));
+            if (!parts) throw new Error('Invalid mock decimal');
+            group.sum += (parts[1] ? -1n : 1n) * (BigInt(parts[2]) * 100n + BigInt((parts[3] || '').padEnd(2, '0')));
+            groups.set(key, group);
+          }
+          return [...groups.values()].map(({ sum, ...keys }) => ({ ...keys,
+            _sum: { amount: `${sum < 0n ? '-' : ''}${(sum < 0n ? -sum : sum) / 100n}.${String((sum < 0n ? -sum : sum) % 100n).padStart(2, '0')}` } }));
+        },
         async create(args) {
           calls.push({ model, method: 'create', args });
           if (hooks.beforeWrite) await hooks.beforeWrite(model, 'create', args);
           const row = { id: `db-${++sequence}`, createdAt: new Date(date), providerPaymentId: null, checkoutUrl: null, dispatch: null,
+            ...(model === 'order' ? { cashCollected: false, deliveryDriverId: null, updatedAt: new Date(date) } : {}),
             paymentProviderId: null, paymentProviderRef: null, ...structuredClone(args.data) };
           if (model === 'order') { state.orderItem.push(...row.items.create.map(item => ({ ...item, orderId: row.id }))); delete row.items; }
           unique(model, [...state[model], row]); state[model].push(row);

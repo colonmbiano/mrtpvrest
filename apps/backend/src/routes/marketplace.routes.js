@@ -3,7 +3,7 @@
 const { InvalidQuery, createCatalog, createPrismaCatalogAdapter } = require('../lib/marketplace-catalog');
 
 function createMarketplaceRouter({ Router, getAdapter, storeSlugs = process.env.MARKETPLACE_STORE_SLUGS || '',
-  getPrisma = () => require('@mrtpvrest/database').prisma, orderOptions = {} } = {}) {
+  getPrisma = () => require('@mrtpvrest/database').prisma, orderOptions = {}, authenticate, ledgerStore } = {}) {
   const router = (Router || require('express').Router)();
   const catalog = createCatalog({ storeSlugs, getAdapter: getAdapter || (() => {
     // Deliberately lazy: an empty allowlist never loads or accesses the database.
@@ -67,6 +67,38 @@ function createMarketplaceRouter({ Router, getAdapter, storeSlugs = process.env.
         trackingToken, prismaClient: getPrisma() }));
     } catch (error) { return orderError(res, error); }
   });
+  function driverAuthentication(req, res, next) {
+    res.set('Cache-Control', 'no-store');
+    // Do not load the authenticated application stack while serving the public catalog.
+    return (authenticate || require('../middleware/auth.middleware').authenticate)(req, res, next);
+  }
+  function driverHandler(kind) {
+    return async (req, res) => {
+      res.set('Cache-Control', 'no-store');
+      const { getDriverBalance, getDriverDeliveryHistory, resolveDriverAccess, DriverBalanceError } = require('../lib/marketplace-driver-balance');
+      try {
+        const scope = resolveDriverAccess(req);
+        let limit = 50;
+        if (kind === 'history' && req.query?.limit !== undefined) {
+          if (typeof req.query.limit !== 'string' || !/^[1-9]\d{0,2}$/.test(req.query.limit) || Number(req.query.limit) > 100) {
+            throw new DriverBalanceError('INVALID_LIMIT', 'limit debe estar entre 1 y 100');
+          }
+          limit = Number(req.query.limit);
+        }
+        const prismaClient = getPrisma();
+        return res.json(kind === 'balance'
+          ? await getDriverBalance({ ...scope, prismaClient, ledgerStore })
+          : await getDriverDeliveryHistory({ ...scope, limit, prismaClient }));
+      } catch (error) {
+        if (error instanceof DriverBalanceError && error.statusCode < 500) {
+          return res.status(error.statusCode).json({ error: error.message, errorCode: error.code });
+        }
+        return res.status(503).json({ error: 'Informacion de repartidor temporalmente no disponible', errorCode: 'DRIVER_BALANCE_UNAVAILABLE' });
+      }
+    };
+  }
+  router.get('/drivers/:id/balance', driverAuthentication, driverHandler('balance'));
+  router.get('/drivers/:id/history', driverAuthentication, driverHandler('history'));
   return router;
 }
 
