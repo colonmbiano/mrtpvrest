@@ -318,6 +318,7 @@ function StoreCard({ store, state }: { store: StoreSummary; state: CatalogState 
     <a href={href ?? '#tiendas'} aria-label={'Visitar ' + store.name} className={'flex h-full flex-col gap-2.5 ' + focus}>
       <div className="relative grid aspect-[5/4] place-items-center overflow-hidden rounded-[1rem]" style={cardTint(store.slug)}>
         <span className="text-6xl drop-shadow-xl" aria-hidden="true">{businessEmoji(store.businessType)}</span>
+        {store.logoUrl && <img src={store.logoUrl} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full bg-white object-contain p-3" />}
         <span className={'absolute bottom-2 left-2 rounded-full px-2 py-1 text-[10px] font-extrabold ' + (store.isOpen ? 'bg-white text-[#168045]' : 'bg-[#34443a] text-white')}>{store.isOpen ? 'Disponible' : 'Cerrada'}</span>
       </div>
       <strong className="line-clamp-2 text-sm leading-snug sm:text-base">{store.name}</strong>
@@ -339,6 +340,7 @@ function ProductCard({ product }: { product: ProductSummary }) {
     <a href={href ?? '#productos'} className={'group flex h-full flex-col gap-2 ' + focus} aria-label={'Ver ' + product.name + ' en ' + product.store.name}>
       <span className="relative grid aspect-[5/4] place-items-center overflow-hidden rounded-[.9rem]" style={cardTint(product.store.slug)}>
         <span className="text-6xl drop-shadow-lg transition-transform group-hover:scale-110" aria-hidden="true">{productEmoji(product.name)}</span>
+        {product.imageUrl && <img src={product.imageUrl} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105" />}
         {off !== null && <span className="absolute left-2 top-2 rounded-lg bg-[#f35b22] px-2 py-1 text-xs font-extrabold text-white">-{off}%</span>}
       </span>
       <strong className="line-clamp-2 min-h-[2.5em] text-sm leading-snug sm:text-[15px]">{product.name}</strong>
