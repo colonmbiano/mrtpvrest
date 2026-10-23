@@ -72,7 +72,8 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
       data: { accountId: account.id, purpose, tokenHash: hashToken(raw),
         expiresAt: new Date(now().getTime() + (purpose === 'EMAIL_VERIFY' ? VERIFY_MS : RESET_MS)) },
     });
-    const link = publicOrigin + path + '?token=' + raw;
+    // Fragment never reaches HTTP servers or server access logs.
+    const link = publicOrigin + path + '#token=' + raw;
     const subject = purpose === 'EMAIL_VERIFY' ? 'Verifica tu correo en MRTPVREST Marketplace' : 'Recupera tu acceso a MRTPVREST Marketplace';
     // No HTML or URL values depend on user-controlled strings (only validated origin and random token).
     await sendEmail(account.email, subject,
