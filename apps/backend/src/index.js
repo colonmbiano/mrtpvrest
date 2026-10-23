@@ -180,6 +180,8 @@ app.use('/api/marketplace/v1', require('./routes/marketplace-tracking-v1.routes'
 app.use('/api/marketplace/v1', require('./routes/marketplace-merchants-v1.routes')())
 app.use('/api/marketplace/v1', require('./routes/marketplace-couriers-v1.routes')())
 app.use('/api/marketplace/v1/webhooks', require('./routes/marketplace-webhooks-v1.routes')())
+app.use('/api/marketplace/v1/ops', require('./routes/marketplace-ops-dispatch-v1.routes')())
+app.use('/api/marketplace/v1', require('./routes/marketplace-settlements-v1.routes')())
 app.use('/api/marketplace', require('./routes/marketplace.routes')())
 app.use('/api/public', require('./routes/menu.routes'))
 app.use('/api/store',  require('./routes/store.routes'))
