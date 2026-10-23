@@ -55,6 +55,7 @@ const TESTS = [
   { path: 'apps/backend/scripts/promo-adapter.test.cjs', name: 'Backend: Adaptador de Promociones' },
   { path: 'apps/backend/scripts/location-promos-job.test.cjs', name: 'Backend: Job Semanal de Promociones' },
   { path: 'apps/backend/scripts/marketplace-orders.test.cjs', name: 'Backend: Pipeline de Órdenes & Transacciones' },
+  { path: 'apps/backend/scripts/marketplace-order-orchestrator.test.cjs', name: 'Backend: Orquestador de Órdenes v1 & Snapshots' },
   { path: 'apps/backend/scripts/driver-balance.test.cjs', name: 'Backend: Balance de Repartidor & Retenciones' },
   { path: 'apps/backend/scripts/marketplace-ledger.test.cjs', name: 'Backend: Ledger Contable Inmutable' },
   { path: 'apps/backend/scripts/marketplace-payments.test.cjs', name: 'Backend: Pasarela MercadoPago & Webhooks' },
@@ -63,6 +64,7 @@ const TESTS = [
   { path: 'apps/backend/scripts/marketplace-quote.test.cjs', name: 'Backend: Cotización Formal & Snapshot TTL' },
   { path: 'apps/backend/scripts/marketplace-dispatch.test.cjs', name: 'Backend: Motor de Asignación y Despacho' },
   { path: 'apps/backend/scripts/marketplace-hybrid-policy.test.cjs', name: 'Backend: Políticas de Despacho Híbrido & Fallback' },
+  { path: 'apps/backend/scripts/marketplace-couriers-v1.test.cjs', name: 'Backend: Repartidores Globales & Afiliaciones v1' },
   { path: 'apps/backend/scripts/runtime-policy.test.cjs', name: 'Backend: Runtime Policy & Tenant Guard' },
 
   // ── INTEGRACIÓN MAESTRA & AISLAMIENTO ──
