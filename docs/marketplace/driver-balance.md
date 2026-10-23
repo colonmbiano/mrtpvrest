@@ -18,7 +18,7 @@ no contabilizadas no lo cambian. Otros debitos compensatorios de esa cuenta
 tambien reducen la obligacion. Un saldo negativo se devuelve como tal.
 
 El efectivo pendiente se calcula aparte: suma del total bruto de las ordenes
-DELIVERY, DELIVERED, paymentMethod CASH, cashCollected false, asignadas al mismo
+DELIVERY, DELIVERED, paymentMethod CASH o CASH_ON_DELIVERY, cashCollected false, asignadas al mismo
 repartidor y restaurante. Incluye productos, envio y propina del total de la
 orden; no resta automaticamente las ganancias ni interpreta un reembolso como
 evidencia de que el repartidor devolvio efectivo. Al registrar el corte mediante

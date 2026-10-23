@@ -71,7 +71,7 @@ un tercer modelo de cabecera: los datos del evento se repiten en sus lineas.
 | `createdAt` | Fecha del asiento en `Timestamptz(3)`. El escritor mapea `transaction.createdAt` a todas sus lineas. No hay `updatedAt`. |
 
 Las seis cuentas son `GATEWAY_ESCROW`, `CUSTOMER_RECEIVABLE`, `MERCHANT_PAYABLE`,
-`COURIER_PAYABLE`, `PLATFORM_FEES` y `PLATFORM_PROMO_SUBSIDY`. Los eventos son
+`COURIER_PAYABLE`, `PLATFORM_FEES`, `PLATFORM_PROMO_SUBSIDY` y `PAYOUT_CLEARING`. Los eventos son
 `ORDER_CAPTURED`, `ORDER_SETTLED`, `ORDER_REFUNDED`, `PAYOUT_DISBURSED` y
 `MANUAL_ADJUSTMENT`. Los dos ultimos conservan compatibilidad con las constantes
 existentes; este cambio no implementa dispersiones ni ajustes.
