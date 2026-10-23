@@ -781,6 +781,9 @@ enum OrderStatus {
   // PACKING = en empaque (verificación final antes de salir/entregar). Al final
   // del enum por la misma razón que OPEN (Postgres ordena por declaración).
   PACKING
+  // Marketplace v1 distinguishes payment from merchant acceptance.
+  PENDING_PAYMENT
+  PENDING_MERCHANT
 }
 
 enum PaymentMethod {
