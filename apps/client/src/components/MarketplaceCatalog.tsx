@@ -26,8 +26,10 @@ const TYPE_TILES: { value: BusinessType | ''; label: string; glyph: string }[] =
   { value: 'RESTAURANT', label: 'Restaurantes', glyph: '🍽️' },
   { value: 'GROCERY', label: 'Súper y frescos', glyph: '🥑' },
   { value: 'RETAIL', label: 'Tiendas', glyph: '🛍️' },
+  { value: 'HARDWARE', label: 'Ferreterías', glyph: '🔨' },
+  { value: 'AUTOPARTS', label: 'Refaccionarias', glyph: '🚗' },
 ];
-const TYPE_GLYPH: Record<BusinessType, string> = { RESTAURANT: '🍽️', GROCERY: '🥑', RETAIL: '🛍️' };
+const TYPE_GLYPH: Record<BusinessType, string> = { RESTAURANT: '🍽️', GROCERY: '🥑', RETAIL: '🛍️', HARDWARE: '🔨', AUTOPARTS: '🚗' };
 
 // Portada ilustrada: tinte estable por tienda, sin imágenes externas.
 function coverStyle(hue: number): CSSProperties {

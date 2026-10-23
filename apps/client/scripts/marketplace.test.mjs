@@ -75,6 +75,8 @@ test('parseCatalogParams: descarta arrays, tipos y slugs fuera de formato', () =
   const { state } = parseCatalogParams({ q: ['a', 'b'], type: 'BAR', store: '../admin', sp: ['2', '3'] });
   assert.deepEqual(state, base);
   assert.equal(parseCatalogParams({ type: 'GROCERY' }).state.type, 'GROCERY');
+  assert.equal(parseCatalogParams({ type: 'HARDWARE' }).state.type, 'HARDWARE');
+  assert.equal(parseCatalogParams({ type: 'AUTOPARTS' }).state.type, 'AUTOPARTS');
   assert.equal(parseCatalogParams({ store: 'tienda-a' }).state.store, 'tienda-a');
   assert.equal(parseCatalogParams({ store: 'Tienda-A' }).state.store, '');
 });
@@ -309,4 +311,17 @@ test('contrato extendido: datos de entrega, promo vigente y me gusta', () => {
   assert.equal(discountPercent(PRODUCT), null);
   assert.equal(storeHue('tienda-a'), storeHue('tienda-a'));
   assert.ok(storeHue('tienda-a') >= 0 && storeHue('tienda-a') < 360);
+});
+
+test('nuevos tipos de negocio: HARDWARE y AUTOPARTS', () => {
+  const hardwareStore = { ...STORE, slug: 'ferreteria-1', name: 'Ferretería Central', businessType: 'HARDWARE' };
+  const autopartsStore = { ...STORE, slug: 'refaccionaria-1', name: 'Repuestos Express', businessType: 'AUTOPARTS' };
+  assert.equal(isStoreSummary(hardwareStore), true);
+  assert.equal(isStoreSummary(autopartsStore), true);
+  assert.equal(parseCatalogParams({ type: 'HARDWARE' }).state.type, 'HARDWARE');
+  assert.equal(parseCatalogParams({ type: 'AUTOPARTS' }).state.type, 'AUTOPARTS');
+  const href = catalogHref({ ...base, type: 'HARDWARE' }, {}, 'tiendas');
+  assert.ok(href.includes('type=HARDWARE'));
+  const storeLink = storeHref(hardwareStore.slug);
+  assert.equal(storeLink, '/ferreteria-1');
 });

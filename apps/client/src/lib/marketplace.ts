@@ -7,12 +7,14 @@
  * separado; un error NUNCA se presenta como lista vacía.
  */
 
-export type BusinessType = 'RESTAURANT' | 'RETAIL' | 'GROCERY';
+export type BusinessType = 'RESTAURANT' | 'RETAIL' | 'GROCERY' | 'HARDWARE' | 'AUTOPARTS';
 
 export const BUSINESS_TYPE_LABELS: Record<BusinessType, string> = {
   RESTAURANT: 'Restaurante',
   RETAIL: 'Tienda',
   GROCERY: 'Abarrotes',
+  HARDWARE: 'Ferretería',
+  AUTOPARTS: 'Refaccionaria',
 };
 
 export const MAX_QUERY_LENGTH = 80;
