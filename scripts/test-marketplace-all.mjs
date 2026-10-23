@@ -42,6 +42,7 @@ const TESTS = [
   // ── ADMIN (Panel Restaurante / Negocio) ──
   { path: 'apps/admin/scripts/promociones-location.test.mjs', name: 'Admin: Promociones Automáticas por Sucursal' },
   { path: 'apps/admin/scripts/admin-pedidos-evidence.test.mjs', name: 'Admin: Visualización Evidencias & PIN' },
+  { path: 'apps/admin/scripts/marketplace-delivery-policy.test.mjs', name: 'Admin: Politica de Despacho Hibrido Marketplace' },
 
   // ── SAAS (SuperAdmin Global) ──
   { path: 'apps/saas/scripts/saas-marketplace.test.mjs', name: 'SaaS: Panel de Control & Auditoría Marketplace' },

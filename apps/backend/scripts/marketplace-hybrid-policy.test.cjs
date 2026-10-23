@@ -378,6 +378,38 @@ test('HTTP v1 PUT policy validates fields, applies branch scope and saves all th
   assert.equal(branch.statusCode, 404);
 });
 
+test('HTTP private policy read resolves the selected branch and returns no private merchant fields', async () => {
+  const f = fixture(); f.store.merchants.get('m1').privateContact = 'PRIVATE';
+  const before = snapshot(f);
+  const res = await f.request('GET', '/merchants/me/delivery-policy', { headers: { 'x-restaurant-id': 'r1', 'x-location-id': 'l1' } });
+  assert.equal(res.statusCode, 200); assert.deepEqual(res.body, { merchantId: 'm1', deliveryPolicy: 'OWN_THEN_SHARED', fallbackSeconds: 30, maxDistanceKm: 10 });
+  assert.equal(res.headers['cache-control'], 'no-store'); assert.equal(snapshot(f), before);
+  const branch = await f.request('GET', '/merchants/me/delivery-policy', { headers: { 'x-location-id': 'l3' } });
+  assert.equal(branch.body.merchantId, 'branch');
+});
+
+test('HTTP private policy read rejects ambiguity, foreign headers, devices and non-admin identities', async () => {
+  const f = fixture(); const path = '/merchants/me/delivery-policy';
+  assert.equal((await f.request('GET', path)).statusCode, 409);
+  for (const headers of [{ 'x-location-id': 'l2' }, { 'x-restaurant-id': 'r2' }, { 'x-location-id': ['l1', 'l3'] }]) {
+    assert.ok([404, 422].includes((await f.request('GET', path, { headers })).statusCode));
+  }
+  for (const user of [null, driver('own'), { ...admin, role: 'CASHIER' }, { ...admin, isActive: false }, { ...admin, isDevice: true }]) {
+    assert.ok([401, 403].includes((await f.request('GET', path, { user, headers: { 'x-location-id': 'l1' } })).statusCode));
+  }
+  assert.equal((await f.request('GET', path, { user: { ...admin, locationId: 'l1' }, headers: { 'x-location-id': 'l3' } })).statusCode, 404);
+});
+
+test('HTTP private policy read defaults unconfigured values and permits explicit SuperAdmin restaurant scope', async () => {
+  const f = fixture(); const merchant = f.store.merchants.get('m1');
+  delete merchant.deliveryPolicy; delete merchant.fallbackSeconds; delete merchant.maxDistanceKm;
+  const res = await f.request('GET', '/merchants/me/delivery-policy', { user: { ...admin, locationId: 'l1' } });
+  assert.deepEqual(res.body, { merchantId: 'm1', deliveryPolicy: 'OWN_THEN_SHARED', fallbackSeconds: 30, maxDistanceKm: 10 });
+  const other = await f.request('GET', '/merchants/me/delivery-policy', { user: { ...admin, role: 'SUPER_ADMIN', restaurantId: null },
+    headers: { 'x-restaurant-id': 'r2', 'x-location-id': 'l2' } });
+  assert.equal(other.statusCode, 200); assert.equal(other.body.merchantId, 'm2');
+});
+
 test('HTTP new merchant routes require verified active human administrator identity', async () => {
   const f = fixture();
   for (const user of [null, { ...admin, isActive: false }, { ...admin, isDevice: true }, { ...admin, role: 'CASHIER' }, driver('own')]) {

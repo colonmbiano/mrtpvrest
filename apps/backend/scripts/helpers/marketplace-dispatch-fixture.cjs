@@ -37,10 +37,10 @@ function fixture(policy = 'OWN_THEN_SHARED', options = {}) {
     Router: () => ({ use: fn => middlewares.push(fn),
       get: (path, fn) => routes.set(`GET ${path}`, fn), post: (path, fn) => routes.set(`POST ${path}`, fn),
       put: (path, fn) => routes.set(`PUT ${path}`, fn) }) });
-  async function request(method, path, { user = admin, params = { id: 't1' }, body = {}, query = {} } = {}) {
+  async function request(method, path, { user = admin, params = { id: 't1' }, body = {}, query = {}, headers = {} } = {}) {
     const res = { statusCode: 200, headers: {}, set(k, v) { this.headers[k.toLowerCase()] = v; return this; },
       status(code) { this.statusCode = code; return this; }, json(data) { this.body = data; return this; } };
-    await routes.get(`${method} ${path}`)({ user, params, body, query }, res);
+    await routes.get(`${method} ${path}`)({ user, params, body, query, headers }, res);
     return res;
   }
   return { store, engine, task, routes, middlewares, request, addTask,

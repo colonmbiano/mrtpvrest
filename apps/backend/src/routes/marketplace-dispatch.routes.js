@@ -1,6 +1,6 @@
 'use strict';
 
-const { DispatchError, createHybridDispatchEngine, validCoordinates } = require('../lib/marketplace-dispatch');
+const { DispatchError, createHybridDispatchEngine, validCoordinates, validateDeliveryPolicy } = require('../lib/marketplace-dispatch');
 
 function createMarketplaceDispatchRouter({ Router, getStore, authenticate, now = () => new Date() } = {}) {
   const router = (Router || require('express').Router)();
@@ -60,6 +60,28 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, now =
     });
   }
 
+  // Private read for the active Admin branch. Never infer merchantId from a
+  // restaurant id or pick the first merchant when a restaurant has branches.
+  endpoint('get', '/merchants/me/delivery-policy', (req, res) => {
+    const user = actor(req);
+    if (!['OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) fail('Administrador requerido', 'MERCHANT_FORBIDDEN');
+    const headers = req.headers || {};
+    const restaurantId = user.role === 'SUPER_ADMIN' ? headers['x-restaurant-id'] || user.restaurantId : user.restaurantId;
+    const locationId = user.locationId || headers['x-location-id'];
+    const identifier = value => typeof value === 'string' && value.length > 0 && value.length <= 128 && value.trim() === value;
+    if (!identifier(restaurantId) || locationId !== undefined && !identifier(locationId)) fail('Selecciona una sucursal', 'MERCHANT_SCOPE_REQUIRED', 422);
+    if (headers['x-restaurant-id'] !== undefined && headers['x-restaurant-id'] !== restaurantId
+      || user.locationId && headers['x-location-id'] !== undefined && headers['x-location-id'] !== user.locationId) {
+      fail('Comercio no encontrado', 'MERCHANT_NOT_FOUND', 404);
+    }
+    const matches = [...store.merchants.values()].filter(merchant => merchant.restaurantId === restaurantId
+      && (!locationId || merchant.locationId === locationId));
+    if (matches.length === 0) fail('Comercio no encontrado', 'MERCHANT_NOT_FOUND', 404);
+    if (matches.length !== 1) fail('Selecciona una sucursal para configurar el despacho', 'MERCHANT_LOCATION_REQUIRED', 409);
+    const merchant = matches[0]; merchantAccess(req, merchant);
+    return res.json({ merchantId: merchant.id, ...validateDeliveryPolicy({ deliveryPolicy: merchant.deliveryPolicy ?? 'OWN_THEN_SHARED',
+      fallbackSeconds: merchant.fallbackSeconds ?? 30, maxDistanceKm: merchant.maxDistanceKm ?? 10 }) });
+  });
   endpoint('put', '/merchants/:id/delivery-policy', (req, res) => {
     const merchant = engine.merchantFor(req.params.id); merchantAccess(req, merchant);
     const policy = body(req, ['deliveryPolicy', 'fallbackSeconds', 'maxDistanceKm']);
