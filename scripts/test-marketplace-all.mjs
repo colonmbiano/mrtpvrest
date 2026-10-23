@@ -21,7 +21,7 @@ const __dirname = dirname(__filename);
 const ROOT = resolve(__dirname, '..');
 
 // ============================================================================
-// CONFIGURACIÓN DE LAS 27 SUITES DE PRUEBA
+// CONFIGURACIÓN DE LAS SUITES DE PRUEBA
 // ============================================================================
 
 const TESTS = [
@@ -59,7 +59,9 @@ const TESTS = [
   { path: 'apps/backend/scripts/marketplace-ledger.test.cjs', name: 'Backend: Ledger Contable Inmutable' },
   { path: 'apps/backend/scripts/marketplace-payments.test.cjs', name: 'Backend: Pasarela MercadoPago & Webhooks' },
   { path: 'apps/backend/scripts/marketplace-catalog.test.cjs', name: 'Backend: Catálogo Multi-Giro & Disponibilidad' },
+  { path: 'apps/backend/scripts/marketplace-quote.test.cjs', name: 'Backend: Cotización Formal & Snapshot TTL' },
   { path: 'apps/backend/scripts/marketplace-dispatch.test.cjs', name: 'Backend: Motor de Asignación y Despacho' },
+  { path: 'apps/backend/scripts/marketplace-hybrid-policy.test.cjs', name: 'Backend: Políticas de Despacho Híbrido & Fallback' },
   { path: 'apps/backend/scripts/runtime-policy.test.cjs', name: 'Backend: Runtime Policy & Tenant Guard' },
 
   // ── INTEGRACIÓN MAESTRA & AISLAMIENTO ──
@@ -139,8 +141,8 @@ async function main() {
     console.log('  ✔ Cero TODOs encontrados en las suites de prueba.');
   }
 
-  // ── FASE 3: Ejecución de las 27 Suites ──
-  console.log('\n[3/4] Ejecutando 27 suites de pruebas offline (0 red, ACID in-memory)...\n');
+  // ── FASE 3: Ejecución de las Suites ──
+  console.log(`\n[3/4] Ejecutando ${TESTS.length} suites de pruebas offline (0 red, ACID in-memory)...\n`);
   let passedSuites = 0;
   let failedSuites = 0;
   let totalTests = 0;
@@ -148,7 +150,7 @@ async function main() {
 
   for (let i = 0; i < TESTS.length; i++) {
     const t = TESTS[i];
-    const prefix = `[${String(i + 1).padStart(2, '0')}/27]`;
+    const prefix = `[${String(i + 1).padStart(2, '0')}/${TESTS.length}]`;
     const tStart = Date.now();
     const result = runSuite(t.path);
     const duration = Date.now() - tStart;
