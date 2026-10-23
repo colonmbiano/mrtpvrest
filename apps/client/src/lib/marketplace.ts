@@ -22,12 +22,24 @@ const SLUG_RE = /^[a-z0-9-]{1,100}$/;
 const PAGE_RE = /^[1-9]\d{0,4}$/;
 const CURRENCY_RE = /^[A-Z]{3}$/;
 
-export type StoreSummary = { slug: string; name: string; businessType: BusinessType };
+export type StoreSummary = {
+  slug: string;
+  name: string;
+  businessType: BusinessType;
+  isOpen: boolean;
+  closedMessage: string | null;
+  estimatedDelivery: number | null; // minutos
+  deliveryFee: number | null; // null = depende de la distancia
+  freeDeliveryFrom: number | null;
+  minOrderAmount: number | null;
+};
 export type ProductSummary = {
   id: string;
   name: string;
   categoryName: string;
   price: number;
+  promoPrice: number | null; // solo si la promo está vigente ahora
+  likes: number;
   currency: string;
   store: { slug: string; name: string };
 };
@@ -131,17 +143,50 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function isAmount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function isAmountOrNull(value: unknown): value is number | null {
+  return value === null || isAmount(value);
+}
+
 export function isStoreSummary(value: unknown): value is StoreSummary {
   return isRecord(value) && isValidSlug(value.slug) && isNonEmptyString(value.name)
-    && isBusinessType(value.businessType);
+    && isBusinessType(value.businessType)
+    && typeof value.isOpen === 'boolean'
+    && (value.closedMessage === null || typeof value.closedMessage === 'string')
+    && (value.estimatedDelivery === null || (Number.isInteger(value.estimatedDelivery) && (value.estimatedDelivery as number) > 0))
+    && isAmountOrNull(value.deliveryFee) && isAmountOrNull(value.freeDeliveryFrom) && isAmountOrNull(value.minOrderAmount);
 }
 
 export function isProductSummary(value: unknown): value is ProductSummary {
   return isRecord(value) && isNonEmptyString(value.id) && isNonEmptyString(value.name)
     && typeof value.categoryName === 'string'
-    && typeof value.price === 'number' && Number.isFinite(value.price) && value.price >= 0
+    && isAmount(value.price)
+    && (value.promoPrice === null || (isAmount(value.promoPrice) && value.promoPrice < value.price))
+    && Number.isInteger(value.likes) && (value.likes as number) >= 0
     && typeof value.currency === 'string' && CURRENCY_RE.test(value.currency)
     && isRecord(value.store) && isValidSlug(value.store.slug) && isNonEmptyString(value.store.name);
+}
+
+// Ventana de entrega mostrada al comprador: ±5 min alrededor del estimado.
+export function etaWindow(minutes: number | null): string | null {
+  if (minutes === null) return null;
+  return `${Math.max(10, minutes - 5)}–${minutes + 5} min`;
+}
+
+// Descuento entero para insignias ("−15%"); null si no hay promo vigente.
+export function discountPercent(product: ProductSummary): number | null {
+  if (product.promoPrice === null || product.price <= 0) return null;
+  return Math.round((1 - product.promoPrice / product.price) * 100);
+}
+
+// Tinte estable por tienda para la portada ilustrada (sin imágenes externas).
+export function storeHue(slug: string): number {
+  let hash = 0;
+  for (const char of slug) hash = (hash * 31 + char.charCodeAt(0)) % 360;
+  return hash;
 }
 
 function isCount(value: unknown, min: number): value is number {

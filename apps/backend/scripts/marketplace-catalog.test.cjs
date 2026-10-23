@@ -1,454 +1,320 @@
+'use strict';
+
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const {
-  InvalidQuery,
-  parseQuery,
-  parseStoreSlugs,
-  createCatalog,
-  createPrismaCatalogAdapter,
-} = require('../src/lib/marketplace-catalog');
-const createMarketplaceRouter = require('../src/routes/marketplace.routes');
+const { readFileSync } = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const { InvalidQuery, parseQuery, parseStoreSlugs, createCatalog, createPrismaCatalogAdapter } = require('../src/lib/marketplace-catalog');
+const createRouter = require('../src/routes/marketplace.routes');
 
-// ── 1. parseStoreSlugs ────────────────────────────────────────────────────────
-
-test('parseStoreSlugs: returns empty array for empty or whitespace string', () => {
-  assert.deepEqual(parseStoreSlugs(''), []);
-  assert.deepEqual(parseStoreSlugs('   '), []);
-});
-
-test('parseStoreSlugs: trims and deduplicates valid slugs', () => {
-  assert.deepEqual(
-    parseStoreSlugs(' store-uno , store-dos,store-uno '),
-    ['store-uno', 'store-dos']
-  );
-});
-
-test('parseStoreSlugs: throws on non-string or invalid slug format', () => {
-  assert.throws(() => parseStoreSlugs(null), /Invalid marketplace allowlist/);
-  assert.throws(() => parseStoreSlugs(123), /Invalid marketplace allowlist/);
-  assert.throws(() => parseStoreSlugs('STORE_UPPERCASE'), /Invalid marketplace allowlist/);
-  assert.throws(() => parseStoreSlugs('store with spaces'), /Invalid marketplace allowlist/);
-  assert.throws(() => parseStoreSlugs('store/slash'), /Invalid marketplace allowlist/);
-});
-
-test('parseStoreSlugs: throws if more than 100 slugs provided', () => {
-  const tooMany = Array.from({ length: 101 }, (_, i) => `store-${i}`).join(',');
-  assert.throws(() => parseStoreSlugs(tooMany), /Invalid marketplace allowlist/);
-});
-
-// ── 2. parseQuery ─────────────────────────────────────────────────────────────
-
-test('parseQuery: defaults to page 1, pageSize 12, empty query', () => {
-  const qStores = parseQuery({}, 'stores');
-  assert.equal(qStores.page, 1);
-  assert.equal(qStores.pageSize, 12);
-  assert.equal(qStores.q, '');
-  assert.equal(qStores.businessType, undefined);
-
-  const qProducts = parseQuery({}, 'products');
-  assert.equal(qProducts.page, 1);
-  assert.equal(qProducts.pageSize, 12);
-  assert.equal(qProducts.q, '');
-  assert.equal(qProducts.store, undefined);
-});
-
-test('parseQuery: trims q and rejects q > 80 characters without truncating', () => {
-  assert.equal(parseQuery({ q: '  tacos al pastor  ' }, 'stores').q, 'tacos al pastor');
-  const valid80 = 'a'.repeat(80);
-  assert.equal(parseQuery({ q: valid80 }, 'stores').q, valid80);
-
-  const invalid81 = 'a'.repeat(81);
-  assert.throws(() => parseQuery({ q: invalid81 }, 'stores'), InvalidQuery);
-});
-
-test('parseQuery: validates page (1..10000) and rejects non-positive or out-of-range', () => {
-  assert.equal(parseQuery({ page: '10' }, 'stores').page, 10);
-  assert.equal(parseQuery({ page: '10000' }, 'stores').page, 10000);
-
-  assert.throws(() => parseQuery({ page: '0' }, 'stores'), InvalidQuery);
-  assert.throws(() => parseQuery({ page: '-1' }, 'stores'), InvalidQuery);
-  assert.throws(() => parseQuery({ page: '10001' }, 'stores'), InvalidQuery);
-  assert.throws(() => parseQuery({ page: '1.5' }, 'stores'), InvalidQuery);
-  assert.throws(() => parseQuery({ page: 'abc' }, 'stores'), InvalidQuery);
-});
-
-test('parseQuery: validates pageSize (1..24) and rejects invalid numbers', () => {
-  assert.equal(parseQuery({ pageSize: '24' }, 'stores').pageSize, 24);
-  assert.equal(parseQuery({ pageSize: '1' }, 'stores').pageSize, 1);
-
-  assert.throws(() => parseQuery({ pageSize: '0' }, 'stores'), InvalidQuery);
-  assert.throws(() => parseQuery({ pageSize: '25' }, 'stores'), InvalidQuery);
-  assert.throws(() => parseQuery({ pageSize: '-5' }, 'stores'), InvalidQuery);
-  assert.throws(() => parseQuery({ pageSize: '12.4' }, 'stores'), InvalidQuery);
-});
-
-test('parseQuery: stores kind validates businessType', () => {
-  assert.equal(parseQuery({ businessType: 'RESTAURANT' }, 'stores').businessType, 'RESTAURANT');
-  assert.equal(parseQuery({ businessType: 'RETAIL' }, 'stores').businessType, 'RETAIL');
-  assert.equal(parseQuery({ businessType: 'GROCERY' }, 'stores').businessType, 'GROCERY');
-  assert.equal(parseQuery({ businessType: '' }, 'stores').businessType, undefined);
-
-  assert.throws(() => parseQuery({ businessType: 'PHARMACY' }, 'stores'), InvalidQuery);
-  assert.throws(() => parseQuery({ businessType: 'restaurant' }, 'stores'), InvalidQuery);
-});
-
-test('parseQuery: products kind validates store slug', () => {
-  assert.equal(parseQuery({ store: 'master-burgers' }, 'products').store, 'master-burgers');
-  assert.equal(parseQuery({ store: '' }, 'products').store, undefined);
-
-  assert.throws(() => parseQuery({ store: 'INVALID/SLUG' }, 'products'), InvalidQuery);
-  assert.throws(() => parseQuery({ store: 'Store Upper' }, 'products'), InvalidQuery);
-});
-
-test('parseQuery: rejects structured non-string parameters (arrays, objects)', () => {
-  assert.throws(() => parseQuery({ q: ['tacos', 'tortas'] }, 'stores'), InvalidQuery);
-  assert.throws(() => parseQuery({ page: { value: 1 } }, 'stores'), InvalidQuery);
-  assert.throws(() => parseQuery(['invalid-array'], 'stores'), InvalidQuery);
-  assert.throws(() => parseQuery(null, 'stores'), InvalidQuery);
-});
-
-// ── 3. createCatalog (Lazy & Projection isolation) ────────────────────────────
-
-test('createCatalog: with empty allowlist, never loads adapter and returns empty envelope', async () => {
-  let adapterCalled = false;
-  const catalog = createCatalog({
-    storeSlugs: '',
-    getAdapter: () => {
-      adapterCalled = true;
-      throw new Error('Adapter must not be loaded');
-    },
+// A small relational fixture driver evaluates the adapter's actual where/select/order/skip/take.
+// It is not Prisma or PostgreSQL: query shape is asserted separately below.
+function matches(row, where) {
+  return Object.entries(where || {}).every(([key, condition]) => {
+    if (key === 'OR') return condition.some(branch => matches(row, branch));
+    const value = row[key];
+    if (condition === null || typeof condition !== 'object') return value === condition;
+    if ('is' in condition) return value != null && matches(value, condition.is);
+    if ('in' in condition && !condition.in.includes(value)) return false;
+    if ('gte' in condition && !(value >= condition.gte)) return false;
+    if ('lte' in condition && !(value <= condition.lte)) return false;
+    if ('contains' in condition) {
+      const text = condition.contains.replace(/\\([\\%_])/g, '$1');
+      return typeof value === 'string' && value.toLowerCase().includes(text.toLowerCase());
+    }
+    return true;
   });
+}
 
-  const stores = await catalog.listStores({});
-  assert.deepEqual(stores, { items: [], page: 1, pageSize: 12, total: 0 });
+function project(row, select) {
+  return Object.fromEntries(Object.entries(select).map(([key, value]) => [
+    key, value === true ? row[key] : row[key] == null ? null : project(row[key], value.select),
+  ]));
+}
 
-  const products = await catalog.listProducts({});
-  assert.deepEqual(products, { items: [], page: 1, pageSize: 12, total: 0 });
-
-  assert.equal(adapterCalled, false);
-});
-
-test('createCatalog: filters store to allowed slug and returns empty if store is not in allowlist', async () => {
-  let adapterCalled = false;
-  const catalog = createCatalog({
-    storeSlugs: 'tienda-uno,tienda-dos',
-    getAdapter: () => {
-      adapterCalled = true;
-      return {};
-    },
-  });
-
-  // Querying a store that exists elsewhere but is not in allowlist
-  const products = await catalog.listProducts({ store: 'tienda-tres' });
-  assert.deepEqual(products, { items: [], page: 1, pageSize: 12, total: 0 });
-  assert.equal(adapterCalled, false);
-});
-
-test('createCatalog: projects only permitted fields, stripping private metadata', async () => {
-  const fakeStoreRows = [
-    {
-      id: 'internal-id-123',
-      tenantId: 'secret-tenant-456',
-      slug: 'la-guarida',
-      name: 'La Guarida del Rock',
-      businessType: 'RESTAURANT',
-      aiApiKey: 'sk-secret-leak',
-    },
+function fixtures() {
+  const stores = [
+    { id: 'a', slug: 'alpha', name: 'Tienda', businessType: 'RESTAURANT' },
+    { id: 'b', slug: 'beta', name: 'Tienda', businessType: 'GROCERY' },
+    { id: 'c', slug: 'private', name: 'Oculta', businessType: 'RETAIL' },
+    { id: 'd', slug: 'inactive', name: 'Baja', businessType: 'RESTAURANT', isActive: false },
+    { id: 'e', slug: 'no-web', name: 'Sin web', businessType: 'RESTAURANT', tenant: { hasWebStore: false, isDemo: false } },
+    { id: 'f', slug: 'demo', name: 'Demo', businessType: 'RESTAURANT', tenant: { hasWebStore: true, isDemo: true } },
+  ].map(row => ({ isActive: true, tenant: { hasWebStore: true, isDemo: false },
+    tenantId: 'private-tenant', aiApiKey: 'private-key', ...row }));
+  function item(id, restaurantId, name, extra = {}) {
+    return { id, restaurantId, name, price: 10, isAvailable: true, availableOnline: true,
+      category: { name: 'Comida', restaurantId, isActive: true, cost: 5 },
+      barcode: 'private-barcode', recipe: 'private-recipe', ...extra };
+  }
+  const items = [
+    item('a1', 'a', 'Taco'), item('a2', 'a', 'Taco'), item('b1', 'b', 'Taco'),
+    item('hidden', 'a', 'Oculto', { availableOnline: false, availableOnKiosk: true }),
+    item('unavailable', 'a', 'Agotado', { isAvailable: false }),
+    item('bad-category', 'a', 'Categoria ajena', { category: { name: 'Ajena', restaurantId: 'b', isActive: true } }),
+    item('inactive-category', 'a', 'Inactivo', { category: { name: 'Baja', restaurantId: 'a', isActive: false } }),
+    item('private-product', 'c', 'Privado'), item('inactive-product', 'd', 'Baja'),
+    item('no-web-product', 'e', 'Sin web'), item('demo-product', 'f', 'Demo'),
+    item('negative', 'a', 'Negativo', { price: -1 }), item('infinite', 'a', 'Infinito', { price: Infinity }),
   ];
-  const fakeProductRows = [
-    {
-      id: 'prod-cuid-1',
-      name: 'Hamburguesa Clasica',
-      categoryName: 'Hamburguesas',
-      price: 125.5,
-      currency: 'MXN',
-      cost: 45.0,
-      recipeId: 'rec-123',
-      store: {
-        id: 'store-internal-id',
-        slug: 'la-guarida',
-        name: 'La Guarida del Rock',
+  for (const row of items) row.restaurant = stores.find(store => store.id === row.restaurantId);
+  const configs = [{ restaurantId: 'a', currency: 'USD', stripeKey: 'private-payment' },
+    { restaurantId: 'c', currency: 'EUR' }];
+  const calls = [];
+  function model(name, rows) {
+    return {
+      async count(args) { calls.push({ model: name, method: 'count', args }); return rows.filter(row => matches(row, args.where)).length; },
+      async findMany(args) {
+        calls.push({ model: name, method: 'findMany', args });
+        let found = rows.filter(row => matches(row, args.where));
+        if (args.orderBy) found.sort((a, b) => {
+          for (const field of args.orderBy) {
+            const key = Object.keys(field)[0];
+            const order = a[key] < b[key] ? -1 : a[key] > b[key] ? 1 : 0;
+            if (order) return order;
+          }
+          return 0;
+        });
+        found = found.slice(args.skip || 0, (args.skip || 0) + (args.take || rows.length));
+        return found.map(row => project(row, args.select));
       },
-    },
-  ];
+    };
+  }
+  const prisma = { restaurant: model('restaurant', stores), menuItem: model('menuItem', items), restaurantConfig: model('restaurantConfig', configs) };
+  return { prisma, calls, stores, items, configs };
+}
 
-  const catalog = createCatalog({
-    storeSlugs: 'la-guarida',
-    getAdapter: () => ({
-      listStores: async () => ({ total: 1, rows: fakeStoreRows }),
-      listProducts: async () => ({ total: 1, rows: fakeProductRows }),
-    }),
-  });
+function catalogFixture(slugs = 'alpha,beta,inactive,no-web,demo') {
+  const data = fixtures();
+  return { ...data, catalog: createCatalog({ storeSlugs: slugs, getAdapter: () => createPrismaCatalogAdapter(data.prisma) }) };
+}
 
-  const storesRes = await catalog.listStores({});
-  assert.equal(storesRes.total, 1);
-  assert.deepEqual(storesRes.items[0], {
-    slug: 'la-guarida',
-    name: 'La Guarida del Rock',
-    businessType: 'RESTAURANT',
-  });
-  assert.equal(storesRes.items[0].tenantId, undefined);
-  assert.equal(storesRes.items[0].aiApiKey, undefined);
-
-  const prodRes = await catalog.listProducts({});
-  assert.equal(prodRes.total, 1);
-  assert.deepEqual(prodRes.items[0], {
-    id: 'prod-cuid-1',
-    name: 'Hamburguesa Clasica',
-    categoryName: 'Hamburguesas',
-    price: 125.5,
-    currency: 'MXN',
-    store: {
-      slug: 'la-guarida',
-      name: 'La Guarida del Rock',
-    },
-  });
-  assert.equal(prodRes.items[0].cost, undefined);
-  assert.equal(prodRes.items[0].recipeId, undefined);
-  assert.equal(prodRes.items[0].store.id, undefined);
-});
-
-test('createCatalog: valid page beyond total returns 200 with items: [] and total count', async () => {
-  const catalog = createCatalog({
-    storeSlugs: 'la-guarida',
-    getAdapter: () => ({
-      listStores: async () => ({ total: 5, rows: [] }),
-      listProducts: async () => ({ total: 5, rows: [] }),
-    }),
-  });
-
-  const res = await catalog.listStores({ page: '3', pageSize: '12' });
-  assert.deepEqual(res, { items: [], page: 3, pageSize: 12, total: 5 });
-});
-
-// ── 4. createPrismaCatalogAdapter (Query Structure & Tenant Isolation) ────────
-
-test('createPrismaCatalogAdapter: listStores applies tenant criteria, active filter and escapes q', async () => {
-  let countWhere;
-  let findManyArgs;
-
-  const mockPrisma = {
-    restaurant: {
-      count: async ({ where }) => {
-        countWhere = where;
-        return 1;
-      },
-      findMany: async (args) => {
-        findManyArgs = args;
-        return [{ slug: 'tacos-el-100', name: '100% Tacos', businessType: 'RESTAURANT' }];
-      },
-    },
+function httpFixture(options = {}) {
+  const routes = {};
+  createRouter({ Router: () => ({ get(path, handler) { routes[path] = handler; } }), ...options });
+  return async (path, query = {}, extra = {}) => {
+    const res = { statusCode: 200, headers: {},
+      set(key, value) { this.headers[key] = value; return this; },
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.body = body; return this; } };
+    await routes[path]({ query, ...extra }, res);
+    return res;
   };
+}
 
-  const adapter = createPrismaCatalogAdapter(mockPrisma);
-  const result = await adapter.listStores({
-    slugs: ['tacos-el-100'],
-    q: '100%_tacos',
-    businessType: 'RESTAURANT',
-    page: 2,
-    pageSize: 10,
-  });
-
-  assert.equal(result.total, 1);
-  // Verifies isActive, hasWebStore, isDemo=false
-  assert.equal(countWhere.isActive, true);
-  assert.deepEqual(countWhere.slug, { in: ['tacos-el-100'] });
-  assert.deepEqual(countWhere.tenant, { is: { hasWebStore: true, isDemo: false } });
-  assert.equal(countWhere.businessType, 'RESTAURANT');
-  // Verifies escaping of % and _ for literal search
-  assert.equal(countWhere.name.contains, '100\\%\\_tacos');
-  assert.equal(countWhere.name.mode, 'insensitive');
-
-  // Pagination args
-  assert.equal(findManyArgs.skip, 10);
-  assert.equal(findManyArgs.take, 10);
-  assert.deepEqual(findManyArgs.select, { slug: true, name: true, businessType: true });
+test('empty publication policy returns empty pages without loading an adapter', async () => {
+  const catalog = createCatalog({ getAdapter: () => assert.fail('Database must not load') });
+  assert.deepEqual(await catalog.listStores({}), { items: [], total: 0, page: 1, pageSize: 12 });
+  assert.deepEqual(await catalog.listProducts({ page: '2', pageSize: '24' }), { items: [], total: 0, page: 2, pageSize: 24 });
 });
 
-test('createPrismaCatalogAdapter: listProducts enforces availableOnline, valid price and matching category', async () => {
-  let menuItemWhere;
-  let menuItemSelect;
+test('allowlist is exact, bounded, validated and never expanded by a store parameter', async () => {
+  assert.deepEqual(parseStoreSlugs(' alpha, beta,alpha '), ['alpha', 'beta']);
+  assert.equal(parseStoreSlugs(Array.from({ length: 100 }, (_, i) => `s-${i}`).join(',')).length, 100);
+  for (const value of ['*', 'Alpha', '../a', 'a/b', 'a,', 'a'.repeat(101), Array(101).fill('a').join(','), ['alpha']]) {
+    assert.throws(() => parseStoreSlugs(value));
+  }
+  const { catalog, calls } = catalogFixture('alpha');
+  assert.deepEqual((await catalog.listProducts({ store: 'private' })).items, []);
+  assert.equal(calls.length, 0);
+});
 
-  const mockPrisma = {
-    restaurant: {
-      findMany: async () => [
-        { id: 'rest-1', slug: 'burger-shop', name: 'Burger Shop' },
-      ],
-    },
-    restaurantConfig: {
-      findMany: async () => [
-        { restaurantId: 'rest-1', currency: 'MXN' },
-      ],
-    },
-    menuItem: {
-      count: async ({ where }) => {
-        menuItemWhere = where;
-        return 1;
-      },
-      findMany: async ({ where, select, skip, take }) => {
-        menuItemSelect = select;
-        return [
-          {
-            id: 'item-1',
-            name: 'Cheeseburger',
-            price: 99.0,
-            restaurantId: 'rest-1',
-            category: { name: 'Burgers' },
-          },
-        ];
-      },
-    },
-  };
+test('query rules reject structured, duplicate, out-of-range and malformed values', () => {
+  for (const kind of ['stores', 'products']) {
+    for (const query of [
+      { q: ['x', 'y'] }, { q: {} }, { q: 'a'.repeat(81) }, { page: '' }, { page: '0' },
+      { page: '-1' }, { page: '1.5' }, { page: '1e2' }, { page: ' 1' }, { page: '10001' },
+      { page: ['1', '2'] }, { pageSize: '0' }, { pageSize: '25' }, { pageSize: {} },
+      { page: 1 }, { extra: {} }, { extra: ['a', 'b'] },
+    ]) assert.throws(() => parseQuery(query, kind), InvalidQuery, JSON.stringify(query));
+  }
+  for (const value of ['RETAIL ', 'retail', 'BAR']) assert.throws(() => parseQuery({ businessType: value }, 'stores'), InvalidQuery);
+  for (const value of ['A', 'a/b', '../a', 'a?x', 'a'.repeat(101)]) assert.throws(() => parseQuery({ store: value }, 'products'), InvalidQuery);
+  assert.equal(parseQuery({ q: '  taco  ', page: '10000', pageSize: '24', harmless: 'ignored' }, 'products').q, 'taco');
+  assert.equal(parseQuery({ q: ' '.repeat(90), store: '' }, 'products').q, '');
+});
 
-  const adapter = createPrismaCatalogAdapter(mockPrisma);
-  const result = await adapter.listProducts({
-    slugs: ['burger-shop'],
-    q: 'cheese',
-    page: 1,
-    pageSize: 12,
+test('stores exclude private, inactive, non-web and demo tenants with explicit public projection', async () => {
+  const { catalog } = catalogFixture();
+  assert.deepEqual(await catalog.listStores({}), { page: 1, pageSize: 12, total: 2, items: [
+    { slug: 'alpha', name: 'Tienda', businessType: 'RESTAURANT', isOpen: false, closedMessage: null, deliveryFee: null, estimatedDelivery: null, freeDeliveryFrom: null, minOrderAmount: null },
+    { slug: 'beta', name: 'Tienda', businessType: 'GROCERY', isOpen: false, closedMessage: null, deliveryFee: null, estimatedDelivery: null, freeDeliveryFrom: null, minOrderAmount: null },
+  ] });
+  assert.deepEqual((await catalog.listStores({ businessType: 'GROCERY', q: '  TIEN  ' })).items.map(row => row.slug), ['beta']);
+  assert.equal((await catalog.listStores({ q: 'none' })).total, 0);
+});
+
+test('store pagination counts after filters and uses id to break tied names', async () => {
+  const { catalog } = catalogFixture();
+  assert.equal((await catalog.listStores({ pageSize: '1' })).items[0].slug, 'alpha');
+  const second = await catalog.listStores({ pageSize: '1', page: '2' });
+  assert.equal(second.items[0].slug, 'beta');
+  assert.equal(second.total, 2);
+  assert.deepEqual(await catalog.listStores({ page: '10000' }), { items: [], total: 2, page: 10000, pageSize: 12 });
+});
+
+test('products enforce ownership, online visibility, availability and same-store active category', async () => {
+  const { catalog } = catalogFixture();
+  const page = await catalog.listProducts({});
+  assert.deepEqual(page.items.map(row => row.id), ['a1', 'a2', 'b1']);
+  assert.equal(page.total, 3);
+  assert.deepEqual(page.items[0], { id: 'a1', name: 'Taco', price: 10, promoPrice: null, likes: 0, categoryName: 'Comida', currency: 'USD', store: { slug: 'alpha', name: 'Tienda' } });
+  assert.equal(page.items[2].currency, 'MXN');
+  assert.deepEqual((await catalog.listProducts({ store: 'beta', q: 'tACO' })).items.map(row => row.id), ['b1']);
+  for (const store of ['inactive', 'no-web', 'demo']) assert.equal((await catalog.listProducts({ store })).total, 0);
+});
+
+test('product pagination is stable and preserves filtered totals beyond the last page', async () => {
+  const { catalog } = catalogFixture();
+  assert.equal((await catalog.listProducts({ q: 'taco', page: '2', pageSize: '1' })).items[0].id, 'a2');
+  assert.deepEqual(await catalog.listProducts({ q: 'taco', page: '4', pageSize: '1' }), { page: 4, pageSize: 1, total: 3, items: [] });
+});
+
+test('Prisma adapter sends explicit eligibility, scopes, narrow selects and DB pagination', async () => {
+  const { catalog, calls } = catalogFixture('alpha,beta');
+  await catalog.listStores({ page: '2', pageSize: '1', businessType: 'GROCERY' });
+  const store = calls.find(call => call.model === 'restaurant' && call.method === 'findMany').args;
+  assert.deepEqual(store.where, { slug: { in: ['alpha', 'beta'] }, isActive: true,
+    tenant: { is: { hasWebStore: true, isDemo: false } }, businessType: 'GROCERY' });
+  assert.deepEqual(store.select, {
+    slug: true,
+    name: true,
+    businessType: true,
+    config: {
+      select: {
+        isOpen: true,
+        closedMessage: true,
+        deliveryMode: true,
+        deliveryFee: true,
+        freeDeliveryFrom: true,
+        minOrderAmount: true,
+        estimatedDelivery: true,
+        scheduleEnabled: true,
+        businessHours: true,
+        timezone: true,
+      },
+    },
   });
-
-  assert.equal(result.total, 1);
-  assert.equal(result.rows.length, 1);
-  assert.equal(result.rows[0].currency, 'MXN');
-  assert.equal(result.rows[0].price, 99.0);
-
-  // Verifies availability filters
-  assert.equal(menuItemWhere.isAvailable, true);
-  assert.equal(menuItemWhere.availableOnline, true);
-  // Finite bound PostgreSQL accepts (Number.MAX_VALUE is rejected as out of range)
-  assert.deepEqual(menuItemWhere.price, { gte: 0, lte: 1e12 });
-  // Verifies category belongs to the same restaurant and is active
-  assert.deepEqual(menuItemWhere.OR, [
-    { restaurantId: 'rest-1', category: { is: { restaurantId: 'rest-1', isActive: true } } },
+  assert.deepEqual(store.orderBy, [{ name: 'asc' }, { id: 'asc' }]);
+  assert.equal(store.skip, 1); assert.equal(store.take, 1);
+  calls.length = 0;
+  await catalog.listProducts({ q: 'Taco', page: '2', pageSize: '1' });
+  const product = calls.find(call => call.model === 'menuItem' && call.method === 'findMany').args;
+  assert.deepEqual(product.where.restaurantId, { in: ['a', 'b'] });
+  assert.equal(product.where.isAvailable, true); assert.equal(product.where.availableOnline, true);
+  assert.deepEqual(product.where.OR, [
+    { restaurantId: 'a', category: { is: { restaurantId: 'a', isActive: true } } },
+    { restaurantId: 'b', category: { is: { restaurantId: 'b', isActive: true } } },
   ]);
-  // Verifies select does not retrieve sensitive fields
-  assert.deepEqual(menuItemSelect, {
+  assert.deepEqual(product.where.restaurant.is, {
+    slug: { in: ['alpha', 'beta'] },
+    isActive: true,
+    tenant: { is: { hasWebStore: true, isDemo: false } },
+  });
+  assert.deepEqual(product.select, {
     id: true,
     name: true,
     price: true,
+    isPromo: true,
+    promoPrice: true,
+    promoStartTime: true,
+    promoEndTime: true,
     restaurantId: true,
     category: { select: { name: true } },
+    _count: { select: { reactions: true } },
   });
+  assert.deepEqual(product.orderBy, [{ name: 'asc' }, { id: 'asc' }]);
+  assert.equal(product.skip, 1); assert.equal(product.take, 1);
+  const config = calls.find(call => call.model === 'restaurantConfig').args;
+  assert.deepEqual(config, {
+    where: { restaurantId: { in: ['a', 'b'] } },
+    select: { restaurantId: true, currency: true, promoStartTime: true, promoEndTime: true, timezone: true },
+    take: 100,
+  });
+  assert.deepEqual(calls.find(call => call.model === 'menuItem' && call.method === 'count').args.where, product.where);
+  assert.equal(calls.length, 4);
 });
 
-test('createPrismaCatalogAdapter: listProducts returns empty if no eligible stores match allowlist', async () => {
-  let menuItemCalled = false;
-  const mockPrisma = {
-    restaurant: {
-      findMany: async () => [],
-    },
-    menuItem: {
-      count: async () => { menuItemCalled = true; return 0; },
-      findMany: async () => { menuItemCalled = true; return []; },
-    },
-  };
-
-  const adapter = createPrismaCatalogAdapter(mockPrisma);
-  const result = await adapter.listProducts({
-    slugs: ['inactive-or-demo-store'],
-    q: '',
-    page: 1,
-    pageSize: 12,
-  });
-
-  assert.deepEqual(result, { total: 0, rows: [] });
-  assert.equal(menuItemCalled, false);
+test('LIKE wildcards and backslashes are escaped, never interpreted as search operators', async () => {
+  const { catalog, calls } = catalogFixture('alpha');
+  await catalog.listStores({ q: '50%_\\' });
+  const where = calls.find(call => call.method === 'count').args.where;
+  assert.deepEqual(where.name, { contains: '50\\%\\_\\\\', mode: 'insensitive' });
+  assert.equal((await catalog.listProducts({ q: "' OR 1=1 --" })).total, 0);
 });
 
-// ── 5. createMarketplaceRouter (HTTP, Status Codes & Cache Headers) ───────────
-
-function createMockRouter() {
-  const routes = [];
-  return {
-    routes,
-    get(path, handler) {
-      routes.push({ path, handler });
-    },
-  };
-}
-
-function createMockReqRes(query = {}) {
-  const headers = {};
-  let statusCode = 200;
-  let jsonBody = null;
-
-  const req = { query };
-  const res = {
-    set(key, val) {
-      headers[key.toLowerCase()] = val;
-      return res;
-    },
-    status(code) {
-      statusCode = code;
-      return res;
-    },
-    json(body) {
-      jsonBody = body;
-      return res;
-    },
-  };
-
-  return { req, res, getHeader: (k) => headers[k.toLowerCase()], getStatus: () => statusCode, getBody: () => jsonBody };
-}
-
-test('router GET /stores: sets Cache-Control: no-store and returns 200 for valid request', async () => {
-  const router = createMarketplaceRouter({
-    Router: createMockRouter,
-    storeSlugs: 'la-guarida',
-    getAdapter: () => ({
-      listStores: async () => ({ total: 1, rows: [{ slug: 'la-guarida', name: 'La Guarida', businessType: 'RESTAURANT' }] }),
-    }),
-  });
-
-  const { req, res, getHeader, getStatus, getBody } = createMockReqRes({ page: '1' });
-  const route = router.routes.find((r) => r.path === '/stores');
-  assert.ok(route);
-  await route.handler(req, res);
-
-  assert.equal(getStatus(), 200);
-  assert.equal(getHeader('cache-control'), 'no-store');
-  assert.equal(getBody().total, 1);
-  assert.equal(getBody().items[0].slug, 'la-guarida');
+test('public boundary drops private adapter fields including nested store secrets', async () => {
+  const catalog = createCatalog({ storeSlugs: 'alpha', getAdapter: () => ({
+    listStores: async () => ({ total: 1, rows: [{ slug: 'alpha', name: 'A', businessType: 'RETAIL', tenantId: 'secret', aiApiKey: 'secret' }] }),
+    listProducts: async () => ({ total: 1, rows: [{ id: '1', name: 'P', price: 1, categoryName: 'C', currency: 'MXN',
+      barcode: 'secret', recipe: 'secret', store: { slug: 'alpha', name: 'A', tenantId: 'secret' } }] }),
+  }) });
+  assert.deepEqual((await catalog.listStores({})).items, [{ slug: 'alpha', name: 'A', businessType: 'RETAIL', isOpen: false, closedMessage: null, deliveryFee: null, estimatedDelivery: null, freeDeliveryFrom: null, minOrderAmount: null }]);
+  assert.deepEqual((await catalog.listProducts({})).items, [{ id: '1', name: 'P', price: 1, categoryName: 'C', currency: 'MXN', promoPrice: null, likes: 0, store: { slug: 'alpha', name: 'A' } }]);
 });
 
-test('router GET /stores: returns 400 INVALID_QUERY on malformed parameters', async () => {
-  const router = createMarketplaceRouter({
-    Router: createMockRouter,
-    storeSlugs: 'la-guarida',
-  });
-
-  const { req, res, getStatus, getBody } = createMockReqRes({ page: '0' });
-  const route = router.routes.find((r) => r.path === '/stores');
-  assert.ok(route);
-  await route.handler(req, res);
-
-  assert.equal(getStatus(), 400);
-  assert.deepEqual(getBody(), {
-    error: 'Parametros de catalogo invalidos',
-    errorCode: 'INVALID_QUERY',
-  });
+test('HTTP handlers return 400 before adapter load and always prohibit caching', async () => {
+  const request = httpFixture({ storeSlugs: 'alpha', getAdapter: () => assert.fail('Invalid query accessed database') });
+  for (const path of ['/stores', '/products']) {
+    const response = await request(path, { page: ['1', '2'] });
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.body.errorCode, 'INVALID_QUERY');
+    assert.equal(response.headers['Cache-Control'], 'no-store');
+  }
 });
 
-test('router GET /products: returns 503 CATALOG_UNAVAILABLE when database/adapter fails', async () => {
-  const router = createMarketplaceRouter({
-    Router: createMockRouter,
-    storeSlugs: 'la-guarida',
-    getAdapter: () => ({
-      listProducts: async () => {
-        throw new Error('Database connection timed out');
-      },
-    }),
-  });
+test('HTTP handlers do not use tenant headers or browser allowlists to enlarge publication', async () => {
+  const request = httpFixture({ storeSlugs: '', getAdapter: () => assert.fail('Browser expanded publication') });
+  const response = await request('/products', { store: 'private', tenantId: 'c', MARKETPLACE_STORE_SLUGS: 'private' }, { headers: { 'x-restaurant-id': 'c' } });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body.items, []);
+  assert.equal(response.headers['Cache-Control'], 'no-store');
+});
 
-  const { req, res, getStatus, getBody } = createMockReqRes({});
-  const route = router.routes.find((r) => r.path === '/products');
-  assert.ok(route);
-  await route.handler(req, res);
+test('adapter failure or timeout returns generic 503 without retry, internal details or empty success', async () => {
+  for (const path of ['/stores', '/products']) {
+    let attempts = 0;
+    const fail = async () => { attempts++; throw new Error('ETIMEDOUT postgres://private:password@host'); };
+    const request = httpFixture({ storeSlugs: 'alpha', getAdapter: () => ({ listStores: fail, listProducts: fail }) });
+    const response = await request(path);
+    assert.equal(attempts, 1);
+    assert.equal(response.statusCode, 503);
+    assert.deepEqual(response.body, { error: 'Catalogo temporalmente no disponible', errorCode: 'CATALOG_UNAVAILABLE' });
+    assert.equal(response.headers['Cache-Control'], 'no-store');
+  }
+});
 
-  assert.equal(getStatus(), 503);
-  assert.deepEqual(getBody(), {
-    error: 'Catalogo temporalmente no disponible',
-    errorCode: 'CATALOG_UNAVAILABLE',
-  });
+test('malformed server allowlist fails closed with 503 without adapter access', async () => {
+  const request = httpFixture({ storeSlugs: '*', getAdapter: () => assert.fail('Malformed configuration accessed DB') });
+  assert.equal((await request('/stores')).statusCode, 503);
+});
+
+test('malformed configured currency yields unavailable rather than an invalid price summary', async () => {
+  const { prisma, configs } = fixtures();
+  configs[0].currency = 'NOT-ISO';
+  const request = httpFixture({ storeSlugs: 'alpha', getAdapter: () => createPrismaCatalogAdapter(prisma) });
+  assert.equal((await request('/products')).statusCode, 503);
+});
+
+test('router import and empty-policy handlers never require Express or database packages', () => {
+  const script = `
+    const Module = require('node:module');
+    const original = Module._load;
+    Module._load = function(id, ...args) {
+      if (id === 'express' || id.includes('database') || id.includes('prisma')) throw new Error('Forbidden import: ' + id);
+      return original.call(this, id, ...args);
+    };
+    const createRouter = require(${JSON.stringify(require.resolve('../src/routes/marketplace.routes'))});
+    const routes = {};
+    createRouter({ storeSlugs: '', Router: () => ({ get(path, fn) { routes[path] = fn; } }) });
+    const res = { set() {}, json(body) { if (body.total !== 0) throw new Error('Unexpected data'); }, status() { throw new Error('Unexpected error'); } };
+    Promise.all(Object.values(routes).map(fn => fn({ query: {} }, res))).catch(() => { process.exitCode = 1; });
+  `;
+  const result = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('new router is mounted publicly before tenant middleware without importing the app', () => {
+  const source = readFileSync(require.resolve('../src/index.js'), 'utf8');
+  assert.ok(source.indexOf("app.use('/api/marketplace', require('./routes/marketplace.routes')())") < source.indexOf('app.use(tenantMiddleware)'));
 });

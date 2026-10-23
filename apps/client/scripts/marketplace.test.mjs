@@ -17,7 +17,7 @@ register(`data:text/javascript,${encodeURIComponent(`
 `)}`);
 import {
   parseCatalogParams, catalogHref, catalogSearchParams, storeHref, parseCatalogPage, isStoreSummary,
-  isProductSummary, fetchCatalogSection, loadCatalog, formatPrice, totalPages, PAGE_SIZE,
+  isProductSummary, fetchCatalogSection, etaWindow, discountPercent, storeHue, loadCatalog, formatPrice, totalPages, PAGE_SIZE,
 } from '../src/lib/marketplace.ts';
 import {
   BLOCKED_API_URL, getApiUrl, getMarketplaceApiUrl, getStorePublicUrl,
@@ -25,9 +25,10 @@ import {
 } from '../src/lib/config.ts';
 
 const API = 'http://127.0.0.1:4100';
-const STORE = { slug: 'tienda-a', name: 'Tienda A', businessType: 'RESTAURANT' };
+const STORE = { slug: 'tienda-a', name: 'Tienda A', businessType: 'RESTAURANT', isOpen: true, closedMessage: null,
+  estimatedDelivery: 30, deliveryFee: 19, freeDeliveryFrom: 250, minOrderAmount: 80 };
 const PRODUCT = {
-  id: 'p1', name: 'Taco', categoryName: 'Tacos', price: 25, currency: 'MXN',
+  id: 'p1', name: 'Taco', categoryName: 'Tacos', price: 25, promoPrice: null, likes: 3, currency: 'MXN',
   store: { slug: 'tienda-a', name: 'Tienda A' },
 };
 const page = (items, extra = {}) => ({ items, page: 1, pageSize: PAGE_SIZE, total: items.length, ...extra });
@@ -290,4 +291,22 @@ test('getStorePublicUrl: mismo origen en el marketplace, nunca el subdominio pro
   withEnv({ NEXT_PUBLIC_MARKETPLACE_CATALOG: 'true', NEXT_PUBLIC_SITE_URL: 'https://staging.example.com' }, () => {
     assert.equal(getStorePublicUrl('tienda-a'), 'https://staging.example.com/tienda-a');
   });
+});
+
+test('contrato extendido: datos de entrega, promo vigente y me gusta', () => {
+  assert.equal(isStoreSummary({ ...STORE, deliveryFee: null, estimatedDelivery: null, isOpen: false, closedMessage: 'Abre 9:00' }), true);
+  assert.equal(isStoreSummary({ ...STORE, isOpen: 'true' }), false);
+  assert.equal(isStoreSummary({ ...STORE, deliveryFee: -1 }), false);
+  assert.equal(isStoreSummary({ ...STORE, estimatedDelivery: 12.5 }), false);
+  const { isOpen, ...withoutOpen } = STORE;
+  assert.equal(isStoreSummary(withoutOpen), false);
+  assert.equal(isProductSummary({ ...PRODUCT, promoPrice: 20 }), true);
+  assert.equal(isProductSummary({ ...PRODUCT, promoPrice: 30 }), false);
+  assert.equal(isProductSummary({ ...PRODUCT, likes: -2 }), false);
+  assert.equal(etaWindow(30), '25–35 min');
+  assert.equal(etaWindow(null), null);
+  assert.equal(discountPercent({ ...PRODUCT, promoPrice: 20 }), 20);
+  assert.equal(discountPercent(PRODUCT), null);
+  assert.equal(storeHue('tienda-a'), storeHue('tienda-a'));
+  assert.ok(storeHue('tienda-a') >= 0 && storeHue('tienda-a') < 360);
 });
