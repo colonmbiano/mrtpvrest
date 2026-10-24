@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { TestOrder } from './marketplace-test-order';
+import type { MultiTestOrder } from './marketplace-multi-order';
 
 export const canUseLocalTestOrders = (): boolean =>
   process.env.NODE_ENV === 'development'
@@ -32,6 +33,35 @@ export async function persistTestOrder(order: Omit<TestOrder, 'id' | 'createdAt'
     encoding: 'utf8', flag: 'wx',
   });
   return complete;
+}
+
+export async function persistMultiTestOrder(
+  data: Pick<MultiTestOrder, 'totalCents' | 'orders'>,
+): Promise<MultiTestOrder> {
+  if (!canUseLocalTestOrders()) throw new Error('DISABLED');
+  const id = randomBytes(20).toString('hex');
+  const order: MultiTestOrder = {
+    id, createdAt: new Date().toISOString(), status: 'TEST_CREATED',
+    pickup: true, deliveryCents: null, payment: 'TEST_NO_CHARGE',
+    totalCents: data.totalCents,
+    orders: data.orders.map((child) => ({ ...child, id: randomBytes(20).toString('hex') })),
+  };
+  await mkdir(directory(), { recursive: true });
+  // Una única escritura atómica de la compra agrupada: sin órdenes hijas huérfanas.
+  await writeFile(path.join(directory(), 'multi-' + id + '.json'),
+    JSON.stringify(order, null, 2), { encoding: 'utf8', flag: 'wx' });
+  return order;
+}
+
+export async function readMultiTestOrder(id: string): Promise<MultiTestOrder | null> {
+  if (!canUseLocalTestOrders() || !/^[a-f0-9]{40}$/.test(id)) return null;
+  try {
+    const raw = await readFile(path.join(directory(), 'multi-' + id + '.json'), 'utf8');
+    const value = JSON.parse(raw) as MultiTestOrder;
+    if (value.id !== id || value.status !== 'TEST_CREATED' || !Array.isArray(value.orders)) return null;
+    if (value.orders.length < 1 || value.orders.length > 2) return null;
+    return value;
+  } catch { return null; }
 }
 
 export async function readTestOrder(id: string): Promise<TestOrder | null> {

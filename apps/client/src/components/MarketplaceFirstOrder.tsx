@@ -6,16 +6,16 @@ import Link from 'next/link';
 import type {
   TestGroup, TestProduct, TestSelection, TestStore,
 } from '@/lib/marketplace-test-order';
+import { useMarketplaceMultiCart, type MultiCartLine } from '@/lib/marketplace-multi-cart';
 
 const money = (cents: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cents / 100);
 
-type CartLine = {
-  key: string; productName: string; unitCents: number;
-  options: string[]; selection: TestSelection;
-};
+type DraftCartLine = Omit<MultiCartLine, 'slug' | 'storeName'>;
 
-function ProductTile({ product, add }: { product: TestProduct; add: (line: CartLine) => void }) {
+function ProductTile({ product, add }: {
+  product: TestProduct; add: (line: DraftCartLine) => void;
+}) {
   const [variantId, setVariantId] = useState(product.variants[0]?.id || '');
   const [choices, setChoices] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(product.groups.map(g => [g.id, g.options.slice(0, g.min).map(o => o.id)])),
@@ -71,7 +71,8 @@ function ProductTile({ product, add }: { product: TestProduct; add: (line: CartL
               {group.name}{group.min > 0 ? ' *' : ' (opcional)'}
             </label>
             {group.max === 1 ? (
-              <select value={choices[group.id]?.[0] || ''} onChange={e => chooseOne(group, e.target.value)}
+              <select aria-label={group.name} value={choices[group.id]?.[0] || ''}
+                onChange={e => chooseOne(group, e.target.value)}
                 className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-2">
                 {group.min === 0 && <option value="">Sin extra</option>}
                 {group.options.map(o => <option key={o.id} value={o.id}>
@@ -106,45 +107,37 @@ function ProductTile({ product, add }: { product: TestProduct; add: (line: CartL
 }
 
 export default function MarketplaceFirstOrder({ store }: { store: TestStore }) {
-  const [cart, setCart] = useState<CartLine[]>([]);
+  const cart = useMarketplaceMultiCart();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState('');
+  const { message, setMessage } = cart;
   const categories = useMemo(() => Array.from(new Set(store.products.map(p => p.category))), [store.products]);
   const visible = store.products.filter(p =>
     (!category || p.category === category)
     && (!search || (p.name + ' ' + p.category).toLowerCase().includes(search.toLowerCase())));
-  const total = cart.reduce((sum, line) => sum + line.unitCents * line.selection.quantity, 0);
-  const count = cart.reduce((sum, line) => sum + line.selection.quantity, 0);
-
-  const add = (line: CartLine) => {
-    setCart(prev => {
-      const found = prev.find(p => p.key === line.key);
-      if (!found) return prev.length >= 15 ? prev : [...prev, line];
-      if (found.selection.quantity >= 10) return prev;
-      return prev.map(p => p.key === line.key ? { ...p,
-        selection: { ...p.selection, quantity: p.selection.quantity + 1 } } : p);
-    });
-    setMessage('Producto añadido al carrito de prueba.');
-  };
-  const remove = (key: string) => setCart(prev => prev.filter(p => p.key !== key));
-  const update = (key: string, n: number) => setCart(prev => prev.map(line =>
-    line.key !== key ? line : { ...line,
-      selection: { ...line.selection, quantity: Math.max(1, Math.min(10, n)) } }));
+  const add = (line: DraftCartLine) =>
+    cart.add({ ...line, slug: store.slug, storeName: store.name });
   const checkout = async () => {
-    if (!cart.length || submitting) return;
+    if (!cart.lines.length || submitting) return;
     setSubmitting(true); setMessage('');
     try {
-      const result = await fetch('/api/pedido-prueba', {
+      const result = await fetch('/api/pedido-prueba-multi', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: store.slug, items: cart.map(line => line.selection) }),
+        body: JSON.stringify({ items: cart.lines.map(line => ({
+          slug: line.slug, ...line.selection,
+        })) }),
       });
       const json: unknown = await result.json();
       if (!result.ok || !json || typeof json !== 'object' || !('id' in json)
-        || typeof json.id !== 'string') throw new Error('El pedido no pudo validarse. Revisa tus opciones.');
-      window.location.assign('/pedido-prueba/' + json.id);
+        || typeof json.id !== 'string') {
+        const reason = json && typeof json === 'object' && 'error' in json
+          && typeof json.error === 'string' ? json.error : 'Error de validación';
+        throw new Error('No se pudo confirmar la compra: ' + reason);
+      }
+      cart.clear();
+      window.location.assign('/compra-prueba/' + json.id);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Error al guardar el pedido de prueba.');
       setSubmitting(false);
@@ -158,7 +151,7 @@ export default function MarketplaceFirstOrder({ store }: { store: TestStore }) {
           <Link href="/" className="text-sm font-bold text-green-700">← Marketplace</Link>
           <span className="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-extrabold text-amber-800">PRUEBA · SIN COBROS</span>
           <a href="#carrito" className="rounded-xl bg-orange-600 px-3 py-2 text-sm font-bold text-white">
-            🛒 {count} · {money(total)}
+            🛒 {cart.count} · {money(cart.totalCents)}
           </a>
         </div>
       </header>
@@ -189,44 +182,66 @@ export default function MarketplaceFirstOrder({ store }: { store: TestStore }) {
               {categories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <p className="mb-3 text-sm font-semibold text-slate-500">{visible.length} productos</p>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-slate-500">{visible.length} productos</p>
+            <Link href={store.slug === 'tokki-bobba' ? '/comercio/master-burguer-s' : '/comercio/tokki-bobba'}
+              className="rounded-lg border border-green-700 px-3 py-2 text-sm font-bold text-green-800 hover:bg-green-50">
+              + Agregar de {store.slug === 'tokki-bobba' ? 'Master Burguer’s' : 'Tokki Boba'} →
+            </Link>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {visible.map(p => <ProductTile key={p.id} product={p} add={add} />)}
           </div>
         </section>
         <aside id="carrito" className="self-start scroll-mt-24 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-20">
-          <h2 className="text-xl font-black">🛒 Tu primer pedido</h2>
-          <p className="mt-1 text-sm text-slate-500">Solo para probar el flujo. Modalidad: recoger en tienda.</p>
-          {cart.length ? <div className="mt-4 space-y-4">
-            {cart.map(l => <div key={l.key} className="border-b pb-3">
+          <h2 className="text-xl font-black">🛒 Carrito multi-tienda</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Un solo checkout · una orden de prueba por tienda · sin envíos reales.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link href="/comercio/master-burguer-s" className="rounded-lg bg-orange-100 px-3 py-2 text-xs font-bold text-orange-900">🍔 Master Burguer’s</Link>
+            <Link href="/comercio/tokki-bobba" className="rounded-lg bg-purple-100 px-3 py-2 text-xs font-bold text-purple-900">🧋 Tokki Boba</Link>
+          </div>
+          {cart.ready && cart.lines.length ? <div className="mt-4 space-y-4">
+            {cart.stores.map(group => <section key={group.slug} aria-label={'Productos de ' + group.lines[0].storeName}>
+              <h3 className="mb-3 rounded-lg bg-green-50 px-3 py-2 text-sm font-black text-green-900">
+                {group.lines[0].storeName}
+              </h3>
+              <div className="space-y-3">
+              {group.lines.map(l => <div key={l.key} className="border-b pb-3">
               <div className="flex justify-between gap-2">
                 <strong className="text-sm">{l.productName}</strong>
-                <button className="text-xs font-bold text-red-600" onClick={() => remove(l.key)}>Quitar</button>
+                <button className="text-xs font-bold text-red-600" onClick={() => cart.remove(l.key)}>Quitar</button>
               </div>
               {l.options.length > 0 && <p className="mt-1 text-xs text-slate-500">{l.options.join(', ')}</p>}
               <div className="mt-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <button className="rounded bg-slate-100 px-2" aria-label="Disminuir cantidad"
-                    onClick={() => update(l.key, l.selection.quantity - 1)}>−</button>
+                    onClick={() => cart.update(l.key, l.selection.quantity - 1)}>−</button>
                   <span className="tabular-nums">{l.selection.quantity}</span>
                   <button className="rounded bg-slate-100 px-2" aria-label="Aumentar cantidad"
-                    onClick={() => update(l.key, l.selection.quantity + 1)}>+</button>
+                    onClick={() => cart.update(l.key, l.selection.quantity + 1)}>+</button>
                 </div>
                 <span className="text-sm font-bold">{money(l.unitCents * l.selection.quantity)}</span>
               </div>
             </div>)}
+              </div>
+              <div className="mt-2 text-right text-xs font-bold text-slate-500">
+                Subtotal {money(group.lines.reduce((sum, l) => sum + l.unitCents * l.selection.quantity, 0))}
+              </div>
+            </section>)}
           </div> : <p className="my-8 rounded-xl bg-slate-50 p-5 text-center text-sm text-slate-500">
             Agrega un producto del menú para comenzar.
           </p>}
           <div className="mt-4 flex justify-between border-t pt-4 font-black">
-            <span>Total de prueba</span><span>{money(total)}</span>
+            <span>Total de productos</span><span>{money(cart.totalCents)}</span>
           </div>
-          <button onClick={checkout} disabled={!cart.length || submitting}
+          <button onClick={checkout} disabled={!cart.ready || !cart.lines.length || submitting}
             className="mt-4 min-h-12 w-full rounded-xl bg-green-700 px-4 font-extrabold text-white hover:bg-green-800 disabled:opacity-40">
-            {submitting ? 'Validando...' : 'Crear primer pedido de prueba'}
+            {submitting ? 'Validando tiendas...' : 'Confirmar compra de prueba'}
           </button>
           <p className="mt-2 text-center text-xs text-slate-500">
-            No se solicita tarjeta, teléfono ni domicilio. No se envía nada a ningún negocio.
+            Pago y envío no disponibles. Se crearán órdenes simuladas separadas por tienda.
           </p>
           {message && <p className="mt-3 text-sm font-semibold text-orange-700" role="status">{message}</p>}
         </aside>

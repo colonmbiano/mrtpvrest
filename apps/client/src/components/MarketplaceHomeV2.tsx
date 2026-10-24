@@ -6,6 +6,7 @@ import {
   LayoutGrid, MapPin, Menu, Search, ShoppingBag, Store, Tag, Truck, UserRound,
 } from 'lucide-react';
 import ScrollToHash from '@/components/ScrollToHash';
+import MarketplaceCartShortcut from '@/components/MarketplaceCartShortcut';
 import { productEmoji } from '@/lib/productEmoji';
 import {
   BUSINESS_TYPE_LABELS, MAX_QUERY_LENGTH, catalogHref, catalogSearchParams,
@@ -134,7 +135,8 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
         Vista aislada de pruebas · Solo tiendas habilitadas; no se procesan pagos reales.
       </p>}
 
-      {livePreview && <div id="preview-info" role="status" className="mx-auto mt-3 max-w-[1380px] px-4 sm:px-6"><p className="rounded-xl border border-[#a3d4b4] bg-[#edf9f0] px-4 py-3 text-sm font-semibold text-[#266642]"><strong>Catálogos reales · vista local de solo lectura:</strong> productos, fotografías y precios publicados de Master Burguer’s y Tokki Boba. No se crean pedidos ni pagos. Los precios y horarios pueden cambiar en las tiendas.</p></div>}
+      {livePreview && <MarketplaceCartShortcut />}
+      {livePreview && <div id="preview-info" role="status" className="mx-auto mt-3 max-w-[1380px] px-4 sm:px-6"><p className="rounded-xl border border-[#a3d4b4] bg-[#edf9f0] px-4 py-3 text-sm font-semibold text-[#266642]"><strong>Catálogos reales · vista local de solo lectura:</strong> productos, fotografías y precios publicados de Master Burguer’s y Tokki Boba. Puedes armar una compra simulada multi-tienda; no se envían pedidos reales, no se cobra ni se asignan repartidores. Los precios y horarios pueden cambiar en las tiendas.</p></div>}
       {previewDemo && <div id="preview-info" role="status" className="mx-auto mt-3 max-w-[1380px] px-4 sm:px-6"><p className="rounded-xl border border-[#f0cf90] bg-[#fff6df] px-4 py-3 text-sm font-semibold text-[#7c5219]"><strong>Vista de demostración:</strong> Master Burguer’s y Tokki Boba aparecen con sus nombres reales. Los demás negocios, productos y precios son ejemplos ficticios. No se realizan pedidos ni pagos y no se consulta la base de datos real.</p></div>}
 
       <main id="contenido" className="mx-auto flex max-w-[1380px] flex-col gap-9 px-4 pb-12 pt-5 sm:gap-11 sm:px-6 sm:pt-7">

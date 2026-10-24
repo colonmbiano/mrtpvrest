@@ -75,3 +75,48 @@ Vercel Preview o producción.
    progresiva en producción bajo aprobación explícita del titular.
 
 No utilizar el simulador como evidencia de que un pedido real llegó a cocina.
+
+## Carrito multi-tienda — actualización
+
+El Marketplace local permite **un único carrito compartido entre Master Burguer's
+y Tokki Boba**. Al visitar la segunda tienda, los productos de la primera
+permanecen en el mismo carrito mediante almacenamiento local del navegador.
+Hay una sola confirmación de prueba.
+
+- Página tienda: `/comercio/master-burguer-s` y `/comercio/tokki-bobba`.
+- POST `/api/pedido-prueba-multi` (solo desarrollo, loopback + origen válido).
+- El servidor vuelve a consultar los dos menús públicos, calcula todas las
+  líneas en centavos e impide productos cruzados de otros comercios.
+- Una única escritura JSON con exclusión de colisiones:
+  `.marketplace-local/pedidos-prueba/multi-<id>.json`.
+  Guarda una compra padre con ID aleatorio y una orden hija (ID independiente)
+  por tienda; si alguna tienda falla **no se guarda nada**.
+- El comprobante conjunto está en `/compra-prueba/<id>`; desglosa subtotal
+  y líneas por negocio, además del total de productos.
+- Reglas del prototipo: máximo dos negocios permitidos, 25 líneas diferentes
+  en la compra, 15 por tienda y 10 unidades por línea.
+- Los importes que muestra el navegador son informativos; el servidor calcula
+  otra vez precios y promociones usando los menús públicos antes de confirmar.
+- No se calcula envío, no hay pagos, no hay cancelaciones/reparto reales y las
+  órdenes no llegan al TPV/KDS ni a ningún restaurante.
+- La activación productiva requerirá órdenes por merchant en PostgreSQL,
+  transacciones y saga/idempotencia, autorización y validación de ubicación,
+  estados independientes, repartidores y políticas de pagos/reembolsos.
+
+Pruebas: `node --test apps/client/scripts/marketplace-multi-order.test.mjs`
+y script local ignorado `.marketplace-local/test_multi_purchase.py`. Casos
+cubiertos: carrito por dos negocios, subtotales independientes, promoción
+actual, variaciones, solicitud sin precio de confianza, validación de
+producto y merchant, falla de cualquiera de las tiendas, no persistencia
+parcial y comprobante de compra agrupada.
+
+### Validación visual del carrito multi-tienda
+- Chrome/Playwright: añadir hamburguesa en Master, ir a la portada,
+  comprobar acceso al carrito persistido, volver a Master, navegar a Tokki,
+  añadir Matcha Milk Tea con tapioca y completar checkout.
+- El recibo local confirmó ambos negocios y dos órdenes hijas.
+- Prueba HTTP: `POST /api/pedido-prueba-multi` devolvió 201,
+  subtotal Master $199, subtotal Tokki $150, total $349.
+- Solicitud CSRF desde otro Origin: 403; cantidad inválida y tienda
+  desconocida: 400.
+- Captura y scripts E2E quedan en `.marketplace-local/`, fuera de Git.
