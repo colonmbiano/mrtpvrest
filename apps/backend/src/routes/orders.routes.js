@@ -481,7 +481,8 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
     // estado (mayormente cerrados) con todos sus items, y el TPV los descargaba
     // solo para descartar ~el 90% en el cliente → el drawer tardaba en cargar.
     // Las páginas admin siguen pidiendo el historial completo (sin el param).
-    const ACTIVE_ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING', 'OPEN', 'ON_THE_WAY'];
+    // PENDING_MERCHANT: pedidos del marketplace que el comercio debe aceptar.
+    const ACTIVE_ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING', 'OPEN', 'ON_THE_WAY', 'PENDING_MERCHANT'];
     const isPaidScope = req.query.scope === 'paid';
     if (req.query.scope === 'active' || req.query.status === 'active') {
       where.status = { in: ACTIVE_ORDER_STATUSES };
