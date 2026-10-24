@@ -2,6 +2,7 @@
 
 import assert from 'assert';
 import { incidentViews } from '../src/lib/orderIncidents.ts';
+import { readFileSync } from 'node:fs';
 
 const TIMELINE_STATES = [
   { status: 'PENDING', label: 'Recibido', icon: '📋' },
@@ -10,10 +11,6 @@ const TIMELINE_STATES = [
   { status: 'ON_THE_WAY', label: 'En camino', icon: '🚗' },
   { status: 'DELIVERED', label: 'Entregado', icon: '🎉' },
 ];
-
-function generatePIN() {
-  return Math.floor(1000 + Math.random() * 9000).toString();
-}
 
 function getStatusIndex(status) {
   return Math.max(0, TIMELINE_STATES.findIndex((s) => s.status === status));
@@ -29,14 +26,6 @@ function validateOrderStructure(order) {
   assert.ok(Array.isArray(order.items), 'Items must be an array');
 }
 
-function validatePin(pin) {
-  assert.ok(pin, 'PIN must be generated');
-  assert.equal(pin.length, 4, 'PIN must be 4 digits');
-  assert.ok(/^\d{4}$/.test(pin), 'PIN must contain only digits');
-  assert.ok(parseInt(pin) >= 1000, 'PIN minimum value is 1000');
-  assert.ok(parseInt(pin) <= 9999, 'PIN maximum value is 9999');
-}
-
 function runTests() {
   console.log('🧪 Order Tracking Tests\n');
 
@@ -44,36 +33,18 @@ function runTests() {
   let failed = 0;
 
   const tests = [
+    {
+      name: 'PIN: the my-orders tracking modal never invents a delivery PIN',
+      run: () => {
+        // Store-own orders have no server PIN; marketplace orders show the real one in
+        // MarketplaceTrackingModal. A random code here would be unverifiable by the courier.
+        const source = readFileSync(new URL('../src/components/OrderTrackingModal.tsx', import.meta.url), 'utf8');
+        assert.ok(!/Math.random|crypto.getRandomValues/.test(source), 'No random codes in the tracking modal');
+        // Rendered JSX text only (comments may explain why there is no PIN).
+        assert.ok(!/>s*PIN de entregas*</.test(source) && !source.includes('Muéstrale este código'), 'No delivery PIN card in the tracking modal');
+      },
+    },
     // PIN Generation Tests
-    {
-      name: 'PIN Generation: Should generate 4-digit PIN',
-      run: () => {
-        const pin = generatePIN();
-        validatePin(pin);
-      },
-    },
-    {
-      name: 'PIN Generation: All generated PINs should be unique',
-      run: () => {
-        const pins = new Set();
-        for (let i = 0; i < 100; i++) {
-          const pin = generatePIN();
-          validatePin(pin);
-          pins.add(pin);
-        }
-        assert.ok(pins.size > 50, 'Should have good distribution of unique PINs');
-      },
-    },
-    {
-      name: 'PIN Generation: PIN format consistency',
-      run: () => {
-        for (let i = 0; i < 50; i++) {
-          const pin = generatePIN();
-          assert.equal(typeof pin, 'string', 'PIN should be a string');
-          assert.equal(pin.length, 4, 'PIN should always be 4 characters');
-        }
-      },
-    },
 
     // Timeline Tests
     {
@@ -210,16 +181,6 @@ function runTests() {
         const statuses = TIMELINE_STATES.map((s) => s.status);
         const uniqueStatuses = new Set(statuses);
         assert.equal(statuses.length, uniqueStatuses.size, 'All statuses should be unique');
-      },
-    },
-    {
-      name: 'Consistency: PIN should be consistent type across calls',
-      run: () => {
-        const pins = [generatePIN(), generatePIN(), generatePIN()];
-        pins.forEach((pin) => {
-          assert.equal(typeof pin, 'string', 'All PINs should be strings');
-          assert.ok(/^\d{4}$/.test(pin), 'All PINs should match 4-digit pattern');
-        });
       },
     },
 

@@ -1,6 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+// Rastreo de los pedidos de "Mis pedidos" (storefront propio de la tienda).
+// Estos pedidos no tienen PIN de entrega: el servidor solo deriva PIN para los
+// pedidos del marketplace, y esos se rastrean en MarketplaceTrackingModal con
+// el código real que devuelve /api/marketplace/orders/:id/status. Aquí nunca
+// se inventa un código: el repartidor no tendría contra qué verificarlo.
 import type { CustomerOrder, CustomerOrderItem } from '../lib/customerAuth';
 import { incidentViews } from '../lib/orderIncidents';
 
@@ -19,28 +23,16 @@ type Props = {
   primary: string;
 };
 
-function generatePIN(): string {
-  return Math.floor(1000 + Math.random() * 9000).toString();
-}
-
 function getStatusIndex(status: string): number {
   return Math.max(0, TIMELINE_STATES.findIndex((s) => s.status === status));
 }
 
 export default function OrderTrackingModal({ open, onClose, order, primary }: Props) {
-  const [pin, setPin] = useState('');
   // Incidencias reales registradas por el repartidor (no se deducen de notas).
   const incidents = incidentViews(order);
 
-  useEffect(() => {
-    if (open && !pin) {
-      setPin(generatePIN());
-    }
-  }, [open, pin]);
-
   const statusIndex = getStatusIndex(order.status);
   const isDelivery = order.orderType === 'DELIVERY';
-  const currentState = TIMELINE_STATES[statusIndex];
 
   if (!open) return null;
 
@@ -63,17 +55,6 @@ export default function OrderTrackingModal({ open, onClose, order, primary }: Pr
 
         {/* Content */}
         <div className="p-5 overflow-y-auto flex-1 space-y-5">
-          {/* PIN Card - only for delivery orders in certain states */}
-          {isDelivery && ['READY', 'ON_THE_WAY', 'DELIVERED'].includes(order.status) && (
-            <div className="p-6 rounded-2xl text-center" style={{ background: `${primary}15`, border: `2px solid ${primary}` }}>
-              <p className="text-xs uppercase tracking-widest font-semibold text-gray-500 mb-3">PIN de entrega</p>
-              <div className="text-5xl font-black tracking-widest mb-2" style={{ fontFamily: 'DM Mono, monospace', color: primary, letterSpacing: '0.25em' }}>
-                {pin}
-              </div>
-              <p className="text-[11px] text-gray-400">Muéstrale este código al repartidor</p>
-            </div>
-          )}
-
           {/* Incident Alert */}
           {incidents.map((inc) => (
             <div
