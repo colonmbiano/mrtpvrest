@@ -335,7 +335,7 @@ function StoreCard({ store, state, previewDemo, livePreview }: { store: StoreSum
   const brandGlyph = previewMaster ? '🍔' : previewTokki ? '🐼🧋' : businessEmoji(store.businessType);
   const subtitle = previewMaster ? 'Hamburguesas, tacos y más' : previewTokki ? 'Bubble tea y bebidas' : BUSINESS_TYPE_LABELS[store.businessType];
   return <li className={'min-w-0 rounded-[1.25rem] border bg-white p-3 shadow-[0_7px_18px_rgba(34,54,42,.05)] transition hover:-translate-y-0.5 hover:shadow-lg sm:p-4 ' + (featuredPreview ? 'border-[#f8bc91] ring-1 ring-[#ffeee4]' : 'border-[#e8eee9]')}>
-    <a href={previewDemo ? '#preview-info' : href ?? '#tiendas'} aria-label={previewDemo ? 'Ver aviso de demostración de ' + store.name : 'Visitar ' + store.name} className={'flex h-full flex-col gap-2.5 ' + focus}>
+    <a href={livePreview ? '/comercio/' + store.slug : previewDemo ? '#preview-info' : href ?? '#tiendas'} aria-label={livePreview ? 'Armar pedido de prueba en ' + store.name : previewDemo ? 'Ver aviso de demostración de ' + store.name : 'Visitar ' + store.name} className={'flex h-full flex-col gap-2.5 ' + focus}>
       <div className="relative grid aspect-[5/4] place-items-center overflow-hidden rounded-[1rem]" style={brandBackdrop}>
         <span className={featuredPreview ? 'text-5xl drop-shadow-xl sm:text-6xl' : 'text-6xl drop-shadow-xl'} aria-hidden="true">{brandGlyph}</span>
         {featuredPreview && <span className={'absolute right-2 top-2 rounded-full px-2 py-1 text-[10px] font-extrabold ' + (previewMaster ? 'bg-[#fb741e] text-white' : 'bg-white text-[#7f428a]')}>DESTACADO</span>}
@@ -350,9 +350,9 @@ function StoreCard({ store, state, previewDemo, livePreview }: { store: StoreSum
           <span className="inline-flex items-center gap-1"><Bike className="h-3.5 w-3.5" aria-hidden="true" />{hasFee ? store.deliveryFee === 0 ? 'Gratis' : formatPrice(store.deliveryFee!, 'MXN') : 'Según zona'}</span>
         </>}
       </span>
-      <span className="mt-1 inline-flex items-center gap-1 text-xs font-extrabold text-[#e75821]">{livePreview ? 'Solo lectura' : previewDemo ? 'Solo ejemplo' : 'Ver tienda'} <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
+      <span className="mt-1 inline-flex items-center gap-1 text-xs font-extrabold text-[#e75821]">{livePreview ? 'Armar pedido de prueba' : previewDemo ? 'Solo ejemplo' : 'Ver tienda'} <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
     </a>
-    {previewDemo && featuredPreview && !livePreview ? <p className="mt-3 border-t border-[#edf0ea] pt-2 text-center text-[11px] font-semibold text-[#846c54]">Catálogo real aún sin conectar</p> : <a href={catalogHref(state, { store: store.slug, productsPage: 1 }, 'productos')} className={'mt-3 block border-t border-[#edf0ea] pt-2 text-center text-[11px] font-bold text-[#496b54] hover:text-[#d5541f] ' + focus}>Ver sus productos</a>}
+    {previewDemo && featuredPreview && !livePreview ? <p className="mt-3 border-t border-[#edf0ea] pt-2 text-center text-[11px] font-semibold text-[#846c54]">Catálogo real aún sin conectar</p> : <a href={livePreview ? '/comercio/' + store.slug : catalogHref(state, { store: store.slug, productsPage: 1 }, 'productos')} className={'mt-3 block border-t border-[#edf0ea] pt-2 text-center text-[11px] font-bold text-[#496b54] hover:text-[#d5541f] ' + focus}>Ver sus productos</a>}
   </li>;
 }
 
@@ -360,7 +360,7 @@ function ProductCard({ product, previewDemo, livePreview }: { product: ProductSu
   const href = storeHref(product.store.slug);
   const off = discountPercent(product);
   return <li className="min-w-0 overflow-hidden rounded-[1.2rem] border border-[#e8eee9] bg-white p-2.5 shadow-[0_7px_18px_rgba(34,54,42,.045)] transition hover:-translate-y-0.5 hover:shadow-lg sm:p-3">
-    <a href={previewDemo ? '#preview-info' : href ?? '#productos'} className={'group flex h-full flex-col gap-2 ' + focus} aria-label={livePreview ? 'Producto real solo lectura: ' + product.name : previewDemo ? 'Producto de demostración: ' + product.name : 'Ver ' + product.name + ' en ' + product.store.name}>
+    <a href={livePreview ? '/comercio/' + product.store.slug : previewDemo ? '#preview-info' : href ?? '#productos'} className={'group flex h-full flex-col gap-2 ' + focus} aria-label={livePreview ? 'Producto real solo lectura: ' + product.name : previewDemo ? 'Producto de demostración: ' + product.name : 'Ver ' + product.name + ' en ' + product.store.name}>
       <span className="relative grid aspect-[5/4] place-items-center overflow-hidden rounded-[.9rem]" style={cardTint(product.store.slug)}>
         <span className="text-6xl drop-shadow-lg transition-transform group-hover:scale-110" aria-hidden="true">{productEmoji(product.name)}</span>
         {product.imageUrl && <Image src={product.imageUrl} alt="" fill unoptimized sizes="(max-width: 640px) 50vw, 20vw" className="object-cover transition-transform group-hover:scale-105" />}
@@ -373,7 +373,7 @@ function ProductCard({ product, previewDemo, livePreview }: { product: ProductSu
         {product.promoPrice !== null && <s className="text-xs tabular-nums text-[#96a19a]">{formatPrice(product.price, product.currency)}</s>}
       </span>
       <span className="mt-auto flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#f85c25] px-2 py-2 text-xs font-bold text-white group-hover:bg-[#d64e1c]">
-        {livePreview ? 'Solo lectura' : previewDemo ? 'Vista de ejemplo' : 'Ver en tienda'} <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        {livePreview ? 'Armar pedido de prueba' : previewDemo ? 'Vista de ejemplo' : 'Ver en tienda'} <ArrowRight className="h-4 w-4" aria-hidden="true" />
       </span>
     </a>
   </li>;
