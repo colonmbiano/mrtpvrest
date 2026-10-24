@@ -226,7 +226,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
           <a href="#tiendas" className={action + ' w-fit bg-[#167847] hover:bg-[#0f6239]'}>Encontrar tiendas <ArrowRight className="h-4 w-4" aria-hidden="true" /></a>
         </section>
 
-        <CatalogSection id="productos" title="Productos para ti" eyebrow="DESCUBRE MÁS" description="Precios y ofertas según cada comercio; compra al entrar a su tienda" state={state}
+        <CatalogSection id="productos" title="Productos para ti" eyebrow="DESCUBRE MÁS" description={livePreview ? 'Fotografías y precios publicados por las dos tiendas; no se puede comprar en esta vista' : 'Precios y ofertas según cada comercio; compra al entrar a su tienda'} state={state}
           result={products} pageKey="productsPage" singular="producto" plural="productos"
           empty="Todavía no hay productos publicados en el marketplace.">
           {(items) => <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -340,12 +340,12 @@ function StoreCard({ store, state, previewDemo, livePreview }: { store: StoreSum
         <span className={featuredPreview ? 'text-5xl drop-shadow-xl sm:text-6xl' : 'text-6xl drop-shadow-xl'} aria-hidden="true">{brandGlyph}</span>
         {featuredPreview && <span className={'absolute right-2 top-2 rounded-full px-2 py-1 text-[10px] font-extrabold ' + (previewMaster ? 'bg-[#fb741e] text-white' : 'bg-white text-[#7f428a]')}>DESTACADO</span>}
         {store.logoUrl && <Image src={store.logoUrl} alt="" fill unoptimized sizes="(max-width: 640px) 50vw, 16vw" className="bg-white object-contain p-3" />}
-        <span className={'absolute bottom-2 left-2 rounded-full px-2 py-1 text-[10px] font-extrabold ' + (store.isOpen ? 'bg-white text-[#168045]' : 'bg-[#34443a] text-white')}>{previewDemo ? 'Demostración' : store.isOpen ? 'Disponible' : 'Cerrada'}</span>
+        <span className={'absolute bottom-2 left-2 rounded-full px-2 py-1 text-[10px] font-extrabold ' + (store.isOpen ? 'bg-white text-[#168045]' : 'bg-[#34443a] text-white')}>{livePreview ? 'Solo lectura' : previewDemo ? 'Demostración' : store.isOpen ? 'Disponible' : 'Cerrada'}</span>
       </div>
       <strong className="line-clamp-2 text-sm leading-snug sm:text-base">{store.name}</strong>
       <span className="text-[11px] font-semibold text-[#7b8b80]">{subtitle}</span>
       <span className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-[#5d7565]">
-        {previewDemo ? <span className="inline-flex items-center gap-1 text-[#7c6a48]"><Store className="h-3.5 w-3.5" aria-hidden="true" />Ficha de demostración</span> : <>
+        {previewDemo ? <span className="inline-flex items-center gap-1 text-[#7c6a48]"><Store className="h-3.5 w-3.5" aria-hidden="true" />{livePreview ? 'Catálogo público real' : 'Ficha de demostración'}</span> : <>
           {eta && <span className="inline-flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" />{eta}</span>}
           <span className="inline-flex items-center gap-1"><Bike className="h-3.5 w-3.5" aria-hidden="true" />{hasFee ? store.deliveryFee === 0 ? 'Gratis' : formatPrice(store.deliveryFee!, 'MXN') : 'Según zona'}</span>
         </>}
@@ -360,7 +360,7 @@ function ProductCard({ product, previewDemo, livePreview }: { product: ProductSu
   const href = storeHref(product.store.slug);
   const off = discountPercent(product);
   return <li className="min-w-0 overflow-hidden rounded-[1.2rem] border border-[#e8eee9] bg-white p-2.5 shadow-[0_7px_18px_rgba(34,54,42,.045)] transition hover:-translate-y-0.5 hover:shadow-lg sm:p-3">
-    <a href={previewDemo ? '#preview-info' : href ?? '#productos'} className={'group flex h-full flex-col gap-2 ' + focus} aria-label={previewDemo ? 'Producto de demostración: ' + product.name : 'Ver ' + product.name + ' en ' + product.store.name}>
+    <a href={previewDemo ? '#preview-info' : href ?? '#productos'} className={'group flex h-full flex-col gap-2 ' + focus} aria-label={livePreview ? 'Producto real solo lectura: ' + product.name : previewDemo ? 'Producto de demostración: ' + product.name : 'Ver ' + product.name + ' en ' + product.store.name}>
       <span className="relative grid aspect-[5/4] place-items-center overflow-hidden rounded-[.9rem]" style={cardTint(product.store.slug)}>
         <span className="text-6xl drop-shadow-lg transition-transform group-hover:scale-110" aria-hidden="true">{productEmoji(product.name)}</span>
         {product.imageUrl && <Image src={product.imageUrl} alt="" fill unoptimized sizes="(max-width: 640px) 50vw, 20vw" className="object-cover transition-transform group-hover:scale-105" />}
