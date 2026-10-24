@@ -42,6 +42,7 @@ export type ProductSummary = {
   id: string;
   name: string;
   imageUrl?: string;
+  fromVariant?: boolean; // Preview de menus de precio variable: mostrar "Desde"
   categoryName: string;
   price: number;
   promoPrice: number | null; // solo si la promo está vigente ahora

@@ -20,6 +20,7 @@ type Props = {
   products: SectionResult<ProductSummary>;
   isolated: boolean;
   previewDemo?: boolean;
+  livePreview?: boolean;
 };
 
 type Category = {
@@ -58,7 +59,8 @@ function patchPage(key: 'storesPage' | 'productsPage', page: number): Partial<Ca
   return key === 'storesPage' ? { storesPage: page } : { productsPage: page };
 }
 
-export default function MarketplaceHomeV2({ state, stores, products, isolated, previewDemo = false }: Props) {
+export default function MarketplaceHomeV2({ state, stores, products, isolated, previewDemo = false, livePreview = false }: Props) {
+  const readOnly = previewDemo || livePreview;
   const promotions = products.status === 'ok'
     ? products.data.items.filter((p) => p.promoPrice !== null)
     : [];
@@ -132,6 +134,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
         Vista aislada de pruebas · Solo tiendas habilitadas; no se procesan pagos reales.
       </p>}
 
+      {livePreview && <div id="preview-info" role="status" className="mx-auto mt-3 max-w-[1380px] px-4 sm:px-6"><p className="rounded-xl border border-[#a3d4b4] bg-[#edf9f0] px-4 py-3 text-sm font-semibold text-[#266642]"><strong>Catálogos reales · vista local de solo lectura:</strong> productos, fotografías y precios publicados de Master Burguer’s y Tokki Boba. No se crean pedidos ni pagos. Los precios y horarios pueden cambiar en las tiendas.</p></div>}
       {previewDemo && <div id="preview-info" role="status" className="mx-auto mt-3 max-w-[1380px] px-4 sm:px-6"><p className="rounded-xl border border-[#f0cf90] bg-[#fff6df] px-4 py-3 text-sm font-semibold text-[#7c5219]"><strong>Vista de demostración:</strong> Master Burguer’s y Tokki Boba aparecen con sus nombres reales. Los demás negocios, productos y precios son ejemplos ficticios. No se realizan pedidos ni pagos y no se consulta la base de datos real.</p></div>}
 
       <main id="contenido" className="mx-auto flex max-w-[1380px] flex-col gap-9 px-4 pb-12 pt-5 sm:gap-11 sm:px-6 sm:pt-7">
@@ -165,7 +168,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
           result={stores} pageKey="storesPage" singular="tienda" plural="tiendas"
           empty="Todavía no hay tiendas publicadas en el marketplace.">
           {(items) => <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-            {items.map((s) => <StoreCard key={s.slug} store={s} state={state} previewDemo={previewDemo} />)}
+            {items.map((s) => <StoreCard key={s.slug} store={s} state={state} previewDemo={readOnly} livePreview={livePreview} />)}
           </ul>}
         </CatalogSection>
 
@@ -174,13 +177,13 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
             <div>
               <p className="mb-1 text-xs font-extrabold uppercase tracking-[.12em] text-[#ef5b2a]">AHORRA EN TUS COMPRAS</p>
               <h2 id="promos-title" className="font-display text-2xl font-extrabold sm:text-3xl">🔥 Promociones</h2>
-              <p className="mt-1 text-sm text-[#6b7c73]">{previewDemo ? 'Precios ilustrativos, sin venta ni pedidos' : 'Ofertas vigentes publicadas por los negocios'}</p>
+              <p className="mt-1 text-sm text-[#6b7c73]">{livePreview ? 'Promociones publicadas · vista sin compra' : previewDemo ? 'Precios ilustrativos, sin venta ni pedidos' : 'Ofertas vigentes publicadas por los negocios'}</p>
             </div>
             <a href="#productos" className={link + ' inline-flex items-center gap-1 text-sm'}>Ver todos los productos <ArrowRight className="h-4 w-4" aria-hidden="true" /></a>
           </div>
           {promotions.length ? (
             <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {promotions.slice(0, 5).map((p) => <ProductCard key={p.id} product={p} previewDemo={previewDemo} />)}
+              {promotions.slice(0, 5).map((p) => <ProductCard key={p.id} product={p} previewDemo={readOnly} livePreview={livePreview} />)}
             </ul>
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e9f1e8] bg-white p-5">
@@ -227,7 +230,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
           result={products} pageKey="productsPage" singular="producto" plural="productos"
           empty="Todavía no hay productos publicados en el marketplace.">
           {(items) => <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {items.map((p) => <ProductCard key={p.id} product={p} previewDemo={previewDemo} />)}
+            {items.map((p) => <ProductCard key={p.id} product={p} previewDemo={readOnly} livePreview={livePreview} />)}
           </ul>}
         </CatalogSection>
 
@@ -317,7 +320,7 @@ function Pagination({ data, state, id, pageKey, plural }: {
   </nav>;
 }
 
-function StoreCard({ store, state, previewDemo }: { store: StoreSummary; state: CatalogState; previewDemo: boolean }) {
+function StoreCard({ store, state, previewDemo, livePreview }: { store: StoreSummary; state: CatalogState; previewDemo: boolean; livePreview: boolean }) {
   const href = storeHref(store.slug);
   const eta = etaWindow(store.estimatedDelivery);
   const hasFee = store.deliveryFee !== null;
@@ -347,13 +350,13 @@ function StoreCard({ store, state, previewDemo }: { store: StoreSummary; state: 
           <span className="inline-flex items-center gap-1"><Bike className="h-3.5 w-3.5" aria-hidden="true" />{hasFee ? store.deliveryFee === 0 ? 'Gratis' : formatPrice(store.deliveryFee!, 'MXN') : 'Según zona'}</span>
         </>}
       </span>
-      <span className="mt-1 inline-flex items-center gap-1 text-xs font-extrabold text-[#e75821]">{previewDemo ? 'Solo ejemplo' : 'Ver tienda'} <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
+      <span className="mt-1 inline-flex items-center gap-1 text-xs font-extrabold text-[#e75821]">{livePreview ? 'Solo lectura' : previewDemo ? 'Solo ejemplo' : 'Ver tienda'} <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
     </a>
-    {previewDemo && featuredPreview ? <p className="mt-3 border-t border-[#edf0ea] pt-2 text-center text-[11px] font-semibold text-[#846c54]">Catálogo real aún sin conectar</p> : <a href={catalogHref(state, { store: store.slug, productsPage: 1 }, 'productos')} className={'mt-3 block border-t border-[#edf0ea] pt-2 text-center text-[11px] font-bold text-[#496b54] hover:text-[#d5541f] ' + focus}>Ver sus productos</a>}
+    {previewDemo && featuredPreview && !livePreview ? <p className="mt-3 border-t border-[#edf0ea] pt-2 text-center text-[11px] font-semibold text-[#846c54]">Catálogo real aún sin conectar</p> : <a href={catalogHref(state, { store: store.slug, productsPage: 1 }, 'productos')} className={'mt-3 block border-t border-[#edf0ea] pt-2 text-center text-[11px] font-bold text-[#496b54] hover:text-[#d5541f] ' + focus}>Ver sus productos</a>}
   </li>;
 }
 
-function ProductCard({ product, previewDemo }: { product: ProductSummary; previewDemo: boolean }) {
+function ProductCard({ product, previewDemo, livePreview }: { product: ProductSummary; previewDemo: boolean; livePreview: boolean }) {
   const href = storeHref(product.store.slug);
   const off = discountPercent(product);
   return <li className="min-w-0 overflow-hidden rounded-[1.2rem] border border-[#e8eee9] bg-white p-2.5 shadow-[0_7px_18px_rgba(34,54,42,.045)] transition hover:-translate-y-0.5 hover:shadow-lg sm:p-3">
@@ -366,11 +369,11 @@ function ProductCard({ product, previewDemo }: { product: ProductSummary; previe
       <strong className="line-clamp-2 min-h-[2.5em] text-sm leading-snug sm:text-[15px]">{product.name}</strong>
       <span className="block truncate text-[11px] text-[#6c8173]">{product.store.name}</span>
       <span className="flex flex-wrap items-baseline gap-1.5">
-        <strong className="text-base font-extrabold tabular-nums text-[#e65319]">{formatPrice(product.promoPrice ?? product.price, product.currency)}</strong>
+        <strong className="text-base font-extrabold tabular-nums text-[#e65319]">{product.fromVariant ? 'Desde ' : ''}{formatPrice(product.promoPrice ?? product.price, product.currency)}</strong>
         {product.promoPrice !== null && <s className="text-xs tabular-nums text-[#96a19a]">{formatPrice(product.price, product.currency)}</s>}
       </span>
       <span className="mt-auto flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#f85c25] px-2 py-2 text-xs font-bold text-white group-hover:bg-[#d64e1c]">
-        {previewDemo ? 'Vista de ejemplo' : 'Ver en tienda'} <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        {livePreview ? 'Solo lectura' : previewDemo ? 'Vista de ejemplo' : 'Ver en tienda'} <ArrowRight className="h-4 w-4" aria-hidden="true" />
       </span>
     </a>
   </li>;

@@ -28,6 +28,14 @@ export function isMarketplacePreviewDemo(): boolean {
     && !isMarketplaceIsolated();
 }
 
+// Solo para desarrollo local (nunca build productivo ni Vercel Preview).
+// Consulta unicamente catalogos PUBLICOS de dos tiendas con GET, sin credenciales.
+export function isMarketplaceLivePreviewEnabled(): boolean {
+  return process.env.NODE_ENV === "development"
+    && isMarketplaceIsolated()
+    && process.env.MARKETPLACE_LIVE_PREVIEW === "true";
+}
+
 // La raíz muestra el catálogo solo cuando se pide explícitamente; sin ninguna
 // bandera conserva la redirección histórica del storefront productivo.
 export function isMarketplaceCatalogEnabled(): boolean {

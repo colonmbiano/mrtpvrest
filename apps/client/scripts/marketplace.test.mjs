@@ -493,3 +493,50 @@ test('fetchMerchantRef returns the merchant id, falls back to null id, and rejec
   assert.equal(await fetchMerchantRef(null, 'taqueria'), null);
   assert.equal(await fetchMerchantRef('https://a', 'Bad Slug'), null);
 });
+
+// Importación dinámica después del hook de resolución .ts del test runner.
+const { loadLivePreviewCatalog } = await import('../src/lib/marketplace-live-preview.ts');
+
+test('vista local real: solo GET publicos para los dos slugs permitidos, sin secretos', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    const parsed = new URL(url);
+    calls.push({ url: parsed.href, init });
+    const slug = parsed.searchParams.get('r');
+    assert.ok(['master-burguer-s', 'tokki-bobba'].includes(slug));
+    assert.equal(parsed.origin, 'https://api.mrtpvrest.com');
+    if (parsed.pathname.endsWith('/info')) {
+      return jsonResponse({ slug, name: slug === 'tokki-bobba' ? 'Tokki Boba' : 'Master Burguer’s',
+        logo: 'https://images.example.org/logo.png', isOpen: true, estimatedDelivery: 40,
+        delivery: { mode: 'FLAT', flatFee: 0 }, minOrderAmount: 0 });
+    }
+    return jsonResponse({ categories: [{ id: 'c', name: 'Menú' }], items: [
+      { id: 'p1', name: 'Angus de prueba', price: 0, categoryId: 'c',
+        variants: [{ name: 'Chica', price: 135 }, { name: 'Grande', price: 190 }], imageUrl: 'https://images.example.org/photo.jpg' },
+      { id: 'p2', name: 'Promoción real', price: 200, isPromo: true, promoPrice: 150,
+        categoryId: 'c', reactionCount: 3 },
+    ] });
+  };
+  const { stores, products } = await loadLivePreviewCatalog(base, false, { fetchImpl });
+  assert.equal(stores.status, 'ok'); assert.equal(products.status, 'ok');
+  assert.equal(stores.data.total, 2); assert.equal(products.data.total, 4);
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every(c => c.init.method === 'GET' && c.init.credentials === 'omit' &&
+    !('Authorization' in c.init.headers) && c.url.includes('/api/store/')));
+  const Angus = products.data.items.find(i => i.name === 'Angus de prueba');
+  assert.equal(Angus.price, 135); assert.equal(Angus.fromVariant, true);
+  assert.equal(Angus.promoPrice, null);
+  assert.equal(products.data.items.find(i => i.name === 'Promoción real').promoPrice, 150);
+  const tokki = await loadLivePreviewCatalog({ ...base, store: 'tokki-bobba' }, false, { fetchImpl });
+  assert.equal(tokki.products.data.total, 2);
+});
+
+test('vista real: falla de API o contrato inválido nunca muestra precios ficticios', async () => {
+  const fetchImpl = async (url) => url.includes('tokki-bobba') ? jsonResponse({}, 503) :
+    jsonResponse({ slug: 'master-burguer-s', name: 'Master Burguer’s', isOpen: true });
+  const value = await loadLivePreviewCatalog(base, false, { fetchImpl });
+  assert.deepEqual(value.stores, { status: 'error', reason: 'unavailable' });
+  assert.deepEqual(value.products, { status: 'error', reason: 'unavailable' });
+  const invalid = await loadLivePreviewCatalog(base, true, { fetchImpl: () => { throw Error('should not request'); } });
+  assert.equal(invalid.products.reason, 'invalid');
+});
