@@ -1,10 +1,11 @@
 'use client';
 
 // Rastreo de los pedidos de "Mis pedidos" (storefront propio de la tienda).
-// Estos pedidos no tienen PIN de entrega: el servidor solo deriva PIN para los
-// pedidos del marketplace, y esos se rastrean en MarketplaceTrackingModal con
-// el código real que devuelve /api/marketplace/orders/:id/status. Aquí nunca
-// se inventa un código: el repartidor no tendría contra qué verificarlo.
+// El código de entrega lo genera y verifica el servidor (store-delivery-pin.js,
+// STORE_DELIVERY_PIN_MODE) y llega como order.deliveryPin; si no llega, no se
+// muestra ninguno. Aquí nunca se inventa un código: el repartidor no tendría
+// contra qué verificarlo. Los pedidos del marketplace usan su propio PIN en
+// MarketplaceTrackingModal.
 import type { CustomerOrder, CustomerOrderItem } from '../lib/customerAuth';
 import { incidentViews } from '../lib/orderIncidents';
 
@@ -33,6 +34,8 @@ export default function OrderTrackingModal({ open, onClose, order, primary }: Pr
 
   const statusIndex = getStatusIndex(order.status);
   const isDelivery = order.orderType === 'DELIVERY';
+  const deliveryPin = isDelivery && typeof order.deliveryPin === 'string' && /^\d{6}$/.test(order.deliveryPin)
+    ? order.deliveryPin : null;
 
   if (!open) return null;
 
@@ -55,6 +58,18 @@ export default function OrderTrackingModal({ open, onClose, order, primary }: Pr
 
         {/* Content */}
         <div className="p-5 overflow-y-auto flex-1 space-y-5">
+          {/* Código de entrega del servidor */}
+          {deliveryPin && (
+            <div className="p-5 rounded-2xl text-center" style={{ background: `${primary}15`, border: `2px solid ${primary}` }}>
+              <p className="text-xs uppercase tracking-widest font-semibold text-gray-600 mb-2">Código de entrega</p>
+              <p className="text-4xl font-black tabular-nums mb-2" style={{ color: primary, letterSpacing: '0.2em' }}
+                aria-label={`Código de entrega ${deliveryPin.split('').join(' ')}`}>
+                {deliveryPin}
+              </p>
+              <p className="text-xs text-gray-600">Díctaselo al repartidor al recibir tu pedido. No lo compartas antes.</p>
+            </div>
+          )}
+
           {/* Incident Alert */}
           {incidents.map((inc) => (
             <div

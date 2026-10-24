@@ -85,6 +85,9 @@ export type CustomerOrder = {
   // Incidencias de ruta persistidas (solo tipo, hora y llamadas). Opcional por
   // compatibilidad con backends anteriores que no las envían.
   incidents?: CustomerOrderIncident[];
+  // Código de entrega que el cliente dicta al repartidor. Lo genera el servidor
+  // (STORE_DELIVERY_PIN_MODE); null/ausente si no aplica o el pedido terminó.
+  deliveryPin?: string | null;
 };
 
 export const fetchMyOrders = (slug: string) => get('customer/orders', slug) as Promise<CustomerOrder[]>;

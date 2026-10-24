@@ -1,5 +1,6 @@
 import api from './api';
 import { useOfflineStore, OfflineTransaction, isPinTransaction } from '@/store/useOfflineStore';
+import { isDeliveryPinRejection } from './storeDeliveryPin';
 
 let syncInterval: NodeJS.Timeout | null = null;
 
@@ -38,6 +39,10 @@ export async function performSync() {
         const status = (err as any)?.response?.status;
         if ((err as Error)?.message === 'UNKNOWN_TRANSACTION_TYPE') store.markFailed(tx.id, 'UNKNOWN_TYPE');
         else if (isPinTransaction(tx) && status >= 400 && status < 500 && ![408, 429].includes(status)) store.markFailed(tx.id, 'REJECTED');
+        // Entrega propia con código del cliente incorrecto o faltante: reintentar no
+        // lo arregla. El pedido sigue "en camino" en el servidor para volver a pedirlo.
+        else if (tx.type === 'CONFIRM_DELIVERY' && status !== 429
+          && isDeliveryPinRejection((err as any)?.response?.data?.code)) store.markFailed(tx.id, 'REJECTED');
         else store.incrementRetry(tx.id);
       }
     }

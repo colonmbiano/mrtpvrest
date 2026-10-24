@@ -6,8 +6,15 @@ const { authenticate, requireTenantAccess, requireRole } = require('../middlewar
 const { localDayRange } = require('../utils/dayRange');
 const { sendPushToDriver, notifyDriversNewDeliveryOrder, notifyOrderStatus } = require('../services/notifications.service');
 const { createDeliveryIncidentsService, DeliveryIncidentError } = require('../lib/delivery-incidents');
+const { createStoreDeliveryPin, StoreDeliveryPinError } = require('../lib/store-delivery-pin');
 const router = express.Router();
-const deliveryIncidents = createDeliveryIncidentsService();
+// PIN de entrega de pedidos propios (STORE_DELIVERY_PIN_MODE). Una sola
+// instancia: lleva el freno de intentos fallidos por pedido.
+const storeDeliveryPin = createStoreDeliveryPin();
+if (storeDeliveryPin.misconfigured) {
+  console.warn('[delivery] STORE_DELIVERY_PIN_MODE sin STORE_DELIVERY_PIN_SECRET valido: PIN de entrega desactivado');
+}
+const deliveryIncidents = createDeliveryIncidentsService({ storeDeliveryPin });
 
 function incidentError(req, res, error) {
   if (error instanceof DeliveryIncidentError) {
@@ -368,9 +375,11 @@ router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, r
       orderBy: { createdAt: 'desc' },
     });
     // Aplanar countryCode al nivel del pedido para simplificar el frontend.
+    // requiresDeliveryPin: la app pide el código del cliente antes de entregar.
     const withCountry = orders.map(o => ({
       ...o,
       countryCode: o.restaurant?.config?.countryCode || 'MX',
+      requiresDeliveryPin: storeDeliveryPin.requiresPin(o),
     }));
     res.json(withCountry);
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
@@ -551,12 +560,43 @@ router.get('/', authenticate, requireTenantAccess, requireRole(...STAFF_ROLES), 
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
+// POST /api/delivery/:driverId/orders/:orderId/delivery-pin — solo verifica el
+// código que dicta el cliente (sin cambiar el pedido) para que la app avise al
+// momento si es incorrecto. La entrega lo vuelve a verificar al cerrar.
+router.post('/:driverId/orders/:orderId/delivery-pin', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
+    const order = await findDriverOrder(req, req.params.orderId, driver.id);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (!storeDeliveryPin.requiresPin(order)) return res.json({ ok: true, required: false });
+    const pin = req.body?.deliveryPin;
+    if (pin === undefined || pin === null || pin === '') {
+      return res.status(400).json({ error: 'Escribe el código de entrega', code: 'INVALID_DELIVERY_PIN' });
+    }
+    storeDeliveryPin.assertCourierPin(order, pin);
+    res.json({ ok: true, required: true });
+  } catch (error) {
+    if (error instanceof StoreDeliveryPinError) return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    // Nunca registrar el cuerpo: contiene el PIN.
+    console.error('[delivery] delivery_pin_check_failed', { code: error?.code || 'INTERNAL_ERROR' });
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
 router.put('/:driverId/orders/:orderId/deliver', authenticate, requireTenantAccess, async (req, res) => {
   try {
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
     const existing = await findDriverOrder(req, req.params.orderId, driver.id);
     if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (req.user?.role === 'DELIVERY' && existing.status !== 'DELIVERED') {
+      try { storeDeliveryPin.assertCourierPin(existing, req.body?.deliveryPin); }
+      catch (error) {
+        if (error instanceof StoreDeliveryPinError) return res.status(error.statusCode).json({ error: error.message, code: error.code });
+        throw error;
+      }
+    }
     const order = await prisma.order.update({
       where: { id: existing.id },
       data: {

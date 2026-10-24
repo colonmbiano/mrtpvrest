@@ -407,15 +407,8 @@ export default function StoreCheckout({
         return;
       }
 
-      // Pago en efectivo: informar sobre PIN de entrega para domicilios
-      if (paymentMethod === 'CASH' && isDelivery) {
-        const delPinMsg = 'El repartidor solicitará un código de 4 dígitos para entrega segura. Confirma con el vendedor.';
-        setSuccess({ ...data, deliveryNote: delPinMsg });
-        setLiveStatus(data.status || 'PENDING');
-        clear();
-        return;
-      }
-
+      // El código de entrega (si la tienda lo usa) viene en data.deliveryPin y se
+      // muestra en la pantalla de éxito; no se inventa ni se anuncia sin él.
       setSuccess(data); setLiveStatus(data.status || 'PENDING'); clear();
     } catch {
       setError('Error de red al enviar el pedido.');
@@ -477,9 +470,17 @@ export default function StoreCheckout({
           </div>
           <p className="text-xs text-gray-400 mb-5">El estado se actualiza automáticamente.</p>
 
-          {success.deliveryNote && (
-            <div className="rounded-2xl bg-blue-50 border border-blue-200 p-3 mb-5">
-              <p className="text-xs text-blue-900 font-bold">{success.deliveryNote}</p>
+          {/* Código de entrega generado por el servidor (pedidos a domicilio). */}
+          {typeof success.deliveryPin === 'string' && /^\d{6}$/.test(success.deliveryPin) && (
+            <div className="rounded-2xl p-4 mb-5" style={{ background: `${primary}14`, border: `2px solid ${primary}` }}>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Código de entrega</p>
+              <p className="text-3xl font-black tabular-nums" style={{ color: primary, letterSpacing: '0.2em' }}
+                aria-label={`Código de entrega ${success.deliveryPin.split('').join(' ')}`}>
+                {success.deliveryPin}
+              </p>
+              <p className="text-xs text-gray-600 font-bold mt-1">
+                Díctaselo al repartidor al recibir tu pedido. Guárdalo: también lo verás en tus pedidos si iniciaste sesión.
+              </p>
             </div>
           )}
 

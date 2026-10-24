@@ -119,6 +119,8 @@ function http(f) {
     '../middleware/auth.middleware': auth, '../utils/dayRange': {},
     '../services/notifications.service': { notifyOrderStatus: async () => {}, sendPushToDriver: async () => {}, notifyDriversNewDeliveryOrder: async () => {} },
     '../lib/delivery-incidents': require('../src/lib/delivery-incidents'),
+    // PIN de pedidos propios: real; sin STORE_DELIVERY_PIN_MODE queda en off.
+    '../lib/store-delivery-pin': require('../src/lib/store-delivery-pin'),
   });
   return { routes, auth, async request(method = 'post', route = '/orders/:orderId/incidents', overrides = {}) {
     const entry = routes.find(item => item.method === method && item.route === route); assert.ok(entry);

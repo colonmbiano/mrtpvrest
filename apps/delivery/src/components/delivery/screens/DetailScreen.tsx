@@ -48,6 +48,9 @@ export function DetailScreen({
   const [showDeliveryPin, setShowDeliveryPin] = useState(false);
   const [showIncidentModal, setShowIncidentModal] = useState<'CUSTOMER_UNREACHABLE' | 'WRONG_ADDRESS' | null>(null);
   const [showEvidenceModal, setShowEvidenceModal] = useState(false);
+  // Marketplace: PIN verificado por el despacho (tarea). Pedidos propios: el
+  // código del cliente lo pide page.tsx antes de cobrar (requiresDeliveryPin).
+  const isMarketplaceOrder = order?.source === 'MARKETPLACE' || Boolean(order?.taskId);
 
   const handlePickupPinConfirm = async (pin: string) => {
     const result = await confirmPickupPin(order.courierId || '', order.taskId || order.id, pin);
@@ -233,7 +236,7 @@ export function DetailScreen({
             </button>
           )}
 
-          {order?.status === 'ON_THE_WAY' && (
+          {order?.status === 'ON_THE_WAY' && isMarketplaceOrder && (
             <button
               onClick={() => setShowDeliveryPin(true)}
               style={{
@@ -259,8 +262,8 @@ export function DetailScreen({
             </button>
           )}
 
-          {/* Fallback para botón de cobrar si no hay PIN requerido */}
-          {order?.status === 'ON_THE_WAY' && !order?.requiresDeliveryPin && (
+          {/* Pedidos propios: cobrar y entregar (con código del cliente si la tienda lo usa) */}
+          {order?.status === 'ON_THE_WAY' && !isMarketplaceOrder && (
             <button onClick={onCobrar} style={S.btnSuccess}>
               <svg
                 viewBox="0 0 24 24"
@@ -275,7 +278,7 @@ export function DetailScreen({
                 <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
                 <polyline points="22 4 12 14.01 9 11.01" />
               </svg>
-              CONFIRMAR ENTREGA
+              {order?.requiresDeliveryPin ? 'ENTREGAR CON CÓDIGO' : 'CONFIRMAR ENTREGA'}
             </button>
           )}
         </div>

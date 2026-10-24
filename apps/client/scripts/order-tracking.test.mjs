@@ -34,14 +34,14 @@ function runTests() {
 
   const tests = [
     {
-      name: 'PIN: the my-orders tracking modal never invents a delivery PIN',
+      name: 'PIN: the my-orders tracking modal only shows the server delivery PIN',
       run: () => {
-        // Store-own orders have no server PIN; marketplace orders show the real one in
-        // MarketplaceTrackingModal. A random code here would be unverifiable by the courier.
+        // The code comes from the server (order.deliveryPin, store-delivery-pin.js). A code
+        // generated in the browser would be unverifiable by the courier.
         const source = readFileSync(new URL('../src/components/OrderTrackingModal.tsx', import.meta.url), 'utf8');
-        assert.ok(!/Math.random|crypto.getRandomValues/.test(source), 'No random codes in the tracking modal');
-        // Rendered JSX text only (comments may explain why there is no PIN).
-        assert.ok(!/>s*PIN de entregas*</.test(source) && !source.includes('Muéstrale este código'), 'No delivery PIN card in the tracking modal');
+        assert.ok(!/Math\.random|crypto\.getRandomValues/.test(source), 'No random codes in the tracking modal');
+        assert.ok(source.includes('order.deliveryPin'), 'The shown code is the one the server sent');
+        assert.ok(!source.includes('Muéstrale este código'), 'The old invented-PIN card is gone');
       },
     },
     // PIN Generation Tests

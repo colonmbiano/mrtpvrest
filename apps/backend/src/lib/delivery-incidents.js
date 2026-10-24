@@ -103,7 +103,9 @@ function database(client) {
 }
 function receipt(row) { return { success: true, incidentId: row.id, loggedAt: row.loggedAt }; }
 
-function createDeliveryIncidentsService({ now = () => new Date(), logger = console } = {}) {
+// storeDeliveryPin: createStoreDeliveryPin() de ./store-delivery-pin. Opcional;
+// sin él (pruebas antiguas) la entrega de pedidos propios no pide PIN.
+function createDeliveryIncidentsService({ now = () => new Date(), logger = console, storeDeliveryPin = null } = {}) {
   async function logIncident({ orderId, body, idempotencyKey, actor, restaurantId, prismaClient, io }) {
     const scope = actorScope({ actor, restaurantId }); id(orderId);
     check(object(body) && (!body.orderId || body.orderId === orderId), 'ORDER_ID_MISMATCH', 'Pedido invalido');
@@ -192,6 +194,18 @@ function createDeliveryIncidentsService({ now = () => new Date(), logger = conso
       check(!(existing.orderType === 'DELIVERY' && !(Number(existing.deliveryFee) > 0)
         && /ENV[IÍ]O POR ASIGNAR/i.test(existing.notes || '')),
       'SHIPPING_FEE_PENDING', 'Captura el costo de envio antes de continuar', 409);
+      // PIN de entrega de pedidos propios: lo verifica el repartidor antes de
+      // cualquier escritura. El personal de la tienda conserva su override y un
+      // replay de un pedido ya entregado no lo vuelve a pedir.
+      if (storeDeliveryPin && !marketplace && actor.role === 'DELIVERY' && status === 'DELIVERED'
+        && existing.status !== 'DELIVERED') {
+        try {
+          storeDeliveryPin.assertCourierPin(existing, body.deliveryPin);
+        } catch (error) {
+          if (error && error.code && error.statusCode) throw new DeliveryIncidentError(error.code, error.message, error.statusCode);
+          throw error;
+        }
+      }
       const driver = await tx.employee.findFirst({ where: { id: driverId, role: 'DELIVERY', isActive: true,
         location: { restaurantId: scope } }, select: { id: true } });
       check(driver, 'DRIVER_NOT_FOUND', 'Repartidor no encontrado', 404);

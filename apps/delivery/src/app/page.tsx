@@ -24,6 +24,8 @@ import { SetupScreen }     from '@/components/delivery/screens/SetupScreen';
 import { MapScreen }       from '@/components/delivery/screens/MapScreen';
 import { DispatchScreen }  from '@/components/delivery/screens/DispatchScreen';
 import { AvisosScreen }    from '@/components/delivery/screens/AvisosScreen';
+import { PinVerificationModal } from '@/components/delivery/PinVerificationModal';
+import { needsStoreDeliveryPin, isDeliveryPinRejection, withDeliveryPin } from '@/lib/storeDeliveryPin';
 
 type Screen =
   | 'setup' | 'login' | 'home' | 'detail'
@@ -143,6 +145,10 @@ export default function DeliveryApp() {
   const [orders, setOrders]             = useState<any[]>([]);
   const [history, setHistory]           = useState<any[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  // Pedido propio cuyo código de entrega se está pidiendo, y códigos ya
+  // capturados por pedido (solo en memoria: nunca se guardan ni se registran).
+  const [pinOrder, setPinOrder]         = useState<any>(null);
+  const deliveryPinsRef                 = useRef<Record<string, string>>({});
   const [messages, setMessages]         = useState<any[]>([]);
   const [cashSummary, setCashSummary]   = useState<any>(null);
   const [movements, setMovements]       = useState<any[]>([]);
@@ -426,8 +432,37 @@ export default function DeliveryApp() {
     } finally { setLoggingIn(false); }
   }
 
+  // Entrar a cobrar: si el pedido propio requiere código del cliente y aún no
+  // se capturó, pedirlo primero.
+  function startDelivery(order: any) {
+    setSelectedOrder(order);
+    if (needsStoreDeliveryPin(order) && !deliveryPinsRef.current[order.id]) {
+      setPinOrder(order);
+      return;
+    }
+    setScreen('cobrar');
+  }
+
+  async function confirmStoreDeliveryPin(pin: string): Promise<{ success: boolean; error?: string }> {
+    const order = pinOrder;
+    if (!order) return { success: false, error: 'Pedido no disponible' };
+    // Sin conexión no se puede verificar aquí: el servidor lo verifica al
+    // sincronizar la entrega y, si no coincide, la cola la marca rechazada.
+    if (navigator.onLine) {
+      try {
+        await api.post(`/api/delivery/${driver.id}/orders/${order.id}/delivery-pin`, { deliveryPin: pin });
+      } catch (err: any) {
+        return { success: false, error: err?.response?.data?.error || 'No se pudo verificar el código' };
+      }
+    }
+    deliveryPinsRef.current[order.id] = pin;
+    setPinOrder(null);
+    setScreen('cobrar');
+    return { success: true };
+  }
+
   async function changeStatus(order: any, status: string, method?: string) {
-    const data = {
+    const data = withDeliveryPin({
       orderId: order.id, status,
       // driverId va en el payload para que la reproducción OFFLINE pueda pegarle
       // al MISMO endpoint que la ruta online (/api/delivery/:driverId/.../status)
@@ -435,9 +470,11 @@ export default function DeliveryApp() {
       // la cola caía en /confirm-cash y la entrega quedaba fuera del corte.
       driverId: driver.id,
       ...(method ? { paymentMethod: method } : {}),
-    };
+    }, order, status, deliveryPinsRef.current[order.id]);
+    const forgetPin = () => { if (status === 'DELIVERED') delete deliveryPinsRef.current[order.id]; };
     if (!navigator.onLine) {
       useOfflineStore.getState().addToQueue({ type: 'CONFIRM_DELIVERY', data });
+      forgetPin();
       if (status === 'DELIVERED') {
         setOrders(os => os.filter(o => o.id !== order.id));
         setScreen('home');
@@ -446,6 +483,7 @@ export default function DeliveryApp() {
     }
     try {
       await api.put(`/api/delivery/${driver.id}/orders/${order.id}/status`, data);
+      forgetPin();
       fetchOrders();
       if (status === 'DELIVERED') setScreen('home');
     } catch (err: any) {
@@ -462,6 +500,14 @@ export default function DeliveryApp() {
         } catch (retryErr: any) {
           alert(retryErr?.response?.data?.error || 'No se pudo asignar el envío');
         }
+        return;
+      }
+      // Código del cliente rechazado: volver a pedirlo (nunca reintentar a ciegas).
+      if (isDeliveryPinRejection(err?.response?.data?.code)) {
+        forgetPin();
+        alert(err.response.data.error || 'El código de entrega no coincide');
+        setScreen('detail');
+        setPinOrder(order);
         return;
       }
       alert(err.response?.data?.error || 'Error');
@@ -617,7 +663,7 @@ export default function DeliveryApp() {
             setScreen('detail');
           }}
           onChat={(order: any) => { setSelectedOrder(order); setScreen('chat'); }}
-          onDeliverOrder={(order: any) => { setSelectedOrder(order); setScreen('cobrar'); }}
+          onDeliverOrder={(order: any) => startDelivery(order)}
           onNavigate={(s: string) => {
             if (s === 'login') { setDriver(null); }
             if (s === 'weekly') fetchHistory();
@@ -631,7 +677,7 @@ export default function DeliveryApp() {
           order={selectedOrder}
           orderDetail={orderDetail}
           onBack={() => setScreen('home')}
-          onCobrar={() => setScreen('cobrar')}
+          onCobrar={() => startDelivery(selectedOrder)}
           onChat={() => setScreen('chat')}
           onPickupConfirmed={() => {
             // Cambiar estado a ON_THE_WAY después de confirmar recolección
@@ -649,6 +695,17 @@ export default function DeliveryApp() {
           order={selectedOrder}
           onBack={() => setScreen('detail')}
           onConfirm={(method: string) => changeStatus(selectedOrder, 'DELIVERED', method)}
+        />
+      )}
+
+      {/* Código de entrega que dicta el cliente (pedidos propios de la tienda) */}
+      {pinOrder && (
+        <PinVerificationModal
+          type="DELIVERY"
+          orderNumber={pinOrder.orderNumber || ''}
+          targetName={pinOrder.customerName || 'el cliente'}
+          onConfirm={confirmStoreDeliveryPin}
+          onCancel={() => setPinOrder(null)}
         />
       )}
 

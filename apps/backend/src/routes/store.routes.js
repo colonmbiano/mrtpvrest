@@ -37,6 +37,10 @@ const { authenticate } = require('../middleware/auth.middleware');
 const { addLoyaltyPoints, genLoyaltyQr, getTier } = require('../services/loyalty.service');
 const { isMilestoneEnabled, processCustomerMilestone } = require('../services/loyalty-milestone.service');
 const { runOrderDictationSmart } = require('../services/order-dictation.service');
+const { createStoreDeliveryPin } = require('../lib/store-delivery-pin');
+// PIN de entrega de pedidos propios a domicilio (STORE_DELIVERY_PIN_MODE): el
+// comprador lo recibe al crear el pedido y en su historial; el repartidor lo pide.
+const storeDeliveryPin = createStoreDeliveryPin();
 const router = express.Router();
 
 // Throttle ligero del parseo de pedidos por IA (público). Protege la cuota de
@@ -579,6 +583,7 @@ function sendDedupReplay(res, order, dedupReason) {
     pointsDiscount: 0,
     tip:         order.tip,
     estimatedMinutes: order.estimatedMinutes || 30,
+    deliveryPin: storeDeliveryPin.pinForCustomer(order),
     couponWarnings: [],
     deduped: true,
     dedupReason,
@@ -764,6 +769,7 @@ router.post('/orders', async (req, res) => {
         pointsDiscount: 0,
         tip:         dupChat.tip,
         estimatedMinutes: dupChat.estimatedMinutes || 30,
+        deliveryPin: storeDeliveryPin.pinForCustomer(dupChat),
         couponWarnings: [],
         deduped: true,
         dedupReason: 'CHAT_WINDOW',
@@ -1106,6 +1112,7 @@ router.post('/orders', async (req, res) => {
         pointsDiscount: 0,
         tip:         dup.tip,
         estimatedMinutes: dup.estimatedMinutes || 30,
+        deliveryPin: storeDeliveryPin.pinForCustomer(dup),
         couponWarnings: [],
         deduped: true,
       });
@@ -1550,6 +1557,7 @@ router.post('/orders', async (req, res) => {
       pointsDiscount,
       tip:         order.tip,
       estimatedMinutes: order.estimatedMinutes || 30,
+      deliveryPin: storeDeliveryPin.pinForCustomer(order),
       couponWarnings,
       reward: milestoneReward,
     });
@@ -2069,6 +2077,8 @@ router.get('/customer/orders', authenticate, requireCustomer, async (req, res) =
       select: {
         id: true, orderNumber: true, status: true, orderType: true, total: true,
         paymentStatus: true, pointsEarned: true, createdAt: true,
+        // source: distingue pedidos del marketplace (su PIN vive en otro flujo).
+        source: true,
         // Datos de entrega/contacto → el "Volver a pedir" los reusa como
         // dirección/nombre guardados (cross-device, no solo el localStorage del
         // dispositivo). Solo DELIVERY tiene dirección.
@@ -2095,7 +2105,12 @@ router.get('/customer/orders', authenticate, requireCustomer, async (req, res) =
         },
       },
     });
-    res.json(orders.map(({ deliveryIncidents, ...order }) => ({ ...order, incidents: deliveryIncidents ?? [] })));
+    res.json(orders.map(({ deliveryIncidents, source, ...order }) => ({
+      ...order,
+      incidents: deliveryIncidents ?? [],
+      // Código que el cliente dicta al repartidor; null si no aplica o el pedido terminó.
+      deliveryPin: storeDeliveryPin.pinForCustomer({ ...order, source }),
+    })));
   } catch (e) { res.status(500).json({ error: 'Error al obtener tus pedidos.' }); }
 });
 
