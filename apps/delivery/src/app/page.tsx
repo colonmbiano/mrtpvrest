@@ -11,7 +11,7 @@ import GPSTracker from '@/components/delivery/GPSTracker';
 import { useOfflineStore } from '@/store/useOfflineStore';
 import { initBackgroundSync } from '@/lib/offline';
 import { ensureDriverPushSubscription } from '@/lib/push';
-import { updateCourierPresence } from '@/lib/marketplaceDispatch';
+import { updateCourierPresence, presenceRefreshDelay } from '@/lib/marketplaceDispatch';
 import { LoginScreen }     from '@/components/delivery/screens/LoginScreen';
 import { CourierDashboard } from '@/components/delivery/screens/CourierDashboard';
 import { DetailScreen }    from '@/components/delivery/screens/DetailScreen';
@@ -597,29 +597,40 @@ export default function DeliveryApp() {
   useEffect(() => {
     if (!driver || !isSharedCourier || !isOnline) return;
     let cancelled = false;
-    const refresh = async () => {
+    let timer: number | undefined;
+    // true si el servidor recibió la muestra; solo entonces se agenda la siguiente.
+    const refresh = async (): Promise<boolean> => {
       try {
         const gps = await getCourierPosition();
-        if (cancelled) return;
+        if (cancelled) return false;
         const response = await updateCourierPresence({
           courierId: driver.id, isOnline: true, acceptingShared: true, ...gps,
         });
         if (!response.ok) throw new Error('El despachador no confirmó el GPS.');
-        if (cancelled) return;
+        if (cancelled) return false;
         lastPresenceRef.current = { ...gps, at: Date.now() };
         setNetworkError('');
+        return true;
       } catch {
-        if (cancelled) return;
+        if (cancelled) return false;
         // No asegurar que seguimos disponibles si no hay presencia actual.
         setIsSharedCourier(false);
         void updateCourierPresence({
           courierId: driver.id, isOnline: false, acceptingShared: false,
         }).catch(() => {}); // Falla de red: el backend dejará vencer la presencia.
         setNetworkError('Se pausó la red: no fue posible actualizar tu GPS. Actívala nuevamente.');
+        return false;
       }
     };
-    const timer = window.setInterval(() => { void refresh(); }, 55000);
-    return () => { cancelled = true; window.clearInterval(timer); };
+    // La siguiente muestra va 55 s después de la última aceptada. Al volver
+    // Internet tras un corte, la última ya puede rebasar los 90 s: va de inmediato.
+    const schedule = () => {
+      timer = window.setTimeout(async () => {
+        if (await refresh() && !cancelled) schedule();
+      }, presenceRefreshDelay(lastPresenceRef.current?.at, Date.now()));
+    };
+    schedule();
+    return () => { cancelled = true; window.clearTimeout(timer); };
   }, [driver, isSharedCourier, isOnline, getCourierPosition]);
 
   const handleMarketplaceOfferAccepted = useCallback((_result: { taskId: string; orderId?: string }) => {
@@ -758,9 +769,11 @@ export default function DeliveryApp() {
             if (s === 'login') {
               ++presenceGenerationRef.current;
               if (driver && isSharedCourier) {
+                // El token se borra abajo antes de que axios envíe: va explícito.
+                const authToken = localStorage.getItem('accessToken') || undefined;
                 void updateCourierPresence({
                   courierId: driver.id, isOnline: false, acceptingShared: false,
-                }).catch(() => {}); // El servidor descartará GPS por TTL si no hay conexión.
+                }, { authToken }).catch(() => {}); // El servidor descartará GPS por TTL si no hay conexión.
               }
               setIsSharedCourier(false);
               setNetworkBusy(false);

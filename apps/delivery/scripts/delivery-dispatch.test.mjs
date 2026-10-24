@@ -98,6 +98,28 @@ test('presence: server accepts only verified shared flag and coordinates from de
   assert.equal('lat' in h.requests[1].data, false);
 });
 
+test('presence: logout sign-off carries the token explicitly; regular calls rely on the interceptor', async () => {
+  const h = harness();
+  h.post(async () => ({ data: { success: true } }));
+  await h.dispatch.updateCourierPresence({ courierId: 'c1', isOnline: false, acceptingShared: false }, { authToken: 'tok-1' });
+  assert.equal(h.requests[0].config.headers.Authorization, 'Bearer tok-1');
+  await h.dispatch.updateCourierPresence({ courierId: 'c1', isOnline: false, acceptingShared: false });
+  assert.equal(h.requests[1].config, undefined);
+});
+
+test('presence: refresh waits 55 s after the last accepted sample, immediately when stale', () => {
+  const { presenceRefreshDelay, PRESENCE_REFRESH_MS } = harness().dispatch;
+  const now = 1_000_000;
+  assert.equal(PRESENCE_REFRESH_MS, 55000);
+  assert.equal(presenceRefreshDelay(now, now), 55000);
+  assert.equal(presenceRefreshDelay(now - 20000, now), 35000);
+  assert.equal(presenceRefreshDelay(now - 120000, now), 0); // after an Internet outage
+  assert.equal(presenceRefreshDelay(null, now), 0);
+  assert.equal(presenceRefreshDelay(undefined, now), 0);
+  assert.equal(presenceRefreshDelay(NaN, now), 0);
+  assert.equal(presenceRefreshDelay(now + 600000, now), 55000); // clock moved backwards
+});
+
 test('presence: invalid coordinates and flags never call the API', async () => {
   const h = harness();
   const base = { courierId: 'c1', lat: 0, lng: 0, isOnline: true, acceptingShared: true };

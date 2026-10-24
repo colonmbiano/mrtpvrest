@@ -60,10 +60,22 @@ export interface PinConfirmResult {
   orderStatusUpdate: string;
 }
 
+// Renovación de presencia: 55 s después de la última muestra aceptada (el
+// despacho descarta GPS de más de 90 s). Si ya pasó ese tiempo —p. ej. al volver
+// Internet tras un corte— toca de inmediato; un reloj que retrocede no la alarga.
+export const PRESENCE_REFRESH_MS = 55000;
+export function presenceRefreshDelay(lastSampleAt: number | null | undefined, now: number): number {
+  if (typeof lastSampleAt !== 'number' || !Number.isFinite(lastSampleAt)) return 0;
+  return Math.min(PRESENCE_REFRESH_MS, Math.max(0, PRESENCE_REFRESH_MS - (now - lastSampleAt)));
+}
+
 /**
  * Actualiza la presencia, disponibilidad y ubicación GPS del repartidor en el despachador.
  */
-export async function updateCourierPresence(payload: PresencePayload): Promise<{ ok: boolean }> {
+export async function updateCourierPresence(
+  payload: PresencePayload,
+  opts: { authToken?: string } = {},
+): Promise<{ ok: boolean }> {
   if (!payload.courierId?.trim() || typeof payload.isOnline !== 'boolean'
     || typeof payload.acceptingShared !== 'boolean'
     || (payload.isOnline && (!Number.isFinite(payload.lat) || !Number.isFinite(payload.lng)
@@ -77,7 +89,10 @@ export async function updateCourierPresence(payload: PresencePayload): Promise<{
     acceptingShared: payload.acceptingShared,
     ...(payload.isOnline ? { lat: payload.lat, lng: payload.lng } : {}),
     ...(payload.accuracy !== undefined ? { accuracy: payload.accuracy } : {}) };
-  const { data } = await api.post(`${DISPATCH_URL}/me/presence`, dataPayload);
+  // Al cerrar sesión el token ya salió del almacenamiento cuando axios arma la
+  // petición (el interceptor corre después): por eso se puede pasar explícito.
+  const config = opts.authToken ? { headers: { Authorization: `Bearer ${opts.authToken}` } } : undefined;
+  const { data } = await api.post(`${DISPATCH_URL}/me/presence`, dataPayload, config);
   return { ...data, ok: data.ok === true || data.success === true };
 }
 

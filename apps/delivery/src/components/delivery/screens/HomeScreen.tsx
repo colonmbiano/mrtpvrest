@@ -34,7 +34,8 @@ interface HomeScreenProps {
   onNavigate: (screen: string) => void;
   isSharedCourier?: boolean;
   onToggleShared?: (enabled: boolean) => void;
-  onMarketplaceOfferAccepted?: (result: { taskId: string; orderId: string }) => void;
+  // El aceptar oferta del despacho regresa taskId; orderId no siempre viene.
+  onMarketplaceOfferAccepted?: (result: { taskId: string; orderId?: string }) => void;
 }
 
 // Tarjeta compacta del pool de disponibles: la acción única es TOMAR el pedido.
