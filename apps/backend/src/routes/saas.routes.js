@@ -1,5 +1,5 @@
 const router  = require('express').Router();
-const prisma   = require('@mrtpvrest/database').prisma;
+const { prisma, runWithBypass } = require('@mrtpvrest/database');
 const { authenticate, requireSuperAdmin } = require('../middleware/auth.middleware');
 const { deriveActiveKeys, syncTenantModuleRows, VALID_MODULE_KEYS } = require('../lib/tenantModules');
 const { resolveTrialDays, decoratePublicPlans } = require('../lib/promo');
@@ -58,6 +58,25 @@ router.get('/plans', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS PROTEGIDAS — requieren SUPER_ADMIN
 // ─────────────────────────────────────────────────────────────────────────────
+// Explicit guards precede the cross-tenant audit scope; public plan routes stay public.
+router.get('/marketplace/overview', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+}, authenticate, requireSuperAdmin, async (req, res) => {
+  if (req.user?.role !== 'SUPER_ADMIN' || req.user.isActive !== true || req.user.isDevice) {
+    return res.status(403).json({ error: 'Acceso restringido a SuperAdmin', errorCode: 'FORBIDDEN' });
+  }
+  if (Object.keys(req.query || {}).length) {
+    return res.status(400).json({ error: 'La vista global no admite filtros', errorCode: 'INVALID_QUERY' });
+  }
+  try {
+    const { getMarketplaceOverview } = require('../lib/saas-marketplace');
+    return res.json(await runWithBypass(() => getMarketplaceOverview({ prismaClient: prisma })));
+  } catch {
+    return res.status(503).json({ error: 'Auditoria marketplace temporalmente no disponible', errorCode: 'MARKETPLACE_OVERVIEW_UNAVAILABLE' });
+  }
+});
+
 router.use(authenticate, requireSuperAdmin);
 
 // ─────────────────────────────────────────────────────────────────────────────

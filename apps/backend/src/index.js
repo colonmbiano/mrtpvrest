@@ -1,5 +1,7 @@
 // src/index.js
 require('dotenv').config()
+const { resolveRuntimePolicy, createCorsOriginCheck, createSocketAdmission, startBackgroundTasks } = require('./lib/runtime-policy')
+const runtimePolicy = resolveRuntimePolicy()
 const express     = require('express')
 const http        = require('http')
 const { Server }  = require('socket.io')
@@ -25,52 +27,16 @@ app.set('trust proxy', 1)
 const server = http.createServer(app)
 
 const corsOptions = {
-  origin: (origin, callback) => {
-    // Permitir peticiones sin origen (como apps móviles o curl)
-    if (!origin) return callback(null, true);
-    
-    let host = '';
-    try {
-      host = new URL(origin).hostname;
-    } catch {
-      host = '';
-    }
-
-    const isMrtpv = host === 'mrtpvrest.com' || host.endsWith('.mrtpvrest.com');
-    const isVercel = process.env.ALLOW_VERCEL_PREVIEWS === 'true' && host.endsWith('.vercel.app');
-    const isLocal = host === 'localhost' || host === '127.0.0.1' || origin.startsWith('capacitor://');
-    // App de escritorio MODA+ (Tauri v2): el webview corre desde un origen propio,
-    // tauri://localhost (macOS/Linux) y http://tauri.localhost (Windows/WebView2).
-    // Sin esto, el fetch del webview va con Origin: http(s)://tauri.localhost y CORS
-    // lo bloquea → la caja de escritorio "no se conecta al servidor".
-    const isTauri = origin.startsWith('tauri://') || host === 'tauri.localhost';
-    if (isMrtpv || isVercel || isLocal || isTauri) {
-      callback(null, true);
-    } else {
-      console.log('CORS Blocked Origin:', origin);
-      // Preflight/origen bloqueado = 4xx de cliente, NO un CRITICAL de servidor.
-      // Marcamos el error para que error.middleware.js lo trate como 403/WARN
-      // usando los hooks que YA lee del error (statusCode/code/level/isOperational):
-      //  - statusCode 403 -> isCritical=false (no CRITICAL, no 500, no notifyAdmin)
-      //  - level 'WARN'   -> nivel explícito en el SystemLog
-      //  - code 'CORS_BLOCKED' -> errorCode dedicado y filtrable (no INTERNAL_ERROR)
-      //  - isOperational  -> mensaje público controlado
-      const corsError = new Error('CORS not allowed for ' + origin);
-      corsError.statusCode = 403;
-      corsError.code = 'CORS_BLOCKED';
-      corsError.level = 'WARN';
-      corsError.isOperational = true;
-      callback(corsError);
-    }
-  },
+  origin: createCorsOriginCheck(runtimePolicy),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-restaurant-id', 'x-location-id', 'x-restaurant-slug', 'x-location-slug', 'Idempotency-Key', 'x-correlation-id'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-restaurant-id', 'x-location-id', 'x-restaurant-slug', 'x-location-slug', 'Idempotency-Key', 'x-correlation-id', 'X-Marketplace-Order-Token', 'X-Buyer-Id', 'X-Guest-Id'],
   exposedHeaders: ['x-correlation-id']
 };
 
 // Socket.io
 const io = new Server(server, {
+  allowRequest: createSocketAdmission(runtimePolicy),
   cors: {
     origin: corsOptions.origin,
     methods: ['GET', 'POST'],
@@ -91,7 +57,6 @@ const {
 } = require('./lib/socket-guard')
 
 attachConnectionCap(io)
-startRevalidationSweep(io)
 
 io.use((socket, next) => {
   const authHeader = String(socket.handshake.headers?.authorization || '');
@@ -206,6 +171,32 @@ app.set('json replacer', function (key, value) {
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 
 // Rutas públicas (sin tenantMiddleware)
+const marketplaceDispatchRouter = require('./routes/marketplace-dispatch.routes')()
+app.use('/api/marketplace/v1', marketplaceDispatchRouter)
+app.use('/api/marketplace/dispatch', marketplaceDispatchRouter)
+app.use('/api/marketplace/v1/quotes', require('./routes/marketplace-quotes.routes')())
+app.use('/api/marketplace/v1/orders', require('./routes/marketplace-orders-v1.routes')())
+app.use('/api/marketplace/v1', require('./routes/marketplace-tracking-v1.routes')())
+app.use('/api/marketplace/v1', require('./routes/marketplace-merchants-v1.routes')())
+app.use('/api/marketplace/v1', require('./routes/marketplace-couriers-v1.routes')())
+app.use('/api/marketplace/v1/webhooks', require('./routes/marketplace-webhooks-v1.routes')())
+app.use('/api/marketplace/v1/ops', require('./routes/marketplace-ops-dispatch-v1.routes')())
+app.use('/api/marketplace/v1', require('./routes/marketplace-settlements-v1.routes')())
+app.use('/api/marketplace', require('./routes/marketplace.routes')())
+
+// Signup v2 stays OFF by default. Even with the flag, refuse a production DB
+// and external calls unless a dedicated staging environment is configured.
+if (process.env.MARKETPLACE_IDENTITY_ENABLED === 'true') {
+  const database = (() => { try { return new URL(process.env.DATABASE_URL || ''); } catch { return null; } })();
+  if (process.env.MARKETPLACE_IDENTITY_MODE !== 'staging'
+    || !database || !/marketplace.*staging/i.test(decodeURIComponent(database.pathname))
+    || !process.env.RESEND_API_KEY || !process.env.TURNSTILE_SECRET_KEY
+    || !/^https:\/\//.test(process.env.MARKETPLACE_IDENTITY_ORIGIN || '')) {
+    throw new Error('Marketplace identity can only run in configured isolated staging');
+  }
+  const { createMarketplaceIdentityRouter } = require('./routes/marketplace-identity.routes');
+  app.use('/api/marketplace/identity', createMarketplaceIdentityRouter());
+}
 app.use('/api/public', require('./routes/menu.routes'))
 app.use('/api/store',  require('./routes/store.routes'))
 app.use('/api/bot-alert', require('./routes/bot-alert.routes'))
@@ -352,31 +343,10 @@ app.use(sentry.errorHandler())
 app.use(errorMiddleware)
 
 // ── Jobs ─────────────────────────────────────────────────────────────────────
-const { startTrialExpiryJob } = require('./jobs/trialExpiry.job')
-startTrialExpiryJob()
-
-const { startAutoPromosJob } = require('./jobs/autoPromos.job')
-startAutoPromosJob()
-
-const { startUnverifiedPurgeJob } = require('./jobs/unverifiedPurge.job')
-startUnverifiedPurgeJob()
-
-const { startRecurringPayablesJob } = require('./jobs/recurringPayables.job')
-startRecurringPayablesJob()
-
-const { startWhatsappBotReportJob } = require('./jobs/whatsappBotReport.job')
-startWhatsappBotReportJob()
-
-const { startDemoExpiryJob } = require('./jobs/demoExpiry.job')
-startDemoExpiryJob()
-
-// Libera mesas cuyo pedido de QR quedó PENDING (caja nunca lo aceptó). Recibe
-// `io` para que el TPV/KDS refresquen el mapa de piso en vivo.
-const { startStaleTableOrdersJob } = require('./jobs/staleTableOrders.job')
-startStaleTableOrdersJob(io)
+startBackgroundTasks(runtimePolicy, io, { startRevalidationSweep })
 
 const PORT = process.env.PORT || 3001
-server.listen(PORT,'0.0.0.0', () => {
+server.listen(PORT, runtimePolicy.host, () => {
   console.log('┌─────────────────────────────────┐')
   console.log('│       MRTPVREST SAAS API        │')
   console.log('│  Puerto: ' + PORT + '                    │')

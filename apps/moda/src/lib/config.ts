@@ -26,7 +26,25 @@ export function sanitizeApiUrl(raw: string): string {
   }
 }
 
+// Copia aislada del marketplace (NEXT_PUBLIC_MARKETPLACE_ISOLATED=true, ver
+// MARKETPLACE-STAGING.md): solo vale la API loopback horneada; se ignoran el
+// override de localStorage y FALLBACK. Sin URL loopback válida, destino bloqueado.
+export const BLOCKED_API_URL = "http://127.0.0.1:9";
+
+export function isolatedApiUrl(): string | null {
+  if (process.env.NEXT_PUBLIC_MARKETPLACE_ISOLATED !== "true") return null;
+  try {
+    const u = new URL(process.env.NEXT_PUBLIC_API_URL || "");
+    const loopback = u.hostname === "127.0.0.1" || u.hostname === "localhost" || u.hostname === "[::1]";
+    return loopback && (u.protocol === "http:" || u.protocol === "https:") ? u.origin : BLOCKED_API_URL;
+  } catch {
+    return BLOCKED_API_URL;
+  }
+}
+
 export function getApiUrl(): string {
+  const isolated = isolatedApiUrl();
+  if (isolated) return isolated;
   if (typeof window !== "undefined") {
     const override = localStorage.getItem(API_KEY) || localStorage.getItem("apiBaseUrl");
     if (override) return sanitizeApiUrl(override);

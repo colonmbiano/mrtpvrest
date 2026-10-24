@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { bindCartToStore } from './cartScope';
 
 export type CartLine = {
   id: string;               // clave única de la línea (compuesta si hay variante/modificadores)
@@ -25,7 +26,11 @@ export type AddInput = {
 };
 
 type CartState = {
+  // Tienda a la que pertenece el carrito. Lo fija la página de la tienda (bindStore).
+  storeSlug: string | null;
   lines: CartLine[];
+  // Vincula el carrito a una tienda. Si era de OTRA tienda, descarta sus líneas.
+  bindStore: (slug: string) => void;
   add: (item: AddInput) => void;
   remove: (id: string) => void;
   setNote: (id: string, note: string) => void;
@@ -35,7 +40,14 @@ type CartState = {
 };
 
 export const useCart = create<CartState>((set, get) => ({
+  storeSlug: null,
   lines: [],
+  bindStore: slug =>
+    set(state => {
+      const decision = bindCartToStore(state.storeSlug, slug);
+      if (state.storeSlug === decision.storeSlug) return state;
+      return decision.clearLines ? { storeSlug: decision.storeSlug, lines: [] } : { storeSlug: decision.storeSlug };
+    }),
   add: item =>
     set(state => {
       const existing = state.lines.find(l => l.id === item.id);

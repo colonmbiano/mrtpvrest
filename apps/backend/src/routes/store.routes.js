@@ -37,6 +37,10 @@ const { authenticate } = require('../middleware/auth.middleware');
 const { addLoyaltyPoints, genLoyaltyQr, getTier } = require('../services/loyalty.service');
 const { isMilestoneEnabled, processCustomerMilestone } = require('../services/loyalty-milestone.service');
 const { runOrderDictationSmart } = require('../services/order-dictation.service');
+const { createStoreDeliveryPin } = require('../lib/store-delivery-pin');
+// PIN de entrega de pedidos propios a domicilio (STORE_DELIVERY_PIN_MODE): el
+// comprador lo recibe al crear el pedido y en su historial; el repartidor lo pide.
+const storeDeliveryPin = createStoreDeliveryPin();
 const router = express.Router();
 
 // Throttle ligero del parseo de pedidos por IA (público). Protege la cuota de
@@ -315,7 +319,12 @@ router.get('/menu', async (req, res) => {
         select: { id: true, name: true, description: true, imageUrl: true, sortOrder: true },
       }),
       prisma.menuItem.findMany({
-        where: { restaurantId: restaurant.id, isAvailable: true, ...(requestIsKiosk(req) ? { availableOnKiosk: true } : { availableOnline: true }) },
+        // Desactivar una categoría la oculta junto con sus productos (también en
+        // kiosko), igual que el catálogo del marketplace.
+        where: {
+          restaurantId: restaurant.id, isAvailable: true, category: { is: { isActive: true } },
+          ...(requestIsKiosk(req) ? { availableOnKiosk: true } : { availableOnline: true }),
+        },
         select: {
           id: true, name: true, description: true, price: true,
           isPromo: true, promoPrice: true, imageUrl: true,
@@ -376,9 +385,10 @@ router.get('/menu', async (req, res) => {
       items: items.filter(i => i.categoryId === cat.id),
     }));
 
-    // Items disponibles que NO quedaron en ninguna categoría activa (categoría
-    // inactiva, eliminada o sin categoría). Sin esto, los temas que solo
-    // renderizan category.items los ocultaban → "la tienda no muestra productos".
+    // Items disponibles con categoría activa que NO quedaron en ninguna categoría
+    // de esta lista (dato inconsistente, p. ej. categoría de otro restaurante).
+    // Sin esto, los temas que solo renderizan category.items los ocultaban →
+    // "la tienda no muestra productos". Los de categoría inactiva ya no llegan aquí.
     const shownIds = new Set(categoriesWithItems.flatMap(c => c.items.map(i => i.id)));
     const orphanItems = items.filter(i => !shownIds.has(i.id));
     if (orphanItems.length > 0) {
@@ -573,6 +583,7 @@ function sendDedupReplay(res, order, dedupReason) {
     pointsDiscount: 0,
     tip:         order.tip,
     estimatedMinutes: order.estimatedMinutes || 30,
+    deliveryPin: storeDeliveryPin.pinForCustomer(order),
     couponWarnings: [],
     deduped: true,
     dedupReason,
@@ -758,6 +769,7 @@ router.post('/orders', async (req, res) => {
         pointsDiscount: 0,
         tip:         dupChat.tip,
         estimatedMinutes: dupChat.estimatedMinutes || 30,
+        deliveryPin: storeDeliveryPin.pinForCustomer(dupChat),
         couponWarnings: [],
         deduped: true,
         dedupReason: 'CHAT_WINDOW',
@@ -1100,6 +1112,7 @@ router.post('/orders', async (req, res) => {
         pointsDiscount: 0,
         tip:         dup.tip,
         estimatedMinutes: dup.estimatedMinutes || 30,
+        deliveryPin: storeDeliveryPin.pinForCustomer(dup),
         couponWarnings: [],
         deduped: true,
       });
@@ -1544,6 +1557,7 @@ router.post('/orders', async (req, res) => {
       pointsDiscount,
       tip:         order.tip,
       estimatedMinutes: order.estimatedMinutes || 30,
+      deliveryPin: storeDeliveryPin.pinForCustomer(order),
       couponWarnings,
       reward: milestoneReward,
     });
@@ -2063,6 +2077,8 @@ router.get('/customer/orders', authenticate, requireCustomer, async (req, res) =
       select: {
         id: true, orderNumber: true, status: true, orderType: true, total: true,
         paymentStatus: true, pointsEarned: true, createdAt: true,
+        // source: distingue pedidos del marketplace (su PIN vive en otro flujo).
+        source: true,
         // Datos de entrega/contacto → el "Volver a pedir" los reusa como
         // dirección/nombre guardados (cross-device, no solo el localStorage del
         // dispositivo). Solo DELIVERY tiene dirección.
@@ -2079,9 +2095,22 @@ router.get('/customer/orders', authenticate, requireCustomer, async (req, res) =
             modifiers: { select: { modifierId: true, name: true } },
           },
         },
+        // Incidencias de ruta que reportó el repartidor (auditoría inmutable).
+        // Al cliente solo le llegan tipo, hora y llamadas: nunca el texto libre
+        // del repartidor (reason/notes), la foto ni ids de repartidor o actor.
+        deliveryIncidents: {
+          select: { id: true, type: true, occurredAt: true, callAttempts: true },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+          take: 20,
+        },
       },
     });
-    res.json(orders);
+    res.json(orders.map(({ deliveryIncidents, source, ...order }) => ({
+      ...order,
+      incidents: deliveryIncidents ?? [],
+      // Código que el cliente dicta al repartidor; null si no aplica o el pedido terminó.
+      deliveryPin: storeDeliveryPin.pinForCustomer({ ...order, source }),
+    })));
   } catch (e) { res.status(500).json({ error: 'Error al obtener tus pedidos.' }); }
 });
 

@@ -17,6 +17,7 @@ export function EditableList({
   onDelete,
   onChangeForm,
   addSection,
+  showKitchenNoteToggle = false,
 }: {
   items: any[];
   editingId: string | null;

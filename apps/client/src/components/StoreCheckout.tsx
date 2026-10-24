@@ -1,10 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCart } from '../lib/cartStore';
 import { authHeader } from '../lib/customerAuth';
 import { cartShareUrl } from '../lib/cartLink';
-import { getApiUrl } from '../lib/config';
+import { getApiUrl, getMarketplaceApiUrl, isMarketplaceCatalogEnabled } from '../lib/config';
+import {
+  buildOrderBody, buildQuoteBody, checkCustomer, checkMarketplaceEligibility, newIdempotencyKey, placeOrder, requestQuote,
+} from '../lib/marketplaceV1Checkout';
+import MarketplaceTrackingModal from './MarketplaceTrackingModal';
+import { useMarketplaceMerchant } from './MarketplaceMerchantProvider';
 import { computeDeliveryPreview, type DeliveryConfig } from '../lib/delivery';
 import { MapLocationPicker } from './MapLocationPicker';
 import { useMoney } from './StoreLocaleContext';
@@ -24,18 +29,12 @@ type StoreCheckoutProps = {
   delivery?: DeliveryConfig | null;
   minOrderAmount?: number;
   onlinePayment?: boolean;
-  // Tipo de pedido preseleccionado (ej. el toggle Entrega/Recoger del tema).
-  // Si la sucursal no lo permite, el efecto de `allowed` lo corrige a uno válido.
   initialOrderType?: OrderType;
   whatsappOrder?: { enabled: boolean; number: string | null };
-  // Menú QR en mesa: cuando llega de un QR, el pedido queda fijo en DINE_IN con
-  // esa mesa y sucursal (sin selector de tipo, mesa bloqueada).
-  // `lockedTable` es solo la ETIQUETA que ve el comensal; lo que ata el pedido a
-  // la mesa es `lockedTableToken` (firmado por el backend, ver lib/table-qr.js).
-  // Los QR viejos traen etiqueta sin token y el backend los resuelve por número.
   lockedTable?: string | null;
   lockedTableToken?: string | null;
   lockedLocationId?: string | null;
+  collectorId?: string;
 };
 
 const STATUS_LABEL: Record<string, { t: string; c: string }> = {
@@ -51,7 +50,7 @@ const STATUS_LABEL: Record<string, { t: string; c: string }> = {
 export default function StoreCheckout({
   open, onClose, slug, primary, locations = [], delivery, minOrderAmount = 0, onlinePayment = false,
   initialOrderType = 'DELIVERY', whatsappOrder,
-  lockedTable = null, lockedTableToken = null, lockedLocationId = null,
+  lockedTable = null, lockedTableToken = null, lockedLocationId = null, collectorId,
 }: StoreCheckoutProps) {
   // Llegó por QR de mesa. Con token firmado la mesa puede no tener número en el
   // nombre ("Barra"), así que el candado NO puede depender de la etiqueta.
@@ -67,6 +66,11 @@ export default function StoreCheckout({
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
+  const [orderNotes, setOrderNotes] = useState('');
+  // Pedido v1 aceptado: abre el seguimiento en lugar de la pantalla legacy.
+  const [v1Tracking, setV1Tracking] = useState<{ orderId: string; orderNumber?: string; trackingToken: string; fulfillment?: 'PICKUP' | 'DELIVERY'; pickupPin?: string; deliveryPin?: string } | null>(null);
+  // Clave de idempotencia del intento actual. Un reintento con los mismos datos reusa la clave.
+  const v1Attempt = useRef<{ key: string; signature: string } | null>(null);
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [geoStatus, setGeoStatus] = useState<'' | 'loading' | 'ok' | 'error'>('');
@@ -269,9 +273,51 @@ export default function StoreCheckout({
     } catch { setLoyaltyMsg('No se pudo identificar'); }
   };
 
+  // Marketplace: la bandera activa Y la tienda es del marketplace. Nunca cae al legacy en silencio.
+  // Mesa (QR) y tiendas sin ficha de marketplace siguen en el flujo legacy.
+  const marketplaceMerchant = useMarketplaceMerchant();
+  const useMarketplaceV1 = isMarketplaceCatalogEnabled() && !!marketplaceMerchant && !fromTableQr;
+
+  const submitMarketplaceV1 = async () => {
+    if (!marketplaceMerchant) return;
+    const apiUrl = getMarketplaceApiUrl();
+    const eligibility = checkMarketplaceEligibility({ orderType, paymentMethod, lines });
+    if (!eligibility.ok) { setError(eligibility.message); return; }
+    const customer = { name: customerName.trim(), phone: customerPhone.trim(), email: customerEmail.trim() || undefined };
+    const customerError = checkCustomer(customer);
+    if (customerError) { setError(customerError); return; }
+    const notes = orderNotes.trim() || undefined;
+    const signature = JSON.stringify({ merchant: marketplaceMerchant, lines: lines.map(l => [l.menuItemId, l.quantity]),
+      customer, notes, method: eligibility.paymentMethod });
+    if (!v1Attempt.current || v1Attempt.current.signature !== signature) {
+      v1Attempt.current = { key: newIdempotencyKey(), signature };
+    }
+    const base = v1Attempt.current.key;
+    setIsSubmitting(true);
+    try {
+      const quote = await requestQuote(apiUrl, buildQuoteBody({ merchant: marketplaceMerchant, lines,
+        fulfillment: eligibility.fulfillment }), `${base}-q`);
+      if ('ok' in quote) { setError(quote.message); return; }
+      const order = await placeOrder(apiUrl, buildOrderBody({ quoteId: quote.quoteId, fulfillment: eligibility.fulfillment,
+        paymentMethod: eligibility.paymentMethod, customer, notes }), `${base}-o`);
+      if ('ok' in order) { setError(order.message); return; }
+      v1Attempt.current = null;
+      clear();
+      if (!order.trackingToken) {
+        // La orden existe; sin token no podemos abrir su seguimiento. Se le pide al cliente guardar el número.
+        setError(`Tu pedido${order.orderNumber ? ` #${order.orderNumber}` : ''} quedó registrado, pero no pudimos abrir su seguimiento.`);
+        return;
+      }
+      setV1Tracking({ orderId: order.orderId, orderNumber: order.orderNumber, trackingToken: order.trackingToken, fulfillment: order.fulfillment, pickupPin: order.pickupPin, deliveryPin: order.deliveryPin });
+    } catch {
+      setError('Error de red al enviar el pedido.');
+    } finally { setIsSubmitting(false); }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (useMarketplaceV1) { await submitMarketplaceV1(); return; }
     if (!customerName.trim()) { setError('Tu nombre es requerido.'); return; }
     if (customerEmail.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail.trim())) {
       setError('El correo no tiene un formato válido.'); return;
@@ -326,13 +372,32 @@ export default function StoreCheckout({
       // Pago en línea: crear checkout en la pasarela y redirigir.
       if (paymentMethod === 'ONLINE') {
         try {
-          const payRes = await fetch(`${API}/api/store/payment/create?r=${encodeURIComponent(slug)}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderId: data.id, returnUrl: typeof window !== 'undefined' ? window.location.origin + '/' : undefined }),
+          const isMarketplace = !!collectorId;
+          const endpoint = isMarketplace
+            ? `${API}/api/marketplace/payments/checkout`
+            : `${API}/api/store/payment/create?r=${encodeURIComponent(slug)}`;
+
+          const payload = isMarketplace
+            ? {
+                orderId: data.id,
+                subtotal: total,
+                deliveryFee,
+                tip,
+                collectorId,
+                returnUrl: typeof window !== 'undefined' ? window.location.href : undefined,
+              }
+            : {
+                orderId: data.id,
+                returnUrl: typeof window !== 'undefined' ? window.location.origin + '/' : undefined,
+              };
+
+          const payRes = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
           });
           const pay = await payRes.json().catch(() => ({}));
           if (payRes.ok && pay.checkoutUrl) { clear(); window.location.href = pay.checkoutUrl; return; }
-          // Si falla la pasarela, el pedido ya existe: lo mostramos como pendiente de pago.
           setError(pay?.error || 'No se pudo iniciar el pago en línea. Tu pedido quedó registrado, paga en la tienda.');
           setSuccess(data); setLiveStatus(data.status || 'PENDING'); clear();
         } catch {
@@ -342,6 +407,8 @@ export default function StoreCheckout({
         return;
       }
 
+      // El código de entrega (si la tienda lo usa) viene en data.deliveryPin y se
+      // muestra en la pantalla de éxito; no se inventa ni se anuncia sin él.
       setSuccess(data); setLiveStatus(data.status || 'PENDING'); clear();
     } catch {
       setError('Error de red al enviar el pedido.');
@@ -363,6 +430,13 @@ export default function StoreCheckout({
     return () => { stop = true; clearInterval(id); };
   }, [success, slug]);
 
+  if (v1Tracking) {
+    return (
+      <MarketplaceTrackingModal orderId={v1Tracking.orderId} orderNumber={v1Tracking.orderNumber}
+        trackingToken={v1Tracking.trackingToken} fulfillment={v1Tracking.fulfillment ?? null} pickupPin={v1Tracking.pickupPin ?? null} deliveryPin={v1Tracking.deliveryPin ?? null} apiUrl={getMarketplaceApiUrl()} primary={primary}
+        onClose={() => { setV1Tracking(null); onClose(); }} />
+    );
+  }
   if (!open) return null;
 
   // ── Pantalla de éxito + seguimiento ──────────────────────────────────────
@@ -395,6 +469,20 @@ export default function StoreCheckout({
             </p>
           </div>
           <p className="text-xs text-gray-400 mb-5">El estado se actualiza automáticamente.</p>
+
+          {/* Código de entrega generado por el servidor (pedidos a domicilio). */}
+          {typeof success.deliveryPin === 'string' && /^\d{6}$/.test(success.deliveryPin) && (
+            <div className="rounded-2xl p-4 mb-5" style={{ background: `${primary}14`, border: `2px solid ${primary}` }}>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Código de entrega</p>
+              <p className="text-3xl font-black tabular-nums" style={{ color: primary, letterSpacing: '0.2em' }}
+                aria-label={`Código de entrega ${success.deliveryPin.split('').join(' ')}`}>
+                {success.deliveryPin}
+              </p>
+              <p className="text-xs text-gray-600 font-bold mt-1">
+                Díctaselo al repartidor al recibir tu pedido. Guárdalo: también lo verás en tus pedidos si iniciaste sesión.
+              </p>
+            </div>
+          )}
 
           {isWa && (
             <a href={waUrl} target="_blank" rel="noopener noreferrer" className="block w-full py-4 text-white rounded-2xl font-black uppercase tracking-widest mb-3 bg-[#25D366] shadow-lg hover:brightness-105 active:scale-95 transition-all flex justify-center items-center gap-2">
@@ -513,6 +601,9 @@ export default function StoreCheckout({
               <input required autoComplete="name" placeholder="Tu nombre" className={field} value={customerName} onChange={e => setCustomerName(e.target.value)} />
               <input type="tel" inputMode="tel" autoComplete="tel" placeholder={isDineIn ? 'Tu teléfono (opcional, para tus puntos)' : 'Tu teléfono'} className={field} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
               <input type="email" inputMode="email" autoComplete="email" placeholder="Tu correo (opcional, para tu confirmación)" className={field} value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
+              {useMarketplaceV1 && (
+                <textarea rows={2} maxLength={1000} placeholder="Notas para la tienda (opcional)" aria-label="Notas para la tienda" className={field} value={orderNotes} onChange={e => setOrderNotes(e.target.value)} />
+              )}
               {isDelivery && (
                 <>
                   <textarea required placeholder="Dirección de entrega" className={`${field} h-20`} value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} />
