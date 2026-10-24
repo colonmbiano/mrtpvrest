@@ -4,6 +4,7 @@
 // guarda por tienda en localStorage. Sin cuentas multi-marca: cada tienda tiene
 // su propio espacio de clientes.
 import { getApiUrl } from './config';
+import type { CustomerOrderIncident } from './orderIncidents';
 
 const API = getApiUrl();
 
@@ -76,12 +77,14 @@ export type CustomerOrderItem = {
 
 export type CustomerOrder = {
   id: string; orderNumber: string; status: string; orderType: string; total: number;
-  notes?: string | null;
   paymentStatus: string; pointsEarned: number; createdAt: string;
   // Contacto/entrega del pedido → "Volver a pedir" los reusa como datos guardados.
   customerName: string | null; customerPhone: string | null;
   deliveryAddress: string | null; deliveryLat: number | null; deliveryLng: number | null;
   items: CustomerOrderItem[];
+  // Incidencias de ruta persistidas (solo tipo, hora y llamadas). Opcional por
+  // compatibilidad con backends anteriores que no las envían.
+  incidents?: CustomerOrderIncident[];
 };
 
 export const fetchMyOrders = (slug: string) => get('customer/orders', slug) as Promise<CustomerOrder[]>;

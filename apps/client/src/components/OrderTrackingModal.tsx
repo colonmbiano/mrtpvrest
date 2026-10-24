@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { CustomerOrder, CustomerOrderItem } from '../lib/customerAuth';
+import { incidentViews } from '../lib/orderIncidents';
 
 const TIMELINE_STATES = [
   { status: 'PENDING', label: 'Recibido', icon: '📋' },
@@ -26,44 +27,16 @@ function getStatusIndex(status: string): number {
   return Math.max(0, TIMELINE_STATES.findIndex((s) => s.status === status));
 }
 
-type DeliveryIncident = {
-  id: string;
-  type: 'CUSTOMER_UNREACHABLE' | 'LOCATION_CHANGED' | 'VEHICLE_ISSUE' | 'TRAFFIC' | 'OTHER';
-  description: string;
-  reportedAt: string;
-  resolved: boolean;
-};
-
-function parseIncidents(order: CustomerOrder): DeliveryIncident[] {
-  if (!order.orderType || order.orderType !== 'DELIVERY' || !['ON_THE_WAY', 'DELIVERED'].includes(order.status)) {
-    return [];
-  }
-  const noteText = order.notes || '';
-  if (noteText.includes('CUSTOMER_UNREACHABLE')) {
-    return [
-      {
-        id: 'inc-1',
-        type: 'CUSTOMER_UNREACHABLE',
-        description: 'No fue posible contactar al cliente',
-        reportedAt: new Date().toISOString(),
-        resolved: order.status === 'DELIVERED',
-      },
-    ];
-  }
-  return [];
-}
-
 export default function OrderTrackingModal({ open, onClose, order, primary }: Props) {
   const [pin, setPin] = useState('');
-  const [incidents, setIncidents] = useState<DeliveryIncident[]>([]);
+  // Incidencias reales registradas por el repartidor (no se deducen de notas).
+  const incidents = incidentViews(order);
 
   useEffect(() => {
     if (open && !pin) {
       setPin(generatePIN());
-      const parsed = parseIncidents(order);
-      setIncidents(parsed);
     }
-  }, [open, pin, order]);
+  }, [open, pin]);
 
   const statusIndex = getStatusIndex(order.status);
   const isDelivery = order.orderType === 'DELIVERY';
@@ -102,21 +75,25 @@ export default function OrderTrackingModal({ open, onClose, order, primary }: Pr
           )}
 
           {/* Incident Alert */}
-          {incidents.length > 0 &&
-            incidents.map((inc) => (
-              <div key={inc.id} className="p-4 rounded-xl border-l-4 bg-red-50" style={{ borderColor: '#ef4444' }}>
-                <div className="flex items-start gap-3">
-                  <span className="text-lg mt-0.5">⚠️</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-red-900">{inc.type === 'CUSTOMER_UNREACHABLE' && 'No fue posible contactar'}</p>
-                    <p className="text-xs text-red-700 mt-1">{inc.description}</p>
-                    {!inc.resolved && (
-                      <p className="text-[10px] text-red-600 font-semibold mt-2 uppercase tracking-wide">Reportado · Pendiente de resolución</p>
-                    )}
-                  </div>
+          {incidents.map((inc) => (
+            <div
+              key={inc.id}
+              role={inc.resolved ? undefined : 'alert'}
+              className={`p-4 rounded-xl border-l-4 ${inc.resolved ? 'bg-gray-50' : 'bg-red-50'}`}
+              style={{ borderColor: inc.resolved ? '#9ca3af' : '#ef4444' }}
+            >
+              <div className="flex items-start gap-3">
+                <span className="text-lg mt-0.5" aria-hidden="true">{inc.resolved ? 'ℹ️' : '⚠️'}</span>
+                <div className="flex-1 min-w-0">
+                  <p className={`font-semibold text-sm ${inc.resolved ? 'text-gray-900' : 'text-red-900'}`}>{inc.title}</p>
+                  <p className={`text-xs mt-1 ${inc.resolved ? 'text-gray-600' : 'text-red-700'}`}>{inc.detail}</p>
+                  <p className={`text-[10px] font-semibold mt-2 uppercase tracking-wide ${inc.resolved ? 'text-gray-500' : 'text-red-600'}`}>
+                    {inc.time ? `Reportado a las ${inc.time}` : 'Reportado'}{inc.resolved ? ' · Pedido entregado' : ''}
+                  </p>
                 </div>
               </div>
-            ))}
+            </div>
+          ))}
 
           {/* Timeline */}
           <div className="space-y-4 py-2">

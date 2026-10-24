@@ -2085,9 +2085,17 @@ router.get('/customer/orders', authenticate, requireCustomer, async (req, res) =
             modifiers: { select: { modifierId: true, name: true } },
           },
         },
+        // Incidencias de ruta que reportó el repartidor (auditoría inmutable).
+        // Al cliente solo le llegan tipo, hora y llamadas: nunca el texto libre
+        // del repartidor (reason/notes), la foto ni ids de repartidor o actor.
+        deliveryIncidents: {
+          select: { id: true, type: true, occurredAt: true, callAttempts: true },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+          take: 20,
+        },
       },
     });
-    res.json(orders);
+    res.json(orders.map(({ deliveryIncidents, ...order }) => ({ ...order, incidents: deliveryIncidents ?? [] })));
   } catch (e) { res.status(500).json({ error: 'Error al obtener tus pedidos.' }); }
 });
 

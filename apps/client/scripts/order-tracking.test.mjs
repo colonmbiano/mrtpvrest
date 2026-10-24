@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'assert';
+import { incidentViews } from '../src/lib/orderIncidents.ts';
 
 const TIMELINE_STATES = [
   { status: 'PENDING', label: 'Recibido', icon: '📋' },
@@ -16,25 +17,6 @@ function generatePIN() {
 
 function getStatusIndex(status) {
   return Math.max(0, TIMELINE_STATES.findIndex((s) => s.status === status));
-}
-
-function parseIncidents(order) {
-  if (!order.orderType || order.orderType !== 'DELIVERY' || !['ON_THE_WAY', 'DELIVERED'].includes(order.status)) {
-    return [];
-  }
-  const noteText = order.notes || '';
-  if (noteText.includes('CUSTOMER_UNREACHABLE')) {
-    return [
-      {
-        id: 'inc-1',
-        type: 'CUSTOMER_UNREACHABLE',
-        description: 'No fue posible contactar al cliente',
-        reportedAt: new Date().toISOString(),
-        resolved: order.status === 'DELIVERED',
-      },
-    ];
-  }
-  return [];
 }
 
 function validateOrderStructure(order) {
@@ -132,86 +114,44 @@ function runTests() {
 
     // Incident Tests
     {
-      name: 'Incidents: Non-delivery order should have no incidents',
+      name: 'Incidents: persisted incidents are shown only on delivery orders',
       run: () => {
-        const order = {
-          id: '1',
-          orderNumber: '1',
-          status: 'DELIVERED',
-          orderType: 'TAKEOUT',
-          total: 100,
-          items: [],
-          notes: 'CUSTOMER_UNREACHABLE',
-        };
-        const incidents = parseIncidents(order);
-        assert.equal(incidents.length, 0, 'Non-delivery orders should not have incidents');
+        const incidents = [{ id: 'i1', type: 'CUSTOMER_UNREACHABLE', occurredAt: '2026-10-23T19:05:00Z', callAttempts: 3 }];
+        assert.equal(incidentViews({ orderType: 'TAKEOUT', status: 'READY', incidents }).length, 0);
+        assert.equal(incidentViews({ orderType: 'DELIVERY', status: 'ON_THE_WAY' }).length, 0);
+        assert.equal(incidentViews({ orderType: 'DELIVERY', status: 'ON_THE_WAY', incidents: null }).length, 0);
+        assert.equal(incidentViews({ orderType: 'DELIVERY', status: 'ON_THE_WAY', incidents: [] }).length, 0);
       },
     },
     {
-      name: 'Incidents: Delivery order with CUSTOMER_UNREACHABLE should be detected',
+      name: 'Incidents: customer unreachable uses call attempts, time and pending state',
       run: () => {
-        const order = {
-          id: '1',
-          orderNumber: '1',
-          status: 'ON_THE_WAY',
-          orderType: 'DELIVERY',
-          total: 100,
-          items: [],
-          notes: 'CUSTOMER_UNREACHABLE encountered',
-        };
-        const incidents = parseIncidents(order);
-        assert.equal(incidents.length, 1, 'Should detect 1 incident');
-        assert.equal(incidents[0].type, 'CUSTOMER_UNREACHABLE');
-        assert.ok(!incidents[0].resolved, 'Incident should not be resolved in ON_THE_WAY');
+        const [view] = incidentViews({ orderType: 'DELIVERY', status: 'ON_THE_WAY',
+          incidents: [{ id: 'i1', type: 'CUSTOMER_UNREACHABLE', occurredAt: '2026-10-23T19:05:00Z', callAttempts: 3 }] },
+          { timeZone: 'America/Mexico_City' });
+        assert.equal(view.id, 'i1');
+        assert.equal(view.title, 'El repartidor no pudo contactarte');
+        assert.equal(view.detail, 'Intentó llamarte 3 veces. Revisa tu teléfono.');
+        assert.equal(view.time, '01:05 p.m.'); // mismo formato es-MX que la línea de tiempo del modal
+        assert.equal(view.resolved, false);
+        const [one] = incidentViews({ orderType: 'DELIVERY', status: 'ON_THE_WAY',
+          incidents: [{ id: 'i2', type: 'CUSTOMER_UNREACHABLE', occurredAt: '2026-10-23T19:05:00Z', callAttempts: 1 }] });
+        assert.equal(one.detail, 'Intentó llamarte 1 vez. Revisa tu teléfono.');
       },
     },
     {
-      name: 'Incidents: Delivered order with CUSTOMER_UNREACHABLE should be resolved',
+      name: 'Incidents: every backend type and unknown types map to fixed copy, never free text',
       run: () => {
-        const order = {
-          id: '1',
-          orderNumber: '1',
-          status: 'DELIVERED',
-          orderType: 'DELIVERY',
-          total: 100,
-          items: [],
-          notes: 'CUSTOMER_UNREACHABLE but delivered',
-        };
-        const incidents = parseIncidents(order);
-        assert.equal(incidents.length, 1, 'Should detect 1 incident');
-        assert.ok(incidents[0].resolved, 'Incident should be resolved when DELIVERED');
-      },
-    },
-    {
-      name: 'Incidents: Orders without incident notes should have empty incidents',
-      run: () => {
-        const order = {
-          id: '1',
-          orderNumber: '1',
-          status: 'ON_THE_WAY',
-          orderType: 'DELIVERY',
-          total: 100,
-          items: [],
-          notes: 'Just a regular note',
-        };
-        const incidents = parseIncidents(order);
-        assert.equal(incidents.length, 0, 'Should not detect incidents');
-      },
-    },
-    {
-      name: 'Incidents: PENDING order should not have incidents even with CUSTOMER_UNREACHABLE note',
-      run: () => {
-        const order = {
-          id: '1',
-          orderNumber: '1',
-          status: 'PENDING',
-          orderType: 'DELIVERY',
-          total: 100,
-          items: [],
-          notes: 'CUSTOMER_UNREACHABLE',
-        };
-        const incidents = parseIncidents(order);
-        assert.equal(incidents.length, 0, 'PENDING orders should not trigger incidents');
+        const at = '2026-10-23T19:05:00Z';
+        const views = incidentViews({ orderType: 'DELIVERY', status: 'DELIVERED', incidents: [
+          { id: 'a', type: 'WRONG_ADDRESS', occurredAt: at, callAttempts: 0 },
+          { id: 'b', type: 'DAMAGED_OR_REJECTED', occurredAt: at, callAttempts: 0 },
+          { id: 'c', type: 'SOMETHING_NEW', occurredAt: 'no-es-fecha', callAttempts: 0 },
+        ] });
+        assert.deepEqual(views.map(v => v.title), ['Hay un problema con la dirección',
+          'Hubo un problema con tu pedido', 'El repartidor reportó un problema']);
+        assert.ok(views.every(v => v.resolved), 'Delivered orders mark incidents as resolved');
+        assert.equal(views[2].time, null, 'Invalid dates do not render a time');
       },
     },
 
@@ -273,28 +213,6 @@ function runTests() {
       },
     },
     {
-      name: 'Consistency: Incidents should have valid structure',
-      run: () => {
-        const order = {
-          id: '1',
-          orderNumber: '1',
-          status: 'ON_THE_WAY',
-          orderType: 'DELIVERY',
-          total: 100,
-          items: [],
-          notes: 'CUSTOMER_UNREACHABLE',
-        };
-        const incidents = parseIncidents(order);
-        incidents.forEach((inc) => {
-          assert.ok(inc.id, 'Incident must have id');
-          assert.ok(inc.type, 'Incident must have type');
-          assert.ok(inc.description, 'Incident must have description');
-          assert.ok(inc.reportedAt, 'Incident must have reportedAt');
-          assert.equal(typeof inc.resolved, 'boolean', 'Incident resolved must be boolean');
-        });
-      },
-    },
-    {
       name: 'Consistency: PIN should be consistent type across calls',
       run: () => {
         const pins = [generatePIN(), generatePIN(), generatePIN()];
@@ -318,38 +236,6 @@ function runTests() {
           items: [],
         };
         validateOrderStructure(order);
-      },
-    },
-    {
-      name: 'Edge Case: Order with null notes',
-      run: () => {
-        const order = {
-          id: '1',
-          orderNumber: '1',
-          status: 'ON_THE_WAY',
-          orderType: 'DELIVERY',
-          total: 100,
-          items: [],
-          notes: null,
-        };
-        const incidents = parseIncidents(order);
-        assert.equal(incidents.length, 0, 'Null notes should not cause incidents');
-      },
-    },
-    {
-      name: 'Edge Case: Order with undefined notes',
-      run: () => {
-        const order = {
-          id: '1',
-          orderNumber: '1',
-          status: 'ON_THE_WAY',
-          orderType: 'DELIVERY',
-          total: 100,
-          items: [],
-          notes: undefined,
-        };
-        const incidents = parseIncidents(order);
-        assert.equal(incidents.length, 0, 'Undefined notes should not cause incidents');
       },
     },
   ];
