@@ -49,6 +49,13 @@ function deriveStoreDeliveryPin(orderId, secret) {
   return String(code).padStart(6, '0');
 }
 
+// Texto para los WhatsApp al comprador (confirmación del chatbot y "en camino");
+// vacío si no hay PIN que mostrar.
+function customerPinText(pin) {
+  if (typeof pin !== 'string' || !PIN_RE.test(pin)) return '';
+  return `🔐 *Código de entrega:* ${pin}\nDíctaselo al repartidor al recibir tu pedido. No lo compartas antes.`;
+}
+
 function samePin(a, b) {
   return a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
@@ -115,4 +122,5 @@ function createStoreDeliveryPin({ config = storeDeliveryPinConfig(), now = () =>
 
 module.exports = {
   StoreDeliveryPinError, storeDeliveryPinConfig, createStoreDeliveryPin, deriveStoreDeliveryPin, appliesTo,
+  customerPinText,
 };

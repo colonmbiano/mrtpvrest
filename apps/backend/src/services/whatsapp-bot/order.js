@@ -10,6 +10,10 @@ const { resolveProviderForRestaurant } = require('../../lib/payment-providers');
 const { nextOrderNumber } = require('../../lib/order-number');
 const { effectivePrice } = require('./catalog');
 const { upsertContact } = require('./contacts');
+const { createStoreDeliveryPin } = require('../../lib/store-delivery-pin');
+
+// Código de entrega del pedido propio a domicilio (STORE_DELIVERY_PIN_MODE).
+const storeDeliveryPin = createStoreDeliveryPin();
 
 class BotOrderError extends Error {
   constructor(code, message) {
@@ -26,7 +30,7 @@ class BotOrderError extends Error {
  * @param {object} args.restaurant - { id }
  * @param {object} args.config - RestaurantConfig
  * @param {object} args.data - contexto de la sesión (cart, orderType, ...)
- * @returns {Promise<{ order, estimatedMinutes }>}
+ * @returns {Promise<{ order, estimatedMinutes, deliveryPin }>} deliveryPin es null si no aplica.
  */
 async function createBotOrder({ prisma, io, restaurant, config, data }) {
   const cart = Array.isArray(data.cart) ? data.cart : [];
@@ -146,7 +150,7 @@ async function createBotOrder({ prisma, io, restaurant, config, data }) {
     }
   }
 
-  return { order, estimatedMinutes };
+  return { order, estimatedMinutes, deliveryPin: storeDeliveryPin.pinForCustomer(order) };
 }
 
 /**
