@@ -386,6 +386,8 @@ function createHybridDispatchEngine({ store, now = () => new Date() }) {
     }
   }
   function offerWave(task, date, onlyCourierId) {
+    // A task reserved in a multistop route must not receive individual offers.
+    if (task.multiTripId) return [];
     const source = task.dispatchMode;
     if (task.status !== TASK_STATUS.OFFERING || !DISPATCH_MODES.includes(source)) return [];
     const pending = [...store.offers.values()].filter(offer => offer.taskId === task.id
@@ -484,6 +486,7 @@ function createHybridDispatchEngine({ store, now = () => new Date() }) {
     const offer = store.offers.get(offerId);
     if (!offer) throw new DispatchError('Oferta no encontrada', 'OFFER_NOT_FOUND', 404);
     const task = taskFor(offer.taskId); merchantFor(task); orderFor(task);
+    if (task.multiTripId) throw new OfferAlreadyClaimedError();
     const date = at();
     // Evaluate the deadline before accepting an own offer, even without polling.
     if (offer.courierId !== courierId) throw new DispatchError('Oferta ajena', 'COURIER_FORBIDDEN', 403);
@@ -529,7 +532,7 @@ function createHybridDispatchEngine({ store, now = () => new Date() }) {
     return [...store.offers.values()].filter(offer => {
       const task = store.tasks.get(offer.taskId);
       return offer.courierId === courierId && offer.status === OFFER_STATUS.OFFERED && new Date(offer.expiresAt) > date
-        && task?.status === TASK_STATUS.OFFERING && offer.dispatchVersion === task.version
+        && !task?.multiTripId && task?.status === TASK_STATUS.OFFERING && offer.dispatchVersion === task.version
         && eligible(store.couriers.get(courierId), task, offer.source, date);
     });
   }

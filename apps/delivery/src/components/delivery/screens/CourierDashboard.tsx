@@ -7,6 +7,7 @@ import {
   RadioTower, ShieldCheck, Wallet, Wifi, WifiOff,
 } from 'lucide-react';
 import { MarketplaceOffers } from '../MarketplaceOffers';
+import { MultiStopPanel } from '../MultiStopPanel';
 
 type DeliveryOrder = {
   id: string; orderNumber: string; customerName: string;
@@ -225,10 +226,13 @@ export function CourierDashboard({
             <Wallet size={21} className="text-emerald-300"/><span className="text-sm font-bold">Mi caja</span><ChevronRight size={15} className="ml-auto text-white/40"/>
           </button>
         </div>
-      </> : <MarketplaceOffers
-        courierId={driver?.id || ''} isSharedCourier={isSharedCourier} isOnline={isOnline}
-        busy={networkBusy} onToggleShared={onToggleShared}
-        onOfferAccepted={result => onMarketplaceOfferAccepted?.(result)}/>}
+      </> : <div className="space-y-5">
+        <MultiStopPanel courierId={driver?.id || ''} isOnline={isOnline}/>
+        <MarketplaceOffers
+          courierId={driver?.id || ''} isSharedCourier={isSharedCourier} isOnline={isOnline}
+          busy={networkBusy} onToggleShared={onToggleShared}
+          onOfferAccepted={result => onMarketplaceOfferAccepted?.(result)}/>
+      </div>}
 
       <div className="flex items-center justify-center gap-2 pt-3 text-center text-[11px] text-white/35">
         <ShieldCheck size={14} /> El servidor valida cada aceptación y confirmación de entrega.

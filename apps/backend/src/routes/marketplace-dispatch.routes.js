@@ -1,11 +1,17 @@
 'use strict';
 
 const { DispatchError, createHybridDispatchEngine, validCoordinates, validateDeliveryPolicy } = require('../lib/marketplace-dispatch');
+const { createMultiStopEngine } = require('../lib/marketplace-multistop');
 
 function createMarketplaceDispatchRouter({ Router, getStore, authenticate, now = () => new Date() } = {}) {
   const router = (Router || require('express').Router)();
   const engine = createHybridDispatchEngine({ store: getStore ? getStore() : {}, now });
   const { store } = engine;
+  // Synthetic/staging-only: these maps do NOT persist across process restarts.
+  const multiStopEnabled = process.env.NODE_ENV !== 'production'
+    && process.env.MARKETPLACE_MULTISTOP_STAGING_ENABLED === 'true'
+    && process.env.MARKETPLACE_IDENTITY_MODE === 'staging';
+  const multiStop = multiStopEnabled ? createMultiStopEngine({ store, now }) : null;
   const fail = (message, code, status = 403) => { throw new DispatchError(message, code, status); };
 
   router.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
@@ -144,6 +150,44 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, now =
     const result = engine[kind === 'pickup' ? 'confirmPickup' : 'confirmDelivery']({ ...input, taskId: req.params.id, courierId: courier.id });
     return res.json({ success: true, taskId: result.task.id, status: result.task.status, orderStatusUpdate: result.orderStatusUpdate });
   });
+  if (multiStop) {
+    // Only a platform-level human administrator may compose a group from
+    // existing server-owned orders/tasks. No customer-controlled routes.
+    endpoint('post', '/ops/multi-trips', (req, res) => {
+      if (req.user.role !== 'SUPER_ADMIN') fail('Administrador de plataforma requerido', 'PLATFORM_FORBIDDEN', 403);
+      const input = body(req, ['checkoutGroupId', 'taskIds', 'payoutAmount', 'ttlSeconds']);
+      return res.status(201).json(multiStop.createTrip(input));
+    });
+    endpoint('get', '/couriers/me/multi-offers', (req, res) => {
+      const courier = courierAccess(req);
+      return res.json({ offers: multiStop.offersFor(courier.id) });
+    });
+    endpoint('post', '/couriers/multi-offers/:offerId/accept', (req, res) => {
+      const courier = courierAccess(req);
+      body(req, []);
+      return res.json({ success: true, trip: multiStop.accept({
+        offerId: req.params.offerId, courierId: courier.id,
+      }) });
+    });
+    endpoint('get', '/couriers/me/multi-trips', (req, res) => {
+      const courier = courierAccess(req);
+      return res.json({ trips: multiStop.listAssigned(courier.id) });
+    });
+    endpoint('post', '/couriers/multi-trips/:tripId/stops/:taskId/pickup', (req, res) => {
+      const courier = courierAccess(req);
+      const input = body(req, ['pickupPin', 'expectedVersion']);
+      return res.json({ success: true, trip: multiStop.pickup({
+        tripId: req.params.tripId, taskId: req.params.taskId, courierId: courier.id, ...input,
+      }) });
+    });
+    endpoint('post', '/couriers/multi-trips/:tripId/deliver', (req, res) => {
+      const courier = courierAccess(req);
+      const input = body(req, ['deliveryPin', 'expectedVersion']);
+      return res.json({ success: true, trip: multiStop.deliver({
+        tripId: req.params.tripId, courierId: courier.id, ...input,
+      }) });
+    });
+  }
   return router;
 }
 
