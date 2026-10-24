@@ -31,39 +31,27 @@ function queuedPin(type: 'CONFIRM_PICKUP_PIN' | 'CONFIRM_DELIVERY_PIN', data: an
 export interface MarketplaceOffer {
   offerId: string;
   taskId: string;
-  orderId: string;
-  orderNumber: string;
-  store: {
-    id: string;
-    name: string;
-    slug: string;
-    businessType?: string;
-  };
-  pickupAddress: string;
-  deliveryAddress: string;
-  customerName: string;
-  deliveryFee: number;
-  tip: number;
-  totalPayout: number;
-  distanceKm: number;
-  expiresAt: number; // Timestamp Unix ms
-  networkType: 'OWN' | 'SHARED';
+  payoutAmount: number;
+  currency: string;
+  source: 'OWN' | 'SHARED';
+  expiresAt: number; // Unix ms; datos disponibles en el contrato real del backend.
 }
 
 export interface PresencePayload {
   courierId: string;
-  name: string;
-  lat: number;
-  lng: number;
   isOnline: boolean;
-  isShared: boolean;
+  lat?: number;
+  lng?: number;
+  accuracy?: number;
+  acceptingShared: boolean;
 }
 
 export interface AcceptOfferResult {
-  ok: boolean;
+  ok?: boolean;
+  success?: boolean;
   taskId: string;
-  orderId: string;
-  orderStatus: string;
+  orderId?: string;
+  assignment?: { id: string; courierId: string; source: string };
 }
 
 export interface PinConfirmResult {
@@ -76,10 +64,20 @@ export interface PinConfirmResult {
  * Actualiza la presencia, disponibilidad y ubicación GPS del repartidor en el despachador.
  */
 export async function updateCourierPresence(payload: PresencePayload): Promise<{ ok: boolean }> {
-  if (!payload.courierId?.trim() || !Number.isFinite(payload.lat) || !Number.isFinite(payload.lng)
-    || payload.lat < -90 || payload.lat > 90 || payload.lng < -180 || payload.lng > 180
-    || typeof payload.isOnline !== 'boolean' || typeof payload.isShared !== 'boolean') throw new Error('INVALID_PRESENCE');
-  const { data } = await api.post(`${DISPATCH_URL}/me/presence`, payload);
+  if (!payload.courierId?.trim() || typeof payload.isOnline !== 'boolean'
+    || typeof payload.acceptingShared !== 'boolean'
+    || (payload.isOnline && (!Number.isFinite(payload.lat) || !Number.isFinite(payload.lng)
+      || (payload.lat as number) < -90 || (payload.lat as number) > 90
+      || (payload.lng as number) < -180 || (payload.lng as number) > 180))
+    || (payload.accuracy !== undefined && (!Number.isFinite(payload.accuracy) || payload.accuracy < 0))) {
+    throw new Error('INVALID_PRESENCE');
+  }
+  // Exact contract: no customer name or obsolete isShared/name properties.
+  const dataPayload = { courierId: payload.courierId, isOnline: payload.isOnline,
+    acceptingShared: payload.acceptingShared,
+    ...(payload.isOnline ? { lat: payload.lat, lng: payload.lng } : {}),
+    ...(payload.accuracy !== undefined ? { accuracy: payload.accuracy } : {}) };
+  const { data } = await api.post(`${DISPATCH_URL}/me/presence`, dataPayload);
   return { ...data, ok: data.ok === true || data.success === true };
 }
 
@@ -93,9 +91,20 @@ export async function getMarketplaceOffers(courierId: string): Promise<Marketpla
   const offers = Array.isArray(data) ? data : data?.offers;
   if (!Array.isArray(offers)) throw new Error('INVALID_OFFERS_RESPONSE');
   const now = Date.now();
-  return offers.map(offer => ({ ...offer, offerId: offer.offerId || offer.id,
-    expiresAt: typeof offer.expiresAt === 'number' ? offer.expiresAt : Date.parse(offer.expiresAt) }))
-    .filter(offer => Number.isFinite(offer.expiresAt) && offer.expiresAt > now);
+  return offers.map((offer: any) => ({
+    offerId: offer?.offerId || offer?.id,
+    taskId: offer?.taskId,
+    payoutAmount: offer?.payoutAmount,
+    currency: offer?.currency,
+    source: offer?.source,
+    expiresAt: typeof offer?.expiresAt === 'number' ? offer.expiresAt : Date.parse(offer?.expiresAt),
+  })).filter((offer: MarketplaceOffer) =>
+    typeof offer.offerId === 'string' && offer.offerId.length > 0
+    && typeof offer.taskId === 'string' && offer.taskId.length > 0
+    && Number.isFinite(offer.payoutAmount) && offer.payoutAmount >= 0
+    && offer.currency === 'MXN'
+    && (offer.source === 'OWN' || offer.source === 'SHARED')
+    && Number.isFinite(offer.expiresAt) && offer.expiresAt > now);
 }
 
 /**

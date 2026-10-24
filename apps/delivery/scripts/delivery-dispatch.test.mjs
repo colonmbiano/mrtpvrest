@@ -77,20 +77,31 @@ const pickup = (taskId = 't1', courierId = 'c1') => ({ type: 'CONFIRM_PICKUP_PIN
 const deliver = (taskId = 't1', courierId = 'c1') => ({ type: 'CONFIRM_DELIVERY_PIN', data: { courierId, taskId, deliveryPin: '4567', paymentMethod: 'CASH', cashCollected: true } });
 const httpError = status => Object.assign(new Error('server error'), { response: { status, data: { errorCode: 'INVALID_PIN' } } });
 
-test('presence: production client sends shared status and valid GPS to the mounted route', async () => {
+test('presence: server accepts only verified shared flag and coordinates from device', async () => {
   const h = harness();
   h.post(async () => ({ data: { success: true } }));
-  const result = await h.dispatch.updateCourierPresence({ courierId: 'c1', name: 'Synthetic', lat: 19.4, lng: -99.1, isOnline: true, isShared: true });
+  const result = await h.dispatch.updateCourierPresence({
+    courierId: 'c1', lat: 19.4, lng: -99.1, accuracy: 25,
+    isOnline: true, acceptingShared: true,
+  });
   assert.equal(result.ok, true);
   assert.equal(h.requests[0].url, `${BASE}/me/presence`);
-  assert.equal(h.requests[0].data.isShared, true);
+  assert.equal(h.requests[0].data.acceptingShared, true);
   assert.equal(h.requests[0].data.lat, 19.4);
+  assert.equal(h.requests[0].data.accuracy, 25);
+  assert.equal('name' in h.requests[0].data, false);
+  assert.equal('isShared' in h.requests[0].data, false);
+  const offline = await h.dispatch.updateCourierPresence({
+    courierId: 'c1', isOnline: false, acceptingShared: false,
+  });
+  assert.equal(offline.ok, true);
+  assert.equal('lat' in h.requests[1].data, false);
 });
 
 test('presence: invalid coordinates and flags never call the API', async () => {
   const h = harness();
-  const base = { courierId: 'c1', name: 'Synthetic', lat: 0, lng: 0, isOnline: true, isShared: true };
-  for (const change of [{ lat: 91 }, { lng: -181 }, { lat: NaN }, { lng: Infinity }, { isShared: 'true' }]) {
+  const base = { courierId: 'c1', lat: 0, lng: 0, isOnline: true, acceptingShared: true };
+  for (const change of [{ lat: 91 }, { lng: -181 }, { lat: NaN }, { lng: Infinity }, { acceptingShared: 'true' }, { accuracy: -1 }]) {
     await assert.rejects(h.dispatch.updateCourierPresence({ ...base, ...change }), /INVALID_PRESENCE/);
   }
   assert.equal(h.requests.length, 0);
@@ -163,18 +174,26 @@ test('offers: filters expired, exact-deadline and malformed expirations; normali
   h.get(async (url, config) => {
     assert.equal(url, `${BASE}/me/offers`); assert.equal(config.params.courierId, 'c1');
     return { data: { offers: [
-      { id: 'live', expiresAt: new Date(h.now() + 1000).toISOString() },
-      { offerId: 'past', expiresAt: h.now() - 1 }, { offerId: 'boundary', expiresAt: h.now() },
-      { offerId: 'bad', expiresAt: 'bad' }, { offerId: 'missing' },
+      { id: 'live', taskId: 't1', payoutAmount: 49.50, currency: 'MXN', source: 'SHARED', expiresAt: new Date(h.now() + 1000).toISOString() },
+      { offerId: 'past', taskId: 't2', payoutAmount: 29, currency: 'MXN', source: 'OWN', expiresAt: h.now() - 1 },
+      { offerId: 'boundary', taskId: 't3', payoutAmount: 10, currency: 'MXN', source: 'SHARED', expiresAt: h.now() },
+      { offerId: 'bad', taskId: 't4', payoutAmount: 10, currency: 'MXN', source: 'OWN', expiresAt: 'bad' },
+      { offerId: 'missing', taskId: 't5', payoutAmount: 10, currency: 'MXN', source: 'OWN' },
+      { offerId: 'no_amount', taskId: 't6', currency: 'MXN', source: 'OWN', expiresAt: h.now() + 1000 },
     ] } };
   });
   const offers = await h.dispatch.getMarketplaceOffers('c1');
   assert.equal(offers.length, 1); assert.equal(offers[0].offerId, 'live');
   assert.equal(offers[0].expiresAt, h.now() + 1000);
+  assert.equal(offers[0].payoutAmount, 49.5);
+  assert.equal(offers[0].source, 'SHARED');
 });
 
 test('offers: accepts array payloads and rejects malformed responses as errors', async () => {
-  const h = harness(); h.get(async () => ({ data: [{ offerId: 'x', expiresAt: h.now() + 1 }] }));
+  const h = harness(); h.get(async () => ({ data: [{
+    offerId: 'x', taskId: 'tx', source: 'OWN',
+    currency: 'MXN', payoutAmount: 33, expiresAt: h.now() + 1,
+  }] }));
   assert.equal((await h.dispatch.getMarketplaceOffers('c1')).length, 1);
   h.get(async () => ({ data: {} }));
   await assert.rejects(h.dispatch.getMarketplaceOffers('c1'), /INVALID_OFFERS_RESPONSE/);
