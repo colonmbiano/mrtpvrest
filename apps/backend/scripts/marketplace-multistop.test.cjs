@@ -152,6 +152,50 @@ test('offer expiry and stale GPS both block acceptance and no task mutates', () 
   assert.throws(()=>g.accept(offer2),e=>e.code==='TRIP_ALREADY_CLAIMED');
 });
 
+// Fields the individual dispatcher needs to offer each task on its own.
+const individual = f => { for (const t of f.store.tasks.values()) Object.assign(t, { deliveryPolicy: 'SHARED_ONLY',
+  fallbackSeconds: 30, maxDistanceKm: 10, payoutAmount: 30, offeringStartedAt: f.now().toISOString() }); };
+const freshGps = f => { for (const c of f.store.couriers.values()) c.presence.lastSeenAt = f.now().toISOString(); };
+
+test('expired route offer frees its tasks: individual dispatch resumes and the group can be offered again', () => {
+  const f=fixture();individual(f);const first=f.create();
+  const single=createHybridDispatchEngine({store:f.store,now:f.now});
+  assert.equal(single.offersForCourier('courier1').length,0);
+  f.tick(30000);freshGps(f);
+  // Resumes on the deadline itself, even before the multistop engine sweeps the route.
+  assert.equal(new Set(single.offersForCourier('courier1').map(o=>o.taskId)).size,2);
+  const again=f.create();
+  assert.notEqual(again.tripId,first.tripId);
+  assert.equal(f.engine.trips.get(first.tripId).status,'EXPIRED');
+  assert.equal(f.store.tasks.get('task_master').multiTripId,again.tripId);
+  assert.equal(single.offersForCourier('courier1').length,0);
+  assert.throws(()=>f.accept(first.offerId),e=>e.code==='OFFER_EXPIRED');
+  assert.equal(f.accept(again.offerId).status,'ASSIGNED');
+});
+
+test('an accepted route keeps its tasks after the offer deadline', () => {
+  const f=fixture();individual(f);const trip=f.accept(f.create().offerId);
+  f.tick(60000);freshGps(f);
+  assert.deepEqual(f.engine.offersFor('courier2'),[]);
+  assert.equal(f.engine.trips.get(trip.id).status,'ASSIGNED');
+  assert.equal(f.store.tasks.get('task_master').multiTripId,trip.id);
+  assert.equal(createHybridDispatchEngine({store:f.store,now:f.now}).offersForCourier('courier2').length,0);
+  assert.equal(f.pickup(trip,'task_master','1234').pickedCount,1);
+});
+
+test('single-task pickup/delivery cannot confirm a route stop outside the route', () => {
+  const f=fixture();const trip=f.accept(f.create().offerId);
+  for(const t of f.store.tasks.values()) t.deliveryPinHash=hashPin('1111');
+  const single=createHybridDispatchEngine({store:f.store,now:f.now});
+  assert.throws(()=>single.confirmPickup({taskId:'task_tokki',courierId:'courier1',pickupPin:'5678'}),e=>e.code==='MULTI_TRIP_STOP');
+  const a=f.pickup(trip,'task_master','1234');
+  assert.throws(()=>single.confirmDelivery({taskId:'task_master',courierId:'courier1',deliveryPin:'1111'}),e=>e.code==='MULTI_TRIP_STOP');
+  assert.equal(f.store.orders.get('order_tokki').status,'READY');
+  assert.equal(f.store.orders.get('order_master').status,'ON_THE_WAY');
+  const b=f.pickup(a,'task_tokki','5678');
+  assert.equal(f.deliver(b,'9090').status,'DELIVERED');
+});
+
 test('another courier cannot see, pick up or deliver assigned route', () => {
   const f=fixture();const trip=f.accept(f.create().offerId);
   assert.throws(()=>f.pickup(trip,'task_master','1234','courier2'),e=>e.code==='TRIP_FORBIDDEN');
@@ -278,4 +322,15 @@ test('HTTP staging: only platform admin can create, offers are private, courier 
   });
   assert.equal(delivered.status,200);
   assert.equal(delivered.body.trip.status,'DELIVERED');
+});
+
+test('HTTP staging: single-task endpoints refuse route stops', () => {
+  const {f,call} = routeFixture();
+  const created=call('POST','/ops/multi-trips',{user:'platform',role:'SUPER_ADMIN',
+    body:{checkoutGroupId:checkout,taskIds:['task_master','task_tokki'],payoutAmount:35}});
+  call('POST','/couriers/multi-offers/:offerId/accept',{user:'courier1',params:{offerId:created.body.offerId}});
+  const bypass=call('POST','/couriers/tasks/:id/pickup',{user:'courier1',params:{id:'task_tokki'},body:{pickupPin:'5678'}});
+  assert.equal(bypass.status,409);
+  assert.equal(bypass.body.errorCode,'MULTI_TRIP_STOP');
+  assert.equal(f.store.orders.get('order_tokki').status,'READY');
 });

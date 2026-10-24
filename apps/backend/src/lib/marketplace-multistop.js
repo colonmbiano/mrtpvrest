@@ -71,6 +71,25 @@ function createMultiStopEngine({ store, now = () => new Date() }) {
     if (trip.status !== 'OFFERING' || !released(trip)) return false;
     return true;
   };
+  // A route nobody accepted before its offer deadline expires: its tasks go back
+  // to individual dispatch and the checkout group may be offered again. Without
+  // this sweep the tasks stayed reserved forever and the orders never shipped.
+  function expireTrips(date) {
+    for (const trip of trips.values()) {
+      if (trip.status !== 'OFFERING') continue;
+      const live = [...offers.values()].some(o => o.tripId === trip.id && o.status === 'OFFERED'
+        && new Date(o.expiresAt).getTime() > date.getTime());
+      if (live) continue;
+      for (const row of offers.values()) {
+        if (row.tripId === trip.id && row.status === 'OFFERED') row.status = 'EXPIRED';
+      }
+      for (const stop of trip.stops) {
+        const task = taskFor(stop.taskId);
+        if (task?.multiTripId === trip.id) { delete task.multiTripId; delete task.multiTripHoldUntil; }
+      }
+      trip.status = 'EXPIRED'; trip.version++;
+    }
+  }
 
   function createTrip({ checkoutGroupId, taskIds, payoutAmount, ttlSeconds = 30 }) {
     if (!validId(checkoutGroupId) || !Array.isArray(taskIds) || taskIds.length < 2 || taskIds.length > 4
@@ -78,8 +97,10 @@ function createMultiStopEngine({ store, now = () => new Date() }) {
       || !Number.isFinite(payoutAmount) || payoutAmount <= 0
       || Math.abs(Math.round(payoutAmount * 100) - payoutAmount * 100) > 0.000001
       || !Number.isInteger(ttlSeconds) || ttlSeconds < 10 || ttlSeconds > 120) bad('INVALID_TRIP', 422);
-    if ([...trips.values()].some(t => t.checkoutGroupId === checkoutGroupId && t.status !== 'CANCELLED'))
-      bad('GROUP_ALREADY_EXISTS', 409);
+    const date = clock();
+    expireTrips(date);
+    if ([...trips.values()].some(t => t.checkoutGroupId === checkoutGroupId
+      && t.status !== 'CANCELLED' && t.status !== 'EXPIRED')) bad('GROUP_ALREADY_EXISTS', 409);
     const draft = [];
     let customerId, address, deliveryHash;
     const seenMerchants = new Set();
@@ -113,19 +134,19 @@ function createMultiStopEngine({ store, now = () => new Date() }) {
         status: 'PENDING', pickupLat: task.pickupLat, pickupLng: task.pickupLng,
       });
     }
-    const date = clock();
     const trip = {
       id: 'multi_' + crypto.randomUUID(), checkoutGroupId, customerId,
       deliveryAddress: address, deliveryPinHash: deliveryHash,
       status: 'OFFERING', version: 1, courierId: null, payoutAmount,
       createdAt: date.toISOString(), acceptedAt: null, deliveredAt: null, stops: draft,
     };
+    const expiresAt = new Date(date.getTime() + ttlSeconds * 1000).toISOString();
     // All validation precedes writes. Single-process only; no DB transaction.
-    for (const row of draft) taskFor(row.taskId).multiTripId = trip.id;
+    // The hold ends with the offer, so individual dispatch resumes on its own.
+    for (const row of draft) Object.assign(taskFor(row.taskId), { multiTripId: trip.id, multiTripHoldUntil: expiresAt });
     trips.set(trip.id, trip);
     const offer = {
-      id: crypto.randomUUID(), tripId: trip.id, status: 'OFFERED',
-      payoutAmount, expiresAt: new Date(date.getTime() + ttlSeconds * 1000).toISOString(),
+      id: crypto.randomUUID(), tripId: trip.id, status: 'OFFERED', payoutAmount, expiresAt,
     };
     offers.set(offer.id, offer);
     return { tripId: trip.id, offerId: offer.id, pickupCount: draft.length };
@@ -133,6 +154,7 @@ function createMultiStopEngine({ store, now = () => new Date() }) {
 
   function offersFor(courierId) {
     const date = clock();
+    expireTrips(date);
     const courier = store.couriers.get(courierId);
     if (!fresh(courier, date)) return [];
     if ([...store.assignments.values()].some(a => a.courierId === courierId && a.status === 'ACTIVE'))
@@ -156,6 +178,7 @@ function createMultiStopEngine({ store, now = () => new Date() }) {
 
   function accept({ offerId, courierId }) {
     const date = clock();
+    expireTrips(date);
     const offer = offers.get(offerId);
     if (!offer) bad('OFFER_NOT_FOUND', 404);
     const trip = tripFor(offer.tripId);
@@ -178,6 +201,7 @@ function createMultiStopEngine({ store, now = () => new Date() }) {
       task.status = TASK_STATUS.ASSIGNED;
       task.currentAssignmentId = assignment.id;
       task.currentAssignment = assignment;
+      delete task.multiTripHoldUntil; // Accepted: the route keeps the task for good.
       store.assignments.set(assignment.id, assignment);
     }
     trip.status = 'ASSIGNED'; trip.courierId = courierId;

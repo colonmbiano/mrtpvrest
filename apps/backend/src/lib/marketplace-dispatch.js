@@ -385,9 +385,18 @@ function createHybridDispatchEngine({ store, now = () => new Date() }) {
       throw new DispatchError('Tarea sin ubicacion, tarifa o PIN verificados', 'INVALID_TASK', 422);
     }
   }
+  // A multistop route holds its tasks while its group offer is live (until
+  // multiTripHoldUntil) and, once accepted, for good (no deadline). A hold that
+  // expired unaccepted returns the task to individual dispatch right away, even
+  // before the multistop engine sweeps the stale route.
+  function heldByMultiTrip(task, date) {
+    if (!task?.multiTripId) return false;
+    if (!task.multiTripHoldUntil) return true;
+    return new Date(task.multiTripHoldUntil).getTime() > date.getTime();
+  }
   function offerWave(task, date, onlyCourierId) {
     // A task reserved in a multistop route must not receive individual offers.
-    if (task.multiTripId) return [];
+    if (heldByMultiTrip(task, date)) return [];
     const source = task.dispatchMode;
     if (task.status !== TASK_STATUS.OFFERING || !DISPATCH_MODES.includes(source)) return [];
     const pending = [...store.offers.values()].filter(offer => offer.taskId === task.id
@@ -486,8 +495,8 @@ function createHybridDispatchEngine({ store, now = () => new Date() }) {
     const offer = store.offers.get(offerId);
     if (!offer) throw new DispatchError('Oferta no encontrada', 'OFFER_NOT_FOUND', 404);
     const task = taskFor(offer.taskId); merchantFor(task); orderFor(task);
-    if (task.multiTripId) throw new OfferAlreadyClaimedError();
     const date = at();
+    if (heldByMultiTrip(task, date)) throw new OfferAlreadyClaimedError();
     // Evaluate the deadline before accepting an own offer, even without polling.
     if (offer.courierId !== courierId) throw new DispatchError('Oferta ajena', 'COURIER_FORBIDDEN', 403);
     if (evaluateFallback({ task, now: date }).shouldFallbackToShared) {
@@ -518,6 +527,11 @@ function createHybridDispatchEngine({ store, now = () => new Date() }) {
     if (task.currentAssignment?.courierId !== courierId || task.currentAssignment.status !== 'ACTIVE') {
       throw new DispatchError('Asignacion no autorizada', 'COURIER_FORBIDDEN', 403);
     }
+    // A stop of a multistop route is confirmed only through the route: it keeps
+    // the pickup sequence and the group delivery PIN, and the trip in sync.
+    if (task.currentAssignment.multiTripId) {
+      throw new DispatchError('Parada de una ruta agrupada: confirmala desde la ruta', 'MULTI_TRIP_STOP', 409);
+    }
     if (kind === 'pickup' && order.status !== 'READY') throw new DispatchError('Orden aun no lista', 'ORDER_NOT_READY', 409);
     if (kind === 'delivery' && order.status !== 'ON_THE_WAY') throw new DispatchError('Orden no recogida', 'ORDER_NOT_PICKED_UP', 409);
     const date = at();
@@ -532,7 +546,7 @@ function createHybridDispatchEngine({ store, now = () => new Date() }) {
     return [...store.offers.values()].filter(offer => {
       const task = store.tasks.get(offer.taskId);
       return offer.courierId === courierId && offer.status === OFFER_STATUS.OFFERED && new Date(offer.expiresAt) > date
-        && !task?.multiTripId && task?.status === TASK_STATUS.OFFERING && offer.dispatchVersion === task.version
+        && !heldByMultiTrip(task, date) && task?.status === TASK_STATUS.OFFERING && offer.dispatchVersion === task.version
         && eligible(store.couriers.get(courierId), task, offer.source, date);
     });
   }
