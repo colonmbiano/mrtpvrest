@@ -23,7 +23,10 @@ import {
   BLOCKED_API_URL, getApiUrl, getMarketplaceApiUrl, getStorePublicUrl,
   isMarketplaceCatalogEnabled, isMarketplacePreviewDemo, parseOrigin,
 } from '../src/lib/config.ts';
-import { loadPreviewCatalog } from '../src/lib/marketplace-preview.ts';
+// marketplace-preview.ts importa './marketplace' sin extensión: se carga con
+// import() dinámico para que el hook de resolución ya esté registrado (los
+// import estáticos se evalúan antes de register()).
+const { loadPreviewCatalog } = await import('../src/lib/marketplace-preview.ts');
 
 const API = 'http://127.0.0.1:4100';
 const STORE = { slug: 'tienda-a', name: 'Tienda A', businessType: 'RESTAURANT', isOpen: true, closedMessage: null,
