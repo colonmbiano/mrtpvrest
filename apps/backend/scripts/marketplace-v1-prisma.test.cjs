@@ -146,3 +146,37 @@ test('sin Mercado Pago conectado el pago en línea se rechaza antes de crear nad
   e => e.code === 'ONLINE_PAYMENT_UNAVAILABLE' && e.statusCode === 409);
   assert.equal(prisma.calls.length, 0);
 });
+
+test('el seguimiento responde el estado real de la orden con el token del comprador', async () => {
+  const crypto = require('node:crypto');
+  const token = 'a1'.repeat(32);
+  const order = { id: 'o1', restaurantId: 'r1', locationId: 'l1', source: 'MARKETPLACE', status: 'PENDING_MERCHANT' };
+  const pipeline = { orderId: 'o1', restaurantId: 'r1', dispatch: null, order,
+    trackingTokenHash: crypto.createHash('sha256').update(token).digest('hex'),
+    trackingExpiresAt: new Date(NOW.getTime() + 86400000) };
+  const calls = [];
+  const prisma = {
+    marketplaceOrderPipeline: { async findFirst(args) {
+      calls.push(args.where);
+      return args.where.orderId === pipeline.orderId && args.where.trackingTokenHash === pipeline.trackingTokenHash
+        ? structuredClone(pipeline) : null;
+    } },
+    location: { async findFirst({ where }) { return where.id === 'l1' && where.restaurantId === 'r1' ? { id: 'l1', restaurantId: 'r1' } : null; } },
+  };
+  const v1 = createMarketplaceV1Services({ prisma, now: () => NOW,
+    env: { MARKETPLACE_V1_ORDERS_ENABLED: 'true', MARKETPLACE_COMMISSION_BPS: '1500', MARKETPLACE_PIN_SECRET: 'p'.repeat(40) } });
+  const view = await v1.trackingService.getOrderTracking({ orderId: 'o1', trackingToken: token });
+  assert.deepEqual(view, { orderId: 'o1', status: 'PENDING_MERCHANT', taskStatus: null, origin: null, courierLocation: null, isStale: false });
+  assert.deepEqual(calls[0], { orderId: 'o1', trackingTokenHash: pipeline.trackingTokenHash, order: { is: { source: 'MARKETPLACE' } } });
+  // El comercio la acepta y la prepara en el TPV: el comprador lo ve.
+  for (const status of ['CONFIRMED', 'PREPARING', 'READY']) {
+    order.status = status;
+    assert.equal((await v1.trackingService.getOrderTracking({ orderId: 'o1', trackingToken: token })).status, status);
+  }
+  // Token ajeno, orden ajena o token vencido: 404 sin decir si la orden existe.
+  await assert.rejects(v1.trackingService.getOrderTracking({ orderId: 'o1', trackingToken: 'b2'.repeat(32) }), e => e.statusCode === 404);
+  await assert.rejects(v1.trackingService.getOrderTracking({ orderId: 'o2', trackingToken: token }), e => e.statusCode === 404);
+  pipeline.trackingExpiresAt = new Date(NOW.getTime() - 1);
+  await assert.rejects(v1.trackingService.getOrderTracking({ orderId: 'o1', trackingToken: token }), e => e.statusCode === 404);
+  await assert.rejects(v1.trackingService.getOrderTracking({ orderId: 'o1', trackingToken: 'corto' }), e => e.statusCode === 401);
+});

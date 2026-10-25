@@ -1,6 +1,7 @@
 'use strict';
 
 const { MarketplaceTrackingError, createMarketplaceTrackingService } = require('../lib/marketplace-tracking-v1');
+const { defaultMarketplaceV1Services } = require('../lib/marketplace-v1-prisma');
 
 function createMarketplaceTrackingV1Router({ Router, service, trackingOptions } = {}) {
   const router = (Router || require('express').Router)();
@@ -11,7 +12,10 @@ function createMarketplaceTrackingV1Router({ Router, service, trackingOptions } 
     res.set('Cache-Control', 'no-store');
     res.set('Vary', 'X-Marketplace-Order-Token');
     try {
-      const tracking = service || (defaultService ||= createMarketplaceTrackingService(trackingOptions));
+      // Sin MARKETPLACE_V1_ORDERS_ENABLED el servicio no tiene puertos y responde 503.
+      const tracking = service || (defaultService ||= trackingOptions
+        ? createMarketplaceTrackingService(trackingOptions)
+        : defaultMarketplaceV1Services()?.trackingService || createMarketplaceTrackingService());
       const result = await tracking.getOrderTracking({ orderId: req.params.id,
         trackingToken: req.headers?.['x-marketplace-order-token'] });
       return res.json(result);

@@ -20,6 +20,7 @@ const { activePromoPrice, APPROVED_MERCHANT } = require('./marketplace-catalog')
 const { createQuoteService } = require('./marketplace-quote');
 const { createMarketplaceOrderOrchestrator, MarketplaceOrderOrchestratorError } = require('./marketplace-order-orchestrator');
 const { createMarketplaceV1Payments } = require('./marketplace-v1-payments');
+const { createMarketplaceTrackingService } = require('./marketplace-tracking-v1');
 const { MAX_CENTS } = require('./marketplace-order-money');
 
 function httpsUrl(value) {
@@ -157,7 +158,30 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, now = () =>
     },
   };
 
-  return { catalog, addresses, quoteStore, merchants };
+  // Seguimiento (lib/marketplace-tracking-v1.js): la orden se busca por su token
+  // (hash) y el servicio vuelve a validar orden, tienda, sucursal y vigencia.
+  const tracking = {
+    taskStore: {
+      async findByOrderId({ orderId, trackingTokenHash }) {
+        const row = await prisma.marketplaceOrderPipeline.findFirst({
+          where: { orderId, trackingTokenHash, order: { is: { source: 'MARKETPLACE' } } },
+          select: { orderId: true, restaurantId: true, trackingTokenHash: true, trackingExpiresAt: true, dispatch: true,
+            order: { select: { id: true, restaurantId: true, locationId: true, source: true, status: true } } } });
+        if (!row) return null;
+        const { dispatch, ...record } = row;
+        return dispatch?.task ? { ...record, task: dispatch.task } : record;
+      },
+    },
+    // Las sucursales no guardan coordenadas: el origen sale vacío, sin inventarlo.
+    locationStore: {
+      findById: ({ locationId, restaurantId }) => prisma.location.findFirst({ where: { id: locationId, restaurantId },
+        select: { id: true, restaurantId: true } }),
+    },
+    // El despachador aún vive en memoria: sin GPS del repartidor (isStale si ya lleva el pedido).
+    presenceStore: { findForAssignment: async () => null },
+  };
+
+  return { catalog, addresses, quoteStore, merchants, tracking };
 }
 
 function createMarketplaceV1Services({ prisma, env = process.env, now = () => new Date(), getGateway, logger } = {}) {
@@ -196,6 +220,7 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
     },
     // Webhook de Mercado Pago de la orden v1 (null sin pago en línea: el router responde 503).
     webhooks: payments ? payments.webhooks : null,
+    trackingService: createMarketplaceTrackingService({ ...adapters.tracking, now }),
   };
 }
 

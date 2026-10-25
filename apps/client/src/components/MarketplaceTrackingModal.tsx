@@ -8,11 +8,13 @@ import { fetchTracking, isCheckoutUrl, pinForFulfillment, type Fulfillment, type
 
 const POLL_MS = 15000;
 
+// Estados reales de la orden (Order.status) tal como los devuelve el seguimiento v1.
 const STATUS_LABEL: Record<string, string> = {
   PENDING_PAYMENT: 'Esperando el pago',
-  PENDING_MERCHANT: 'Pedido recibido',
-  ACCEPTED: 'Aceptado por la tienda',
+  PENDING_MERCHANT: 'Esperando que la tienda lo acepte',
+  CONFIRMED: 'Aceptado por la tienda',
   PREPARING: 'En preparación',
+  PACKING: 'Empacando tu pedido',
   READY: 'Listo para recoger',
   ON_THE_WAY: 'En camino',
   DELIVERED: 'Entregado',
