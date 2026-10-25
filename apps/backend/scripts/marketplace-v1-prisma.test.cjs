@@ -44,9 +44,12 @@ const item = (extra = {}) => ({ id: 'm1', restaurantId: 'r1', name: 'Taco', pric
   category: { isActive: true, restaurantId: 'r1' }, variants: [], modifierGroups: [], ...extra });
 
 test('apagado por defecto; la comisión se lee del entorno y se valida', () => {
-  assert.deepEqual(marketplaceV1Config({}), { enabled: false, commissionBps: null, onlinePayments: false, notificationUrl: null });
+  assert.deepEqual(marketplaceV1Config({}), { enabled: false, commissionBps: null, onlinePayments: false, notificationUrl: null, delivery: false });
   assert.deepEqual(marketplaceV1Config({ MARKETPLACE_V1_ORDERS_ENABLED: 'true', MARKETPLACE_COMMISSION_BPS: '1500' }),
-    { enabled: true, commissionBps: 1500, onlinePayments: false, notificationUrl: null });
+    { enabled: true, commissionBps: 1500, onlinePayments: false, notificationUrl: null, delivery: false });
+  // La entrega a domicilio tiene su propia bandera.
+  assert.equal(marketplaceV1Config({ MARKETPLACE_V1_DELIVERY_ENABLED: 'true' }).delivery, true);
+  assert.equal(marketplaceV1Config({ MARKETPLACE_V1_DELIVERY_ENABLED: '1' }).delivery, false);
   // El pago en línea exige su propia bandera y una URL https del webhook.
   const hook = 'https://api.example.test/api/marketplace/v1/webhooks/mercadopago';
   assert.equal(marketplaceV1Config({ MARKETPLACE_V1_ONLINE_PAYMENTS_ENABLED: 'true', MARKETPLACE_MP_NOTIFICATION_URL: hook }).onlinePayments, true);
@@ -65,7 +68,10 @@ test('el comercio es el restaurante aprobado del directorio, con horario y monto
   const merchant = await catalog.loadMerchantBySlug('tienda');
   assert.deepEqual(prisma.calls[0][1].where, { slug: 'tienda', isActive: true, ...APPROVED_MERCHANT });
   assert.deepEqual(merchant, { id: 'r1', slug: 'tienda', status: 'ACTIVE', open: true, currency: 'MXN', commissionBps: 1200,
-    minOrderCents: 5000, freeDeliveryFromCents: null, zones: [], prepMinutes: 25 });
+    minOrderCents: 5000, freeDeliveryFromCents: null, delivery: null, prepMinutes: 25 });
+  // Sin la bandera de domicilio ni siquiera se leen zonas ni campos de envío.
+  assert.equal('deliveryZones' in prisma.calls[0][1].select, false);
+  assert.equal('deliveryMode' in prisma.calls[0][1].select.config.select, false);
   // Sin configuración la tienda está cerrada; sin comisión configurada no se manda el campo (la cotización falla 503).
   const closed = createMarketplaceV1Adapters({ prisma: fakePrisma({ restaurant: { id: 'r1', slug: 'tienda', config: null } }), now: () => NOW });
   const noConfig = await closed.catalog.loadMerchant('r1');
@@ -73,6 +79,54 @@ test('el comercio es el restaurante aprobado del directorio, con horario y monto
   assert.equal('commissionBps' in noConfig, false);
   const missing = createMarketplaceV1Adapters({ prisma: fakePrisma({ restaurant: null }), now: () => NOW });
   assert.equal(await missing.catalog.loadMerchant('r1'), null);
+});
+
+const POLYGON = [{ lat: 19.4, lng: -99.17 }, { lat: 19.4, lng: -99.13 }, { lat: 19.44, lng: -99.13 }, { lat: 19.44, lng: -99.17 }];
+const DELIVERY = { deliveryMode: 'ZONES', deliveryFee: 25, originLat: 19.42, originLng: -99.15, deliveryBaseFee: 20,
+  deliveryPerKm: 5, deliveryFreeRadiusKm: null, deliveryMaxKm: 8 };
+// La tarifa de zona llega como Decimal de Prisma: un objeto con valueOf, no un número.
+const decimal = value => ({ valueOf: () => value, toString: () => String(value) });
+
+test('con la bandera de domicilio el comercio trae la regla de envío de la tienda', async () => {
+  const restaurant = { id: 'r1', slug: 'tienda', config: { ...OPEN, ...DELIVERY },
+    locations: [{ id: 'l1', hasDelivery: true }],
+    deliveryZones: [{ id: 'z1', name: 'Centro', fee: decimal(30), active: true, polygon: POLYGON }] };
+  const prisma = fakePrisma({ restaurant });
+  const { catalog } = createMarketplaceV1Adapters({ prisma, commissionBps: 1200, deliveryEnabled: true, now: () => NOW });
+  const merchant = await catalog.loadMerchant('r1');
+  assert.deepEqual(merchant.delivery, { ...DELIVERY,
+    deliveryZones: [{ id: 'z1', name: 'Centro', fee: 30, active: true, polygon: POLYGON }] });
+  const select = prisma.calls[0][1].select;
+  assert.deepEqual(select.deliveryZones.where, { active: true });
+  assert.deepEqual(select.deliveryZones.orderBy, [{ priority: 'asc' }, { id: 'asc' }]);
+  // La misma sucursal que recibirá la orden: la primera activa.
+  assert.deepEqual(select.locations.orderBy, [{ createdAt: 'asc' }, { id: 'asc' }]);
+  assert.equal(select.locations.take, 1);
+  // Fuera del modo ZONES las zonas no cuentan; sin domicilio en la sucursal no hay envío.
+  const flat = fakePrisma({ restaurant: { ...restaurant, config: { ...OPEN, ...DELIVERY, deliveryMode: 'FLAT' } } });
+  assert.deepEqual((await createMarketplaceV1Adapters({ prisma: flat, deliveryEnabled: true, now: () => NOW })
+    .catalog.loadMerchant('r1')).delivery.deliveryZones, []);
+  const pickupOnly = fakePrisma({ restaurant: { ...restaurant, locations: [{ id: 'l1', hasDelivery: false }] } });
+  assert.equal((await createMarketplaceV1Adapters({ prisma: pickupOnly, deliveryEnabled: true, now: () => NOW })
+    .catalog.loadMerchant('r1')).delivery, null);
+  const noLocation = fakePrisma({ restaurant: { ...restaurant, locations: [] } });
+  assert.equal((await createMarketplaceV1Adapters({ prisma: noLocation, deliveryEnabled: true, now: () => NOW })
+    .catalog.loadMerchant('r1')).delivery, null);
+});
+
+test('la dirección de la cotización y la orden sale de la libreta del comprador', async () => {
+  const prisma = fakePrisma();
+  const rows = [{ id: 'a1', accountId: 'guest:a', address: 'Calle 1 #2, Centro', lat: 19.42, lng: -99.15 }];
+  const seen = [];
+  const tx = { marketplaceBuyerAddress: { async findFirst(args) { seen.push(['tx', args]); return rows.find(r => r.id === args.where.id && r.accountId === args.where.accountId) ?? null; } } };
+  prisma.marketplaceBuyerAddress = { async findFirst(args) { seen.push(['db', args]); return tx.marketplaceBuyerAddress.findFirst(args); } };
+  const { addresses } = createMarketplaceV1Adapters({ prisma, now: () => NOW });
+  assert.deepEqual(await addresses.resolve('guest:a', 'a1'), { id: 'a1', address: 'Calle 1 #2, Centro', lat: 19.42, lng: -99.15, accountId: 'guest:a' });
+  // Dentro de la transacción de la orden se lee con el cliente de la transacción.
+  assert.equal((await addresses.resolve('guest:a', 'a1', { tx })).id, 'a1');
+  assert.equal(seen.at(-1)[0], 'tx');
+  // La dirección de otra cuenta no existe para este comprador.
+  assert.equal(await addresses.resolve('guest:b', 'a1'), null);
 });
 
 test('solo se venden productos simples, disponibles en línea y con precio', async () => {

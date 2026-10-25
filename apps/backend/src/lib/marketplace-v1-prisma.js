@@ -6,8 +6,11 @@
 // es el mismo criterio que publica el directorio (APPROVED_MERCHANT). Los precios
 // salen del menú del TPV con la misma ventana de promoción que el catálogo.
 //
-// Primera entrega: solo RECOGER EN TIENDA. La entrega a domicilio necesita una
-// libreta de direcciones del comprador (addresses.resolve aún devuelve null).
+// Entrega a domicilio: la dirección sale de la libreta del comprador
+// (lib/marketplace-buyer-addresses.js) y el envío se cobra con la regla de la
+// tienda (RestaurantConfig.deliveryMode FLAT | DISTANCE | ZONES, lib/delivery-fee.js).
+// Apagada aparte con MARKETPLACE_V1_DELIVERY_ENABLED=true: los repartidores todavía
+// no reciben las tareas de la orden v1 (el despachador vive en memoria).
 //
 // Apagado por defecto: MARKETPLACE_V1_ORDERS_ENABLED=true lo activa. Además hace
 // falta MARKETPLACE_COMMISSION_BPS (0–10000; sin ella la cotización responde 503)
@@ -21,6 +24,7 @@ const { createQuoteService } = require('./marketplace-quote');
 const { createMarketplaceOrderOrchestrator, MarketplaceOrderOrchestratorError } = require('./marketplace-order-orchestrator');
 const { createMarketplaceV1Payments } = require('./marketplace-v1-payments');
 const { createMarketplaceTrackingService } = require('./marketplace-tracking-v1');
+const { createBuyerAddressBook } = require('./marketplace-buyer-addresses');
 const { MAX_CENTS } = require('./marketplace-order-money');
 
 function httpsUrl(value) {
@@ -35,7 +39,8 @@ function marketplaceV1Config(env = process.env) {
   const bps = /^\d{1,5}$/.test(raw) ? Number(raw) : null;
   const notificationUrl = httpsUrl(env.MARKETPLACE_MP_NOTIFICATION_URL);
   return { enabled: env.MARKETPLACE_V1_ORDERS_ENABLED === 'true', commissionBps: bps !== null && bps <= 10000 ? bps : null,
-    onlinePayments: env.MARKETPLACE_V1_ONLINE_PAYMENTS_ENABLED === 'true' && notificationUrl !== null, notificationUrl };
+    onlinePayments: env.MARKETPLACE_V1_ONLINE_PAYMENTS_ENABLED === 'true' && notificationUrl !== null, notificationUrl,
+    delivery: env.MARKETPLACE_V1_DELIVERY_ENABLED === 'true' };
 }
 
 // Pesos (Float del TPV) → centavos enteros; null si no es un monto válido.
@@ -49,6 +54,25 @@ const CONFIG_SELECT = {
   isOpen: true, scheduleEnabled: true, businessHours: true, timezone: true,
   currency: true, minOrderAmount: true, freeDeliveryFrom: true, estimatedDelivery: true,
 };
+// Campos de envío de RestaurantConfig que lee lib/delivery-fee.js.
+const DELIVERY_SELECT = {
+  deliveryMode: true, deliveryFee: true, originLat: true, originLng: true,
+  deliveryBaseFee: true, deliveryPerKm: true, deliveryFreeRadiusKm: true, deliveryMaxKm: true,
+};
+// Mismo orden que la tienda y la orden legacy: en solapes gana la de menor prioridad.
+const ZONES_SELECT = { where: { active: true }, orderBy: [{ priority: 'asc' }, { id: 'asc' }],
+  select: { id: true, name: true, fee: true, active: true, polygon: true } };
+
+// Regla de envío de la tienda en pesos, tal como la recibe computeDeliveryFee.
+// null = el comercio no entrega a domicilio por el marketplace (la cotización responde 409).
+function deliveryRule(config, location, zones) {
+  if (!config || !location || location.hasDelivery === false) return null;
+  const { deliveryMode, deliveryFee, originLat, originLng, deliveryBaseFee, deliveryPerKm, deliveryFreeRadiusKm, deliveryMaxKm } = config;
+  return { deliveryMode: deliveryMode || 'FLAT', deliveryFee, originLat, originLng, deliveryBaseFee, deliveryPerKm,
+    deliveryFreeRadiusKm, deliveryMaxKm,
+    // La tarifa de zona es Decimal en la BD; computeDeliveryFee espera un número.
+    deliveryZones: deliveryMode === 'ZONES' ? (zones || []).map(zone => ({ ...zone, fee: Number(zone.fee) })) : [] };
+}
 
 // Quote rows ⇄ objetos de lib/marketplace-quote.js.
 function quoteFromRow(row) {
@@ -59,12 +83,17 @@ function quoteFromRow(row) {
     idempotencyKeyHash: row.idempotencyKeyHash, createdAt: row.createdAt, expiresAt: row.expiresAt };
 }
 
-function createMarketplaceV1Adapters({ prisma, commissionBps = null, now = () => new Date() } = {}) {
+function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEnabled = false, now = () => new Date() } = {}) {
   const merchantScope = where => ({ ...where, isActive: true, ...APPROVED_MERCHANT });
+  // Sucursal de la orden: la primera sucursal activa del restaurante (ver merchants.resolve).
+  const FIRST_LOCATION = { where: { isActive: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 1 };
 
   async function loadMerchantRow(where) {
     const row = await prisma.restaurant.findFirst({ where: merchantScope(where),
-      select: { id: true, slug: true, config: { select: CONFIG_SELECT } } });
+      select: { id: true, slug: true,
+        config: { select: deliveryEnabled ? { ...CONFIG_SELECT, ...DELIVERY_SELECT } : CONFIG_SELECT },
+        ...(deliveryEnabled ? { deliveryZones: ZONES_SELECT,
+          locations: { ...FIRST_LOCATION, select: { id: true, hasDelivery: true } } } : {}) } });
     if (!row) return null;
     const config = row.config || null;
     return {
@@ -75,7 +104,8 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, now = () =>
       ...(commissionBps === null ? {} : { commissionBps }),
       minOrderCents: cents(config?.minOrderAmount) ?? 0,
       freeDeliveryFromCents: config?.freeDeliveryFrom == null ? null : cents(config.freeDeliveryFrom),
-      zones: [],
+      // La sucursal de la orden debe ofrecer domicilio (Location.hasDelivery, como en la tienda).
+      delivery: deliveryEnabled ? deliveryRule(config, row.locations?.[0], row.deliveryZones) : null,
       prepMinutes: Number.isInteger(config?.estimatedDelivery) ? config.estimatedDelivery : null,
     };
   }
@@ -109,9 +139,9 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, now = () =>
     },
   };
 
-  // Entrega a domicilio pendiente: todavía no hay libreta de direcciones del
-  // comprador, así que ninguna dirección resuelve (la cotización responde 404).
-  const addresses = { resolve: async () => null };
+  // La cotización y la orden leen la dirección de la libreta del comprador, por cuenta.
+  const addressBook = createBuyerAddressBook({ prismaClient: prisma, now });
+  const addresses = { resolve: addressBook.resolve };
 
   const db = tx => tx || prisma;
   const quoteStore = {
@@ -151,8 +181,7 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, now = () =>
     // Sucursal de la orden: la primera sucursal activa del restaurante.
     async resolve(merchantId, { tx } = {}) {
       const row = await db(tx).restaurant.findFirst({ where: merchantScope({ id: merchantId }),
-        select: { id: true, slug: true, locations: { where: { isActive: true },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { id: true }, take: 1 } } });
+        select: { id: true, slug: true, locations: { ...FIRST_LOCATION, select: { id: true } } } });
       if (!row) return null;
       return { id: row.id, status: 'ACTIVE', restaurantId: row.id, locationId: row.locations[0]?.id ?? null, slug: row.slug };
     },
@@ -181,7 +210,7 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, now = () =>
     presenceStore: { findForAssignment: async () => null },
   };
 
-  return { catalog, addresses, quoteStore, merchants, tracking };
+  return { catalog, addresses, addressBook, quoteStore, merchants, tracking };
 }
 
 function createMarketplaceV1Services({ prisma, env = process.env, now = () => new Date(), getGateway, logger } = {}) {
@@ -192,7 +221,8 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
       ...(getGateway ? { getGateway } : {}) })
     : null;
   const onlineUnavailable = message => new MarketplaceOrderOrchestratorError('ONLINE_PAYMENT_UNAVAILABLE', message, 409);
-  const adapters = createMarketplaceV1Adapters({ prisma, commissionBps: config.commissionBps, now });
+  const { addressBook, ...adapters } = createMarketplaceV1Adapters({ prisma, commissionBps: config.commissionBps,
+    deliveryEnabled: config.delivery, now });
   // La clave de los PIN sale del mismo env que la bandera; sin ella la orden responde 503.
   const activePinKeyId = env.MARKETPLACE_PIN_KEY_ID || 'v1';
   const pinSecrets = env.MARKETPLACE_PIN_SECRET ? { [activePinKeyId]: env.MARKETPLACE_PIN_SECRET } : {};
@@ -221,6 +251,8 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
     // Webhook de Mercado Pago de la orden v1 (null sin pago en línea: el router responde 503).
     webhooks: payments ? payments.webhooks : null,
     trackingService: createMarketplaceTrackingService({ ...adapters.tracking, now }),
+    // Libreta de direcciones del comprador (routes/marketplace-addresses-v1.routes.js).
+    addressBook,
   };
 }
 

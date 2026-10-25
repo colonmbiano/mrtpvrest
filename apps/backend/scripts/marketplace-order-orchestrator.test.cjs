@@ -49,8 +49,9 @@ async function fixture(options = {}) {
   const calls = []; const hooks = {}; const transactions = new WeakMap();
   const merchant = { id: 'm1', restaurantId: 'r1', locationId: 'l1', slug: 'store-one', status: 'ACTIVE', open: true,
     currency: 'MXN', commissionBps: 1000, prepMinutes: 15, deliveryPolicy: 'SHARED_ONLY',
-    zones: [{ id: 'z1', feeCents: 3000, active: true, polygon: [
-      { lat: 19.40, lng: -99.17 }, { lat: 19.40, lng: -99.13 }, { lat: 19.44, lng: -99.13 }, { lat: 19.44, lng: -99.17 }] }] };
+    // Store delivery rule in pesos (RestaurantConfig + DeliveryZone), as the quote reads it.
+    delivery: { deliveryMode: 'ZONES', deliveryZones: [{ id: 'z1', fee: 30, active: true, polygon: [
+      { lat: 19.40, lng: -99.17 }, { lat: 19.40, lng: -99.13 }, { lat: 19.44, lng: -99.13 }, { lat: 19.44, lng: -99.17 }] }] } };
   const savedAddress = { id: 'addr1', accountId: ACCOUNT, address: 'Direccion sintetica 123', lat: 19.42, lng: -99.15 };
   function transactionState(tx) {
     assert.ok(transactions.has(tx), 'Port must receive the exact active transaction');

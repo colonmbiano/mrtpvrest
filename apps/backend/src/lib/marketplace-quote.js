@@ -7,7 +7,7 @@
 // fails closed (503) instead of pricing without persistence.
 const crypto = require('node:crypto');
 const { decimal, MAX_CENTS } = require('./marketplace-order-money');
-const { findZoneForPoint } = require('./delivery-fee');
+const { computeDeliveryFee } = require('./delivery-fee');
 
 const TTL_MS = 5 * 60 * 1000;
 const MAX_ITEMS = 50;
@@ -86,16 +86,27 @@ function price({ merchant, listings, request, address }) {
   check(subtotalCents >= (merchant.minOrderCents ?? 0), 'MINIMUM_ORDER', 'No alcanza el pedido minimo', 409);
   let deliveryFeeCents = 0;
   let zoneId = null;
+  let distanceKm = null;
   let deliveryAvailability = 'NOT_APPLICABLE';
   if (request.fulfillment === 'DELIVERY') {
+    // merchant.delivery is the store's own rule (RestaurantConfig fields in pesos:
+    // deliveryMode FLAT | DISTANCE | ZONES, plus deliveryZones); null = no delivery here.
+    const rule = merchant.delivery;
+    check(rule && typeof rule === 'object', 'DELIVERY_UNAVAILABLE', 'Este comercio aun no entrega a domicilio por el marketplace; elige recoger en tienda', 409);
     check(address && Number.isFinite(address.lat) && Number.isFinite(address.lng), 'ADDRESS_NOT_FOUND', 'Direccion no encontrada', 404);
-    // Coverage is required even when the free-delivery threshold applies.
-    const zone = findZoneForPoint(merchant.zones || [], address.lat, address.lng);
-    check(zone, 'DELIVERY_OUT_OF_RANGE', 'Fuera de cobertura', 409);
-    check(Number.isSafeInteger(zone.feeCents) && zone.feeCents >= 0, 'INVALID_DELIVERY_FEE', 'Tarifa de entrega no disponible', 503);
+    // Without an origin the store rule would charge the base fee for any distance.
+    check(rule.deliveryMode !== 'DISTANCE' || Number.isFinite(rule.originLat) && Number.isFinite(rule.originLng),
+      'DELIVERY_UNAVAILABLE', 'El comercio no tiene configurada su ubicacion para el envio por distancia', 409);
+    // Same calculation as the store (lib/delivery-fee.js). The free-delivery threshold is
+    // applied afterwards, so coverage is required even when the order ships free.
+    const fee = computeDeliveryFee({ ...rule, freeDeliveryFrom: null }, subtotalCents / 100, { lat: address.lat, lng: address.lng });
+    check(!fee.error, 'DELIVERY_OUT_OF_RANGE', 'Fuera de cobertura', 409);
+    const feeCents = Number.isFinite(fee.fee) && fee.fee >= 0 ? Math.round(fee.fee * 100) : NaN;
+    check(Number.isSafeInteger(feeCents) && feeCents <= MAX_CENTS, 'INVALID_DELIVERY_FEE', 'Tarifa de entrega no disponible', 503);
     const free = merchant.freeDeliveryFromCents != null && subtotalCents >= merchant.freeDeliveryFromCents;
-    deliveryFeeCents = free ? 0 : zone.feeCents;
-    zoneId = zone.id;
+    deliveryFeeCents = free ? 0 : feeCents;
+    zoneId = fee.zoneId ?? null;
+    distanceKm = fee.distanceKm ?? null;
     deliveryAvailability = 'AVAILABLE';
   }
   const totalCents = subtotalCents + deliveryFeeCents;
@@ -104,7 +115,7 @@ function price({ merchant, listings, request, address }) {
   const commissionCents = Math.min(subtotalCents,
     Number((BigInt(subtotalCents) * BigInt(merchant.commissionBps) + 5000n) / 10000n));
   return {
-    lines, zoneId, deliveryAvailability, subtotalCents, deliveryFeeCents, totalCents,
+    lines, zoneId, distanceKm, deliveryAvailability, subtotalCents, deliveryFeeCents, totalCents,
     commissionBps: merchant.commissionBps, commissionCents, merchantPayoutCents: subtotalCents - commissionCents,
     // Courier payout equals the delivery fee, as in the existing order flow. Tips are not part of quotes.
     courierPayoutCents: deliveryFeeCents,
@@ -169,7 +180,7 @@ function createQuoteService({ catalog, addresses, quoteStore, now = () => new Da
         subtotalCents: priced.subtotalCents, deliveryFeeCents: priced.deliveryFeeCents, totalCents: priced.totalCents,
         commissionBps: priced.commissionBps, commissionCents: priced.commissionCents,
         merchantPayoutCents: priced.merchantPayoutCents, courierPayoutCents: priced.courierPayoutCents,
-        zoneId: priced.zoneId, estimatedReadyMinutes: priced.estimatedReadyMinutes,
+        zoneId: priced.zoneId, distanceKm: priced.distanceKm, estimatedReadyMinutes: priced.estimatedReadyMinutes,
         deliveryAvailability: priced.deliveryAvailability,
       },
       requestHash, idempotencyKeyHash, createdAt: at, expiresAt: new Date(at.getTime() + ttlMs),

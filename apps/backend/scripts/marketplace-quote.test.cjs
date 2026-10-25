@@ -7,6 +7,7 @@ const path = require('node:path');
 const { createQuoteService, assertQuoteUsable, MarketplaceQuoteError, TTL_MS } = require('../src/lib/marketplace-quote');
 const createRouter = require('../src/routes/marketplace-quotes.routes');
 const { BuyerIdentityError, createBuyerAccountResolver } = require('../src/lib/marketplace-buyer-identity');
+const { computeDeliveryFee } = require('../src/lib/delivery-fee');
 const jwt = require('jsonwebtoken');
 
 // A regression must fail offline rather than reach a provider or a database.
@@ -26,7 +27,9 @@ function world() {
   const state = {
     merchant: { id: 'm1', status: 'ACTIVE', open: true, currency: 'MXN', minOrderCents: 0, freeDeliveryFromCents: null,
       commissionBps: 1000, prepMinutes: 20,
-      zones: [{ id: 'z1', name: 'Centro', feeCents: 3000, active: true, polygon: square(19.40, -99.17, 19.44, -99.13) }] },
+      // The store's own rule, in pesos, as RestaurantConfig + DeliveryZone hold it.
+      delivery: { deliveryMode: 'ZONES', deliveryFee: 15,
+        deliveryZones: [{ id: 'z1', name: 'Centro', fee: 30, active: true, polygon: square(19.40, -99.17, 19.44, -99.13) }] } },
     listings: [
       { merchantId: 'm1', menuItemId: 'burger', name: 'Hamburguesa', unitPriceCents: 1999, published: true, available: true },
       { merchantId: 'm1', menuItemId: 'fries', name: 'Papas', unitPriceCents: 1005, published: true, available: true },
@@ -147,6 +150,73 @@ test('free-delivery threshold removes the fee but zone coverage is still require
   assert.equal(r.deliveryFee, '0.00');
   assert.equal(r.total, '70.02');
   await rejects(quote(w, request({ deliveryAddressId: 'addr-out' }), `${KEY}-out`), 'DELIVERY_OUT_OF_RANGE', 409);
+});
+
+test('a zone quote records the zone that priced it', async () => {
+  const w = world();
+  const r = await quote(w);
+  assert.equal(w.store.saved.get(r.quoteId).priceSnapshot.zoneId, 'z1');
+});
+
+test('flat delivery charges the store fixed fee anywhere', async () => {
+  const w = world();
+  w.state.merchant.delivery = { deliveryMode: 'FLAT', deliveryFee: 25.5 };
+  const inside = await quote(w);
+  const outside = await quote(w, request({ deliveryAddressId: 'addr-out' }), `${KEY}-far`);
+  assert.equal(inside.deliveryFee, '25.50');
+  assert.equal(outside.deliveryFee, '25.50');
+  assert.equal(inside.total, '95.52');
+  assert.equal(w.store.saved.get(inside.quoteId).priceSnapshot.zoneId, null);
+});
+
+// Origin at INSIDE: addr-out is 0.18 degrees north, about 20.02 km away.
+const DISTANCE_RULE = { deliveryMode: 'DISTANCE', originLat: INSIDE.lat, originLng: INSIDE.lng,
+  deliveryBaseFee: 20, deliveryPerKm: 5, deliveryFreeRadiusKm: null, deliveryMaxKm: null };
+
+test('distance delivery charges base plus per-km, the same as the store', async () => {
+  const w = world();
+  w.state.merchant.delivery = { ...DISTANCE_RULE };
+  const r = await quote(w, request({ deliveryAddressId: 'addr-out' }));
+  const store = computeDeliveryFee(DISTANCE_RULE, 70.02, OUTSIDE);
+  assert.equal(store.distanceKm, 20.02);
+  assert.equal(r.deliveryFee, store.fee.toFixed(2));
+  assert.equal(r.deliveryFee, '120.10');
+  assert.equal(w.store.saved.get(r.quoteId).priceSnapshot.distanceKm, 20.02);
+  assert.equal(w.store.saved.get(r.quoteId).priceSnapshot.courierPayoutCents, 12010);
+});
+
+test('distance delivery: free radius, maximum distance and a missing origin', async () => {
+  const w = world();
+  w.state.merchant.delivery = { ...DISTANCE_RULE, deliveryFreeRadiusKm: 1 };
+  assert.equal((await quote(w)).deliveryFee, '0.00');
+  w.state.merchant.delivery = { ...DISTANCE_RULE, deliveryMaxKm: 10 };
+  await rejects(quote(w, request({ deliveryAddressId: 'addr-out' }), `${KEY}-max`), 'DELIVERY_OUT_OF_RANGE', 409);
+  // The store would fall back to the base fee for any distance; the marketplace refuses.
+  w.state.merchant.delivery = { ...DISTANCE_RULE, originLat: null };
+  await rejects(quote(w, request(), `${KEY}-origin`), 'DELIVERY_UNAVAILABLE', 409);
+  assert.equal(w.store.saved.size, 1);
+});
+
+test('free delivery by amount still needs coverage in distance mode', async () => {
+  const w = world();
+  w.state.merchant.freeDeliveryFromCents = 5000;
+  w.state.merchant.delivery = { ...DISTANCE_RULE, deliveryMaxKm: 10 };
+  assert.equal((await quote(w)).deliveryFee, '0.00');
+  await rejects(quote(w, request({ deliveryAddressId: 'addr-out' }), `${KEY}-free-far`), 'DELIVERY_OUT_OF_RANGE', 409);
+});
+
+test('a merchant without a delivery rule only quotes pickup', async () => {
+  const w = world();
+  w.state.merchant.delivery = null;
+  await rejects(quote(w), 'DELIVERY_UNAVAILABLE', 409);
+  assert.equal((await quote(w, request({ fulfillment: 'PICKUP', deliveryAddressId: undefined }), `${KEY}-pickup`)).deliveryFee, '0.00');
+});
+
+test('an unusable zone fee fails closed', async () => {
+  const w = world();
+  w.state.merchant.delivery.deliveryZones[0].fee = 'abc';
+  await rejects(quote(w), 'INVALID_DELIVERY_FEE', 503);
+  assert.equal(w.store.saved.size, 0);
 });
 
 test('minimum order is enforced', async () => {

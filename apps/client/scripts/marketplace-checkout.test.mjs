@@ -449,7 +449,12 @@ test('requestQuote sends the idempotency key and parses the server quote', async
 test('a 401 or 4xx from the server is a rejection carrying the server message', async () => {
   const result = await requestQuote('https://api.example', {}, KEY,
     async () => jsonResponse({ error: 'Cuenta requerida', errorCode: 'UNAUTHENTICATED' }, 401));
-  assert.deepEqual(result, { ok: false, reason: 'rejected', message: 'Cuenta requerida' });
+  assert.deepEqual(result, { ok: false, reason: 'rejected', message: 'Cuenta requerida', code: 'UNAUTHENTICATED' });
+  const expired = await placeOrder('https://api.example', {}, KEY,
+    async () => jsonResponse({ error: 'La cotizacion expiro; solicita una nueva', errorCode: 'QUOTE_EXPIRED' }, 409));
+  assert.equal(expired.code, 'QUOTE_EXPIRED');
+  const bare = await placeOrder('https://api.example', {}, KEY, async () => jsonResponse({ error: 'No' }, 409));
+  assert.equal('code' in bare, false);
 });
 
 test('server 5xx and network errors are unavailable, and a missing api url is a config failure', async () => {
@@ -478,13 +483,17 @@ test('placeOrder parses the order and the idempotent flag; malformed responses a
 const { checkMarketplaceEligibility, parseTracking, fetchTracking } = await import('../src/lib/marketplaceV1Checkout.ts');
 const TOKEN = 'a'.repeat(64);
 
-test('marketplace checkout is pickup-only, cash or online, and never silently uses another path', () => {
+test('marketplace checkout is pickup or delivery, cash or online, and never silently uses another path', () => {
   const plain = [cartLine()];
   assert.deepEqual(checkMarketplaceEligibility({ orderType: 'TAKEOUT', paymentMethod: 'CASH', lines: plain }),
     { ok: true, fulfillment: 'PICKUP', paymentMethod: 'CASH' });
   assert.deepEqual(checkMarketplaceEligibility({ orderType: 'TAKEOUT', paymentMethod: 'ONLINE', lines: plain }),
     { ok: true, fulfillment: 'PICKUP', paymentMethod: 'ONLINE' });
-  assert.match(checkMarketplaceEligibility({ orderType: 'DELIVERY', paymentMethod: 'CASH', lines: plain }).message, /domicilio/);
+  // A domicilio: si el comercio no entrega por el marketplace lo dice la cotización.
+  assert.deepEqual(checkMarketplaceEligibility({ orderType: 'DELIVERY', paymentMethod: 'CASH', lines: plain }),
+    { ok: true, fulfillment: 'DELIVERY', paymentMethod: 'CASH' });
+  assert.deepEqual(checkMarketplaceEligibility({ orderType: 'DELIVERY', paymentMethod: 'ONLINE', lines: plain }),
+    { ok: true, fulfillment: 'DELIVERY', paymentMethod: 'ONLINE' });
   assert.match(checkMarketplaceEligibility({ orderType: 'DINE_IN', paymentMethod: 'CASH', lines: plain }).message, /mesa/);
   assert.match(checkMarketplaceEligibility({ orderType: 'TAKEOUT', paymentMethod: 'TRANSFER', lines: plain }).message, /pago/);
   assert.match(checkMarketplaceEligibility({ orderType: 'TAKEOUT', paymentMethod: 'CASH', lines: [cartLine({ modifierIds: ['x'] })] }).message, /modificadores/);
@@ -708,4 +717,49 @@ test('an online order carries its checkout link, or says it is still pending', a
   const forged = await placeOrder('https://api.example', {}, KEY, async () => jsonResponse({ ...base,
     checkout: { status: 'READY', url: 'https://evil.test/pay' } }, 201), GUEST);
   assert.equal(forged.checkoutUrl, undefined);
+});
+
+// ── Libreta de direcciones v1 y envío cotizado ─────────────────────────────────
+const { listAddresses, saveAddress, deleteAddress, checkAddress, moneyCents } = await import('../src/lib/marketplaceV1Checkout.ts');
+const HOME = { id: 'a1', address: 'Av. Juárez 10, Centro', lat: 19.4326, lng: -99.1332 };
+
+test('saveAddress sends one line of text and the map point with the order identity (X-Buyer-Id)', async () => {
+  let sent;
+  const saved = await saveAddress('https://api.example', { address: ' Av. Juárez 10,\n Centro ', lat: HOME.lat, lng: HOME.lng },
+    async (url, init) => { sent = { url, init }; return jsonResponse(HOME, 201); }, GUEST);
+  assert.deepEqual(saved, HOME);
+  assert.equal(sent.url, 'https://api.example/api/marketplace/v1/addresses');
+  assert.equal(sent.init.method, 'POST');
+  assert.equal(sent.init.headers['X-Buyer-Id'], GUEST);
+  assert.equal('X-Guest-Id' in sent.init.headers, false);
+  assert.deepEqual(JSON.parse(sent.init.body), { address: 'Av. Juárez 10, Centro', lat: HOME.lat, lng: HOME.lng });
+  const rejected = await saveAddress('https://api.example', HOME,
+    async () => jsonResponse({ error: 'Marca tu ubicacion en el mapa', errorCode: 'INVALID_LOCATION' }, 400), GUEST);
+  assert.deepEqual(rejected, { ok: false, reason: 'rejected', message: 'Marca tu ubicacion en el mapa', code: 'INVALID_LOCATION' });
+  assert.equal((await saveAddress('https://api.example', HOME, async () => jsonResponse({ id: 'a1' }, 201), GUEST)).reason, 'unavailable');
+  assert.equal((await saveAddress(null, HOME, undefined, GUEST)).reason, 'config');
+});
+
+test('listAddresses drops malformed rows and deleteAddress accepts 204', async () => {
+  const list = await listAddresses('https://api.example', async () => jsonResponse({ addresses: [HOME, { id: 'x', address: 'Sin punto' }] }), GUEST);
+  assert.deepEqual(list, [HOME]);
+  assert.equal((await listAddresses('https://api.example', async () => jsonResponse({ nope: [] }), GUEST)).reason, 'unavailable');
+  assert.equal((await listAddresses('https://api.example', async () => new Response('x', { status: 503 }), GUEST)).reason, 'unavailable');
+  let deleted;
+  assert.equal(await deleteAddress('https://api.example', 'a/1', async (url, init) => { deleted = { url, init }; return new Response(null, { status: 204 }); }, GUEST), true);
+  assert.equal(deleted.url, 'https://api.example/api/marketplace/v1/addresses/a%2F1');
+  assert.equal(deleted.init.method, 'DELETE');
+  assert.equal((await deleteAddress('https://api.example', 'a1', async () => jsonResponse({ error: 'Direccion no encontrada' }, 404), GUEST)).reason, 'rejected');
+});
+
+test('a new delivery address needs text and a map point; quoted money is read in cents', () => {
+  assert.equal(checkAddress({ address: 'Av. Juárez 10', coords: { lat: 19.4, lng: -99.1 } }), null);
+  assert.match(checkAddress({ address: 'abc', coords: { lat: 19.4, lng: -99.1 } }), /dirección/);
+  assert.match(checkAddress({ address: 'Av. Juárez 10', coords: null }), /mapa/);
+  assert.match(checkAddress({ address: 'x'.repeat(501), coords: { lat: 19.4, lng: -99.1 } }), /larga/);
+  assert.equal(moneyCents('30.00'), 3000);
+  assert.equal(moneyCents('120.10'), 12010);
+  assert.equal(moneyCents('0.29'), 29);
+  assert.equal(moneyCents('30'), null);
+  assert.equal(moneyCents(undefined), null);
 });

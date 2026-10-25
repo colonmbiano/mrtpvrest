@@ -54,7 +54,9 @@ export default function MarketplaceTrackingModal({ orderId, orderNumber, trackin
     return () => { stopped = true; clearInterval(id); };
   }, [apiUrl, orderId, trackingToken]);
 
-  const label = tracking ? (STATUS_LABEL[tracking.status] ?? 'Actualizando') : 'Consultando…';
+  // A domicilio, "listo" significa que la tienda espera al repartidor.
+  const label = tracking ? (tracking.status === 'READY' && fulfillment === 'DELIVERY' ? 'Listo, esperando al repartidor'
+    : STATUS_LABEL[tracking.status] ?? 'Actualizando') : 'Consultando…';
   // Código que el comprador necesita según cómo recibe el pedido. Una orden cancelada no muestra ninguno.
   const pin = tracking?.status === 'CANCELLED' ? null : pinForFulfillment(fulfillment, { pickupPin, deliveryPin });
 

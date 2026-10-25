@@ -19,6 +19,8 @@ export type V1Failure = {
   ok: false;
   reason: 'config' | 'unavailable' | 'rejected' | 'unsupported';
   message: string;
+  // errorCode del servidor en un rechazo (p. ej. QUOTE_EXPIRED), cuando lo manda.
+  code?: string;
 };
 // Desglose opcional de la cotización. Montos como cadenas de dos decimales, tal como los da el servidor.
 export type V1Quote = {
@@ -152,6 +154,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function rejection(json: unknown): V1Failure {
+  const result = failure('rejected', isRecord(json) && typeof json.error === 'string' ? json.error : 'La solicitud fue rechazada.');
+  if (isRecord(json) && typeof json.errorCode === 'string') result.code = json.errorCode;
+  return result;
+}
+
 async function post(apiUrl: string | null, path: string, body: unknown, key: string, fetchImpl: FetchLike, guestId: string): Promise<{ ok: true; status: number; json: unknown } | V1Failure> {
   if (!apiUrl) return failure('config', 'El pedido no está disponible en este entorno.');
   if (!KEY_RE.test(key)) return failure('rejected', 'Clave de solicitud inválida.');
@@ -173,10 +181,7 @@ async function post(apiUrl: string | null, path: string, body: unknown, key: str
   }
   const json: unknown = await res.json().catch(() => null);
   if (res.status >= 500) return failure('unavailable', 'El servicio no está disponible. Intenta de nuevo.');
-  if (!res.ok) {
-    const message = isRecord(json) && typeof json.error === 'string' ? json.error : 'La solicitud fue rechazada.';
-    return failure('rejected', message);
-  }
+  if (!res.ok) return rejection(json);
   return { ok: true, status: res.status, json };
 }
 
@@ -219,10 +224,11 @@ export async function placeOrder(apiUrl: string | null, body: unknown, key: stri
   return order;
 }
 
-// Elegibilidad del checkout v1 (solo recogida; ver el comentario del módulo). Devuelve el
-// motivo cuando el pedido no puede enviarse por v1: en ese caso no se usa el legacy.
+// Elegibilidad del checkout v1 (recogida o domicilio; ver el comentario del módulo). Devuelve
+// el motivo cuando el pedido no puede enviarse por v1: en ese caso no se usa el legacy. Si
+// el comercio no entrega a domicilio por el marketplace, lo dice la cotización.
 export type CheckoutEligibility =
-  | { ok: true; fulfillment: 'PICKUP'; paymentMethod: PaymentMethod }
+  | { ok: true; fulfillment: Fulfillment; paymentMethod: PaymentMethod }
   | { ok: false; message: string };
 
 export function checkMarketplaceEligibility(input: {
@@ -230,14 +236,78 @@ export function checkMarketplaceEligibility(input: {
   paymentMethod: string;
   lines: CartLine[];
 }): CheckoutEligibility {
-  if (input.orderType === 'DELIVERY') return { ok: false, message: 'Entrega a domicilio aún no está disponible en la tienda del marketplace. Elige recoger en tienda.' };
   if (input.orderType === 'DINE_IN') return { ok: false, message: 'Pedidos de mesa no están disponibles en el marketplace.' };
   if (input.paymentMethod !== 'CASH' && input.paymentMethod !== 'ONLINE') {
     return { ok: false, message: 'Este método de pago no está disponible en el marketplace. Usa efectivo o pago en línea.' };
   }
   const reason = unsupportedReason(input.lines);
   if (reason) return { ok: false, message: `Este pedido no puede pagarse en línea: ${reason}.` };
-  return { ok: true, fulfillment: 'PICKUP', paymentMethod: input.paymentMethod };
+  return { ok: true, fulfillment: input.orderType === 'DELIVERY' ? 'DELIVERY' : 'PICKUP', paymentMethod: input.paymentMethod };
+}
+
+// Monto de dos decimales del servidor ("30.00") → centavos; null si no es un monto.
+export function moneyCents(value: string | undefined): number | null {
+  return typeof value === 'string' && MONEY_RE.test(value) ? Math.round(Number(value) * 100) : null;
+}
+
+// ── Libreta de direcciones del comprador (/api/marketplace/v1/addresses) ──────
+// Misma identidad que la orden (X-Buyer-Id): la orden lee la dirección por su id.
+// Guardar otra vez la misma dirección (texto y punto del mapa) devuelve la existente.
+export type V1Address = { id: string; address: string; lat: number; lng: number };
+
+function parseAddress(value: unknown): V1Address | null {
+  if (!isRecord(value) || typeof value.id !== 'string' || !value.id || typeof value.address !== 'string'
+    || typeof value.lat !== 'number' || !Number.isFinite(value.lat) || typeof value.lng !== 'number' || !Number.isFinite(value.lng)) return null;
+  return { id: value.id, address: value.address, lat: value.lat, lng: value.lng };
+}
+
+// Validación local mínima de una dirección nueva. El servidor valida todo de nuevo.
+export function checkAddress(input: { address: string; coords: { lat: number; lng: number } | null }): string | null {
+  const address = input.address.replace(/\s+/g, ' ').trim();
+  if (address.length < 5) return 'Escribe la dirección de entrega.';
+  if (address.length > 500) return 'La dirección es demasiado larga.';
+  if (!input.coords || !Number.isFinite(input.coords.lat) || !Number.isFinite(input.coords.lng)) return 'Marca tu ubicación en el mapa para calcular el envío.';
+  return null;
+}
+
+async function addressRequest(apiUrl: string | null, path: string, init: RequestInit, fetchImpl: FetchLike,
+  guestId: string): Promise<{ ok: true; status: number; json: unknown } | V1Failure> {
+  if (!apiUrl) return failure('config', 'Las direcciones no están disponibles en este entorno.');
+  if (!isGuestId(guestId)) return failure('rejected', 'Identificador de sesión inválido.');
+  let res: Response;
+  try {
+    res = await fetchImpl(`${apiUrl}/api/marketplace/v1/addresses${path}`, { ...init, cache: 'no-store',
+      headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}), 'X-Buyer-Id': guestId },
+      signal: AbortSignal.timeout(8000) });
+  } catch {
+    return failure('unavailable', 'No pudimos conectar. Intenta de nuevo.');
+  }
+  const json: unknown = res.status === 204 ? null : await res.json().catch(() => null);
+  if (res.status >= 500) return failure('unavailable', 'Las direcciones no están disponibles. Intenta de nuevo.');
+  if (!res.ok) return rejection(json);
+  return { ok: true, status: res.status, json };
+}
+
+export async function listAddresses(apiUrl: string | null, fetchImpl: FetchLike = fetch,
+  guestId: string = getOrCreateGuestId()): Promise<V1Address[] | V1Failure> {
+  const result = await addressRequest(apiUrl, '', { method: 'GET' }, fetchImpl, guestId);
+  if (!result.ok) return result;
+  if (!isRecord(result.json) || !Array.isArray(result.json.addresses)) return failure('unavailable', 'Respuesta de direcciones fuera de contrato.');
+  return result.json.addresses.map(parseAddress).filter((a): a is V1Address => a !== null);
+}
+
+export async function saveAddress(apiUrl: string | null, input: { address: string; lat: number; lng: number },
+  fetchImpl: FetchLike = fetch, guestId: string = getOrCreateGuestId()): Promise<V1Address | V1Failure> {
+  const body = JSON.stringify({ address: input.address.replace(/\s+/g, ' ').trim(), lat: input.lat, lng: input.lng });
+  const result = await addressRequest(apiUrl, '', { method: 'POST', body }, fetchImpl, guestId);
+  if (!result.ok) return result;
+  return parseAddress(result.json) ?? failure('unavailable', 'Respuesta de dirección fuera de contrato.');
+}
+
+export async function deleteAddress(apiUrl: string | null, id: string, fetchImpl: FetchLike = fetch,
+  guestId: string = getOrCreateGuestId()): Promise<true | V1Failure> {
+  const result = await addressRequest(apiUrl, `/${encodeURIComponent(id)}`, { method: 'DELETE' }, fetchImpl, guestId);
+  return result.ok ? true : result;
 }
 
 // Seguimiento v1 de una orden. El token viaja solo en cabecera, nunca en la URL.

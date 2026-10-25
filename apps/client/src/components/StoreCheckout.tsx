@@ -6,9 +6,11 @@ import { authHeader } from '../lib/customerAuth';
 import { cartShareUrl } from '../lib/cartLink';
 import { getApiUrl, getMarketplaceApiUrl, isMarketplaceCatalogEnabled } from '../lib/config';
 import {
-  buildOrderBody, buildQuoteBody, checkCustomer, checkMarketplaceEligibility, newIdempotencyKey, placeOrder, requestQuote,
+  buildOrderBody, buildQuoteBody, checkAddress, checkCustomer, checkMarketplaceEligibility, moneyCents, newIdempotencyKey,
+  placeOrder, requestQuote, saveAddress,
 } from '../lib/marketplaceV1Checkout';
 import MarketplaceTrackingModal from './MarketplaceTrackingModal';
+import MarketplaceSavedAddresses from './MarketplaceSavedAddresses';
 import { useMarketplaceMerchant } from './MarketplaceMerchantProvider';
 import { computeDeliveryPreview, type DeliveryConfig } from '../lib/delivery';
 import { MapLocationPicker } from './MapLocationPicker';
@@ -71,6 +73,9 @@ export default function StoreCheckout({
   const [v1Tracking, setV1Tracking] = useState<{ orderId: string; orderNumber?: string; trackingToken: string; fulfillment?: 'PICKUP' | 'DELIVERY'; pickupPin?: string; deliveryPin?: string; checkoutUrl?: string } | null>(null);
   // Clave de idempotencia del intento actual. Un reintento con los mismos datos reusa la clave.
   const v1Attempt = useRef<{ key: string; signature: string } | null>(null);
+  // Envío cotizado por el servidor para esta dirección y este carrito (pesos). Sustituye la
+  // estimación local, que no conoce las zonas de la tienda.
+  const [v1Fee, setV1Fee] = useState<{ key: string; fee: number } | null>(null);
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [geoStatus, setGeoStatus] = useState<'' | 'loading' | 'ok' | 'error'>('');
@@ -207,16 +212,28 @@ export default function StoreCheckout({
   useEffect(() => {
     if (isDineIn && paymentMethod === 'ONLINE') setPaymentMethod('CASH');
   }, [isDineIn, paymentMethod]);
+  // Marketplace: la bandera activa Y la tienda es del marketplace. Nunca cae al legacy en silencio.
+  // Mesa (QR) y tiendas sin ficha de marketplace siguen en el flujo legacy.
+  const marketplaceMerchant = useMarketplaceMerchant();
+  const useMarketplaceV1 = isMarketplaceCatalogEnabled() && !!marketplaceMerchant && !fromTableQr;
+  // El marketplace siempre necesita el punto del mapa: con él cotiza el envío y llega el repartidor.
+  const needsMapPoint = delivery?.mode === 'DISTANCE' || useMarketplaceV1;
   // Cliente que regresa (perfil guardado) con datos completos → checkout exprés.
   // DINE_IN no aplica (necesita mesa y suele venir de un QR).
   // Para DELIVERY con envío por distancia exigimos coords guardadas: sin ellas el
   // cliente necesita el mapa → no exprés (se muestra el formulario completo).
-  const deliveryReady = !isDelivery || (!!deliveryAddress.trim() && (delivery?.mode !== 'DISTANCE' || !!coords));
+  const deliveryReady = !isDelivery || (!!deliveryAddress.trim() && (!needsMapPoint || !!coords));
   const hasCompleteProfile = !!customerName.trim() && deliveryReady;
   const expressMode = !!savedName && hasCompleteProfile && orderType !== 'DINE_IN' && !editData;
   const preview = useMemo(() => computeDeliveryPreview(delivery, total, coords), [delivery, total, coords]);
-  const needsLocationForFee = isDelivery && delivery?.mode === 'DISTANCE' && !!delivery?.origin && !coords;
-  const deliveryFee = isDelivery ? (preview.outOfRange ? 0 : preview.fee) : 0;
+  const needsLocationForFee = isDelivery && (delivery?.mode === 'DISTANCE' && !!delivery?.origin || useMarketplaceV1) && !coords;
+  const v1FeeKey = JSON.stringify([deliveryAddress.replace(/\s+/g, ' ').trim(), coords?.lat ?? null, coords?.lng ?? null, total]);
+  const v1Quoted = useMarketplaceV1 && isDelivery && v1Fee?.key === v1FeeKey ? v1Fee.fee : null;
+  // La estimación local no conoce las zonas: en el marketplace ese envío lo dice la cotización.
+  // (/api/store manda deliveryMode tal cual, ZONES incluido, aunque el tipo diga FLAT | DISTANCE.)
+  const zonesMode = (delivery?.mode as string | undefined) === 'ZONES';
+  const v1FeePending = useMarketplaceV1 && isDelivery && zonesMode && v1Quoted === null;
+  const deliveryFee = isDelivery ? (v1Quoted ?? (v1FeePending || preview.outOfRange ? 0 : preview.fee)) : 0;
   const discount = coupon?.discount || 0;
   const grandTotal = Math.max(0, total - discount + deliveryFee + tip);
   // El mínimo no aplica en mesa: existe para que valga la pena preparar y mandar
@@ -273,11 +290,6 @@ export default function StoreCheckout({
     } catch { setLoyaltyMsg('No se pudo identificar'); }
   };
 
-  // Marketplace: la bandera activa Y la tienda es del marketplace. Nunca cae al legacy en silencio.
-  // Mesa (QR) y tiendas sin ficha de marketplace siguen en el flujo legacy.
-  const marketplaceMerchant = useMarketplaceMerchant();
-  const useMarketplaceV1 = isMarketplaceCatalogEnabled() && !!marketplaceMerchant && !fromTableQr;
-
   const submitMarketplaceV1 = async () => {
     if (!marketplaceMerchant) return;
     const apiUrl = getMarketplaceApiUrl();
@@ -286,21 +298,55 @@ export default function StoreCheckout({
     const customer = { name: customerName.trim(), phone: customerPhone.trim(), email: customerEmail.trim() || undefined };
     const customerError = checkCustomer(customer);
     if (customerError) { setError(customerError); return; }
+    const toDoor = eligibility.fulfillment === 'DELIVERY';
+    if (toDoor) {
+      const addressError = checkAddress({ address: deliveryAddress, coords });
+      if (addressError) { setError(addressError); return; }
+    }
     const notes = orderNotes.trim() || undefined;
     const signature = JSON.stringify({ merchant: marketplaceMerchant, lines: lines.map(l => [l.menuItemId, l.quantity]),
-      customer, notes, method: eligibility.paymentMethod });
+      customer, notes, method: eligibility.paymentMethod, fulfillment: eligibility.fulfillment,
+      delivery: toDoor ? v1FeeKey : null });
     if (!v1Attempt.current || v1Attempt.current.signature !== signature) {
       v1Attempt.current = { key: newIdempotencyKey(), signature };
     }
     const base = v1Attempt.current.key;
     setIsSubmitting(true);
     try {
+      let deliveryAddressId: string | undefined;
+      if (toDoor && coords) {
+        // La cotización y la orden leen la dirección de la libreta; la misma dirección no se duplica.
+        const saved = await saveAddress(apiUrl, { address: deliveryAddress, lat: coords.lat, lng: coords.lng });
+        if ('ok' in saved) { setError(saved.message); return; }
+        deliveryAddressId = saved.id;
+      }
       const quote = await requestQuote(apiUrl, buildQuoteBody({ merchant: marketplaceMerchant, lines,
-        fulfillment: eligibility.fulfillment }), `${base}-q`);
-      if ('ok' in quote) { setError(quote.message); return; }
+        fulfillment: eligibility.fulfillment, deliveryAddressId }), `${base}-q`);
+      if ('ok' in quote) {
+        // Rechazada no queda guardada: el siguiente intento cotiza con clave nueva.
+        if (quote.reason === 'rejected') v1Attempt.current = null;
+        setError(quote.message);
+        return;
+      }
+      if (toDoor) {
+        const quoted = moneyCents(quote.deliveryFee);
+        if (quoted === null) { setError('No pudimos calcular el envío. Intenta de nuevo.'); return; }
+        if (quoted !== Math.round(deliveryFee * 100)) {
+          // El envío real no es el que se mostró: se muestra y el comprador confirma de nuevo
+          // (misma clave, así el segundo clic usa esta misma cotización).
+          setV1Fee({ key: v1FeeKey, fee: quoted / 100 });
+          setError(`El envío a esta dirección cuesta ${fmt(quoted / 100)}. Revisa el total y confirma de nuevo.`);
+          return;
+        }
+      }
       const order = await placeOrder(apiUrl, buildOrderBody({ quoteId: quote.quoteId, fulfillment: eligibility.fulfillment,
-        paymentMethod: eligibility.paymentMethod, customer, notes }), `${base}-o`);
-      if ('ok' in order) { setError(order.message); return; }
+        deliveryAddressId, paymentMethod: eligibility.paymentMethod, customer, notes }), `${base}-o`);
+      if ('ok' in order) {
+        // Cotización vencida: la orden no se creó, el siguiente intento cotiza de nuevo.
+        if (order.code === 'QUOTE_EXPIRED') v1Attempt.current = null;
+        setError(order.message);
+        return;
+      }
       if (eligibility.paymentMethod === 'ONLINE' && !order.checkoutUrl) {
         // La orden existe pero falta el link de pago: se conserva la clave y el carrito,
         // así reintentar completa el pago sin crear otra orden.
@@ -612,8 +658,13 @@ export default function StoreCheckout({
               )}
               {isDelivery && (
                 <>
+                  {useMarketplaceV1 && (
+                    <MarketplaceSavedAddresses apiUrl={getMarketplaceApiUrl()} primary={primary}
+                      current={{ address: deliveryAddress, coords }}
+                      onPick={a => { setDeliveryAddress(a.address); setCoords({ lat: a.lat, lng: a.lng }); }} />
+                  )}
                   <textarea required placeholder="Dirección de entrega" className={`${field} h-20`} value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} />
-                  {delivery?.mode === 'DISTANCE' && (
+                  {needsMapPoint && (
                     <>
                       <button type="button" onClick={useMyLocation} className="w-full p-4 rounded-2xl font-bold text-sm border-2"
                         style={{ borderColor: coords ? '#10b981' : primary, color: coords ? '#10b981' : primary }}>
@@ -628,6 +679,9 @@ export default function StoreCheckout({
                     </>
                   )}
                   {geoStatus === 'error' && <p className="text-amber-600 text-xs font-bold">No pudimos obtener tu ubicación. Revisa los permisos.</p>}
+                  {useMarketplaceV1 && (
+                    <p className="px-1 text-[11px] text-gray-400">Guardamos esta dirección para tus próximos pedidos en este navegador; puedes quitarla cuando quieras.</p>
+                  )}
                 </>
               )}
               {/* Con QR la mesa ya viene fija y se anuncia arriba ("Pedido para
@@ -770,7 +824,9 @@ export default function StoreCheckout({
               <Row label="Subtotal" value={fmt(total)} />
               {isDelivery && (
                 <Row label={`Envío${preview.distanceKm != null ? ` · ${preview.distanceKm} km` : ''}`}
-                  value={preview.outOfRange ? 'Fuera de cobertura' : needsLocationForFee ? 'Usa tu ubicación' : deliveryFee === 0 ? 'Gratis' : fmt(deliveryFee)} />
+                  value={v1Quoted !== null ? (v1Quoted === 0 ? 'Gratis' : fmt(v1Quoted))
+                    : preview.outOfRange ? 'Fuera de cobertura' : needsLocationForFee ? 'Usa tu ubicación'
+                    : v1FeePending ? 'Se calcula al confirmar' : deliveryFee === 0 ? 'Gratis' : fmt(deliveryFee)} />
               )}
               {discount > 0 && <Row label="Descuento" value={`−${fmt(discount)}`} green />}
               {tip > 0 && <Row label="Propina" value={fmt(tip)} />}

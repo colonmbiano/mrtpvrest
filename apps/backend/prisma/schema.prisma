@@ -5035,3 +5035,26 @@ model MarketplaceWebhookEvent {
   @@index([dataId])
   @@map("marketplace_webhook_events")
 }
+
+// ── Marketplace: libreta de direcciones del comprador (API v1) ─────────────
+// La cuenta es la misma identidad de la cotización y la orden (JWT de cliente o
+// invitado "guest:<hash>"), así solo quien guardó la dirección la ve y la usa.
+// Las filas no se editan: la cotización y la orden leen la misma dirección, y
+// cambiarla entre ambas movería un envío ya cotizado. fingerprint = sha256 de
+// [dirección, lat, lng]: guardar la misma dirección otra vez reutiliza la fila.
+// Es del comprador, no de un tenant: no lleva restaurantId.
+model MarketplaceBuyerAddress {
+  id          String   @id @default(uuid())
+  accountId   String   @db.VarChar(64)
+  fingerprint String   @db.Char(64)
+  address     String   @db.VarChar(500)
+  lat         Float
+  lng         Float
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  // Último uso: la libreta muestra primero las más recientes.
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([accountId, fingerprint])
+  @@index([accountId, updatedAt])
+  @@map("marketplace_buyer_addresses")
+}
