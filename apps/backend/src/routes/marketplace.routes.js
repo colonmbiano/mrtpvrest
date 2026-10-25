@@ -3,9 +3,12 @@
 const { InvalidQuery, createCatalog, createPrismaCatalogAdapter } = require('../lib/marketplace-catalog');
 
 function createMarketplaceRouter({ Router, getAdapter, storeSlugs = process.env.MARKETPLACE_STORE_SLUGS || '',
+  // Directorio por aprobación (tabla marketplace_merchant_memberships). Apagado
+  // por defecto: activarlo solo después de aplicar su migración.
+  directoryApproved = process.env.MARKETPLACE_DIRECTORY_APPROVED === 'true',
   getPrisma = () => require('@mrtpvrest/database').prisma, orderOptions = {}, authenticate, ledgerStore, payoutOptions = {} } = {}) {
   const router = (Router || require('express').Router)();
-  const catalog = createCatalog({ storeSlugs, getAdapter: getAdapter || (() => {
+  const catalog = createCatalog({ storeSlugs, includeApproved: directoryApproved, getAdapter: getAdapter || (() => {
     // Deliberately lazy: an empty allowlist never loads or accesses the database.
     return createPrismaCatalogAdapter(require('@mrtpvrest/database').prisma);
   }) });

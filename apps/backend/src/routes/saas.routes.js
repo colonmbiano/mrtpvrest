@@ -80,6 +80,51 @@ router.get('/marketplace/overview', (req, res, next) => {
 router.use(authenticate, requireSuperAdmin);
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MARKETPLACE · solicitudes de comercios para el directorio (SUPER_ADMIN)
+// El negocio las crea en POST /api/modules/marketplace/membership; aquí la
+// plataforma las aprueba, rechaza, suspende o reactiva. Cross-tenant → bypass.
+// ─────────────────────────────────────────────────────────────────────────────
+let membershipService;
+function memberships() {
+  const { restaurantHasModule, MODULES } = require('../lib/modules');
+  const { createMerchantMembershipService } = require('../lib/marketplace-merchant-membership');
+  return membershipService ||= createMerchantMembershipService({
+    prismaClient: prisma,
+    hasMarketplaceModule: (restaurantId) => restaurantHasModule(restaurantId, MODULES.MODULE_MARKETPLACE),
+  });
+}
+function membershipError(res, err) {
+  const { MembershipError } = require('../lib/marketplace-merchant-membership');
+  if (err instanceof MembershipError) return res.status(err.statusCode).json({ error: err.message, errorCode: err.code });
+  return res.status(503).json({ error: 'Directorio del marketplace temporalmente no disponible', errorCode: 'MEMBERSHIP_UNAVAILABLE' });
+}
+
+// GET /api/saas/marketplace/memberships?status=PENDING
+router.get('/marketplace/memberships', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const status = typeof req.query.status === 'string' && req.query.status ? req.query.status : undefined;
+    res.json(await runWithBypass(() => memberships().listMemberships({ status })));
+  } catch (err) {
+    membershipError(res, err);
+  }
+});
+
+// POST /api/saas/marketplace/memberships/:restaurantId/review — { decision, note }
+// decision: APPROVE | REJECT | SUSPEND | REINSTATE
+router.post('/marketplace/memberships/:restaurantId/review', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const { decision, note } = req.body || {};
+    res.json(await runWithBypass(() => memberships().reviewMembership({
+      restaurantId: req.params.restaurantId, decision, note, actorId: req.user?.id,
+    })));
+  } catch (err) {
+    membershipError(res, err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PLANES (gestión — SUPER_ADMIN)
 // ─────────────────────────────────────────────────────────────────────────────
 

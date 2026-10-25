@@ -328,6 +328,7 @@ model Restaurant {
   integrations     IntegrationConfig[]
   orders           Order[]
   driverPayouts     MarketplaceDriverPayout[]
+  marketplaceMembership MarketplaceMerchantMembership?
   customers        Customer[]
   suppliers        Supplier[]
   whatsappSessions WhatsappSession[]
@@ -4954,4 +4955,32 @@ model MarketplaceSession {
 
   @@index([accountId, expiresAt])
   @@map("marketplace_sessions")
+}
+
+// ── Marketplace: aprobación de comercios para el directorio ─────────────────
+// Un negocio con el módulo "marketplace" solicita aparecer en el directorio y la
+// plataforma (SUPER_ADMIN) lo aprueba, rechaza o suspende. Sin fila APPROVED el
+// restaurante no se publica (salvo la lista MARKETPLACE_STORE_SLUGS de preview).
+enum MarketplaceMembershipStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+model MarketplaceMerchantMembership {
+  id            String                      @id @default(cuid())
+  restaurantId  String                      @unique
+  restaurant    Restaurant                  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  status        MarketplaceMembershipStatus @default(PENDING)
+  requestedById String?
+  requestedAt   DateTime                    @default(now())
+  reviewedById  String?
+  reviewedAt    DateTime?
+  reviewNote    String?
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
+
+  @@index([status, requestedAt])
+  @@map("marketplace_merchant_memberships")
 }

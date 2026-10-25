@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import api from '@/lib/api';
 import { AlertCircle } from 'lucide-react';
 import { DispatchAuditSection } from './DispatchAuditSection';
+import { MerchantApplicationsSection } from './MerchantApplicationsSection';
 
 interface Store {
   id: string;
@@ -140,6 +141,8 @@ export default function MarketplacePage() {
             </div>
           ))}
         </div>
+
+        <MerchantApplicationsSection />
 
         <DispatchAuditSection />
 

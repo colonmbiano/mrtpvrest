@@ -60,8 +60,23 @@ function nameFilter(q) {
   return q ? { name: { contains: q.replace(/[\\%_]/g, '\\$&'), mode: 'insensitive' } } : {};
 }
 
-function eligibleStores(slugs) {
-  return { slug: { in: slugs }, isActive: true, tenant: { is: { hasWebStore: true, isDemo: false } } };
+// Comercio aprobado para el directorio: fila APPROVED y módulo marketplace activo
+// (override del tenant o plan), mismo criterio que lib/modules.js.
+const APPROVED_MERCHANT = {
+  marketplaceMembership: { is: { status: 'APPROVED' } },
+  tenant: { is: { isDemo: false, OR: [
+    { enabledModules: { hasSome: ['marketplace', 'MARKETPLACE'] } },
+    { subscription: { is: { plan: { is: { allowedModules: { hasSome: ['marketplace', 'MARKETPLACE'] } } } } } },
+  ] } },
+};
+
+// Sin directorio por aprobación, solo la lista explícita (MARKETPLACE_STORE_SLUGS).
+// Con él, también los comercios aprobados; `store` acota a una sola tienda.
+function eligibleStores(slugs, { includeApproved = false, store } = {}) {
+  const listed = { slug: { in: slugs }, isActive: true, tenant: { is: { hasWebStore: true, isDemo: false } } };
+  if (!includeApproved) return listed;
+  return { isActive: true, ...(store ? { slug: store } : {}),
+    OR: [{ slug: { in: slugs }, tenant: { is: { hasWebStore: true, isDemo: false } } }, APPROVED_MERCHANT] };
 }
 
 const STORE_CONFIG_SELECT = {
@@ -106,8 +121,8 @@ function activePromoPrice(row, promoConfig, now) {
 
 function createPrismaCatalogAdapter(prisma, { now = () => new Date() } = {}) {
   return {
-    async listStores({ slugs, q, businessType, page, pageSize }) {
-      const where = { ...eligibleStores(slugs), ...nameFilter(q), ...(businessType ? { businessType } : {}) };
+    async listStores({ slugs, includeApproved, store, q, businessType, page, pageSize }) {
+      const where = { ...eligibleStores(slugs, { includeApproved, store }), ...nameFilter(q), ...(businessType ? { businessType } : {}) };
       const [total, rows] = await Promise.all([
         prisma.restaurant.count({ where }),
         prisma.restaurant.findMany({ where, select: { slug: true, name: true, businessType: true, logoUrl: true, config: { select: STORE_CONFIG_SELECT } },
@@ -116,15 +131,16 @@ function createPrismaCatalogAdapter(prisma, { now = () => new Date() } = {}) {
       const at = now();
       return { total, rows: rows.map(row => ({ slug: row.slug, name: row.name, businessType: row.businessType, logoUrl: row.logoUrl, ...storeTerms(row.config, at) })) };
     },
-    async listProducts({ slugs, q, page, pageSize }) {
+    async listProducts({ slugs, includeApproved, store, q, page, pageSize }) {
       // At most 100 explicit stores. Resolve IDs server-side; no tenant header or query is used.
-      const stores = await prisma.restaurant.findMany({ where: eligibleStores(slugs),
+      const eligible = eligibleStores(slugs, { includeApproved, store });
+      const stores = await prisma.restaurant.findMany({ where: eligible,
         select: { id: true, slug: true, name: true }, orderBy: [{ id: 'asc' }], take: 100 });
       if (!stores.length) return { total: 0, rows: [] };
       const ids = stores.map(store => store.id);
       const where = {
         restaurantId: { in: ids },
-        restaurant: { is: eligibleStores(slugs) },
+        restaurant: { is: eligible },
         isAvailable: true, availableOnline: true,
         // Both ownership checks are needed even for inconsistent cross-store category links.
         OR: ids.map(restaurantId => ({ restaurantId, category: { is: { restaurantId, isActive: true } } })),
@@ -158,16 +174,19 @@ function createPrismaCatalogAdapter(prisma, { now = () => new Date() } = {}) {
   };
 }
 
-function createCatalog({ getAdapter, storeSlugs = '' }) {
+// includeApproved (MARKETPLACE_DIRECTORY_APPROVED=true) suma al directorio los
+// comercios aprobados por la plataforma. Apagado, una lista vacía nunca toca la BD.
+function createCatalog({ getAdapter, storeSlugs = '', includeApproved = false }) {
   let adapter;
   async function list(kind, rawQuery) {
     const query = parseQuery(rawQuery, kind);
     let slugs = parseStoreSlugs(storeSlugs);
     if (query.store) slugs = slugs.filter(slug => slug === query.store);
     const envelope = { items: [], page: query.page, pageSize: query.pageSize, total: 0 };
-    if (!slugs.length) return envelope;
+    if (!slugs.length && !includeApproved) return envelope;
     adapter ||= getAdapter();
-    const { rows, total } = await (kind === 'stores' ? adapter.listStores : adapter.listProducts)({ ...query, slugs });
+    const { rows, total } = await (kind === 'stores' ? adapter.listStores : adapter.listProducts)({
+      ...query, slugs, ...(includeApproved ? { includeApproved: true } : {}) });
     // Project again at the public boundary, even if an injected adapter returns extra fields.
     const items = rows.map(row => kind === 'stores'
       ? { slug: row.slug, name: row.name, businessType: row.businessType,
