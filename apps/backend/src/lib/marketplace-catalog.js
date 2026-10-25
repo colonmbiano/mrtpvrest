@@ -202,4 +202,5 @@ function createCatalog({ getAdapter, storeSlugs = '', includeApproved = false })
   return { listStores: query => list('stores', query), listProducts: query => list('products', query) };
 }
 
-module.exports = { InvalidQuery, parseQuery, parseStoreSlugs, createCatalog, createPrismaCatalogAdapter, storeTerms, activePromoPrice };
+module.exports = { InvalidQuery, parseQuery, parseStoreSlugs, createCatalog, createPrismaCatalogAdapter, storeTerms, activePromoPrice,
+  APPROVED_MERCHANT };

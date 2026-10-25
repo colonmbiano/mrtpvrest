@@ -2,6 +2,7 @@
 
 const { createMarketplaceOrderOrchestrator, MarketplaceOrderOrchestratorError } = require('../lib/marketplace-order-orchestrator');
 const { BuyerIdentityError, createBuyerAccountResolver } = require('../lib/marketplace-buyer-identity');
+const { defaultMarketplaceV1Services } = require('../lib/marketplace-v1-prisma');
 
 // Bearer customer tokens or explicit guest-session buyer handles are supported.
 // Staff sessions and accountId/restaurantId in a body never confer ownership.
@@ -13,7 +14,10 @@ function createMarketplaceOrdersV1Router({ Router, service, resolveAccount, orch
     res.set('Cache-Control', 'no-store');
     try {
       const accountId = await accountFor(req);
-      const orders = service || (defaultService ||= createMarketplaceOrderOrchestrator(orchestratorOptions));
+      // Sin MARKETPLACE_V1_ORDERS_ENABLED el orquestador no tiene adaptadores y responde 503.
+      const orders = service || (defaultService ||= orchestratorOptions
+        ? createMarketplaceOrderOrchestrator(orchestratorOptions)
+        : defaultMarketplaceV1Services()?.orderService || createMarketplaceOrderOrchestrator());
       const result = await orders.createOrder({ accountId: accountId ?? undefined,
         idempotencyKey: req.headers?.['idempotency-key'], body: req.body });
       return res.status(result.idempotent ? 200 : 201).json(result);

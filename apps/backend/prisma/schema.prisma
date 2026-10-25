@@ -329,6 +329,7 @@ model Restaurant {
   orders           Order[]
   driverPayouts     MarketplaceDriverPayout[]
   marketplaceMembership MarketplaceMerchantMembership?
+  marketplaceQuotes MarketplaceQuote[]
   customers        Customer[]
   suppliers        Supplier[]
   whatsappSessions WhatsappSession[]
@@ -4983,4 +4984,35 @@ model MarketplaceMerchantMembership {
 
   @@index([status, requestedAt])
   @@map("marketplace_merchant_memberships")
+}
+
+// ── Marketplace: cotizaciones v1 ────────────────────────────────────────────
+// Precio congelado en centavos (lib/marketplace-quote.js) que la orden consume
+// una sola vez (lib/marketplace-order-orchestrator.js). Pertenece a la cuenta del
+// comprador, no a un tenant: por eso usa merchantId (id del restaurante) y no la
+// columna restaurantId que la guardia de tenants exige filtrar.
+model MarketplaceQuote {
+  id                 String     @id
+  accountId          String
+  merchantId         String
+  merchant           Restaurant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  fulfillment        String // DELIVERY | PICKUP
+  deliveryAddressId  String?
+  status             String     @default("ACTIVE") // ACTIVE | CONSUMED
+  currency           String     @default("MXN") @db.Char(3)
+  itemsSnapshot      Json
+  priceSnapshot      Json
+  requestHash        String     @db.Char(64)
+  idempotencyKeyHash String     @unique @db.Char(64)
+  createdAt          DateTime   @default(now()) @db.Timestamptz(3)
+  expiresAt          DateTime   @db.Timestamptz(3)
+  // Consumo por la orden: una sola orden por cotización y por clave de la orden.
+  consumedAt         DateTime?  @db.Timestamptz(3)
+  orderId            String?    @unique
+  requestKeyHash     String?    @db.Char(64)
+
+  @@unique([accountId, requestKeyHash])
+  @@index([accountId, createdAt])
+  @@index([merchantId, createdAt])
+  @@map("marketplace_quotes")
 }

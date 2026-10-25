@@ -584,6 +584,9 @@ test('X-Guest-Id travels on quote, order and tracking with the same identity', a
   await fetchTracking('https://api.example', 'o1', TOKEN, capture, GUEST);
   assert.equal(seen.length, 3);
   for (const call of seen) assert.equal(call.headers['X-Guest-Id'], GUEST);
+  // La orden solo acepta X-Buyer-Id: viaja con el mismo id para consumir la cotización.
+  assert.equal(seen[0].headers['X-Buyer-Id'], GUEST);
+  assert.equal(seen[1].headers['X-Buyer-Id'], GUEST);
 });
 
 test('a default call sends a valid guest id, and an invalid explicit one is refused before any request', async () => {

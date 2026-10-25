@@ -2,6 +2,7 @@
 
 const { MarketplaceQuoteError, createQuoteService } = require('../lib/marketplace-quote');
 const { BuyerIdentityError, createBuyerAccountResolver } = require('../lib/marketplace-buyer-identity');
+const { defaultMarketplaceV1Services } = require('../lib/marketplace-v1-prisma');
 
 function createMarketplaceQuotesRouter({ Router, service, resolveAccount, buyerOptions } = {}) {
   const router = (Router || require('express').Router)();
@@ -12,7 +13,8 @@ function createMarketplaceQuotesRouter({ Router, service, resolveAccount, buyerO
     res.set('Cache-Control', 'no-store');
     try {
       const accountId = await accountFor(req);
-      const quotes = service || (defaultService ||= createQuoteService());
+      // Sin MARKETPLACE_V1_ORDERS_ENABLED el servicio no tiene adaptadores y responde 503.
+      const quotes = service || (defaultService ||= defaultMarketplaceV1Services()?.quoteService || createQuoteService());
       const quote = await quotes.createQuote({ accountId: accountId ?? undefined,
         idempotencyKey: req.headers?.['idempotency-key'], body: req.body });
       return res.status(201).json(quote);

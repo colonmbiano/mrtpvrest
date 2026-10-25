@@ -146,7 +146,10 @@ async function post(apiUrl: string | null, path: string, body: unknown, key: str
     res = await fetchImpl(`${apiUrl}${path}`, {
       method: 'POST',
       cache: 'no-store',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'Idempotency-Key': key, 'X-Guest-Id': guestId },
+      // La orden solo acepta X-Buyer-Id (no X-Guest-Id); ambos llevan el mismo id de
+      // invitado, así la orden consume la cotización de la misma sesión.
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'Idempotency-Key': key,
+        'X-Guest-Id': guestId, 'X-Buyer-Id': guestId },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(10000),
     });
