@@ -40,7 +40,22 @@ export type V1Order = {
   fulfillment?: Fulfillment;
   pickupPin?: string;
   deliveryPin?: string;
+  // Pago en línea: link de Mercado Pago, o pendiente si el servidor aún no lo generó
+  // (se reintenta la orden con la misma clave).
+  checkoutUrl?: string;
+  checkoutPending?: boolean;
 };
+
+const MP_HOST_RE = /^([a-z0-9-]+\.)*mercadopago\.(com|com\.mx|com\.ar|cl|com\.co|com\.br|com\.pe|com\.uy)$/;
+
+// Solo un link https de Mercado Pago sirve como página de pago.
+export function isCheckoutUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && MP_HOST_RE.test(url.hostname) && !url.username && !url.password;
+  } catch { return false; }
+}
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 // Primer motivo por el que el carrito no puede cotizarse en v1; null si todas las líneas son simples.
@@ -197,6 +212,10 @@ export async function placeOrder(apiUrl: string | null, body: unknown, key: stri
   if (json.fulfillment === 'PICKUP' || json.fulfillment === 'DELIVERY') order.fulfillment = json.fulfillment;
   if (isDeliveryPin(json.pickupPin)) order.pickupPin = json.pickupPin;
   if (isDeliveryPin(json.deliveryPin)) order.deliveryPin = json.deliveryPin;
+  if (isRecord(json.checkout)) {
+    if (isCheckoutUrl(json.checkout.url)) order.checkoutUrl = json.checkout.url;
+    else if (json.checkout.status === 'PENDING') order.checkoutPending = true;
+  }
   return order;
 }
 

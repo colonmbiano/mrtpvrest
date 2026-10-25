@@ -68,7 +68,7 @@ export default function StoreCheckout({
   const [customerEmail, setCustomerEmail] = useState('');
   const [orderNotes, setOrderNotes] = useState('');
   // Pedido v1 aceptado: abre el seguimiento en lugar de la pantalla legacy.
-  const [v1Tracking, setV1Tracking] = useState<{ orderId: string; orderNumber?: string; trackingToken: string; fulfillment?: 'PICKUP' | 'DELIVERY'; pickupPin?: string; deliveryPin?: string } | null>(null);
+  const [v1Tracking, setV1Tracking] = useState<{ orderId: string; orderNumber?: string; trackingToken: string; fulfillment?: 'PICKUP' | 'DELIVERY'; pickupPin?: string; deliveryPin?: string; checkoutUrl?: string } | null>(null);
   // Clave de idempotencia del intento actual. Un reintento con los mismos datos reusa la clave.
   const v1Attempt = useRef<{ key: string; signature: string } | null>(null);
   const [deliveryAddress, setDeliveryAddress] = useState('');
@@ -301,6 +301,12 @@ export default function StoreCheckout({
       const order = await placeOrder(apiUrl, buildOrderBody({ quoteId: quote.quoteId, fulfillment: eligibility.fulfillment,
         paymentMethod: eligibility.paymentMethod, customer, notes }), `${base}-o`);
       if ('ok' in order) { setError(order.message); return; }
+      if (eligibility.paymentMethod === 'ONLINE' && !order.checkoutUrl) {
+        // La orden existe pero falta el link de pago: se conserva la clave y el carrito,
+        // así reintentar completa el pago sin crear otra orden.
+        setError(`Tu pedido${order.orderNumber ? ` #${order.orderNumber}` : ''} quedó registrado, pero no pudimos generar el pago. Intenta de nuevo.`);
+        return;
+      }
       v1Attempt.current = null;
       clear();
       if (!order.trackingToken) {
@@ -308,7 +314,7 @@ export default function StoreCheckout({
         setError(`Tu pedido${order.orderNumber ? ` #${order.orderNumber}` : ''} quedó registrado, pero no pudimos abrir su seguimiento.`);
         return;
       }
-      setV1Tracking({ orderId: order.orderId, orderNumber: order.orderNumber, trackingToken: order.trackingToken, fulfillment: order.fulfillment, pickupPin: order.pickupPin, deliveryPin: order.deliveryPin });
+      setV1Tracking({ orderId: order.orderId, orderNumber: order.orderNumber, trackingToken: order.trackingToken, fulfillment: order.fulfillment, pickupPin: order.pickupPin, deliveryPin: order.deliveryPin, checkoutUrl: order.checkoutUrl });
     } catch {
       setError('Error de red al enviar el pedido.');
     } finally { setIsSubmitting(false); }
@@ -433,7 +439,7 @@ export default function StoreCheckout({
   if (v1Tracking) {
     return (
       <MarketplaceTrackingModal orderId={v1Tracking.orderId} orderNumber={v1Tracking.orderNumber}
-        trackingToken={v1Tracking.trackingToken} fulfillment={v1Tracking.fulfillment ?? null} pickupPin={v1Tracking.pickupPin ?? null} deliveryPin={v1Tracking.deliveryPin ?? null} apiUrl={getMarketplaceApiUrl()} primary={primary}
+        trackingToken={v1Tracking.trackingToken} fulfillment={v1Tracking.fulfillment ?? null} pickupPin={v1Tracking.pickupPin ?? null} deliveryPin={v1Tracking.deliveryPin ?? null} checkoutUrl={v1Tracking.checkoutUrl ?? null} apiUrl={getMarketplaceApiUrl()} primary={primary}
         onClose={() => { setV1Tracking(null); onClose(); }} />
     );
   }

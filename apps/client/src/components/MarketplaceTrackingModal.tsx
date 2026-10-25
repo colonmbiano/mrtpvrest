@@ -4,7 +4,7 @@
 // token en cabecera y se actualiza cada 15 s. El token y el código de entrega solo viven en
 // memoria del componente; no se guardan en el navegador.
 import { useEffect, useState } from 'react';
-import { fetchTracking, pinForFulfillment, type Fulfillment, type V1Tracking } from '../lib/marketplaceV1Checkout';
+import { fetchTracking, isCheckoutUrl, pinForFulfillment, type Fulfillment, type V1Tracking } from '../lib/marketplaceV1Checkout';
 
 const POLL_MS = 15000;
 
@@ -26,12 +26,15 @@ type Props = {
   fulfillment?: Fulfillment | null;
   pickupPin?: string | null;
   deliveryPin?: string | null;
+  // Pago en línea: link de Mercado Pago. Se abre en otra pestaña para no perder
+  // este seguimiento (el código solo vive aquí, en memoria).
+  checkoutUrl?: string | null;
   apiUrl: string | null;
   primary: string;
   onClose: () => void;
 };
 
-export default function MarketplaceTrackingModal({ orderId, orderNumber, trackingToken, fulfillment, pickupPin, deliveryPin, apiUrl, primary, onClose }: Props) {
+export default function MarketplaceTrackingModal({ orderId, orderNumber, trackingToken, fulfillment, pickupPin, deliveryPin, checkoutUrl, apiUrl, primary, onClose }: Props) {
   const [tracking, setTracking] = useState<V1Tracking | null>(null);
   const [error, setError] = useState('');
 
@@ -63,6 +66,16 @@ export default function MarketplaceTrackingModal({ orderId, orderNumber, trackin
           </div>
           <button type="button" onClick={onClose} className="rounded-lg px-3 py-1 text-sm font-bold text-gray-600 hover:bg-gray-100">Cerrar</button>
         </div>
+        {checkoutUrl && isCheckoutUrl(checkoutUrl) && (!tracking || tracking.status === 'PENDING_PAYMENT') && (
+          <section className="mb-4 rounded-2xl bg-sky-50 p-4 text-center">
+            <a href={checkoutUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-xl px-4 text-base font-extrabold text-white"
+              style={{ background: '#009ee3' }}>
+              Pagar con Mercado Pago
+            </a>
+            <p className="mt-2 text-xs text-gray-600">La tienda recibe tu pedido cuando Mercado Pago confirme el pago. Conserva esta ventana.</p>
+          </section>
+        )}
         {pin && (
           <section aria-label={`${pin.label} ${pin.code.split('').join(' ')}`} className="mb-4 rounded-2xl border-2 p-5 text-center" style={{ borderColor: primary }}>
             <p className="text-xs font-bold uppercase tracking-wide text-gray-500">{pin.label}</p>

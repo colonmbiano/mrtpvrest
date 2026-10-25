@@ -683,3 +683,29 @@ test('the mapped breakdown reconciles in cents: subtotal - discount + delivery f
   const cents = value => Math.round(Number(value) * 100);
   assert.equal(cents(quote.subtotal) - cents(quote.discount) + cents(quote.deliveryFee), cents(quote.total));
 });
+
+// ── Pago en línea v1: link de Mercado Pago en la respuesta de la orden ────────
+const { isCheckoutUrl } = await import('../src/lib/marketplaceV1Checkout.ts');
+
+test('only an https Mercado Pago link is accepted as the payment page', () => {
+  assert.equal(isCheckoutUrl('https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=1'), true);
+  assert.equal(isCheckoutUrl('https://sandbox.mercadopago.com.mx/checkout/v1/redirect?pref_id=1'), true);
+  for (const bad of ['http://www.mercadopago.com.mx/checkout', 'https://mercadopago.com.mx.evil.test/pay',
+    'https://evil.test/?mercadopago.com', 'https://user:pw@www.mercadopago.com/pay', 'javascript:alert(1)', 42, null]) {
+    assert.equal(isCheckoutUrl(bad), false, String(bad));
+  }
+});
+
+test('an online order carries its checkout link, or says it is still pending', async () => {
+  const base = { orderId: 'o1', quoteId: 'q1', status: 'PENDING_PAYMENT', paymentMethod: 'ONLINE' };
+  const ready = await placeOrder('https://api.example', {}, KEY, async () => jsonResponse({ ...base,
+    checkout: { status: 'READY', url: 'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=1' } }, 201), GUEST);
+  assert.equal(ready.checkoutUrl, 'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=1');
+  const pending = await placeOrder('https://api.example', {}, KEY, async () => jsonResponse({ ...base,
+    checkout: { status: 'PENDING', url: null } }, 201), GUEST);
+  assert.equal(pending.checkoutUrl, undefined);
+  assert.equal(pending.checkoutPending, true);
+  const forged = await placeOrder('https://api.example', {}, KEY, async () => jsonResponse({ ...base,
+    checkout: { status: 'READY', url: 'https://evil.test/pay' } }, 201), GUEST);
+  assert.equal(forged.checkoutUrl, undefined);
+});

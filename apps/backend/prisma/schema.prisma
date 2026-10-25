@@ -5016,3 +5016,22 @@ model MarketplaceQuote {
   @@index([merchantId, createdAt])
   @@map("marketplace_quotes")
 }
+
+// ── Marketplace: avisos (webhooks) de Mercado Pago ──────────────────────────
+// Una fila por entrega (data.id + x-request-id): evita procesar dos veces el
+// mismo aviso y deja auditoría del resultado (PAID, MISMATCH, UNMATCHED…).
+// Es de la plataforma, no de un tenant: no lleva restaurantId.
+model MarketplaceWebhookEvent {
+  id         String   @id
+  provider   String
+  eventId    String
+  dataId     String
+  requestId  String
+  action     String?
+  outcome    String
+  receivedAt DateTime @db.Timestamptz(3)
+
+  @@unique([provider, eventId])
+  @@index([dataId])
+  @@map("marketplace_webhook_events")
+}

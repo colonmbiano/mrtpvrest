@@ -38,11 +38,14 @@ async function createMarketplacePaymentGateway({ restaurantId, prismaClient, req
     collectorId: String(config.collectorId),
     commissionRate: config.marketplaceCommissionRate ?? 0.05,
     commissionFixed: config.marketplaceCommissionFixed ?? 0,
-    async createPreference({ orderId, items, marketplaceFee, idempotencyKey }) {
+    // notificationUrl (opcional) lo arma el servidor, p. ej. el webhook v1 con el comercio
+    // en la URL; si no viene se usa la del comercio. Nunca proviene del comprador.
+    async createPreference({ orderId, items, marketplaceFee, idempotencyKey, notificationUrl }) {
+      const notifyTo = notificationUrl || config.marketplaceNotificationUrl;
       const result = await call('/checkout/preferences', { method: 'POST',
         headers: { 'X-Idempotency-Key': idempotencyKey },
         body: JSON.stringify({ external_reference: orderId, items, marketplace_fee: marketplaceFee,
-          ...(config.marketplaceNotificationUrl ? { notification_url: config.marketplaceNotificationUrl } : {}) }) });
+          ...(notifyTo ? { notification_url: notifyTo } : {}) }) });
       const initPoint = integration.mode === 'sandbox' ? result.sandbox_init_point : result.init_point;
       let url;
       try { url = new URL(initPoint); } catch { throw new MarketplaceGatewayError(); }

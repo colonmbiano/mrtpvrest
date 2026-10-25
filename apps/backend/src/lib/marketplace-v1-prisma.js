@@ -7,23 +7,34 @@
 // salen del menú del TPV con la misma ventana de promoción que el catálogo.
 //
 // Primera entrega: solo RECOGER EN TIENDA. La entrega a domicilio necesita una
-// libreta de direcciones del comprador (addresses.resolve aún devuelve null) y el
-// pago en línea, la conexión con Mercado Pago (se rechaza con 409).
+// libreta de direcciones del comprador (addresses.resolve aún devuelve null).
 //
 // Apagado por defecto: MARKETPLACE_V1_ORDERS_ENABLED=true lo activa. Además hace
 // falta MARKETPLACE_COMMISSION_BPS (0–10000; sin ella la cotización responde 503)
 // y MARKETPLACE_PIN_SECRET (32+ bytes; sin ella la orden responde 503).
+// Pago en línea (lib/marketplace-v1-payments.js), aparte: MARKETPLACE_V1_ONLINE_PAYMENTS_ENABLED=true
+// y MARKETPLACE_MP_NOTIFICATION_URL (https, el webhook v1); sin ellos ONLINE se rechaza (409).
 
 const { computeOpenState } = require('../utils/storeHours');
 const { activePromoPrice, APPROVED_MERCHANT } = require('./marketplace-catalog');
 const { createQuoteService } = require('./marketplace-quote');
 const { createMarketplaceOrderOrchestrator, MarketplaceOrderOrchestratorError } = require('./marketplace-order-orchestrator');
+const { createMarketplaceV1Payments } = require('./marketplace-v1-payments');
 const { MAX_CENTS } = require('./marketplace-order-money');
+
+function httpsUrl(value) {
+  try {
+    const url = new URL(String(value ?? ''));
+    return url.protocol === 'https:' && !url.username && !url.password && !url.hash ? url.href : null;
+  } catch { return null; }
+}
 
 function marketplaceV1Config(env = process.env) {
   const raw = String(env.MARKETPLACE_COMMISSION_BPS ?? '').trim();
   const bps = /^\d{1,5}$/.test(raw) ? Number(raw) : null;
-  return { enabled: env.MARKETPLACE_V1_ORDERS_ENABLED === 'true', commissionBps: bps !== null && bps <= 10000 ? bps : null };
+  const notificationUrl = httpsUrl(env.MARKETPLACE_MP_NOTIFICATION_URL);
+  return { enabled: env.MARKETPLACE_V1_ORDERS_ENABLED === 'true', commissionBps: bps !== null && bps <= 10000 ? bps : null,
+    onlinePayments: env.MARKETPLACE_V1_ONLINE_PAYMENTS_ENABLED === 'true' && notificationUrl !== null, notificationUrl };
 }
 
 // Pesos (Float del TPV) → centavos enteros; null si no es un monto válido.
@@ -149,9 +160,14 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, now = () =>
   return { catalog, addresses, quoteStore, merchants };
 }
 
-function createMarketplaceV1Services({ prisma, env = process.env, now = () => new Date() } = {}) {
+function createMarketplaceV1Services({ prisma, env = process.env, now = () => new Date(), getGateway, logger } = {}) {
   const config = marketplaceV1Config(env);
   if (!config.enabled) return null;
+  const payments = config.onlinePayments
+    ? createMarketplaceV1Payments({ prisma, notificationUrl: config.notificationUrl, now, logger,
+      ...(getGateway ? { getGateway } : {}) })
+    : null;
+  const onlineUnavailable = message => new MarketplaceOrderOrchestratorError('ONLINE_PAYMENT_UNAVAILABLE', message, 409);
   const adapters = createMarketplaceV1Adapters({ prisma, commissionBps: config.commissionBps, now });
   // La clave de los PIN sale del mismo env que la bandera; sin ella la orden responde 503.
   const activePinKeyId = env.MARKETPLACE_PIN_KEY_ID || 'v1';
@@ -161,14 +177,25 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
     quoteService: createQuoteService({ ...adapters, now }),
     orderService: {
       async createOrder(args) {
-        // Sin Mercado Pago conectado, un pedido en línea quedaría sin pagar para siempre.
         if (args?.body?.paymentMethod === 'ONLINE') {
-          throw new MarketplaceOrderOrchestratorError('ONLINE_PAYMENT_UNAVAILABLE',
-            'El pago en línea aún no está disponible en el marketplace; elige pagar en efectivo', 409);
+          // Sin Mercado Pago conectado, un pedido en línea quedaría sin pagar para siempre.
+          if (!payments) throw onlineUnavailable('El pago en línea aún no está disponible en el marketplace; elige pagar en efectivo');
+          // Antes de crear la orden: el comercio de la cotización debe tener Mercado Pago.
+          const quote = typeof args.accountId === 'string' && typeof args.body.quoteId === 'string'
+            ? await prisma.marketplaceQuote.findFirst({ where: { id: args.body.quoteId, accountId: args.accountId },
+              select: { merchantId: true } })
+            : null;
+          if (quote && !(await payments.acceptsOnline(quote.merchantId))) {
+            throw onlineUnavailable('Este comercio aún no acepta pago en línea; elige pagar en efectivo');
+          }
         }
-        return orchestrator.createOrder(args);
+        const result = await orchestrator.createOrder(args);
+        if (result.paymentMethod !== 'ONLINE' || !payments) return result;
+        return { ...result, checkout: await payments.ensureCheckout({ orderId: result.orderId, restaurantId: result.merchantId }) };
       },
     },
+    // Webhook de Mercado Pago de la orden v1 (null sin pago en línea: el router responde 503).
+    webhooks: payments ? payments.webhooks : null,
   };
 }
 

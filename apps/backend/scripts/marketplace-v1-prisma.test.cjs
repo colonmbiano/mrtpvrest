@@ -44,9 +44,15 @@ const item = (extra = {}) => ({ id: 'm1', restaurantId: 'r1', name: 'Taco', pric
   category: { isActive: true, restaurantId: 'r1' }, variants: [], modifierGroups: [], ...extra });
 
 test('apagado por defecto; la comisión se lee del entorno y se valida', () => {
-  assert.deepEqual(marketplaceV1Config({}), { enabled: false, commissionBps: null });
+  assert.deepEqual(marketplaceV1Config({}), { enabled: false, commissionBps: null, onlinePayments: false, notificationUrl: null });
   assert.deepEqual(marketplaceV1Config({ MARKETPLACE_V1_ORDERS_ENABLED: 'true', MARKETPLACE_COMMISSION_BPS: '1500' }),
-    { enabled: true, commissionBps: 1500 });
+    { enabled: true, commissionBps: 1500, onlinePayments: false, notificationUrl: null });
+  // El pago en línea exige su propia bandera y una URL https del webhook.
+  const hook = 'https://api.example.test/api/marketplace/v1/webhooks/mercadopago';
+  assert.equal(marketplaceV1Config({ MARKETPLACE_V1_ONLINE_PAYMENTS_ENABLED: 'true', MARKETPLACE_MP_NOTIFICATION_URL: hook }).onlinePayments, true);
+  assert.equal(marketplaceV1Config({ MARKETPLACE_V1_ONLINE_PAYMENTS_ENABLED: 'true' }).onlinePayments, false);
+  assert.equal(marketplaceV1Config({ MARKETPLACE_V1_ONLINE_PAYMENTS_ENABLED: 'true',
+    MARKETPLACE_MP_NOTIFICATION_URL: 'http://api.example.test/hook' }).onlinePayments, false);
   for (const bad of ['10001', '-5', '15%', '1.5', '']) {
     assert.equal(marketplaceV1Config({ MARKETPLACE_COMMISSION_BPS: bad }).commissionBps, null, bad);
   }
