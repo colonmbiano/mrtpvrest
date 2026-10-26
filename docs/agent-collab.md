@@ -1,5 +1,12 @@
 # Flujo de colaboracion entre agentes
 
+## Marketplace — estado vigente del 25/oct/2026
+
+Para `feature/marketplace-hibrido`, consultar primero [el estado consolidado](marketplace/estado-y-modelo-tpv-marketplace.md). La copia local es compartida por Codex y Claude: registrar responsable y rutas antes de editar; serializar archivos compartidos y no incluir cambios ajenos en commits globales. Los ejemplos siguientes no autorizan builds, despliegues ni comandos contra producción.
+
+Las entregas deben separar implementación, fixtures/mocks, base desechable, aceptación de navegador y despliegue. El verificador ampliado cubre 55 suites enumeradas; su resultado no implica que el marketplace esté listo para producción.
+
+
 Usa esto cuando Codex y Antigravity trabajen en el mismo repo.
 
 ## Paso 1: Revisar el repo

@@ -10,7 +10,7 @@
  * Uso: node scripts/test-marketplace-all.mjs
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -76,6 +76,27 @@ const TESTS = [
   // ── INTEGRACIÓN MAESTRA & AISLAMIENTO ──
   { path: 'apps/backend/scripts/marketplace-pilot-e2e.test.mjs', name: 'Backend: Suite E2E Maestra del Piloto' },
   { path: 'tests/marketplace/api-url-isolation.test.mjs', name: 'Infra: Aislamiento Local & Loopback URL' },
+
+  // Integraciones incorporadas después del piloto inicial. Solo fixtures/mocks.
+  { path: 'apps/client/scripts/marketplace-first-order.test.mjs', name: 'Client: Pedido de demostración' },
+  { path: 'apps/client/scripts/marketplace-multi-order.test.mjs', name: 'Client: Carrito multitienda de demostración' },
+  { path: 'apps/client/scripts/marketplace-registration.test.mjs', name: 'Client: Registro de perfiles' },
+  { path: 'apps/delivery/scripts/store-delivery-pin.test.mjs', name: 'Delivery: PIN y cobro de reparto propio' },
+  { path: 'apps/backend/scripts/marketplace-identity.test.cjs', name: 'Backend: Identidad de compradores y couriers' },
+  { path: 'apps/backend/scripts/marketplace-multistop.test.cjs', name: 'Backend: Rutas multitienda de staging' },
+  { path: 'apps/backend/scripts/marketplace-merchant-membership.test.cjs', name: 'Backend: Aprobación de comercios' },
+  { path: 'apps/backend/scripts/marketplace-v1-prisma.test.cjs', name: 'Backend: Adaptadores Prisma v1 con fixtures' },
+  { path: 'apps/backend/scripts/marketplace-v1-payments.test.cjs', name: 'Backend: Pagos v1 con pasarela simulada' },
+  { path: 'apps/backend/scripts/marketplace-buyer-addresses.test.cjs', name: 'Backend: Direcciones del comprador' },
+  { path: 'apps/backend/scripts/store-delivery-pin.test.cjs', name: 'Backend: PIN de entrega propia' },
+  ...[
+    'delivery-marketplace-store.routes.test.js',
+    'delivery-pin.routes.test.js',
+    'delivery-pin.whatsapp.test.js',
+    'marketplace-membership.routes.test.js',
+    'marketplace-v1-tracking.routes.test.js',
+    'orders.marketplace-acceptance.test.js',
+  ].map(file => ({ path: `apps/backend/__tests__/${file}`, name: `Jest: ${file}`, runner: 'jest' })),
 ];
 
 const SCHEMA_PATHS = [
@@ -89,18 +110,21 @@ function fileHash(relPath) {
   return createHash('sha256').update(readFileSync(full)).digest('hex');
 }
 
-function runSuite(relPath) {
-  const full = resolve(ROOT, relPath);
+function runSuite(suite) {
+  const full = resolve(ROOT, suite.path);
   try {
-    const stdout = execSync(`node "${full}"`, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-    let count = 0;
-    const passMatch = stdout.match(/ℹ pass (\d+)/);
-    if (passMatch) {
-      count = parseInt(passMatch[1], 10);
-    } else {
-      const checks = (stdout.match(/✔/g) || []).length;
-      count = checks > 0 ? checks : 1;
-    }
+    const args = suite.runner === 'jest'
+      ? [resolve(ROOT, 'apps/backend/node_modules/jest/bin/jest.js'), '--runInBand', '--no-cache', '--json', '--runTestsByPath', full]
+      : [full];
+    const stdout = execFileSync(process.execPath, args, {
+      cwd: suite.runner === 'jest' ? resolve(ROOT, 'apps/backend') : ROOT,
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000,
+    });
+    // No inventar una prueba cuando un script no publica un recuento.
+    const passMatch = stdout.match(/(?:ℹ|#) pass (\d+)/);
+    const count = suite.runner === 'jest'
+      ? JSON.parse(stdout).numPassedTests
+      : passMatch ? Number(passMatch[1]) : null;
     return { success: true, count, output: stdout };
   } catch (err) {
     return { success: false, count: 0, error: err.message, output: (err.stdout || '') + (err.stderr || '') };
@@ -151,27 +175,30 @@ async function main() {
   }
 
   // ── FASE 3: Ejecución de las Suites ──
-  console.log(`\n[3/4] Ejecutando ${TESTS.length} suites de pruebas offline (0 red, ACID in-memory)...\n`);
+  console.log(`\n[3/4] Ejecutando ${TESTS.length} suites locales con fixtures/mocks...\n`);
   let passedSuites = 0;
   let failedSuites = 0;
   let totalTests = 0;
+  let uncountedSuites = 0;
   const startTime = Date.now();
 
   for (let i = 0; i < TESTS.length; i++) {
     const t = TESTS[i];
     const prefix = `[${String(i + 1).padStart(2, '0')}/${TESTS.length}]`;
     const tStart = Date.now();
-    const result = runSuite(t.path);
+    const result = runSuite(t);
     const duration = Date.now() - tStart;
 
     if (result.success) {
       passedSuites++;
-      totalTests += result.count;
-      console.log(`  ✔ ${prefix} ${t.name.padEnd(52)} (${String(result.count).padStart(2)} tests) [${duration}ms]`);
+      if (result.count === null) uncountedSuites++;
+      else totalTests += result.count;
+      console.log(`  ✔ ${prefix} ${t.name.padEnd(52)} (${result.count === null ? 'sin recuento' : result.count + ' tests'}) [${duration}ms]`);
     } else {
       failedSuites++;
       console.error(`  ✖ ${prefix} ${t.name.padEnd(52)} FALLÓ [${duration}ms]`);
       console.error(`     ${result.error?.split('\n')[0]}`);
+      console.error(result.output.slice(-6000));
     }
   }
 
@@ -182,12 +209,13 @@ async function main() {
   console.log('  SCORECARD FINAL DE CALIDAD Y REGRESIÓN');
   console.log('='.repeat(80));
   console.log(`  Total Suites Ejecutadas: ${TESTS.length}`);
-  console.log(`  Suites Aprobadas:        ${passedSuites} / ${TESTS.length} (100% PASS)`);
-  console.log(`  Total Tests Pasados:     ${totalTests}`);
+  console.log(`  Suites Aprobadas:        ${passedSuites} / ${TESTS.length}`);
+  console.log(`  Tests con recuento:      ${totalTests}`);
+  console.log(`  Suites sin recuento:     ${uncountedSuites}`);
   console.log(`  Suites Fallidas:         ${failedSuites}`);
   console.log(`  Tiempo Total:            ${elapsed}s`);
   console.log(`  Estado de Schemas:       BYTE-IDENTICAL (SHA-256 verificado)`);
-  console.log(`  Modo de Ejecución:       STRICT OFFLINE (Aislamiento verificado)`);
+  console.log(`  Alcance:                fixtures/mocks; no certifica aislamiento de red ni producción`);
   console.log('='.repeat(80));
 
   if (failedSuites > 0) {
@@ -195,7 +223,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('\n✨ VALIDACIÓN EXITOSA: Todos los módulos del Marketplace están completos y operativos.\n');
+  console.log('\nVALIDACIÓN LOCAL EXITOSA: Pasan las suites incluidas. No certifica operación real, despliegue ni pruebas de navegador.\n');
   process.exit(0);
 }
 

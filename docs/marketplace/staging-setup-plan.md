@@ -1,5 +1,7 @@
 # MRTPVREST Marketplace - Plan de Setup Staging Cloud
 
+> **Documento histórico. Actualización del 25/oct/2026:** consultar [el estado consolidado](estado-y-modelo-tpv-marketplace.md). Los resultados, hashes, pendientes y afirmaciones de completitud que siguen corresponden a la fecha original. No acreditan operación productiva ni autorización para ejecutar el plan de despliegue. La verificación vigente es 55/55 suites locales y tipado limpio en las cuatro aplicaciones revisadas.
+
 **Fecha:** 2026-10-23  
 **Status:** Plan Ejecutable  
 **Opción:** Cloud Completo (Railway + Vercel + Supabase)
@@ -351,4 +353,3 @@ watch -n 300 'curl -s https://mrtpvrest-marketplace-backend-staging.railway.app/
 
 **Tiempo estimado:** 30-45 minutos  
 **Costo estimado:** ~$20-40/mes (PostgreSQL + Redis + Node compute en Railway)
-

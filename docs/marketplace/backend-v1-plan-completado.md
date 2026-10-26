@@ -1,8 +1,10 @@
-# MRTPVREST Marketplace — Certificación de Backend v1 y Despacho Híbrido
+# MRTPVREST Marketplace — Registro histórico de Backend v1 y Despacho Híbrido
+
+> **Documento histórico. Actualización del 25/oct/2026:** consultar [el estado consolidado](estado-y-modelo-tpv-marketplace.md). Los resultados, hashes, pendientes y afirmaciones de completitud que siguen corresponden a la fecha original. No acreditan operación productiva ni autorización para ejecutar el plan de despliegue. La verificación vigente es 55/55 suites locales y tipado limpio en las cuatro aplicaciones revisadas.
 
 **Fecha:** 23 de Octubre de 2026 (Zona Horaria: America/Mexico_City)  
 **Rama:** `feature/marketplace-hibrido`  
-**Estado:** ✅ **100% COMPLETADO (38/38 SUITES · 1,071 PRUEBAS OFFLINE PASANDO)**  
+**Estado histórico:** contratos y servicios probados con fixtures el 23/oct; no certificación de operación productiva. Los recuentos originales se conservan abajo como registro.
 
 ---
 
@@ -99,4 +101,3 @@ Cada invariante de seguridad, concurrencia y dinero exigido por el Checklist de 
 | 10 | **Operación offline de repartidor** | Sincronización diferida idempotente con resolución explícita de conflictos | `delivery-dispatch.test.mjs` | ✅ PASS |
 | 11 | **Cancelaciones y compensación** | Cancelación antes/después de pickup revierte asientos contables | `marketplace-settlements-v1.test.cjs` | ✅ PASS |
 | 12 | **Partida doble y precisión exacta** | Asientos contables (`DEBIT = CREDIT`) en centavos enteros sin redondeos Float | `marketplace-ledger.test.cjs` + `marketplace-settlements-v1.test.cjs` | ✅ PASS |
-

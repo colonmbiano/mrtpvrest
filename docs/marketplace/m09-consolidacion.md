@@ -1,5 +1,7 @@
 # M09: consolidación local del marketplace
 
+> **Documento histórico. Actualización del 25/oct/2026:** consultar [el estado consolidado](estado-y-modelo-tpv-marketplace.md). Los resultados, hashes, pendientes y afirmaciones de completitud que siguen corresponden a la fecha original. No acreditan operación productiva ni autorización para ejecutar el plan de despliegue. La verificación vigente es 55/55 suites locales y tipado limpio en las cuatro aplicaciones revisadas.
+
 **Fecha:** 22 de octubre de 2026
 **Responsable:** Claude Code (Codex de Orca sin cuota y runtime Orca detenido; ver registro)
 **Rama:** `feature/marketplace-hibrido` en `C:/Users/colon/AndroidStudioProjects/mrtpvrest-marketplace`

@@ -1,97 +1,90 @@
-# MRTPVREST Marketplace: estado actual y modelo TPV + Marketplace
+# MRTPVREST Marketplace: estado actual y pendientes
 
-**Fecha:** 23 de octubre de 2026
-**Rama:** `feature/marketplace-hibrido`
-**Resumen:** el marketplace **todavía no es operativo**. Hay mucho construido y probado, pero falta la parte que permite vender de verdad. El TPV se mantiene como producto base; el marketplace será un canal de venta adicional, opcional por negocio.
+**Corte:** 25 de octubre de 2026 (America/Mexico_City).
+**Rama:** `feature/marketplace-hibrido`.
+**Base funcional revisada:** `195e040d`.
+**Estado:** integración local avanzada; todavía no certificada para operación productiva.
 
----
+Este es el punto de entrada vigente. Sustituye los resúmenes de preparación del 22/oct y la declaración de “100% completado” del informe backend del 23/oct. Los informes anteriores conservan evidencia histórica, no el estado de hoy.
 
-## 1. ¿Ya es operativo?
+## Modelo del producto
 
-No todavía.
+El TPV sigue siendo el producto base. Marketplace es un canal opcional por negocio: comparte menú, restaurante, sucursal, cocina y pedidos con el TPV. Las órdenes llevan `source: MARKETPLACE`. El módulo y la aprobación del comercio controlan su presencia en el directorio.
 
-### Lo que ya funciona (en local y en la preview de Vercel)
+La primera operación integrada usa recogida en tienda o entrega por repartidores propios. La red compartida automática es una etapa posterior. El carrito multitienda de demostración sigue siendo un flujo de prueba; no acredita un cobro productivo multicomercio.
 
-- **Vitrina del marketplace:** catálogo, tiendas y carrito multi-tienda.
-- **Checkout de prueba** con los menús públicos reales de Master Burguer's y Tokki Boba. No cobra, no envía nada al TPV ni a cocina y guarda las órdenes solo en archivos locales (`.marketplace-local/pedidos-prueba`).
-- **App del repartidor rediseñada:** hub con "Mi ruta" y "Marketplace".
-- **PIN de entrega para pedidos propios a domicilio:** el servidor lo genera y lo verifica, el cliente lo ve en "Mis pedidos" y por WhatsApp, y el repartidor lo pide antes de entregar. Está apagado por defecto (`STORE_DELIVERY_PIN_MODE=off`).
-- **Migración de base de datos que faltaba:** generada y probada en una base PostgreSQL local desechable. Todavía no se aplica en ninguna base real.
-- **Pruebas:** pasan todas las suites del backend, jest (650/650), el e2e del piloto, 6 suites del cliente y 5 de la app del repartidor; `tsc` pasa en el cliente y en la app del repartidor.
+## Cambios consolidados
 
-### Lo que falta para que sea real
+| Área | Implementado | Límite actual / siguiente cierre |
+| --- | --- | --- |
+| Catálogo y comprador | Tiendas, productos, filtros, navegación, carrito y experiencia de prueba | El adaptador real v1 admite productos simples; variantes, modificadores obligatorios, combos y venta por peso no están integrados en esa compra |
+| TPV y KDS | Recepción, aceptación/rechazo y etiqueta de Marketplace; pedidos pendientes de pago separados de los que requieren aceptación | Validar el recorrido visual completo con todas las aplicaciones juntas |
+| Comercios | Módulo por negocio, solicitud, aprobación y directorio aprobado | Aplicar migraciones/configuración en el entorno objetivo antes de habilitar |
+| Cotización y orden v1 | Adaptadores Prisma, precios del servidor, snapshots, consumo de cotización e idempotencia | Activación explícita; falta certificar el entorno de operación |
+| Pago en línea | Preferencia Mercado Pago, firma/deduplicación del webhook, captura contable y paso a pendiente de aceptación | Pasarela simulada en las pruebas; pendiente validación con cuenta sandbox y webhook del entorno objetivo |
+| Direcciones y envío | Libreta del comprador, ubicación seleccionada y tarifa de la tienda FLAT/DISTANCE/ZONES | Pendiente comprobación visual de zonas, cobertura y direcciones |
+| Repartidores propios | Bolsa, toma/asignación, entrega con PIN del comprador, protección de intentos, conservación de pago online y efectivo en el corte | Integración local terminada el 25/oct; pendiente aceptación conjunta comprador/TPV/repartidor |
+| Seguimiento | Estado real de la orden y token del comprador | El adaptador actual no entrega GPS: presencia devuelve null y la consulta de sucursal no obtiene coordenadas |
+| Red compartida y rutas multitienda | Motor híbrido, concurrencia, fallback, afiliaciones y pruebas de rutas de staging | El router de despacho utiliza mapas en memoria; falta persistencia y alimentación desde órdenes reales |
+| Panel Ops | Interfaz, permisos, listado y reasignación auditada implementados y probados con fixtures | Montado sin stores transaccionales de operación; no certificarlo como funcional con datos reales |
+| Liquidaciones/reembolsos | Contratos, lógica de partida doble y pruebas | Faltan adaptadores de operación para los puertos del servicio y validación de liquidación/reembolso real |
 
-| Área | Estado hoy | Detalle |
-|---|---|---|
-| **Comprar** | No funciona | Cotización y orden v1 están programadas pero sin adaptadores a la base de datos: responden 503 en cualquier entorno real. |
-| **Cobrar** | No funciona | La conexión con Mercado Pago (`marketplace-payments.routes.js`) no está montada en el backend. |
-| **Repartir** | No funciona | El despachador híbrido vive en memoria y nadie lo alimenta; todo repartidor recibe `COURIER_FORBIDDEN`. Las órdenes del marketplace no llegan al despachador. |
-| **Recibir en el TPV** | No funciona | El TPV solo lista los estados `PENDING`, `OPEN`, `CONFIRMED`, `PREPARING`, `READY` y `PACKING`; los pedidos del marketplace entran como `PENDING_MERCHANT` o `PENDING_PAYMENT`. Ni el TPV, ni el KDS, ni el admin tienen código para pedidos del marketplace. |
-| **Dar de alta comercios** | Manual | Los comercios se publican con una lista fija en `MARKETPLACE_STORE_SLUGS`. Falta la aprobación de comercios para el directorio. |
-| **Cuentas globales** | Solo staging | Las cuentas de comprador y repartidor del marketplace solo arrancan en un staging aislado. |
-| **Publicar** | Bloqueado | Nada está desplegado. Next.js 16.2.9 tiene avisos críticos de seguridad y la migración nueva no está aplicada en ninguna base real. |
+## Historial reciente verificable
 
-> El documento `backend-v1-plan-completado.md` dice "100% COMPLETADO". Se refiere a contratos y servicios con pruebas, no a que la API funcione con la base de datos real.
+| Commit | Entrega |
+| --- | --- |
+| `4fb33d98` | Pedidos Marketplace en TPV y KDS |
+| `90ef55c5` | Módulo por negocio y aprobación de comercios |
+| `dc20efdc` | Cotización y orden v1 conectadas a Prisma, inicialmente recogida |
+| `d43556d7` | Pago online y webhook v1 |
+| `b7ae7564` | Seguimiento con estado real |
+| `dc365be2` | Direcciones y tarifa de entrega |
+| `195e040d` | Reparto propio con PIN del comprador |
 
----
+Al inicio de esta consolidación había 13 commits por delante de la referencia local `origin/feature/marketplace-hibrido`. No se consultó de nuevo el remoto; ese número no certifica su estado actual. La consolidación documental se guarda después de esta base.
 
-## 2. Cómo encajan el TPV y el marketplace
+## Verificación repetida el 25/oct
 
-El diseño actual ya sigue este modelo: **el TPV es el producto base y el marketplace es un canal de venta más**, igual que la tienda en línea y el bot de WhatsApp.
+- `node scripts/test-marketplace-all.mjs`: **55/55 suites aprobadas**, **1.218 pruebas con recuento explícito**, más **5 scripts aprobados sin recuento normalizado**, cero fallos.
+- El verificador incluye ahora 17 suites omitidas: adaptadores v1, pagos, direcciones, aprobación, identidad, PIN propio, demostración multitienda y rutas HTTP con Prisma/pasarela simulados.
+- El contador dejó de inventar una prueba para cada script sin resumen. Los totales anteriores no son directamente comparables.
+- `tsc --noEmit --incremental false`: **sin errores en client, delivery, admin y saas**. El bloqueo histórico de lectura de los tipos React no se reprodujo.
+- Prueba de recepción web del TPV (`src/__tests__/webOrders.test.ts`): **3/3 aprobadas**, ejecutadas por separado; no incluidas en el total del verificador.
+- Ambos schemas Prisma son idénticos: SHA-256 `937501d87d6b9d5b3b651db8833ad92be52c76585d10cb9c707fbd449567441c`.
+- Hay **98 directorios de migración**. Su existencia no acredita aplicación en ninguna base.
+- Claude dejó registrados ensayos E2E con PostgreSQL desechable para los pasos 3a–3e. Esta consolidación repitió las pruebas locales con fixtures/mocks, no esos ensayos de base de datos ni los recorridos de navegador.
+- El verificador valida únicamente las suites enumeradas. No ejecuta todo el monorepo ni certifica bloqueo de red, disponibilidad de servicios, navegador, despliegue o producción.
 
-- **Cada comercio del marketplace es un negocio del SaaS:** su restaurante y su sucursal (`restaurantId` + `locationId`).
-- **Un pedido del marketplace es un pedido normal del restaurante**, marcado con `source: 'MARKETPLACE'`, en la misma tabla `orders`.
-- **El menú se administra una sola vez, en el TPV.** El marketplace lee ese mismo menú.
-- Quien no quiera el marketplace sigue usando el TPV exactamente como hoy.
+## Activación y entornos
 
-### Opciones para los negocios
+Las rutas v1 siguen detrás de banderas explícitas: `MARKETPLACE_V1_ORDERS_ENABLED`, `MARKETPLACE_V1_DELIVERY_ENABLED`, `MARKETPLACE_V1_ONLINE_PAYMENTS_ENABLED`; la pasarela requiere además `MARKETPLACE_PAYMENT_NETWORK_ENABLED`. El directorio aprobado usa `MARKETPLACE_DIRECTORY_APPROVED`. Esto describe el código, no los valores efectivos de los entornos.
 
-| Plan | Qué incluye |
-|---|---|
-| **Solo TPV** (como hoy) | Caja, cocina, tienda propia, WhatsApp y repartidores propios. Nada cambia para quien no quiera el marketplace. |
-| **TPV + Marketplace** | Lo mismo, más aparecer en el marketplace. Los pedidos llegan al mismo TPV y KDS, y se cobra una comisión por pedido. |
-| *Solo marketplace* (opcional, más adelante) | Para negocios sin caja: una versión reducida del TPV que solo recibe pedidos y administra el menú. |
+El registro local documenta autorizaciones posteriores a la preparación inicial para instalar, arrancar en loopback, hacer commits locales y probar en PostgreSQL desechable. No equivalen a autorización para cambiar producción. En esta consolidación no se instalaron paquetes, cambiaron entornos, arrancaron aplicaciones, ejecutaron migraciones ni desplegaron recursos.
 
-**Recomendación:** empezar con **TPV + Marketplace**, porque reutiliza toda la operación que ya funciona (TPV, KDS, caja, repartidores propios). El plan "solo marketplace" puede venir después como una versión reducida del mismo TPV, no como una app aparte.
+La protección de push sigue configurada. Las migraciones de estas integraciones no están acreditadas como aplicadas en producción. El estado remoto de previews y servicios debe comprobarse antes de publicar; no se infiere de una rama ni de una captura histórica.
 
-### Cómo viajaría un pedido
+## Pendientes ordenados
 
-1. El cliente compra en el marketplace (cotización con precios del servidor y orden con `Idempotency-Key`).
-2. El pedido aparece en el TPV y el KDS del comercio con la etiqueta **"Marketplace"** y el estado **"por aceptar"**.
-3. El comercio lo acepta o lo rechaza.
-4. Cocina lo prepara como cualquier otro pedido.
-5. Lo entrega un **repartidor propio** (la app actual) o uno de la **red compartida** (despacho híbrido), siempre con PIN de recogida y PIN de entrega.
-6. La **liquidación** descuenta la comisión y le paga al comercio (libro contable de doble partida ya programado).
+1. **Cerrar aceptación del flujo con reparto propio.** Un comercio aprobado, compra de productos compatibles, orden en TPV/KDS, aceptación, preparación, asignación, PIN y entrega. Cubrir efectivo y pago online simulado, reintentos, rechazo, PIN incorrecto y aislamiento entre comercios.
+2. **Completar persistencia del despacho compartido y Ops.** Guardar tareas/ofertas/asignaciones, conectar órdenes y couriers reales, recuperar estado tras reinicio y verificar concurrencia en PostgreSQL. Conservar separada la ruta propia MANUAL que ya funciona en código.
+3. **Conectar GPS real y alta de cuentas para el entorno elegido.** Coordenadas de sucursal, presencia del repartidor, asociación con la tarea, privacidad y caducidad; revisar la identidad de staging antes de habilitar cuentas reales.
+4. **Integrar liquidaciones y reembolsos.** Stores transaccionales, permisos por comercio, conciliación, reintentos y validación con pasarela sandbox; comprobar recuperación de eventos pendientes.
+5. **Cerrar revisión de seguridad y compatibilidad.** Revalidar dependencias y avisos actuales, secretos propios del marketplace, separación de PIN de recogida/entrega y límites de intentos en todos los caminos. El bloqueo del PIN de reparto propio está implementado; no extender esa conclusión a toda la red compartida.
+6. **Preparar publicación controlada.** Verificar destinos, variables y automatizaciones remotas; plan de migración y reversión; ejecutar aceptación en staging persistente y conservar evidencia. Publicar requiere una instrucción explícita.
+7. **Confirmar configuración comercial antes de habilitar ventas.** Comisión efectiva, responsables de aprobación, alcance de red compartida y reglas de liquidación. El código configurable no confirma una decisión de negocio.
 
----
+## Coordinación y entrega entre agentes
 
-## 3. Qué construir, en orden
+- Codex dejó implementados contratos/backend, permisos y paneles; Claude completó las integraciones TPV/Prisma y reparto propio. El paso 3e figura como terminado en `195e040d`.
+- Esta consolidación actualiza documentación y verificador; no asigna una nueva funcionalidad ni envía tareas a otros chats.
+- La copia es compartida: registrar archivos y responsable antes de cada tarea; trabajar en secuencia cuando se solapen. No hacer commits globales que absorban trabajo ajeno en curso.
+- Registrar por separado: implementado, probado con mocks, probado con base desechable, aceptado en navegador y desplegado.
+- La cola M01–M09 y los IDs de Orca pertenecen al arranque histórico. No prueban que hoy exista un coordinador o trabajador activo.
 
-1. **El TPV y el KDS reciben los pedidos del marketplace.** Mostrar `source: 'MARKETPLACE'` y los estados `PENDING_MERCHANT` / `PENDING_PAYMENT`, con botones de aceptar y rechazar.
-2. **Módulo "Marketplace" por negocio.** Activarlo con el sistema de módulos que ya existe (`tenant_modules`) y agregar la aprobación de comercios para el directorio (pendiente: `MarketplaceMerchantMembership` con `PENDING` / `APPROVED` / `SUSPENDED`).
-3. **Conectar cotización, orden y pago a la base de datos real:** adaptadores Prisma para los servicios v1 y montar la conexión con Mercado Pago.
-4. **Despachador con persistencia,** en lugar del almacén en memoria, alimentado por las órdenes del marketplace.
-5. **Panel de liquidaciones para el comercio:** comisiones, pagos y reembolsos.
+## Referencias
 
----
-
-## 4. Bloqueos antes de cualquier despliegue
-
-Vienen de la auditoría general del 23/oct:
-
-- [x] **Migración que faltaba:** `packages/database/prisma/migrations/20261023210000_reconcile_marketplace_branch_drift/` (commit local `e9c63b28`). Probada en una base local desechable: las 94 migraciones aplican desde cero y es idempotente. **Falta aplicarla** en un entorno real, en una ventana de poco tráfico (crea índices únicos en `orders`, `locations` y `menu_items`).
-- [x] **Protecciones de push restauradas:** `push.default=nothing`, `pushurl` a `127.0.0.1:9` y hook `pre-push`. Todo push falla hasta que el usuario lo autorice.
-- [ ] **Actualizar Next.js a 16.4.1 o superior** (avisos críticos de ejecución remota) y axios a 1.20 o superior, en todo el monorepo.
-- [ ] **Ocultar la pestaña Marketplace de la app del repartidor en producción** hasta que el despachador guarde sus datos.
-- [ ] **Endurecer los PIN:** límite de intentos, HMAC en lugar de SHA-256 sin sal, y no darle al comprador el PIN de recogida.
-- [ ] **Secretos JWT propios del marketplace,** en lugar de reutilizar el `JWT_SECRET` del SaaS.
-- [ ] **Push de los commits locales** cuando el usuario lo autorice, revisando antes el destino y lo que se despliega automáticamente.
-
----
-
-## 5. Decisiones pendientes del negocio
-
-- ¿El marketplace será solo un módulo para negocios con TPV, o también habrá un plan "solo marketplace"?
-- Comisión por pedido: porcentaje, monto fijo o ambos, y quién paga el envío.
-- ¿Quién aprueba los comercios que aparecen en el directorio y con qué requisitos?
-- Repartidores de la red compartida: requisitos de alta, zonas y forma de pago.
+- [Registro técnico histórico de backend](backend-v1-plan-completado.md)
+- [Contrato de catálogo](contrato-catalogo.md)
+- [Plan técnico](MRTPVREST_Marketplace_Plan_Tecnico_v1.md)
+- [Verificador local](../../scripts/test-marketplace-all.mjs)
+- [Guía de colaboración](../agent-collab.md)

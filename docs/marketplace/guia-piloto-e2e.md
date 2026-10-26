@@ -1,5 +1,7 @@
 # Guía técnica maestra del piloto Marketplace E2E
 
+> **Documento histórico. Actualización del 25/oct/2026:** consultar [el estado consolidado](estado-y-modelo-tpv-marketplace.md). Los resultados, hashes, pendientes y afirmaciones de completitud que siguen corresponden a la fecha original. No acreditan operación productiva ni autorización para ejecutar el plan de despliegue. La verificación vigente es 55/55 suites locales y tipado limpio en las cuatro aplicaciones revisadas.
+
 Rama: `feature/marketplace-hibrido`. Fecha local: 22 de octubre de 2026.
 Ejecución de la matriz: `2026-10-23T05:39:18.233Z`, Node `v24.15.0`.
 
