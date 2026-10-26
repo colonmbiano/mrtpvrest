@@ -1,6 +1,7 @@
 'use strict';
 
 const { createHash } = require('node:crypto');
+const { NOT_DISPATCHABLE, PIPELINE_SELECT, storeDeliveredMarketplace, networkMarketplace } = require('./marketplace-store-delivery');
 
 const STAFF = new Set(['CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN']);
 const TYPES = new Set(['CUSTOMER_UNREACHABLE', 'WRONG_ADDRESS', 'DAMAGED_OR_REJECTED']);
@@ -9,8 +10,9 @@ const METHODS = new Set(['CASH', 'CARD_PRESENT', 'TRANSFER', 'COURTESY', 'PENDIN
 const TX = { maxWait: 5000, timeout: 15000 };
 const ORDER_SELECT = { id: true, restaurantId: true, locationId: true, deliveryDriverId: true,
   orderType: true, source: true, status: true, deliveryFee: true, notes: true,
+  paymentMethod: true, paymentStatus: true,
   restaurant: { select: { tenantId: true } },
-  marketplacePipeline: { select: { restaurantId: true, dispatch: true } } };
+  marketplacePipeline: { select: PIPELINE_SELECT } };
 const INCIDENT_SELECT = { id: true, orderId: true, courierId: true, actorId: true, type: true,
   reason: true, notes: true, callAttempts: true, occurredAt: true, loggedAt: true,
   photoMimeType: true, photoBytes: true };
@@ -70,7 +72,8 @@ function actorScope({ actor, restaurantId }) {
   return id(scope);
 }
 function assignedCourier(order) {
-  if (order.source !== 'MARKETPLACE') return order.deliveryDriverId;
+  // Pedidos propios y los del marketplace que entrega la tienda: su repartidor asignado.
+  if (!networkMarketplace(order)) return order.deliveryDriverId;
   const pipeline = order.marketplacePipeline;
   const task = pipeline?.dispatch?.task;
   check(pipeline?.restaurantId === order.restaurantId && task?.orderId === order.id
@@ -188,15 +191,28 @@ function createDeliveryIncidentsService({ now = () => new Date(), logger = conso
       const existing = await authorizedOrder(tx, { orderId, restaurantId: scope, actor, courierId: driverId, lock: true });
       check(!['CANCELLED'].includes(existing.status) && !(existing.status === 'DELIVERED' && status !== 'DELIVERED'),
         'INVALID_TRANSITION', 'El pedido no permite este cambio', 409);
-      const marketplace = existing.source === 'MARKETPLACE';
+      // Red compartida: la entrega se confirma con PIN en el despacho. Los del
+      // marketplace que entrega la tienda siguen el flujo propio, con el PIN del comprador.
+      const marketplace = networkMarketplace(existing);
+      const byStore = storeDeliveredMarketplace(existing);
       check(!marketplace || (existing.status === 'DELIVERED' && status === 'DELIVERED' && !paymentMethod),
         'PIN_CONFIRMATION_REQUIRED', 'Confirma la entrega Marketplace mediante PIN antes de adjuntar evidencia', 409);
+      if (byStore && existing.status !== 'DELIVERED') {
+        check(!NOT_DISPATCHABLE.includes(existing.status), 'ORDER_NOT_ACCEPTED', 'La tienda aun no acepta este pedido', 409);
+        // El cobro ya quedó fijado en la orden: en línea no se cobra nada; en efectivo, solo efectivo.
+        check(paymentMethod == null || (existing.paymentStatus !== 'PAID' && paymentMethod === 'CASH'), 'INVALID_PAYMENT_METHOD',
+          existing.paymentStatus === 'PAID' ? 'El pedido ya se pago en linea; no cobres nada' : 'Este pedido del marketplace se paga en efectivo', 409);
+      }
       check(!(existing.orderType === 'DELIVERY' && !(Number(existing.deliveryFee) > 0)
         && /ENV[IÍ]O POR ASIGNAR/i.test(existing.notes || '')),
       'SHIPPING_FEE_PENDING', 'Captura el costo de envio antes de continuar', 409);
       // PIN de entrega de pedidos propios: lo verifica el repartidor antes de
       // cualquier escritura. El personal de la tienda conserva su override y un
       // replay de un pedido ya entregado no lo vuelve a pedir.
+      if (!marketplace && actor.role === 'DELIVERY' && status === 'DELIVERED' && existing.status !== 'DELIVERED') {
+        // Sin verificador no se puede cerrar un pedido del marketplace: su PIN es obligatorio.
+        check(storeDeliveryPin || !byStore, 'DELIVERY_PIN_UNAVAILABLE', 'Verificacion del codigo no disponible', 503);
+      }
       if (storeDeliveryPin && !marketplace && actor.role === 'DELIVERY' && status === 'DELIVERED'
         && existing.status !== 'DELIVERED') {
         try {
@@ -224,7 +240,8 @@ function createDeliveryIncidentsService({ now = () => new Date(), logger = conso
       if (!marketplace && existing.status !== 'DELIVERED') {
         const data = { status };
         if (paymentMethod) data.paymentMethod = paymentMethod === 'TRANSFER_PENDING' ? 'TRANSFER' : paymentMethod;
-        if (status === 'DELIVERED') {
+        // Pagado en línea (marketplace): la entrega no toca el cobro.
+        if (status === 'DELIVERED' && !(byStore && existing.paymentStatus === 'PAID')) {
           const pending = !paymentMethod || ['CASH', 'CASH_ON_DELIVERY', 'TRANSFER_PENDING', 'PENDING'].includes(paymentMethod);
           Object.assign(data, pending ? { paymentStatus: 'PENDING', cashCollected: false, paidAt: null }
             : { paymentStatus: 'PAID', paidAt: at });

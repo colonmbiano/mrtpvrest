@@ -7,6 +7,7 @@ import { PinVerificationModal } from '../PinVerificationModal';
 import { DeliveryEvidenceModal } from '../DeliveryEvidenceModal';
 import { DeliveryIncidentModal } from '../DeliveryIncidentModal';
 import { confirmPickupPin, confirmDeliveryPin } from '@/lib/marketplaceDispatch';
+import { isNetworkOrder } from '@/lib/storeDeliveryPin';
 
 interface DetailScreenProps {
   order: any;
@@ -48,9 +49,10 @@ export function DetailScreen({
   const [showDeliveryPin, setShowDeliveryPin] = useState(false);
   const [showIncidentModal, setShowIncidentModal] = useState<'CUSTOMER_UNREACHABLE' | 'WRONG_ADDRESS' | null>(null);
   const [showEvidenceModal, setShowEvidenceModal] = useState(false);
-  // Marketplace: PIN verificado por el despacho (tarea). Pedidos propios: el
-  // código del cliente lo pide page.tsx antes de cobrar (requiresDeliveryPin).
-  const isMarketplaceOrder = order?.source === 'MARKETPLACE' || Boolean(order?.taskId);
+  // Red del marketplace: PIN verificado por el despacho (tarea). Pedidos propios y los
+  // del marketplace que entrega la tienda: el código del cliente lo pide page.tsx
+  // antes de cobrar (requiresDeliveryPin).
+  const isMarketplaceOrder = isNetworkOrder(order);
 
   const handlePickupPinConfirm = async (pin: string) => {
     const result = await confirmPickupPin(order.courierId || '', order.taskId || order.id, pin);

@@ -106,6 +106,24 @@ test('cash uses delivered CASH orders without a cut, including shared marketplac
   assert.ok(!query.select.customerName); assert.ok(!query.select.deliveryAddress); assert.ok(!query.select.marketplacePipeline.select.dispatch);
 });
 
+test('marketplace que entrega la tienda (MANUAL): el efectivo cuenta para su repartidor propio', async () => {
+  const f = setup(); const base = f.state.order[0];
+  f.state.order.push({ ...base, id: 'mp-store', source: 'MARKETPLACE', deliveryDriverId: 'd1', total: 115.50 },
+    { ...base, id: 'mp-store-other', source: 'MARKETPLACE', deliveryDriverId: 'd2', total: 50 },
+    { ...base, id: 'mp-shared-stale', source: 'MARKETPLACE', deliveryDriverId: 'd1', total: 70 });
+  f.state.marketplaceOrderPipeline.push(
+    { orderId: 'mp-store', restaurantId: 'r1', currency: 'MXN', dispatch: { task: { deliveryPolicy: 'MANUAL', currentAssignment: null } } },
+    { orderId: 'mp-store-other', restaurantId: 'r1', currency: 'MXN', dispatch: { task: { deliveryPolicy: 'MANUAL' } } },
+    // Red compartida con un deliveryDriverId viejo: no es del repartidor propio.
+    { orderId: 'mp-shared-stale', restaurantId: 'r1', currency: 'MXN', dispatch: { task: { deliveryPolicy: 'SHARED_ONLY', currentAssignment: { courierId: 'd9' } } } });
+  const result = await balance(f);
+  assert.equal(result.cashInHand, 415.80);
+  assert.equal(result.pendingCashOrders, 3);
+  const query = f.calls.find(call => call.model === 'order' && call.method === 'findMany').args;
+  assert.deepEqual(query.where.OR[2], { source: 'MARKETPLACE', deliveryDriverId: 'd1', marketplacePipeline: { is: { restaurantId: 'r1',
+    dispatch: { path: ['task', 'deliveryPolicy'], equals: 'MANUAL' } } } });
+});
+
 test('stale legacy driver fields do not override the marketplace assignment and collected cash disappears', async () => {
   const f = setup();
   assert.equal((await balance(f, { driverId: 'stale-driver' })).cashInHand, 0);

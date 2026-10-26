@@ -47,11 +47,15 @@ function currency(row) {
   return value;
 }
 function assignedOrders(driverId, restaurantId) {
+  const pipelineScope = restaurantId ? { restaurantId } : {};
   return { ...(restaurantId ? { restaurantId } : {}), orderType: 'DELIVERY',
     OR: [
       { source: { not: 'MARKETPLACE' }, deliveryDriverId: driverId },
-      { source: 'MARKETPLACE', marketplacePipeline: { is: { ...(restaurantId ? { restaurantId } : {}),
+      { source: 'MARKETPLACE', marketplacePipeline: { is: { ...pipelineScope,
         dispatch: { path: ['task', 'currentAssignment', 'courierId'], equals: driverId } } } },
+      // Marketplace que entrega un repartidor propio (política MANUAL, lib/marketplace-store-delivery.js).
+      { source: 'MARKETPLACE', deliveryDriverId: driverId, marketplacePipeline: { is: { ...pipelineScope,
+        dispatch: { path: ['task', 'deliveryPolicy'], equals: 'MANUAL' } } } },
     ] };
 }
 function database(prismaClient) {

@@ -14,8 +14,14 @@
 //   required  sin PIN correcto no se puede marcar la entrega.
 // Requiere STORE_DELIVERY_PIN_SECRET (32+ bytes); sin él, el modo queda en off.
 // Solo aplica a repartidores: el personal de la tienda conserva su override.
+//
+// Los pedidos del marketplace que entrega un repartidor propio de la tienda
+// (lib/marketplace-store-delivery.js) también pasan por aquí, con el mismo freno de
+// intentos: su código es el deliveryPin de la orden y es SIEMPRE obligatorio,
+// sin importar STORE_DELIVERY_PIN_MODE.
 
 const crypto = require('crypto');
+const { storeDeliveredMarketplace, matchesMarketplacePin } = require('./marketplace-store-delivery');
 
 const MODES = new Set(['off', 'optional', 'required']);
 const PIN_RE = /^\d{6}$/;
@@ -76,7 +82,7 @@ function createStoreDeliveryPin({ config = storeDeliveryPinConfig(), now = () =>
   }
 
   function requiresPin(order) {
-    return enabledFor(order);
+    return storeDeliveredMarketplace(order) || enabledFor(order);
   }
 
   function lockedOut(key, at) {
@@ -97,9 +103,10 @@ function createStoreDeliveryPin({ config = storeDeliveryPinConfig(), now = () =>
   // Verifica el PIN que dicta el comprador. Lanza StoreDeliveryPinError si no
   // procede; regresa true si el pedido no usa PIN o el PIN es correcto.
   function assertCourierPin(order, pin) {
-    if (!enabledFor(order)) return true;
+    const marketplace = storeDeliveredMarketplace(order);
+    if (!marketplace && !enabledFor(order)) return true;
     if (pin === undefined || pin === null || pin === '') {
-      if (config.mode === 'required') {
+      if (marketplace || config.mode === 'required') {
         throw new StoreDeliveryPinError('DELIVERY_PIN_REQUIRED', 'Pide al cliente su código de entrega', 409);
       }
       return true;
@@ -109,7 +116,9 @@ function createStoreDeliveryPin({ config = storeDeliveryPinConfig(), now = () =>
     if (lockedOut(key, at)) {
       throw new StoreDeliveryPinError('DELIVERY_PIN_LOCKED', 'Demasiados intentos; espera unos minutos o pide ayuda a la tienda', 429);
     }
-    if (typeof pin !== 'string' || !PIN_RE.test(pin) || !samePin(pin, deriveStoreDeliveryPin(order.id, config.secret))) {
+    const matches = typeof pin === 'string' && PIN_RE.test(pin) && (marketplace
+      ? matchesMarketplacePin(order, pin) : samePin(pin, deriveStoreDeliveryPin(order.id, config.secret)));
+    if (!matches) {
       recordFailure(key, at);
       throw new StoreDeliveryPinError('INVALID_DELIVERY_PIN', 'El código de entrega no coincide', 400);
     }

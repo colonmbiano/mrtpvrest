@@ -810,7 +810,7 @@ export default function DeliveryApp() {
         <CobrarScreen
           order={selectedOrder}
           onBack={() => setScreen('detail')}
-          onConfirm={(method: string) => changeStatus(selectedOrder, 'DELIVERED', method)}
+          onConfirm={(method?: string) => changeStatus(selectedOrder, 'DELIVERED', method)}
         />
       )}
 

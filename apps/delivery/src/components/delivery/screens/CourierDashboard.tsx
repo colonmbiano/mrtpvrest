@@ -8,12 +8,15 @@ import {
 } from 'lucide-react';
 import { MarketplaceOffers } from '../MarketplaceOffers';
 import { MultiStopPanel } from '../MultiStopPanel';
+import { isNetworkOrder } from '@/lib/storeDeliveryPin';
 
 type DeliveryOrder = {
   id: string; orderNumber: string; customerName: string;
   deliveryAddress: string; status: string; total: number;
   source?: string; taskId?: string; restaurantName?: string;
   deliveryFee?: number; notes?: string;
+  // Pedido del marketplace que entrega la tienda con sus repartidores (flujo propio con código).
+  deliveredByStore?: boolean;
 };
 type Driver = { id: string; name: string };
 interface Props {
@@ -51,7 +54,7 @@ function OrderCard({ order, onSelectOrder, onChat, onDeliverOrder }: Pick<Props,
   const status = STATUS[order.status] || { text: order.status || 'Sin estado', color: '#bdc2ce' };
   const onTheWay = order.status === 'ON_THE_WAY';
   const ready = order.status === 'READY';
-  const isMarketplace = order.source === 'MARKETPLACE' || Boolean(order.taskId);
+  const isMarketplace = isNetworkOrder(order);
   return <article className="relative overflow-hidden rounded-[24px] border border-white/10 bg-[#1a1b20] p-4 shadow-[0_14px_30px_rgba(0,0,0,.12)]">
     <div className="absolute inset-y-0 left-0 w-1 bg-amber-400" aria-hidden="true"/>
     <div className="flex items-start justify-between gap-3">
@@ -61,6 +64,7 @@ function OrderCard({ order, onSelectOrder, onChat, onDeliverOrder }: Pick<Props,
         </p>
         <h3 className="mt-2 text-lg font-extrabold text-white">{order.customerName || 'Cliente'}</h3>
         {isMarketplace && <p className="mt-1 text-xs font-bold text-sky-300">Red Marketplace</p>}
+        {order.deliveredByStore && <p className="mt-1 text-xs font-bold text-sky-300">Marketplace · pide el código al cliente</p>}
       </div>
       <span className="rounded-lg px-2.5 py-1.5 text-xs font-black"
         style={{ color: status.color, background: status.color + '18' }}>

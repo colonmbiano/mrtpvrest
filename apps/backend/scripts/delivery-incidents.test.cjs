@@ -121,6 +121,8 @@ function http(f) {
     '../lib/delivery-incidents': require('../src/lib/delivery-incidents'),
     // PIN de pedidos propios: real; sin STORE_DELIVERY_PIN_MODE queda en off.
     '../lib/store-delivery-pin': require('../src/lib/store-delivery-pin'),
+    // Marketplace que entregan los repartidores propios: real.
+    '../lib/marketplace-store-delivery': require('../src/lib/marketplace-store-delivery'),
   });
   return { routes, auth, async request(method = 'post', route = '/orders/:orderId/incidents', overrides = {}) {
     const entry = routes.find(item => item.method === method && item.route === route); assert.ok(entry);
@@ -312,6 +314,63 @@ test('Marketplace incidents use durable task assignment, never legacy deliveryDr
   f.state.order[0].status = 'DELIVERED';
   await f.status({ status: 'DELIVERED', evidence: { photoBase64: PNG } }); assert.equal(f.state.deliveryEvidence.length, 1);
   assert.equal(f.state.driverCashMovement.length, 0); assert.equal(f.state.orderStatusHistory.length, 0);
+});
+
+// Marketplace que entrega un repartidor propio: tarea MANUAL, repartidor en deliveryDriverId y
+// el PIN del comprador (hash en el pipeline) siempre obligatorio, aun con STORE_DELIVERY_PIN_MODE=off.
+const MARKETPLACE_PIN = '482913';
+function storeDelivered(f, overrides = {}) {
+  const { createStoreDeliveryPin } = require('../src/lib/store-delivery-pin');
+  const { hashPin } = require('../src/lib/marketplace-dispatch');
+  Object.assign(f.state.order[0], { source: 'MARKETPLACE', marketplacePipeline: { restaurantId: 'r1', deliveryPinHash: hashPin(MARKETPLACE_PIN),
+    dispatch: { task: { orderId: 'o1', restaurantId: 'r1', deliveryPolicy: 'MANUAL', status: 'WAITING_READY', currentAssignment: null } } },
+  ...overrides });
+  const service = createDeliveryIncidentsService({ now: () => new Date(NOW), logger: { warn() {} },
+    storeDeliveryPin: createStoreDeliveryPin({ config: { mode: 'off', secret: null, misconfigured: false } }) });
+  return (body, extra = {}) => service.updateStatus({ ...f.args, driverId: 'd1', body, ...extra });
+}
+
+test('marketplace entregado por la tienda: el repartidor asignado lo cierra solo con el PIN del comprador', async () => {
+  const f = setup(); const status = storeDelivered(f);
+  await assert.rejects(status({ status: 'DELIVERED', paymentMethod: 'CASH' }), { code: 'DELIVERY_PIN_REQUIRED' });
+  await assert.rejects(status({ status: 'DELIVERED', paymentMethod: 'CASH', deliveryPin: '000000' }), { code: 'INVALID_DELIVERY_PIN' });
+  assert.equal(f.state.order[0].status, 'ON_THE_WAY');
+  const { order, changed } = await status({ status: 'DELIVERED', paymentMethod: 'CASH', deliveryPin: MARKETPLACE_PIN });
+  assert.equal(changed, true); assert.equal(order.status, 'DELIVERED');
+  // Efectivo: queda por conciliar en caja y entra al corte del repartidor.
+  assert.equal(order.paymentStatus, 'PENDING'); assert.equal(f.state.driverCashMovement.length, 1);
+  assert.equal(f.state.orderStatusHistory.length, 1);
+  // La respuesta se relee sin el pipeline (lleva el hash del PIN).
+  const reread = f.calls.filter(c => c.name === 'order' && c.method === 'findFirst').at(-1).args;
+  assert.ok(reread.include && !('marketplacePipeline' in reread.include));
+  // Otro repartidor no puede (la asignación es deliveryDriverId, no la tarea).
+  const other = setup(); const otherStatus = storeDelivered(other, { deliveryDriverId: 'd2' });
+  await assert.rejects(otherStatus({ status: 'DELIVERED', deliveryPin: MARKETPLACE_PIN }), { code: 'COURIER_FORBIDDEN' });
+});
+
+test('marketplace entregado por la tienda: pagado en línea no se cobra y por aceptar no sale', async () => {
+  const paid = setup(); const status = storeDelivered(paid, { paymentMethod: 'CARD', paymentStatus: 'PAID', paidAt: NOW });
+  await assert.rejects(status({ status: 'DELIVERED', paymentMethod: 'CASH', deliveryPin: MARKETPLACE_PIN }), { code: 'INVALID_PAYMENT_METHOD' });
+  const done = await status({ status: 'DELIVERED', deliveryPin: MARKETPLACE_PIN });
+  assert.equal(done.order.paymentStatus, 'PAID'); assert.equal(done.order.paymentMethod, 'CARD');
+  assert.equal(paid.state.driverCashMovement.length, 0);
+  const cash = setup(); const cashStatus = storeDelivered(cash);
+  await assert.rejects(cashStatus({ status: 'DELIVERED', paymentMethod: 'TRANSFER', deliveryPin: MARKETPLACE_PIN }), { code: 'INVALID_PAYMENT_METHOD' });
+  for (const pending of ['PENDING_MERCHANT', 'PENDING_PAYMENT']) {
+    const f = setup(); const early = storeDelivered(f, { status: pending });
+    await assert.rejects(early({ status: 'ON_THE_WAY' }), { code: 'ORDER_NOT_ACCEPTED' });
+    assert.equal(f.state.order[0].status, pending);
+  }
+  const ready = setup(); const go = storeDelivered(ready, { status: 'READY' });
+  assert.equal((await go({ status: 'ON_THE_WAY' })).order.status, 'ON_THE_WAY');
+});
+
+test('marketplace entregado por la tienda: el personal conserva su override y sin verificador no se cierra', async () => {
+  const f = setup(); const status = storeDelivered(f);
+  assert.equal((await status({ status: 'DELIVERED', paymentMethod: 'CASH' }, { actor: OWNER })).order.status, 'DELIVERED');
+  const bare = setup(); storeDelivered(bare);
+  await assert.rejects(bare.status({ status: 'DELIVERED', deliveryPin: MARKETPLACE_PIN }), { code: 'DELIVERY_PIN_UNAVAILABLE' });
+  assert.equal(bare.state.order[0].status, 'ON_THE_WAY');
 });
 test('HTTP routes run actual authenticate and tenant middleware; forged/missing/inactive tokens cannot persist', async () => {
   const f = setup(); const h = http(f);

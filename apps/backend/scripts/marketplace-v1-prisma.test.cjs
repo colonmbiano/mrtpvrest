@@ -185,7 +185,9 @@ test('la cotización se guarda una vez por clave y la orden la consume con CAS',
 test('la orden entra a la primera sucursal activa del comercio aprobado', async () => {
   const prisma = fakePrisma();
   const { merchants } = createMarketplaceV1Adapters({ prisma, now: () => NOW });
-  assert.deepEqual(await merchants.resolve('r1'), { id: 'r1', status: 'ACTIVE', restaurantId: 'r1', locationId: 'l1', slug: 'tienda' });
+  // MANUAL: la entregan los repartidores propios de la tienda, sin oferta a la red.
+  assert.deepEqual(await merchants.resolve('r1'), { id: 'r1', status: 'ACTIVE', restaurantId: 'r1', locationId: 'l1', slug: 'tienda',
+    deliveryPolicy: 'MANUAL' });
   const query = prisma.calls[0][1];
   assert.deepEqual(query.where, { id: 'r1', isActive: true, ...APPROVED_MERCHANT });
   assert.deepEqual(query.select.locations.orderBy, [{ createdAt: 'asc' }, { id: 'asc' }]);

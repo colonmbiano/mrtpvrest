@@ -156,3 +156,50 @@ test('updateStatus: sin servicio de PIN o en off se conserva el flujo anterior',
   const { status } = setup('off');
   assert.equal((await status({ status: 'DELIVERED', paymentMethod: 'CASH' })).order.status, 'DELIVERED');
 });
+
+// ── Marketplace que entrega un repartidor propio (orden v1, tarea MANUAL) ─────
+
+const { hashPin } = require('../src/lib/marketplace-dispatch');
+const { storeDeliveredMarketplace, networkMarketplace, courierView } = require('../src/lib/marketplace-store-delivery');
+const MARKETPLACE_PIN = '730415';
+const byStore = (task = {}, extra = {}) => ({ ...ORDER, source: 'MARKETPLACE', marketplacePipeline: { restaurantId: 'r1',
+  deliveryPinHash: hashPin(MARKETPLACE_PIN), dispatch: { task: { orderId: 'o1', restaurantId: 'r1', deliveryPolicy: 'MANUAL', ...task } } }, ...extra });
+
+test('marketplace: solo la tarea MANUAL del mismo pedido y restaurante la entrega la tienda', () => {
+  assert.equal(storeDeliveredMarketplace(byStore()), true);
+  assert.equal(storeDeliveredMarketplace(byStore({ deliveryPolicy: 'SHARED_ONLY' })), false);
+  assert.equal(storeDeliveredMarketplace(byStore({ orderId: 'otro' })), false);
+  assert.equal(storeDeliveredMarketplace(byStore({ restaurantId: 'r2' })), false);
+  assert.equal(storeDeliveredMarketplace(byStore({}, { orderType: 'TAKEOUT' })), false);
+  assert.equal(storeDeliveredMarketplace({ ...byStore(), marketplacePipeline: null }), false);
+  assert.equal(networkMarketplace(byStore({ deliveryPolicy: 'SHARED_ONLY' })), true);
+  assert.equal(networkMarketplace(byStore()), false);
+  assert.equal(networkMarketplace(ORDER), false);
+});
+
+test('marketplace: el PIN del comprador es obligatorio aun en off y comparte el freno de intentos', () => {
+  let clock = 0;
+  const svc = make('off', { now: () => clock });
+  const order = byStore();
+  assert.equal(svc.requiresPin(order), true);
+  assert.equal(svc.requiresPin(byStore({ deliveryPolicy: 'SHARED_ONLY' })), false);
+  assert.throws(() => svc.assertCourierPin(order, undefined), { code: 'DELIVERY_PIN_REQUIRED', statusCode: 409 });
+  assert.throws(() => svc.assertCourierPin(order, '12345'), { code: 'INVALID_DELIVERY_PIN' });
+  // El PIN propio de la tienda no sirve para un pedido del marketplace.
+  assert.throws(() => svc.assertCourierPin(order, pinOf()), { code: 'INVALID_DELIVERY_PIN' });
+  assert.equal(svc.assertCourierPin(order, MARKETPLACE_PIN), true);
+  for (let i = 0; i < 10; i++) assert.throws(() => svc.assertCourierPin(order, '000000'), { code: 'INVALID_DELIVERY_PIN' });
+  assert.throws(() => svc.assertCourierPin(order, MARKETPLACE_PIN), { code: 'DELIVERY_PIN_LOCKED' });
+  clock += 15 * 60 * 1000 + 1;
+  assert.equal(svc.assertCourierPin(order, MARKETPLACE_PIN), true);
+  // El comprador lo ve en su seguimiento del marketplace, no aquí.
+  assert.equal(svc.pinForCustomer(order), null);
+});
+
+test('marketplace: la vista del repartidor quita el pipeline (hashes de PIN) y marca deliveredByStore', () => {
+  const view = courierView(byStore());
+  assert.equal(view.deliveredByStore, true);
+  assert.equal('marketplacePipeline' in view, false);
+  assert.equal(JSON.stringify(view).includes(hashPin(MARKETPLACE_PIN)), false);
+  assert.deepEqual(courierView({ ...ORDER, marketplacePipeline: null }), ORDER);
+});

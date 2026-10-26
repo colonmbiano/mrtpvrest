@@ -9,8 +9,9 @@
 // Entrega a domicilio: la dirección sale de la libreta del comprador
 // (lib/marketplace-buyer-addresses.js) y el envío se cobra con la regla de la
 // tienda (RestaurantConfig.deliveryMode FLAT | DISTANCE | ZONES, lib/delivery-fee.js).
-// Apagada aparte con MARKETPLACE_V1_DELIVERY_ENABLED=true: los repartidores todavía
-// no reciben las tareas de la orden v1 (el despachador vive en memoria).
+// La entregan los repartidores PROPIOS de la tienda con el PIN del comprador: la tarea
+// de despacho nace en política MANUAL, sin oferta a la red (lib/marketplace-store-delivery.js).
+// Se activa aparte con MARKETPLACE_V1_DELIVERY_ENABLED=true.
 //
 // Apagado por defecto: MARKETPLACE_V1_ORDERS_ENABLED=true lo activa. Además hace
 // falta MARKETPLACE_COMMISSION_BPS (0–10000; sin ella la cotización responde 503)
@@ -183,7 +184,9 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
       const row = await db(tx).restaurant.findFirst({ where: merchantScope({ id: merchantId }),
         select: { id: true, slug: true, locations: { ...FIRST_LOCATION, select: { id: true } } } });
       if (!row) return null;
-      return { id: row.id, status: 'ACTIVE', restaurantId: row.id, locationId: row.locations[0]?.id ?? null, slug: row.slug };
+      // MANUAL: entrega la tienda con sus repartidores; la orden no se ofrece a la red compartida.
+      return { id: row.id, status: 'ACTIVE', restaurantId: row.id, locationId: row.locations[0]?.id ?? null, slug: row.slug,
+        deliveryPolicy: 'MANUAL' };
     },
   };
 
