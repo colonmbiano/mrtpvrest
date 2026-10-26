@@ -32,8 +32,9 @@ function checkoutLink(value) {
   } catch { return null; }
 }
 
+// notifyMerchant (opcional, lib/marketplace-v1-notify.js): avisa a la caja cuando el pago deja la orden por aceptar.
 function createMarketplaceV1Payments({ prisma, notificationUrl, getGateway = createMarketplacePaymentGateway,
-  now = () => new Date(), logger = console } = {}) {
+  now = () => new Date(), logger = console, notifyMerchant = null } = {}) {
   const gatewayFor = restaurantId => getGateway({ restaurantId, prismaClient: prisma });
   const load = (db, orderId, restaurantId) => db.marketplaceOrderPipeline.findFirst({
     where: { orderId, restaurantId, order: { is: { source: 'MARKETPLACE' } } }, select: PIPELINE_SELECT });
@@ -111,7 +112,7 @@ function createMarketplaceV1Payments({ prisma, notificationUrl, getGateway = cre
     },
     updateEvent: (tx, id, data) => tx.marketplaceWebhookEvent.update({ where: { id }, data }),
   };
-  // Sin consumidor de outbox todavía: el TPV ve el cambio de estado al refrescar.
+  // Sin consumidor de outbox persistente: el aviso a la caja sale de webhooks.handle tras el commit.
   const outboxStore = { append: async () => {} };
   const unitOfWork = { run: work => prisma.$transaction(work, TX) };
 
@@ -161,9 +162,21 @@ function createMarketplaceV1Payments({ prisma, notificationUrl, getGateway = cre
   }
 
   const webhooks = {
-    handle({ headers, query, body, secret }) {
+    // io (opcional): el socket del servidor, para avisar a la caja cuando el pago deja la orden por aceptar.
+    async handle({ headers, query, body, secret, io }) {
       const merchantId = typeof query?.merchant === 'string' && ID.test(query.merchant) ? query.merchant : null;
-      return createMarketplaceWebhooksV1Service(portsFor(merchantId)).handle({ headers, query, body, secret });
+      const ports = portsFor(merchantId);
+      const confirmed = [];
+      ports.outboxStore = { async append(tx, event) {
+        if (event?.eventType === 'PaymentConfirmed' && typeof event.payload?.orderId === 'string') confirmed.push(event.payload.orderId);
+        return outboxStore.append(tx, event);
+      } };
+      const result = await createMarketplaceWebhooksV1Service(ports).handle({ headers, query, body, secret });
+      // Solo con la transacción confirmada (PROCESSED); el aviso nunca cambia la respuesta a Mercado Pago.
+      if (result?.status === 'PROCESSED' && notifyMerchant) {
+        for (const orderId of confirmed) await notifyMerchant({ io, orderId, restaurantId: merchantId });
+      }
+      return result;
     },
   };
 

@@ -26,6 +26,7 @@ const { createMarketplaceOrderOrchestrator, MarketplaceOrderOrchestratorError } 
 const { createMarketplaceV1Payments } = require('./marketplace-v1-payments');
 const { createMarketplaceTrackingService } = require('./marketplace-tracking-v1');
 const { createBuyerAddressBook } = require('./marketplace-buyer-addresses');
+const { createMerchantOrderNotifier } = require('./marketplace-v1-notify');
 const { MAX_CENTS } = require('./marketplace-order-money');
 
 function httpsUrl(value) {
@@ -84,7 +85,9 @@ function quoteFromRow(row) {
     idempotencyKeyHash: row.idempotencyKeyHash, createdAt: row.createdAt, expiresAt: row.expiresAt };
 }
 
-function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEnabled = false, now = () => new Date() } = {}) {
+// acceptsOnline(restaurantId): opcional; agrega ONLINE a los métodos de pago públicos del comercio.
+function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEnabled = false, acceptsOnline = null,
+  now = () => new Date() } = {}) {
   const merchantScope = where => ({ ...where, isActive: true, ...APPROVED_MERCHANT });
   // Sucursal de la orden: la primera sucursal activa del restaurante (ver merchants.resolve).
   const FIRST_LOCATION = { where: { isActive: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 1 };
@@ -117,26 +120,90 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
     // Solo productos simples se venden por v1: sin variantes, sin grupos de
     // modificadores obligatorios, sin combos y sin venta por peso.
     async loadListings(merchantId, menuItemIds) {
-      const [items, promoConfig] = await Promise.all([
-        prisma.menuItem.findMany({ where: { restaurantId: merchantId, id: { in: menuItemIds } },
-          select: { id: true, restaurantId: true, name: true, price: true, isPromo: true, promoPrice: true,
-            promoStartTime: true, promoEndTime: true, isAvailable: true, availableOnline: true,
-            soldByWeight: true, isCombo: true, category: { select: { isActive: true, restaurantId: true } },
-            variants: { where: { isAvailable: true }, select: { id: true }, take: 1 },
-            modifierGroups: { where: { OR: [{ required: true }, { minSelection: { gt: 0 } }] }, select: { id: true }, take: 1 } } }),
-        prisma.restaurantConfig.findFirst({ where: { restaurantId: merchantId },
-          select: { promoStartTime: true, promoEndTime: true, timezone: true } }),
-      ]);
+      const [items, promoConfig] = await loadItems(merchantId, { id: { in: menuItemIds } });
       const at = now();
       return items.map(row => {
         const unit = activePromoPrice(row, promoConfig || null, at) ?? row.price;
         const unitPriceCents = cents(unit);
         return { merchantId: row.restaurantId, menuItemId: row.id, name: row.name,
-          published: row.availableOnline === true && row.category?.isActive === true
-            && row.category?.restaurantId === merchantId && row.soldByWeight !== true && row.isCombo !== true
-            && row.variants.length === 0 && row.modifierGroups.length === 0 && unitPriceCents > 0,
+          published: sellable(row, merchantId) && unitPriceCents > 0,
           available: row.isAvailable === true, unitPriceCents };
       });
+    },
+  };
+
+  // Productos del menú con lo necesario para saber si v1 los vende y a qué precio.
+  function loadItems(merchantId, where = {}) {
+    return Promise.all([
+      prisma.menuItem.findMany({ where: { restaurantId: merchantId, ...where },
+        select: { id: true, restaurantId: true, categoryId: true, name: true, description: true, price: true, isPromo: true,
+          promoPrice: true, promoStartTime: true, promoEndTime: true, isAvailable: true, availableOnline: true,
+          soldByWeight: true, isCombo: true, category: { select: { isActive: true, restaurantId: true } },
+          variants: { where: { isAvailable: true }, select: { id: true }, take: 1 },
+          modifierGroups: { where: { OR: [{ required: true }, { minSelection: { gt: 0 } }] }, select: { id: true }, take: 1 } } }),
+      prisma.restaurantConfig.findFirst({ where: { restaurantId: merchantId },
+        select: { promoStartTime: true, promoEndTime: true, timezone: true } }),
+    ]);
+  }
+  // Solo productos simples: sin variantes, sin modificadores obligatorios, sin combos ni venta por peso.
+  function sellable(row, merchantId) {
+    return row.availableOnline === true && row.category?.isActive === true && row.category?.restaurantId === merchantId
+      && row.soldByWeight !== true && row.isCombo !== true && row.variants.length === 0 && row.modifierGroups.length === 0;
+  }
+
+  // Directorio y catálogo públicos v1 (lib/marketplace-merchants-v1.js; la vista ahí es una lista
+  // blanca). Mismos comercios que cotizan: aprobados, activos y con el módulo.
+  const MERCHANT_SELECT = { id: true, slug: true, name: true, logoUrl: true,
+    config: { select: { ...CONFIG_SELECT, address: true, originLat: true, originLng: true, deliveryMode: true } },
+    ...(deliveryEnabled ? { deliveryZones: ZONES_SELECT } : {}) };
+  function publicMerchant(row, at) {
+    const config = row.config || null;
+    let businessHours = null;
+    try { const parsed = JSON.parse(config?.businessHours || 'null'); businessHours = Array.isArray(parsed) ? parsed : null; } catch { /* sin horario */ }
+    return { id: row.id, slug: row.slug, name: row.name, logo: row.logoUrl || null, banner: null,
+      // Aún no hay giros/categorías del comercio en el schema.
+      categories: [], published: true, status: 'ACTIVE', open: computeOpenState(config, at).isOpen === true,
+      estimatedReadyMinutes: Number.isInteger(config?.estimatedDelivery) ? config.estimatedDelivery : null,
+      minOrderCents: cents(config?.minOrderAmount) ?? 0,
+      deliveryZones: deliveryEnabled && config?.deliveryMode === 'ZONES'
+        ? (row.deliveryZones || []).map(zone => ({ id: zone.id, name: zone.name, feeCents: cents(Number(zone.fee)), active: zone.active,
+          polygon: zone.polygon })) : [],
+      businessHours,
+      // El origen del envío de la tienda es su punto de recogida público.
+      pickup: Number.isFinite(config?.originLat) && Number.isFinite(config?.originLng)
+        ? { address: config.address || null, lat: config.originLat, lng: config.originLng } : null,
+      paymentMethods: ['CASH'] };
+  }
+  const merchantsRepo = {
+    async findPublishedMerchants() {
+      const rows = await prisma.restaurant.findMany({ where: merchantScope({}), select: MERCHANT_SELECT,
+        orderBy: [{ slug: 'asc' }], take: 200 });
+      const at = now();
+      return rows.map(row => publicMerchant(row, at));
+    },
+    async findPublishedMerchantBySlug(slug) {
+      const row = await prisma.restaurant.findFirst({ where: merchantScope({ slug }), select: MERCHANT_SELECT });
+      if (!row) return null;
+      const merchant = publicMerchant(row, now());
+      if (acceptsOnline && await acceptsOnline(row.id)) merchant.paymentMethods.push('ONLINE');
+      return merchant;
+    },
+    async findMerchantCatalog(merchantId) {
+      const [categories, [items, promoConfig]] = await Promise.all([
+        prisma.category.findMany({ where: { restaurantId: merchantId, isActive: true },
+          select: { id: true, name: true, isActive: true, sortOrder: true } }),
+        loadItems(merchantId),
+      ]);
+      const at = now();
+      return {
+        categories: categories.map(category => ({ id: category.id, name: category.name, isActive: category.isActive, position: category.sortOrder })),
+        items: items.filter(row => sellable(row, merchantId)).map(row => {
+          const promo = activePromoPrice(row, promoConfig || null, at);
+          return { id: row.id, categoryId: row.categoryId, name: row.name, description: row.description,
+            unitPriceCents: cents(row.price), promoActive: promo != null, promoPriceCents: promo == null ? null : cents(promo),
+            availableOnline: row.availableOnline, isAvailable: row.isAvailable, modifierGroups: [] };
+        }),
+      };
     },
   };
 
@@ -213,19 +280,21 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
     presenceStore: { findForAssignment: async () => null },
   };
 
-  return { catalog, addresses, addressBook, quoteStore, merchants, tracking };
+  return { catalog, addresses, addressBook, quoteStore, merchants, merchantsRepo, tracking };
 }
 
 function createMarketplaceV1Services({ prisma, env = process.env, now = () => new Date(), getGateway, logger } = {}) {
   const config = marketplaceV1Config(env);
   if (!config.enabled) return null;
+  // Aviso inmediato a la caja (order:new) cuando una orden queda por aceptar; los routers pasan io.
+  const notifyMerchant = createMerchantOrderNotifier({ prisma, ...(logger ? { logger } : {}) });
   const payments = config.onlinePayments
-    ? createMarketplaceV1Payments({ prisma, notificationUrl: config.notificationUrl, now, logger,
+    ? createMarketplaceV1Payments({ prisma, notificationUrl: config.notificationUrl, now, logger, notifyMerchant,
       ...(getGateway ? { getGateway } : {}) })
     : null;
   const onlineUnavailable = message => new MarketplaceOrderOrchestratorError('ONLINE_PAYMENT_UNAVAILABLE', message, 409);
-  const { addressBook, ...adapters } = createMarketplaceV1Adapters({ prisma, commissionBps: config.commissionBps,
-    deliveryEnabled: config.delivery, now });
+  const { addressBook, merchantsRepo, ...adapters } = createMarketplaceV1Adapters({ prisma, commissionBps: config.commissionBps,
+    deliveryEnabled: config.delivery, acceptsOnline: payments ? id => payments.acceptsOnline(id) : null, now });
   // La clave de los PIN sale del mismo env que la bandera; sin ella la orden responde 503.
   const activePinKeyId = env.MARKETPLACE_PIN_KEY_ID || 'v1';
   const pinSecrets = env.MARKETPLACE_PIN_SECRET ? { [activePinKeyId]: env.MARKETPLACE_PIN_SECRET } : {};
@@ -233,6 +302,7 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
   return {
     quoteService: createQuoteService({ ...adapters, now }),
     orderService: {
+      // args.io (opcional): socket del servidor para el aviso a la caja; el orquestador lo ignora.
       async createOrder(args) {
         if (args?.body?.paymentMethod === 'ONLINE') {
           // Sin Mercado Pago conectado, un pedido en línea quedaría sin pagar para siempre.
@@ -247,6 +317,10 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
           }
         }
         const result = await orchestrator.createOrder(args);
+        // En efectivo queda por aceptar al crearse (en línea, cuando se confirma el pago). Una repetición no vuelve a avisar.
+        if (result.status === 'PENDING_MERCHANT' && !result.idempotent) {
+          await notifyMerchant({ io: args?.io, orderId: result.orderId, restaurantId: result.merchantId });
+        }
         if (result.paymentMethod !== 'ONLINE' || !payments) return result;
         return { ...result, checkout: await payments.ensureCheckout({ orderId: result.orderId, restaurantId: result.merchantId }) };
       },
@@ -256,6 +330,8 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
     trackingService: createMarketplaceTrackingService({ ...adapters.tracking, now }),
     // Libreta de direcciones del comprador (routes/marketplace-addresses-v1.routes.js).
     addressBook,
+    // Directorio y catálogo públicos v1 (routes/marketplace-merchants-v1.routes.js).
+    merchantsRepo,
   };
 }
 

@@ -689,9 +689,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
           printedWebOrders.current.delete(id);
           return;
         }
-        // Marketplace: la comanda sale al aceptarlo, no al llegar.
+        // Marketplace: la comanda sale al aceptarlo, no al llegar. Sí se refresca la lista
+        // para que el pedido aparezca de inmediato en "Pedidos web" por aceptar.
         if (!kitchenPrintReady(full)) {
           printedWebOrders.current.delete(id);
+          fetchOpenOrders();
           return;
         }
         const items = orderItemsToTicketItems(full.items || []);

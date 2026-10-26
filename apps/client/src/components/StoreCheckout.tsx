@@ -216,6 +216,10 @@ export default function StoreCheckout({
   // Mesa (QR) y tiendas sin ficha de marketplace siguen en el flujo legacy.
   const marketplaceMerchant = useMarketplaceMerchant();
   const useMarketplaceV1 = isMarketplaceCatalogEnabled() && !!marketplaceMerchant && !fromTableQr;
+  // El marketplace no ofrece "al recibir" con tarjeta ni transferencia: si quedó elegido, vuelve a efectivo.
+  useEffect(() => {
+    if (useMarketplaceV1 && (paymentMethod === 'CARD' || paymentMethod === 'TRANSFER')) setPaymentMethod('CASH');
+  }, [useMarketplaceV1, paymentMethod]);
   // El marketplace siempre necesita el punto del mapa: con él cotiza el envío y llega el repartidor.
   const needsMapPoint = delivery?.mode === 'DISTANCE' || useMarketplaceV1;
   // Cliente que regresa (perfil guardado) con datos completos → checkout exprés.
@@ -226,7 +230,9 @@ export default function StoreCheckout({
   const hasCompleteProfile = !!customerName.trim() && deliveryReady;
   const expressMode = !!savedName && hasCompleteProfile && orderType !== 'DINE_IN' && !editData;
   const preview = useMemo(() => computeDeliveryPreview(delivery, total, coords), [delivery, total, coords]);
-  const needsLocationForFee = isDelivery && (delivery?.mode === 'DISTANCE' && !!delivery?.origin || useMarketplaceV1) && !coords;
+  // Solo cuando el costo depende de la ubicación (por distancia). El marketplace exige el punto
+  // del mapa al confirmar (checkAddress), aunque la tarifa sea fija.
+  const needsLocationForFee = isDelivery && delivery?.mode === 'DISTANCE' && !!delivery?.origin && !coords;
   const v1FeeKey = JSON.stringify([deliveryAddress.replace(/\s+/g, ' ').trim(), coords?.lat ?? null, coords?.lng ?? null, total]);
   const v1Quoted = useMarketplaceV1 && isDelivery && v1Fee?.key === v1FeeKey ? v1Fee.fee : null;
   // La estimación local no conoce las zonas: en el marketplace ese envío lo dice la cotización.
@@ -234,8 +240,10 @@ export default function StoreCheckout({
   const zonesMode = (delivery?.mode as string | undefined) === 'ZONES';
   const v1FeePending = useMarketplaceV1 && isDelivery && zonesMode && v1Quoted === null;
   const deliveryFee = isDelivery ? (v1Quoted ?? (v1FeePending || preview.outOfRange ? 0 : preview.fee)) : 0;
-  const discount = coupon?.discount || 0;
-  const grandTotal = Math.max(0, total - discount + deliveryFee + tip);
+  // La orden del marketplace (v1) aún no cobra cupón, propina ni puntos: no se suman al total mostrado.
+  const discount = useMarketplaceV1 ? 0 : coupon?.discount || 0;
+  const chargedTip = useMarketplaceV1 ? 0 : tip;
+  const grandTotal = Math.max(0, total - discount + deliveryFee + chargedTip);
   // El mínimo no aplica en mesa: existe para que valga la pena preparar y mandar
   // un pedido fuera del local (espeja la regla del backend en store.routes).
   const belowMin = !isDineIn && minOrderAmount > 0 && total < minOrderAmount;
@@ -355,6 +363,8 @@ export default function StoreCheckout({
       }
       v1Attempt.current = null;
       clear();
+      // Las notas son de este pedido; el siguiente empieza sin ellas.
+      setOrderNotes('');
       if (!order.trackingToken) {
         // La orden existe; sin token no podemos abrir su seguimiento. Se le pide al cliente guardar el número.
         setError(`Tu pedido${order.orderNumber ? ` #${order.orderNumber}` : ''} quedó registrado, pero no pudimos abrir su seguimiento.`);
@@ -706,6 +716,8 @@ export default function StoreCheckout({
               </>)}
             </div>
 
+            {/* Lealtad, cupón y propina: solo en la tienda propia; la orden del marketplace aún no los cobra. */}
+            {!useMarketplaceV1 && (<>
             {/* Cliente frecuente (lealtad) */}
             <div>
               <p className={sectionTitle}>Cliente frecuente (opcional)</p>
@@ -786,12 +798,15 @@ export default function StoreCheckout({
                 ))}
               </div>
             </div>
+            </>)}
 
             {/* Método de pago */}
             <div>
               <p className={sectionTitle}>Pago</p>
-              <div className="grid grid-cols-3 gap-2">
-                {([['CASH', '💵 Efectivo'], ['CARD', isDineIn ? '💳 Tarjeta' : '💳 Al recibir'], ['TRANSFER', '🏦 Transfer.']] as ['CASH'|'CARD'|'TRANSFER', string][]).map(([m, label]) => (
+              <div className={`grid ${useMarketplaceV1 ? 'grid-cols-1' : 'grid-cols-3'} gap-2`}>
+                {/* El marketplace solo acepta efectivo o pago en línea. */}
+                {([['CASH', '💵 Efectivo'], ['CARD', isDineIn ? '💳 Tarjeta' : '💳 Al recibir'], ['TRANSFER', '🏦 Transfer.']] as ['CASH'|'CARD'|'TRANSFER', string][])
+                  .filter(([m]) => !useMarketplaceV1 || m === 'CASH').map(([m, label]) => (
                   <button key={m} type="button" onClick={() => setPaymentMethod(m)}
                     className="py-3 rounded-2xl text-xs font-bold border-2 transition-all"
                     style={{ borderColor: paymentMethod === m ? primary : '#e5e7eb', background: paymentMethod === m ? `${primary}14` : 'transparent', color: paymentMethod === m ? primary : '#6b7280' }}>
@@ -829,7 +844,7 @@ export default function StoreCheckout({
                     : v1FeePending ? 'Se calcula al confirmar' : deliveryFee === 0 ? 'Gratis' : fmt(deliveryFee)} />
               )}
               {discount > 0 && <Row label="Descuento" value={`−${fmt(discount)}`} green />}
-              {tip > 0 && <Row label="Propina" value={fmt(tip)} />}
+              {chargedTip > 0 && <Row label="Propina" value={fmt(chargedTip)} />}
             </div>
 
             {/* Footer sticky: Total + CTA siempre visibles (patrón del ProductModal),

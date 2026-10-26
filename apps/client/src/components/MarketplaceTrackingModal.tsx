@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react';
 import { fetchTracking, isCheckoutUrl, pinForFulfillment, type Fulfillment, type V1Tracking } from '../lib/marketplaceV1Checkout';
 
 const POLL_MS = 15000;
+// Estados finales: ya no cambian, así que se deja de consultar y el código ya no sirve.
+const FINAL_STATUSES = new Set(['DELIVERED', 'CANCELLED']);
 
 // Estados reales de la orden (Order.status) tal como los devuelve el seguimiento v1.
 const STATUS_LABEL: Record<string, string> = {
@@ -42,23 +44,27 @@ export default function MarketplaceTrackingModal({ orderId, orderNumber, trackin
 
   useEffect(() => {
     let stopped = false;
+    let id: ReturnType<typeof setInterval> | undefined;
     const load = async () => {
       const result = await fetchTracking(apiUrl, orderId, trackingToken);
       if (stopped) return;
       if ('ok' in result && result.ok === false) { setError(result.message); return; }
       setError('');
-      setTracking(result as V1Tracking);
+      const next = result as V1Tracking;
+      setTracking(next);
+      if (FINAL_STATUSES.has(next.status)) clearInterval(id);
     };
     load();
-    const id = setInterval(load, POLL_MS);
+    id = setInterval(load, POLL_MS);
     return () => { stopped = true; clearInterval(id); };
   }, [apiUrl, orderId, trackingToken]);
 
   // A domicilio, "listo" significa que la tienda espera al repartidor.
   const label = tracking ? (tracking.status === 'READY' && fulfillment === 'DELIVERY' ? 'Listo, esperando al repartidor'
     : STATUS_LABEL[tracking.status] ?? 'Actualizando') : 'Consultando…';
-  // Código que el comprador necesita según cómo recibe el pedido. Una orden cancelada no muestra ninguno.
-  const pin = tracking?.status === 'CANCELLED' ? null : pinForFulfillment(fulfillment, { pickupPin, deliveryPin });
+  const final = tracking ? FINAL_STATUSES.has(tracking.status) : false;
+  // Código que el comprador necesita según cómo recibe el pedido. Entregada o cancelada ya no muestra ninguno.
+  const pin = final ? null : pinForFulfillment(fulfillment, { pickupPin, deliveryPin });
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Seguimiento del pedido" className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center">
@@ -91,10 +97,14 @@ export default function MarketplaceTrackingModal({ orderId, orderNumber, trackin
           <p className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">La ubicación del repartidor no está actualizada.</p>
         )}
         {error && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
-          <div className="h-full w-1/3 animate-pulse rounded-full" style={{ background: primary }} />
-        </div>
-        <p className="mt-3 text-xs text-gray-500">Se actualiza automáticamente cada 15 segundos.</p>
+        {!final && (
+          <>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
+              <div className="h-full w-1/3 animate-pulse rounded-full" style={{ background: primary }} />
+            </div>
+            <p className="mt-3 text-xs text-gray-500">Se actualiza automáticamente cada 15 segundos.</p>
+          </>
+        )}
       </div>
     </div>
   );

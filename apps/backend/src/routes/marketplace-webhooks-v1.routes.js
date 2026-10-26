@@ -15,7 +15,9 @@ function createMarketplaceWebhooksV1Router({ Router, service, webhookSecret = re
     try {
       // Con el pago en línea v1 activo, sus adaptadores Prisma; si no, el servicio sin puertos responde 503.
       const webhooks = service || (defaultService ||= defaultMarketplaceV1Services()?.webhooks || createMarketplaceWebhooksV1Service());
-      const result = await webhooks.handle({ headers: req.headers, query: req.query, body: req.body, secret: webhookSecret() });
+      // io: para avisar a la caja al instante cuando el pago deja la orden por aceptar.
+      const result = await webhooks.handle({ headers: req.headers, query: req.query, body: req.body, secret: webhookSecret(),
+        io: req.app?.get?.('io') });
       return res.status(200).json(result);
     } catch (error) {
       if (error instanceof MarketplaceWebhookError) {

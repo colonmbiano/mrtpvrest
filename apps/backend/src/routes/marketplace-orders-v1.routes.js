@@ -18,8 +18,9 @@ function createMarketplaceOrdersV1Router({ Router, service, resolveAccount, orch
       const orders = service || (defaultService ||= orchestratorOptions
         ? createMarketplaceOrderOrchestrator(orchestratorOptions)
         : defaultMarketplaceV1Services()?.orderService || createMarketplaceOrderOrchestrator());
+      // io: para avisar a la caja al instante cuando la orden queda por aceptar.
       const result = await orders.createOrder({ accountId: accountId ?? undefined,
-        idempotencyKey: req.headers?.['idempotency-key'], body: req.body });
+        idempotencyKey: req.headers?.['idempotency-key'], body: req.body, io: req.app?.get?.('io') });
       return res.status(result.idempotent ? 200 : 201).json(result);
     } catch (error) {
       if (error instanceof MarketplaceOrderOrchestratorError || error instanceof BuyerIdentityError) {

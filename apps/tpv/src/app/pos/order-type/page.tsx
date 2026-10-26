@@ -280,9 +280,11 @@ export default function OrderTypePage() {
           printedWebOrders.current.delete(id);
           return;
         }
-        // Marketplace: la comanda sale al aceptarlo, no al llegar.
+        // Marketplace: la comanda sale al aceptarlo, no al llegar. Sí se refresca la lista
+        // para que el pedido aparezca de inmediato en "Pedidos web" por aceptar.
         if (!kitchenPrintReady(full)) {
           printedWebOrders.current.delete(id);
+          fetchOpenOrders();
           return;
         }
         const items = orderItemsToTicketItems(full.items || []);
@@ -402,6 +404,10 @@ export default function OrderTypePage() {
         createdAt: o.createdAt,
         itemsCount: Array.isArray(o.items) ? o.items.length : 0,
         address: o.deliveryAddress || o.address?.street || null,
+        // Igual que el panel del menú: sin esto un pedido pagado en línea se veía "Por cobrar".
+        paymentStatus: o.paymentStatus || null,
+        paymentMethod: o.paymentMethod || null,
+        cashCollected: o.cashCollected === true,
       })),
     [webOrders],
   );

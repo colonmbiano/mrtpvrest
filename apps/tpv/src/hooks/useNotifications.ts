@@ -142,9 +142,12 @@ export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
       order.source === "ONLINE" ||
       !order.source; // pedidos de la tienda online
 
+    // Marketplace: llega por aceptar (en efectivo al crearse; en línea ya pagado).
+    const fromMarketplace = String(order.source || "").toUpperCase() === "MARKETPLACE";
+
     addNotification({
       type: "order_new",
-      title: isOnline ? "🛍️ Pedido en línea recibido" : "🧾 Nuevo pedido",
+      title: fromMarketplace ? "🛒 Pedido del marketplace por aceptar" : isOnline ? "🛍️ Pedido en línea recibido" : "🧾 Nuevo pedido",
       body: `${order.orderNumber || `#${String(order.id).slice(-6).toUpperCase()}`} · ${
         order.customerName || "Cliente"
       } · $${Number(order.total ?? 0).toFixed(2)}`,
