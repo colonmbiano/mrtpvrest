@@ -1,4 +1,4 @@
-import { ONLINE_SOURCES, isMarketplaceOrder, kitchenPrintReady, needsAcceptance } from "@/lib/webOrders";
+import { ONLINE_SOURCES, chargeBlockedLabel, isMarketplaceOrder, itemsLocked, kitchenPrintReady, needsAcceptance } from "@/lib/webOrders";
 
 describe("pedidos web del TPV", () => {
   it("el marketplace es un canal web más, junto a la tienda y WhatsApp", () => {
@@ -28,5 +28,23 @@ describe("pedidos web del TPV", () => {
     // Los demás canales siguen imprimiendo al entrar, como hoy.
     expect(kitchenPrintReady({ source: "ONLINE", status: "PENDING" })).toBe(true);
     expect(kitchenPrintReady({ source: "WHATSAPP", status: "PENDING" })).toBe(true);
+  });
+
+  it("la caja no cobra un pedido del marketplace por aceptar, esperando pago o ya pagado", () => {
+    expect(chargeBlockedLabel({ source: "MARKETPLACE", status: "PENDING_MERCHANT", paymentStatus: "PENDING" })).toBe("Por aceptar");
+    expect(chargeBlockedLabel({ source: "MARKETPLACE", status: "PENDING_MERCHANT", paymentStatus: "PAID" })).toBe("Por aceptar");
+    expect(chargeBlockedLabel({ source: "MARKETPLACE", status: "PENDING_PAYMENT", paymentStatus: "PENDING" })).toBe("Esperando pago");
+    expect(chargeBlockedLabel({ source: "MARKETPLACE", status: "READY", paymentStatus: "PAID" })).toBe("Pagado en línea");
+    // Aceptado y en efectivo (p. ej. recoger en tienda): sí se cobra en caja.
+    expect(chargeBlockedLabel({ source: "MARKETPLACE", status: "READY", paymentStatus: "PENDING" })).toBeNull();
+    // Los demás canales siguen como hoy.
+    expect(chargeBlockedLabel({ source: "ONLINE", status: "PENDING", paymentStatus: "PAID" })).toBeNull();
+    expect(chargeBlockedLabel(null)).toBeNull();
+  });
+
+  it("los productos de un pedido del marketplace no se editan en el TPV", () => {
+    expect(itemsLocked({ source: "MARKETPLACE", status: "CONFIRMED" })).toBe(true);
+    expect(itemsLocked({ source: "ONLINE", status: "PENDING" })).toBe(false);
+    expect(itemsLocked({ source: "TPV" })).toBe(false);
   });
 });

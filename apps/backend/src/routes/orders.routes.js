@@ -1,6 +1,10 @@
 const { validateQuantityGroups, compactQuantityModifiers, modifierSnapshotKey } = require('../lib/quantity-modifiers');
 require('dotenv').config();
 const { createHash } = require('node:crypto');
+// Pedidos del marketplace: sin editar productos/montos en el TPV y sin cobrarlos en caja si no
+// se han aceptado o ya se pagaron en línea.
+const { marketplaceEditBlock, marketplaceChargeBlock } = require('../lib/marketplace-order-lock');
+const sendBlock = (res, block) => res.status(block.status).json(block.body);
 
 // ─────────────────────────────────────────────────────────────────────────
 // expandSubRecipeToIngredients · devuelve los ingredientes finales (hojas)
@@ -1357,6 +1361,8 @@ async function addRoundHandler(req, res) {
     if (existing.locationId !== req.locationId || existing.restaurantId !== restaurantId) {
       return res.status(403).json({ error: 'La orden pertenece a otra sucursal' });
     }
+    const locked = marketplaceEditBlock(existing);
+    if (locked) return sendBlock(res, locked);
     // The round itself is the durable receipt: retries after cache expiry or
     // process restart cannot insert its products twice. No schema migration.
     const roundId = clientOrderId ? `tpv-${createHash('sha256')
@@ -1633,6 +1639,9 @@ router.put('/items/:itemId', authenticate, requireTenantAccess, requireRole('ADM
       return res.status(400).json({ error: 'La orden ya está cancelada' });
     }
     if (!isNotesOnly) {
+      // La nota sí se permite en un pedido del marketplace (no toca dinero ni productos).
+      const locked = marketplaceEditBlock(orderItem.order);
+      if (locked) return sendBlock(res, locked);
       if (orderItem.order.status === 'DELIVERED') {
         return res.status(400).json({ error: 'La orden ya está cerrada' });
       }
@@ -1742,6 +1751,8 @@ router.delete('/items/:itemId', authenticate, requireTenantAccess, requireRole('
     if (orderItem.order.locationId && req.locationId && orderItem.order.locationId !== req.locationId) {
       return res.status(403).json({ error: 'Item de otra sucursal' });
     }
+    const locked = marketplaceEditBlock(orderItem.order);
+    if (locked) return sendBlock(res, locked);
     if (['DELIVERED', 'CANCELLED'].includes(orderItem.order.status)) {
       return res.status(400).json({ error: 'La orden ya está cerrada' });
     }
@@ -1832,6 +1843,8 @@ router.delete('/items/:itemId/modifiers/:modRowId',
     if (orderItem.order.locationId && req.locationId && orderItem.order.locationId !== req.locationId) {
       return res.status(403).json({ error: 'Item de otra sucursal' });
     }
+    const locked = marketplaceEditBlock(orderItem.order);
+    if (locked) return sendBlock(res, locked);
     if (['DELIVERED', 'CANCELLED'].includes(orderItem.order.status)) {
       return res.status(400).json({ error: 'La orden ya está cerrada' });
     }
@@ -1983,9 +1996,11 @@ router.put('/:id/discount', authenticate, requireTenantAccess, requireRole('CASH
 
     const order = await prisma.order.findFirst({
       where: { id: req.params.id, restaurantId },
-      select: { id: true, subtotal: true, discount: true, deliveryFee: true, total: true, orderNumber: true, status: true },
+      select: { id: true, subtotal: true, discount: true, deliveryFee: true, total: true, orderNumber: true, status: true, source: true },
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const locked = marketplaceEditBlock(order);
+    if (locked) return sendBlock(res, locked);
     if (['DELIVERED', 'CANCELLED'].includes(order.status)) {
       return res.status(409).json({ error: 'No se puede modificar un pedido cerrado' });
     }
@@ -2194,8 +2209,11 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
       // Atribuir el cobro al turno abierto AHORA, no al de creación (ver
       // openShiftIdForCobro). Se resuelve dentro de la $transaction del cobro.
       const target = await tx.order.findFirst({
-        where: { id: req.params.id, restaurantId }, select: { locationId: true },
+        where: { id: req.params.id, restaurantId }, select: { locationId: true, source: true, status: true, paymentStatus: true },
       });
+      // Marketplace: no se cobra en caja si aún no se acepta o si ya se pagó en línea.
+      const chargeLocked = marketplaceChargeBlock(target);
+      if (chargeLocked) throw Object.assign(new Error(chargeLocked.body.error), { marketplaceBlock: chargeLocked });
       const cobroShiftId = target ? await openShiftIdForCobro(tx, target.locationId) : null;
       let resolvedMethod;
       let cashCollected;
@@ -2252,6 +2270,7 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
 
     res.json(order);
   } catch (e) {
+    if (e.marketplaceBlock) return sendBlock(res, e.marketplaceBlock);
     if (req.body.expectedTotal != null && e.code === 'P2025') {
       return res.status(409).json({ code: 'OFFLINE_TOTAL_CHANGED',
         error: 'La cuenta cambió de importe, ya fue cobrada o no está disponible. Revisa el cobro local antes de conciliar.' });
@@ -2282,10 +2301,13 @@ router.post('/:id/charge-to-employee',
         where: { id: req.params.id, restaurantId },
         select: {
           id: true, restaurantId: true, locationId: true, paymentStatus: true,
-          subtotal: true, promoDiscount: true, deliveryFee: true,
+          subtotal: true, promoDiscount: true, deliveryFee: true, source: true,
         },
       });
       if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+      // Un pedido del marketplace no se carga a la cuenta de un empleado.
+      const locked = marketplaceEditBlock(order);
+      if (locked) return sendBlock(res, locked);
       if (order.paymentStatus === 'PAID') {
         return res.status(409).json({ error: 'La orden ya está pagada' });
       }
@@ -2391,9 +2413,11 @@ router.patch('/:id/type', authenticate, requireTenantAccess, requireRole('ADMIN'
 
     const existing = await prisma.order.findFirst({
       where: { id: req.params.id, restaurantId },
-      select: { id: true, orderType: true, tableId: true, locationId: true, status: true, paymentStatus: true },
+      select: { id: true, orderType: true, tableId: true, locationId: true, status: true, paymentStatus: true, source: true },
     });
     if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const locked = marketplaceEditBlock(existing);
+    if (locked) return sendBlock(res, locked);
     if (existing.paymentStatus === 'PAID') {
       return res.status(400).json({ error: 'No se puede cambiar el tipo de una orden ya pagada' });
     }
@@ -2462,6 +2486,9 @@ async function transferOrderHandler(req, res) {
       return res.status(400).json({ error: 'Las órdenes son de sucursales distintas' });
     }
     for (const o of [source, target]) {
+      // Ni juntar un pedido del marketplace con otro ni meterle productos ajenos.
+      const locked = marketplaceEditBlock(o);
+      if (locked) return sendBlock(res, locked);
       if (['DELIVERED', 'CANCELLED'].includes(o.status)) {
         return res.status(400).json({ error: `Orden ${o.id === id ? 'origen' : 'destino'} cerrada` });
       }
@@ -2715,6 +2742,8 @@ async function splitOrderHandler(req, res) {
           return { source: sourceFull, created: createdFull };
         }
       }
+      const locked = marketplaceEditBlock(source);
+      if (locked) throw Object.assign(splitError(locked.status, locked.body.error), { code: locked.body.code });
       if (['DELIVERED', 'CANCELLED'].includes(source.status)) {
         throw splitError(400, 'La orden está cerrada');
       }
@@ -2853,7 +2882,7 @@ async function splitOrderHandler(req, res) {
     }
 
     res.json(result);
-  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, ...(e.code ? { code: e.code } : {}) }); }
 }
 
 router.post('/:id/split', authenticate, requireTenantAccess, requireOrderMergeRole, splitOrderHandler);

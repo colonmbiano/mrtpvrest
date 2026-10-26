@@ -68,6 +68,10 @@ export interface OpenAccount {
   isWeb?: boolean;
   /** Solo modo "Cobradas": método de pago crudo para el chip de la fila. */
   paymentMethod?: string | null;
+  /** Marketplace: motivo por el que no se cobra en caja ("Por aceptar", "Pagado en línea"…). */
+  chargeBlocked?: string | null;
+  /** Marketplace: sus productos no se editan; "Editar" pasa a "Ver". */
+  itemsLocked?: boolean;
 }
 
 // Etiqueta legible del método de pago (chip de la fila en modo "Cobradas").
@@ -1087,11 +1091,11 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       <div className="flex items-stretch gap-2">
                         <button
                           type="button"
-                          aria-label={`Editar cuenta de ${title}`}
+                          aria-label={`${acc.itemsLocked ? "Ver" : "Editar"} cuenta de ${title}`}
                           onClick={() => onOpenAccount?.(acc.id)}
                           className="flex-1 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text-primary)] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                         >
-                          <Pencil size={15} strokeWidth={2.5} /> Editar
+                          <Pencil size={15} strokeWidth={2.5} /> {acc.itemsLocked ? "Ver" : "Editar"}
                         </button>
                         <button
                           type="button"
@@ -1101,7 +1105,15 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                         >
                           <Receipt size={15} strokeWidth={2.5} /> Imprimir
                         </button>
-                        {!hideMoney && (
+                        {!hideMoney && (acc.chargeBlocked ? (
+                          // Marketplace por aceptar o ya pagado en línea: no se cobra en caja.
+                          <span
+                            role="note"
+                            className="flex-[1.3] h-10 rounded-xl border border-[var(--border-strong)] text-[var(--text-secondary)] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5"
+                          >
+                            {acc.chargeBlocked}
+                          </span>
+                        ) : (
                           <button
                             type="button"
                             aria-label={`Cobrar cuenta de ${title}`}
@@ -1110,7 +1122,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                           >
                             <Zap size={15} strokeWidth={2.8} /> Cobrar
                           </button>
-                        )}
+                        ))}
                       </div>
                     ))}
                     </div>

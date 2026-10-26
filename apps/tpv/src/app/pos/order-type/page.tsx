@@ -37,7 +37,7 @@ import {
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 import { getLocalOrders, loadOpenOrders, loadOrder, mergeLocalPaidOrders, waitForOfflineHydration } from "@/lib/order-repository";
-import { ONLINE_SOURCES, isMarketplaceOrder, kitchenPrintReady, needsAcceptance } from "@/lib/webOrders";
+import { ONLINE_SOURCES, chargeBlockedLabel, isMarketplaceOrder, itemsLocked, kitchenPrintReady, needsAcceptance } from "@/lib/webOrders";
 import { ORDER_TYPE_BADGE } from "@/lib/orderTypes";
 import { toast } from "sonner";
 
@@ -352,6 +352,8 @@ export default function OrderTypePage() {
           driver: o.deliveryDriverName || null,
           takenBy: o.createdByName || null,
           isWeb: ONLINE_SOURCES.has(String(o.source || "").toUpperCase()),
+          chargeBlocked: chargeBlockedLabel(o),
+          itemsLocked: itemsLocked(o),
         };
       }),
     [openOrders],
@@ -446,7 +448,10 @@ export default function OrderTypePage() {
       o.tableId || o.table?.id || "",
       o.orderNumber ?? null,
     );
-    useActiveOrderStore.getState().setPendingAction(pendingAction);
+    // Marketplace: se abre en solo lectura y, si no se cobra en caja, sin cobro agendado.
+    const blocked = chargeBlockedLabel(o);
+    useActiveOrderStore.getState().setOrderLock({ itemsLocked: itemsLocked(o), chargeBlocked: blocked });
+    useActiveOrderStore.getState().setPendingAction(pendingAction === "pay" && blocked ? null : pendingAction);
     router.push("/pos/menu");
   };
 
@@ -842,6 +847,8 @@ export default function OrderTypePage() {
     itemsCount: Array.isArray(o.items) ? o.items.length : 0,
     driver: o.deliveryDriverName || undefined,
     needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
+    chargeBlocked: chargeBlockedLabel(o),
+    itemsLocked: itemsLocked(o),
   }));
   const drawerPaidOrders: DrawerOrder[] = paidOrders.map((p) => ({
     id: p.id,

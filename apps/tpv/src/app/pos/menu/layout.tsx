@@ -57,7 +57,7 @@ import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import ChangeOrderTypeModal from "@/components/pos/ChangeOrderTypeModal";
 import { ORDER_TYPE_BADGE as ORDER_TYPE_LABEL } from "@/lib/orderTypes";
-import { ONLINE_SOURCES, isMarketplaceOrder, kitchenPrintReady } from "@/lib/webOrders";
+import { ONLINE_SOURCES, chargeBlockedLabel, isMarketplaceOrder, itemsLocked, kitchenPrintReady } from "@/lib/webOrders";
 
 const ACTIVE_STATUSES = new Set([
   "PENDING",
@@ -572,6 +572,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       o.tableId || o.table?.id || "",
       o.orderNumber ?? null,
     );
+    // Marketplace: solo lectura y, si toca, sin cobro en caja.
+    useActiveOrderStore.getState().setOrderLock({ itemsLocked: itemsLocked(o), chargeBlocked: chargeBlockedLabel(o) });
     setShowOrders(false);
     setShowWebOrders(false);
     setMobileView("menu");
@@ -581,9 +583,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const handleOpenOrderInCatalog = async (o: any) => {
     const full = await fetchFullOrder(o);
     openOrderInCatalog(full);
-    toast.success(
-      "Ticket abierto: agrega productos o usa el menú para reimprimir",
-    );
+    toast.success(itemsLocked(full)
+      ? "Pedido del marketplace abierto en solo lectura: se puede ver e imprimir"
+      : "Ticket abierto: agrega productos o usa el menú para reimprimir");
   };
 
   const handleOpenPayment = async (o: any) => {
@@ -1142,6 +1144,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     driver: o.deliveryDriverName || undefined,
     needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
     takenBy: o.createdByName || undefined,
+    chargeBlocked: chargeBlockedLabel(o),
+    itemsLocked: itemsLocked(o),
   }));
 
   // Tickets cobrados → shape del drawer. El "createdAt" del tile muestra la
