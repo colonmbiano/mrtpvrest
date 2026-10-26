@@ -222,7 +222,7 @@ type OrderTypeCard = {
 };
 
 const ORDER_TYPES: OrderTypeCard[] = [
-  { id: "DINE_IN",  title: ORDER_TYPE_ACTION.DINE_IN,  icon: Armchair,    accent: "#34C988", shortcut: "1" },
+  { id: "DINE_IN",  title: ORDER_TYPE_ACTION.DINE_IN,  icon: Armchair,    accent: "#E0A22A", shortcut: "1" },
   { id: "TAKEOUT",  title: ORDER_TYPE_ACTION.TAKEOUT,  icon: ShoppingBag, accent: "#3b82f6", shortcut: "2" },
   { id: "DELIVERY", title: ORDER_TYPE_ACTION.DELIVERY, icon: Moto,        accent: "#F97316", shortcut: "3" },
 ];
@@ -231,7 +231,7 @@ const ORDER_TYPES: OrderTypeCard[] = [
 const TYPE_META: Record<OrderType, { label: string; icon: typeof Utensils; accent: string }> = {
   DINE_IN:  { label: ORDER_TYPE_BADGE.DINE_IN,  icon: Utensils,    accent: "#E0A22A" },
   TAKEOUT:  { label: ORDER_TYPE_BADGE.TAKEOUT,  icon: ShoppingBag, accent: "#3b82f6" },
-  DELIVERY: { label: ORDER_TYPE_BADGE.DELIVERY, icon: Bike,        accent: "#10b981" },
+  DELIVERY: { label: ORDER_TYPE_BADGE.DELIVERY, icon: Bike,        accent: "#F97316" },
 };
 
 // Punto de estado por estado de la orden.
