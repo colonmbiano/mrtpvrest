@@ -10,7 +10,7 @@ import DeviceStep from './steps/DeviceStep';
 import { useAuthStore } from '@/store/authStore';
 import { useHydrated } from '@/hooks/useClientValue';
 import { useThemeStore } from '@/store/themeStore';
-import { setTenant, getTenantIds } from '@/lib/tenant';
+import { setTenant } from '@/lib/tenant';
 
 type SetupStep = 'login' | 'location' | 'device' | 'saving';
 

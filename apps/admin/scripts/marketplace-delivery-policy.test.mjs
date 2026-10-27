@@ -21,9 +21,9 @@ const source = readFileSync(new URL('../lib/marketplaceDeliveryPolicy.ts', impor
 const transpiled = ts.transpileModule(source, { fileName: 'marketplaceDeliveryPolicy.ts', reportDiagnostics: true,
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } });
 assert.equal((transpiled.diagnostics || []).filter(d => d.category === ts.DiagnosticCategory.Error).length, 0);
-const module = { exports: {} };
-vm.runInNewContext(transpiled.outputText, { module, exports: module.exports, require: forbidden, fetch: forbidden });
-const { createPolicyEditor, policyPayload, initialPolicyState, DELIVERY_POLICIES } = module.exports;
+const sandboxModule = { exports: {} };
+vm.runInNewContext(transpiled.outputText, { module: sandboxModule, exports: sandboxModule.exports, require: forbidden, fetch: forbidden });
+const { createPolicyEditor, policyPayload, initialPolicyState, DELIVERY_POLICIES } = sandboxModule.exports;
 const { fixture, admin } = require('../../backend/scripts/helpers/marketplace-dispatch-fixture.cjs');
 const plain = value => JSON.parse(JSON.stringify(value));
 const CONFIG = { merchantId: 'marketplace-merchant-1', deliveryPolicy: 'OWN_THEN_SHARED', fallbackSeconds: 30, maxDistanceKm: 10 };

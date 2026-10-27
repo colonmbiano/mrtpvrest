@@ -44,7 +44,6 @@ export default function MarketplaceTrackingModal({ orderId, orderNumber, trackin
 
   useEffect(() => {
     let stopped = false;
-    let id: ReturnType<typeof setInterval> | undefined;
     const load = async () => {
       const result = await fetchTracking(apiUrl, orderId, trackingToken);
       if (stopped) return;
@@ -54,8 +53,8 @@ export default function MarketplaceTrackingModal({ orderId, orderNumber, trackin
       setTracking(next);
       if (FINAL_STATUSES.has(next.status)) clearInterval(id);
     };
+    const id = setInterval(load, POLL_MS);
     load();
-    id = setInterval(load, POLL_MS);
     return () => { stopped = true; clearInterval(id); };
   }, [apiUrl, orderId, trackingToken]);
 
