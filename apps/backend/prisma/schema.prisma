@@ -2972,6 +2972,9 @@ model DriverLocation {
   speed     Float? // km/h
   heading   Float? // dirección en grados
   createdAt DateTime @default(now())
+
+  // Seguimiento v1 del comprador: último aviso del repartidor para un pedido.
+  @@index([driverId, orderId, createdAt])
 }
 
 model DriverRoute {

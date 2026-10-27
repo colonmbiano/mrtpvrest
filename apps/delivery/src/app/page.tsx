@@ -714,7 +714,9 @@ export default function DeliveryApp() {
 
   return (
     <>
-      {driver && screen === 'home' && (
+      {/* Montado en todas las pantallas con sesión: en el detalle del pedido (cuando entrega)
+          el GPS sigue enviando y el comprador ve al repartidor en su seguimiento. */}
+      {driver && screen !== 'setup' && screen !== 'login' && (
         <div style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
           <GPSTracker
             driverId={driver?.id}

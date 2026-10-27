@@ -85,9 +85,13 @@ function quoteFromRow(row) {
     idempotencyKeyHash: row.idempotencyKeyHash, createdAt: row.createdAt, expiresAt: row.expiresAt };
 }
 
+// Prefijo de la tarea del reparto propio en el seguimiento; las tareas de la red usan sus propios IDs.
+const STORE_TASK_PREFIX = 'store:';
+
 // acceptsOnline(restaurantId): opcional; agrega ONLINE a los métodos de pago públicos del comercio.
+// networkPresence(): opcional; devuelve el presenceStore de la red (G1) para el seguimiento.
 function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEnabled = false, acceptsOnline = null,
-  now = () => new Date() } = {}) {
+  networkPresence = null, now = () => new Date() } = {}) {
   const merchantScope = where => ({ ...where, isActive: true, ...APPROVED_MERCHANT });
   // Sucursal de la orden: la primera sucursal activa del restaurante (ver merchants.resolve).
   const FIRST_LOCATION = { where: { isActive: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 1 };
@@ -257,6 +261,22 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
     },
   };
 
+  // Reparto propio (MANUAL): no hay tarea de la red, así que la tarea y la asignación
+  // se describen con los avisos GPS que la app del repartidor etiqueta con ESTE pedido
+  // (routes/gps.routes.js solo acepta la etiqueta si el pedido es de ese repartidor).
+  // La app solo etiqueta el pedido que lleva en camino; el primer aviso marca la salida.
+  const storeCourierTask = async order => {
+    if (order.orderType !== 'DELIVERY' || order.status !== 'ON_THE_WAY' || !order.deliveryDriverId) return null;
+    const first = await prisma.driverLocation.findFirst({ where: { driverId: order.deliveryDriverId, orderId: order.id },
+      orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
+    if (!first) return null;
+    const taskId = `${STORE_TASK_PREFIX}${order.id}`;
+    const assignment = { id: `${taskId}:${order.deliveryDriverId}`, taskId, status: 'ACTIVE',
+      courierId: order.deliveryDriverId, pickedUpAt: first.createdAt };
+    return { id: taskId, orderId: order.id, restaurantId: order.restaurantId, locationId: order.locationId,
+      status: 'PICKED_UP', pickedUpAt: first.createdAt, currentAssignmentId: assignment.id, currentAssignment: assignment };
+  };
+
   // Seguimiento (lib/marketplace-tracking-v1.js): la orden se busca por su token
   // (hash) y el servicio vuelve a validar orden, tienda, sucursal y vigencia.
   const tracking = {
@@ -265,19 +285,34 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
         const row = await prisma.marketplaceOrderPipeline.findFirst({
           where: { orderId, trackingTokenHash, order: { is: { source: 'MARKETPLACE' } } },
           select: { orderId: true, restaurantId: true, trackingTokenHash: true, trackingExpiresAt: true, dispatch: true,
-            order: { select: { id: true, restaurantId: true, locationId: true, source: true, status: true } } } });
+            order: { select: { id: true, restaurantId: true, locationId: true, source: true, status: true,
+              orderType: true, deliveryDriverId: true } } } });
         if (!row) return null;
         const { dispatch, ...record } = row;
-        return dispatch?.task ? { ...record, task: dispatch.task } : record;
+        // Las órdenes v1 nacen con una tarea MANUAL que la red nunca toma: la entrega la
+        // tienda, así que su GPS sale del repartidor propio. Otras políticas son de la red.
+        const manual = !dispatch?.task || dispatch.task.deliveryPolicy === 'MANUAL';
+        const task = (manual ? await storeCourierTask(record.order) : null) ?? dispatch?.task;
+        return task ? { ...record, task } : record;
       },
     },
-    // Las sucursales no guardan coordenadas: el origen sale vacío, sin inventarlo.
+    // Coordenadas de la sucursal (opcionales): sin ellas el origen sale vacío, sin inventarlo.
     locationStore: {
       findById: ({ locationId, restaurantId }) => prisma.location.findFirst({ where: { id: locationId, restaurantId },
-        select: { id: true, restaurantId: true } }),
+        select: { id: true, restaurantId: true, latitude: true, longitude: true } }),
     },
-    // El despachador aún vive en memoria: sin GPS del repartidor (isStale si ya lleva el pedido).
-    presenceStore: { findForAssignment: async () => null },
+    // Repartidor propio: su último aviso GPS de este pedido. Red: la presencia
+    // persistente (G1), solo si la red está activa. El servicio descarta señales viejas.
+    presenceStore: {
+      async findForAssignment(scope) {
+        if (!scope?.taskId?.startsWith(STORE_TASK_PREFIX)) return networkPresence ? networkPresence().findForAssignment(scope) : null;
+        if (scope.taskId !== `${STORE_TASK_PREFIX}${scope.orderId}` || scope.assignmentId !== `${scope.taskId}:${scope.courierId}`) return null;
+        const ping = await prisma.driverLocation.findFirst({ where: { driverId: scope.courierId, orderId: scope.orderId },
+          orderBy: { createdAt: 'desc' }, select: { lat: true, lng: true, createdAt: true } });
+        return ping ? { courierId: scope.courierId, assignmentId: scope.assignmentId, taskId: scope.taskId,
+          orderId: scope.orderId, lat: ping.lat, lng: ping.lng, lastSeenAt: ping.createdAt } : null;
+      },
+    },
   };
 
   return { catalog, addresses, addressBook, quoteStore, merchants, merchantsRepo, tracking };
@@ -293,8 +328,13 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
       ...(getGateway ? { getGateway } : {}) })
     : null;
   const onlineUnavailable = message => new MarketplaceOrderOrchestratorError('ONLINE_PAYMENT_UNAVAILABLE', message, 409);
+  // La presencia de la red se carga al primer seguimiento de una tarea de la red, y solo con la red activa.
+  let network;
+  const networkPresence = env.MARKETPLACE_NETWORK_ENABLED === 'true'
+    ? () => (network ||= require('./marketplace-network-prisma').createNetworkPersistence({ prisma, now })).presenceStore
+    : null;
   const { addressBook, merchantsRepo, ...adapters } = createMarketplaceV1Adapters({ prisma, commissionBps: config.commissionBps,
-    deliveryEnabled: config.delivery, acceptsOnline: payments ? id => payments.acceptsOnline(id) : null, now });
+    deliveryEnabled: config.delivery, acceptsOnline: payments ? id => payments.acceptsOnline(id) : null, networkPresence, now });
   // La clave de los PIN sale del mismo env que la bandera; sin ella la orden responde 503.
   const activePinKeyId = env.MARKETPLACE_PIN_KEY_ID || 'v1';
   const pinSecrets = env.MARKETPLACE_PIN_SECRET ? { [activePinKeyId]: env.MARKETPLACE_PIN_SECRET } : {};

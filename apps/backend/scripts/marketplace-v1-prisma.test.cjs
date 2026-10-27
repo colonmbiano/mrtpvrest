@@ -236,3 +236,101 @@ test('el seguimiento responde el estado real de la orden con el token del compra
   await assert.rejects(v1.trackingService.getOrderTracking({ orderId: 'o1', trackingToken: token }), e => e.statusCode === 404);
   await assert.rejects(v1.trackingService.getOrderTracking({ orderId: 'o1', trackingToken: 'corto' }), e => e.statusCode === 401);
 });
+
+// C5: GPS del repartidor propio en el seguimiento. La app del repartidor etiqueta sus
+// avisos con el pedido que lleva en camino (DriverLocation.orderId). Como en la base real,
+// la orden v1 trae la tarea MANUAL que crea el orquestador y que la red nunca toma.
+const MANUAL_DISPATCH = { task: { id: 'task-o1', orderId: 'o1', restaurantId: 'r1', locationId: 'l1', status: 'WAITING_READY',
+  deliveryPolicy: 'MANUAL' }, offer: null };
+function trackingFixture({ order: orderExtra = {}, pings = [], location = { id: 'l1', restaurantId: 'r1', latitude: 19.43, longitude: -99.13 },
+  dispatch = MANUAL_DISPATCH, env = {}, networkPresence } = {}) {
+  const crypto = require('node:crypto');
+  const token = 'c3'.repeat(32);
+  const order = { id: 'o1', restaurantId: 'r1', locationId: 'l1', source: 'MARKETPLACE', status: 'ON_THE_WAY',
+    orderType: 'DELIVERY', deliveryDriverId: 'd1', ...orderExtra };
+  const pipeline = { orderId: 'o1', restaurantId: 'r1', dispatch, order,
+    trackingTokenHash: crypto.createHash('sha256').update(token).digest('hex'), trackingExpiresAt: new Date(NOW.getTime() + 86400000) };
+  const pingCalls = [];
+  const prisma = {
+    marketplaceOrderPipeline: { async findFirst(args) {
+      return args.where.orderId === 'o1' && args.where.trackingTokenHash === pipeline.trackingTokenHash ? structuredClone(pipeline) : null;
+    } },
+    location: { async findFirst({ where, select }) {
+      assert.deepEqual(select, { id: true, restaurantId: true, latitude: true, longitude: true });
+      return where.id === location?.id && where.restaurantId === location.restaurantId ? location : null;
+    } },
+    driverLocation: { async findFirst({ where, orderBy, select }) {
+      pingCalls.push(where);
+      const rows = pings.filter(p => p.driverId === where.driverId && p.orderId === where.orderId)
+        .sort((a, b) => a.createdAt - b.createdAt);
+      const row = orderBy.createdAt === 'asc' ? rows[0] : rows[rows.length - 1];
+      return row ? Object.fromEntries(Object.keys(select).map(k => [k, row[k]])) : null;
+    } },
+  };
+  const fullEnv = { MARKETPLACE_V1_ORDERS_ENABLED: 'true', MARKETPLACE_COMMISSION_BPS: '1500', MARKETPLACE_PIN_SECRET: 'p'.repeat(40), ...env };
+  const services = networkPresence === undefined
+    ? createMarketplaceV1Services({ prisma, now: () => NOW, env: fullEnv })
+    : { trackingService: require('../src/lib/marketplace-tracking-v1').createMarketplaceTrackingService({
+      ...createMarketplaceV1Adapters({ prisma, now: () => NOW, networkPresence }).tracking, now: () => NOW }) };
+  return { order, pingCalls, read: () => services.trackingService.getOrderTracking({ orderId: 'o1', trackingToken: token }) };
+}
+const ping = (driverId, orderId, createdAt, lat = 19.44, lng = -99.14) => ({ driverId, orderId, createdAt, lat, lng });
+const ago = s => new Date(NOW.getTime() - s * 1000);
+
+test('C5: en camino, el comprador ve el último aviso GPS del repartidor propio y la sucursal', async () => {
+  // Con la tarea MANUAL del orquestador y también con un pipeline sin despacho.
+  for (const dispatch of [MANUAL_DISPATCH, null]) {
+    const f = trackingFixture({ dispatch, pings: [ping('d1', 'o1', ago(300), 19.41, -99.12), ping('d1', 'o1', ago(20), 19.45, -99.15)] });
+    assert.deepEqual(await f.read(), { orderId: 'o1', status: 'ON_THE_WAY', taskStatus: 'PICKED_UP',
+      origin: { lat: 19.43, lng: -99.13 }, courierLocation: { lat: 19.45, lng: -99.15 }, isStale: false });
+    // Solo avisos de ese repartidor con ESE pedido.
+    assert.ok(f.pingCalls.every(w => w.driverId === 'd1' && w.orderId === 'o1'));
+  }
+});
+
+test('C5: una señal de 90 s o más ya no se muestra y el seguimiento la marca vieja', async () => {
+  const old = trackingFixture({ pings: [ping('d1', 'o1', ago(400)), ping('d1', 'o1', ago(90))] });
+  const view = await old.read();
+  assert.equal(view.courierLocation, null); assert.equal(view.isStale, true); assert.equal(view.taskStatus, 'PICKED_UP');
+});
+
+test('C5: avisos de otro pedido u otro repartidor nunca revelan su ubicación', async () => {
+  // El repartidor lleva otro pedido primero y otro repartidor etiquetó o1 antes de la reasignación.
+  const f = trackingFixture({ pings: [ping('d1', 'o9', ago(10)), ping('d1', null, ago(5)), ping('d2', 'o1', ago(15))] });
+  assert.deepEqual(await f.read(), { orderId: 'o1', status: 'ON_THE_WAY', taskStatus: 'WAITING_READY',
+    origin: { lat: 19.43, lng: -99.13 }, courierLocation: null, isStale: false });
+});
+
+test('C5: fuera de "en camino", sin repartidor o para recoger no se consulta el GPS', async () => {
+  const pings = [ping('d1', 'o1', ago(10))];
+  for (const order of [{ status: 'READY' }, { status: 'DELIVERED' }, { status: 'CANCELLED' },
+    { deliveryDriverId: null }, { orderType: 'TAKEOUT' }]) {
+    const f = trackingFixture({ order, pings });
+    const view = await f.read();
+    assert.equal(view.courierLocation, null); assert.equal(view.isStale, false); assert.equal(view.taskStatus, 'WAITING_READY');
+    assert.equal(f.pingCalls.length, 0, JSON.stringify(order));
+  }
+});
+
+test('C5: una sucursal sin coordenadas deja el origen vacío y el GPS sigue funcionando', async () => {
+  const f = trackingFixture({ location: { id: 'l1', restaurantId: 'r1', latitude: null, longitude: null }, pings: [ping('d1', 'o1', ago(30))] });
+  const view = await f.read();
+  assert.equal(view.origin, null); assert.deepEqual(view.courierLocation, { lat: 19.44, lng: -99.14 });
+});
+
+test('C5: una tarea de la red usa la presencia de la red y nunca los avisos del repartidor propio', async () => {
+  const assignment = { id: 'a1', taskId: 't1', status: 'ACTIVE', courierId: 'c1', pickedUpAt: ago(300) };
+  const dispatch = { task: { id: 't1', orderId: 'o1', restaurantId: 'r1', locationId: 'l1', status: 'PICKED_UP', pickedUpAt: ago(300),
+    deliveryPolicy: 'SHARED_ONLY', currentAssignmentId: 'a1', currentAssignment: assignment } };
+  const scopes = [];
+  const presence = { async findForAssignment(scope) { scopes.push(scope);
+    return { courierId: 'c1', assignmentId: 'a1', taskId: 't1', orderId: 'o1', lat: 19.5, lng: -99.2, lastSeenAt: ago(5) }; } };
+  const net = trackingFixture({ dispatch, pings: [ping('d1', 'o1', ago(3))], networkPresence: () => presence });
+  assert.deepEqual((await net.read()).courierLocation, { lat: 19.5, lng: -99.2 });
+  assert.deepEqual(scopes[0], { courierId: 'c1', assignmentId: 'a1', taskId: 't1', orderId: 'o1', restaurantId: 'r1', locationId: 'l1' });
+  assert.equal(net.pingCalls.length, 0);
+  // Con la red apagada (sin MARKETPLACE_NETWORK_ENABLED) no hay presencia: la señal se marca vieja.
+  const off = trackingFixture({ dispatch, pings: [ping('d1', 'o1', ago(3))] });
+  const view = await off.read();
+  assert.equal(view.courierLocation, null); assert.equal(view.isStale, true); assert.equal(off.pingCalls.length, 0);
+});

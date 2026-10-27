@@ -311,12 +311,23 @@ export async function deleteAddress(apiUrl: string | null, id: string, fetchImpl
 }
 
 // Seguimiento v1 de una orden. El token viaja solo en cabecera, nunca en la URL.
-export type V1Tracking = { orderId: string; status: string; taskStatus: string | null; isStale: boolean };
+// origin: la sucursal (si tiene coordenadas). courierLocation: el repartidor, solo
+// en camino y con una señal reciente; el backend la omite si es vieja (isStale).
+export type V1LatLng = { lat: number; lng: number };
+export type V1Tracking = { orderId: string; status: string; taskStatus: string | null; isStale: boolean;
+  origin: V1LatLng | null; courierLocation: V1LatLng | null };
+
+function parseLatLng(value: unknown): V1LatLng | null {
+  if (!isRecord(value) || typeof value.lat !== 'number' || typeof value.lng !== 'number'
+    || !Number.isFinite(value.lat) || !Number.isFinite(value.lng) || Math.abs(value.lat) > 90 || Math.abs(value.lng) > 180) return null;
+  return { lat: value.lat, lng: value.lng };
+}
 
 export function parseTracking(json: unknown): V1Tracking | null {
   if (!isRecord(json) || typeof json.orderId !== 'string' || typeof json.status !== 'string') return null;
   const taskStatus = typeof json.taskStatus === 'string' ? json.taskStatus : null;
-  return { orderId: json.orderId, status: json.status, taskStatus, isStale: json.isStale === true };
+  return { orderId: json.orderId, status: json.status, taskStatus, isStale: json.isStale === true,
+    origin: parseLatLng(json.origin), courierLocation: parseLatLng(json.courierLocation) };
 }
 
 export async function fetchTracking(apiUrl: string | null, orderId: string, trackingToken: string,

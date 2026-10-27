@@ -5,6 +5,7 @@
 // memoria del componente; no se guardan en el navegador.
 import { useEffect, useState } from 'react';
 import { fetchTracking, isCheckoutUrl, pinForFulfillment, type Fulfillment, type V1Tracking } from '../lib/marketplaceV1Checkout';
+import MarketplaceTrackingMap from './MarketplaceTrackingMap';
 
 const POLL_MS = 15000;
 // Estados finales: ya no cambian, así que se deja de consultar y el código ya no sirve.
@@ -91,6 +92,13 @@ export default function MarketplaceTrackingModal({ orderId, orderNumber, trackin
             <p className="mt-2 font-mono text-4xl font-extrabold tracking-[0.3em] text-gray-900" aria-hidden="true">{pin.code}</p>
             <p className="mt-3 text-sm text-gray-700">{pin.instruction}</p>
           </section>
+        )}
+        {/* En camino y con señal reciente del repartidor (el backend omite las viejas). */}
+        {tracking?.status === 'ON_THE_WAY' && tracking.courierLocation && (
+          <div className="mb-4">
+            <MarketplaceTrackingMap courier={tracking.courierLocation} origin={tracking.origin} accent={primary} />
+            <p className="mt-2 text-xs text-gray-500">Ubicación del repartidor{tracking.origin ? ' y de la sucursal' : ''}.</p>
+          </div>
         )}
         {tracking?.isStale && (
           <p className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">La ubicación del repartidor no está actualizada.</p>

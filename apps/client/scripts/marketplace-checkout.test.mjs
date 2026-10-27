@@ -511,8 +511,19 @@ test('placeOrder keeps the tracking token and order number when the server retur
 
 test('parseTracking projects only the public tracking fields', () => {
   assert.deepEqual(parseTracking({ orderId: 'o1', status: 'READY', taskStatus: null, isStale: false, courierId: 'secret' }),
-    { orderId: 'o1', status: 'READY', taskStatus: null, isStale: false });
+    { orderId: 'o1', status: 'READY', taskStatus: null, isStale: false, origin: null, courierLocation: null });
   assert.equal(parseTracking({ orderId: 'o1' }), null);
+});
+
+test('parseTracking keeps only valid coordinates of the branch and the courier', () => {
+  const parsed = parseTracking({ orderId: 'o1', status: 'ON_THE_WAY', taskStatus: 'PICKED_UP', isStale: false,
+    origin: { lat: 19.43, lng: -99.13, address: 'privada' }, courierLocation: { lat: 19.45, lng: -99.15, courierId: 'secret' } });
+  assert.deepEqual(parsed.origin, { lat: 19.43, lng: -99.13 });
+  assert.deepEqual(parsed.courierLocation, { lat: 19.45, lng: -99.15 });
+  for (const bad of [{ lat: 91, lng: 0 }, { lat: 0, lng: 181 }, { lat: '19', lng: -99 }, { lat: NaN, lng: 1 }, null, 'x']) {
+    const view = parseTracking({ orderId: 'o1', status: 'ON_THE_WAY', origin: bad, courierLocation: bad });
+    assert.equal(view.origin, null); assert.equal(view.courierLocation, null);
+  }
 });
 
 test('fetchTracking sends the token in a header only, never in the url', async () => {

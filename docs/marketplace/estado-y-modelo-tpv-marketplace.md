@@ -26,7 +26,7 @@ La primera operación integrada usa recogida en tienda o entrega por repartidore
 | Pago en línea | Preferencia Mercado Pago, firma/deduplicación del webhook, captura contable y paso a pendiente de aceptación | Pasarela simulada en las pruebas; pendiente validación con cuenta sandbox y webhook del entorno objetivo |
 | Direcciones y envío | Libreta del comprador, ubicación seleccionada y tarifa de la tienda FLAT/DISTANCE/ZONES | Pendiente comprobación visual de zonas, cobertura y direcciones |
 | Repartidores propios | Bolsa, toma/asignación, entrega con PIN del comprador, protección de intentos, conservación de pago online y efectivo en el corte | Aceptado en navegador el 26/oct (efectivo y pago en línea simulado). La caja conserva el override sin PIN; ver "Reglas vigentes del reparto propio" |
-| Seguimiento | Estado real de la orden y token del comprador; deja de consultar y oculta el código al quedar entregado o cancelado. G1/G2 entregan presencia persistente y coordenadas de sucursal | C5 debe conectar esos datos al seguimiento; no se afirma GPS visible todavía |
+| Seguimiento | Estado real de la orden y token del comprador; deja de consultar y oculta el código al quedar entregado o cancelado. C5: en camino, mapa con el repartidor y la sucursal (si tiene coordenadas). Reparto propio: último aviso GPS de la app del repartidor etiquetado con ESE pedido; red: presencia de G1 solo con `MARKETPLACE_NETWORK_ENABLED=true`. Señal de 90 s o más se oculta y se marca vieja. Aceptado en navegador con base desechable | La app del repartidor solo manda GPS con permiso de ubicación; no se probó en navegador. El índice `DriverLocation(driverId, orderId, createdAt)` llega con la migración `20261027000000` |
 | Red compartida y rutas multitienda | G1 conecta tareas, ofertas, asignaciones y presencia a PostgreSQL; 11 escenarios de reparto unitario aprobados, incluido reinicio de proceso y concurrencia | Bandera apagada; v1 conserva MANUAL. Pendientes selección de comercios, aceptación en navegador y escalado. Multitienda sigue en demostración/staging |
 | Panel Ops | G6 conecta listado, aprobación y reasignación auditada a los stores transaccionales | Probado con fixtures y PostgreSQL; pendiente aceptación de navegador y activación del entorno |
 | Liquidaciones/reembolsos | G7 añade adaptadores reales, reserva durable, conciliación y recuperación; ocho escenarios PostgreSQL aprobados con pasarela simulada | Pendientes Mercado Pago sandbox real y publicador del outbox. Obligación contable no equivale a transferencia bancaria |
@@ -44,6 +44,9 @@ La primera operación integrada usa recogida en tienda o entrega por repartidore
 | `195e040d` | Reparto propio con PIN del comprador |
 | `6526b939` | Consolidación del estado y verificador ampliado |
 | `47060daf` | Correcciones de la aceptación en navegador: directorio v1, etiqueta de pagado en el TPV, seguimiento, checkout v1 y aviso inmediato al TPV |
+| `62765ba8` | TPV: sin "Cobrar" ni edición de productos en pedidos del marketplace |
+| `38c90c4b`, `ada677b8` | G1–G8 de Codex: red y Ops persistentes, coordenadas de sucursal, PIN de la red, panel SaaS, pestaña de la red, finanzas e informe de seguridad |
+| (este commit) | C5: GPS en el seguimiento v1 |
 
 Al inicio de esta consolidación había 13 commits por delante de la referencia local `origin/feature/marketplace-hibrido`. No se consultó de nuevo el remoto; ese número no certifica su estado actual. La consolidación documental se guarda después de esta base.
 
@@ -122,7 +125,7 @@ La protección de push sigue configurada. Las migraciones de estas integraciones
    - Impedir editar productos de un pedido del marketplace desde el TPV.
    - Decidir el override de la caja sin código (ver "Reglas vigentes del reparto propio").
 2. **Completar persistencia del despacho compartido y Ops.** Guardar tareas/ofertas/asignaciones, conectar órdenes y couriers reales, recuperar estado tras reinicio y verificar concurrencia en PostgreSQL. Conservar separada la ruta propia MANUAL que ya funciona en código.
-3. **Conectar GPS real y alta de cuentas para el entorno elegido.** Coordenadas de sucursal, presencia del repartidor, asociación con la tarea, privacidad y caducidad; revisar la identidad de staging antes de habilitar cuentas reales.
+3. **Alta de cuentas para el entorno elegido.** El GPS del seguimiento ya está conectado (C5); falta revisar la identidad de staging antes de habilitar cuentas reales de repartidores de la red.
 4. **Integrar liquidaciones y reembolsos.** Stores transaccionales, permisos por comercio, conciliación, reintentos y validación con pasarela sandbox; comprobar recuperación de eventos pendientes.
 5. **Cerrar revisión de seguridad y compatibilidad.** Revalidar dependencias y avisos actuales, secretos propios del marketplace, separación de PIN de recogida/entrega y límites de intentos en todos los caminos. El bloqueo del PIN de reparto propio está implementado; no extender esa conclusión a toda la red compartida.
 6. **Preparar publicación controlada.** Verificar destinos, variables y automatizaciones remotas; plan de migración y reversión; ejecutar aceptación en staging persistente y conservar evidencia. Publicar requiere una instrucción explícita.
