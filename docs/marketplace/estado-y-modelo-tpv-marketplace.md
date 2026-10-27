@@ -5,6 +5,8 @@
 **Base funcional revisada:** `47060daf` (reparto propio aceptado en navegador; ver la sección correspondiente).
 **Estado:** integración local avanzada; todavía no certificada para operación productiva.
 
+**Actualización Codex G1–G8 (26/oct):** [entrega, pruebas y pendientes](entrega-codex-g1-g8.md). Red y Ops ya tienen persistencia PostgreSQL; finanzas cuenta con adaptadores de conciliación/reembolso y recuperación. Probados en base desechable, aún sin aceptación de navegador de esos cambios ni publicación por Codex. Los apartados históricos siguientes conservan su fecha y alcance.
+
 Este es el punto de entrada vigente. Sustituye los resúmenes de preparación del 22/oct y la declaración de “100% completado” del informe backend del 23/oct. Los informes anteriores conservan evidencia histórica, no el estado de hoy.
 
 ## Modelo del producto
@@ -24,10 +26,10 @@ La primera operación integrada usa recogida en tienda o entrega por repartidore
 | Pago en línea | Preferencia Mercado Pago, firma/deduplicación del webhook, captura contable y paso a pendiente de aceptación | Pasarela simulada en las pruebas; pendiente validación con cuenta sandbox y webhook del entorno objetivo |
 | Direcciones y envío | Libreta del comprador, ubicación seleccionada y tarifa de la tienda FLAT/DISTANCE/ZONES | Pendiente comprobación visual de zonas, cobertura y direcciones |
 | Repartidores propios | Bolsa, toma/asignación, entrega con PIN del comprador, protección de intentos, conservación de pago online y efectivo en el corte | Aceptado en navegador el 26/oct (efectivo y pago en línea simulado). La caja conserva el override sin PIN; ver "Reglas vigentes del reparto propio" |
-| Seguimiento | Estado real de la orden y token del comprador; deja de consultar y oculta el código al quedar entregado o cancelado | El adaptador actual no entrega GPS: presencia devuelve null y la consulta de sucursal no obtiene coordenadas |
-| Red compartida y rutas multitienda | Motor híbrido, concurrencia, fallback, afiliaciones y pruebas de rutas de staging | El router de despacho utiliza mapas en memoria; falta persistencia y alimentación desde órdenes reales |
-| Panel Ops | Interfaz, permisos, listado y reasignación auditada implementados y probados con fixtures | Montado sin stores transaccionales de operación; no certificarlo como funcional con datos reales |
-| Liquidaciones/reembolsos | Contratos, lógica de partida doble y pruebas | Faltan adaptadores de operación para los puertos del servicio y validación de liquidación/reembolso real |
+| Seguimiento | Estado real de la orden y token del comprador; deja de consultar y oculta el código al quedar entregado o cancelado. G1/G2 entregan presencia persistente y coordenadas de sucursal | C5 debe conectar esos datos al seguimiento; no se afirma GPS visible todavía |
+| Red compartida y rutas multitienda | G1 conecta tareas, ofertas, asignaciones y presencia a PostgreSQL; 11 escenarios de reparto unitario aprobados, incluido reinicio de proceso y concurrencia | Bandera apagada; v1 conserva MANUAL. Pendientes selección de comercios, aceptación en navegador y escalado. Multitienda sigue en demostración/staging |
+| Panel Ops | G6 conecta listado, aprobación y reasignación auditada a los stores transaccionales | Probado con fixtures y PostgreSQL; pendiente aceptación de navegador y activación del entorno |
+| Liquidaciones/reembolsos | G7 añade adaptadores reales, reserva durable, conciliación y recuperación; ocho escenarios PostgreSQL aprobados con pasarela simulada | Pendientes Mercado Pago sandbox real y publicador del outbox. Obligación contable no equivale a transferencia bancaria |
 
 ## Historial reciente verificable
 
