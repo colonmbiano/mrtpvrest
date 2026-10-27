@@ -46,7 +46,9 @@ La primera operación integrada usa recogida en tienda o entrega por repartidore
 | `47060daf` | Correcciones de la aceptación en navegador: directorio v1, etiqueta de pagado en el TPV, seguimiento, checkout v1 y aviso inmediato al TPV |
 | `62765ba8` | TPV: sin "Cobrar" ni edición de productos en pedidos del marketplace |
 | `38c90c4b`, `ada677b8` | G1–G8 de Codex: red y Ops persistentes, coordenadas de sucursal, PIN de la red, panel SaaS, pestaña de la red, finanzas e informe de seguridad |
-| (este commit) | C5: GPS en el seguimiento v1 |
+| `5a16fe42` | C5: GPS en el seguimiento v1 e índice de `DriverLocation` |
+| `cac66c31` | TPV: el mesero en una comandera entra directo al salón (prueba E2E intermitente) |
+| (este commit) | C7: activación, migración y reversión |
 
 Al inicio de esta consolidación había 13 commits por delante de la referencia local `origin/feature/marketplace-hibrido`. No se consultó de nuevo el remoto; ese número no certifica su estado actual. La consolidación documental se guarda después de esta base.
 
@@ -128,7 +130,7 @@ La protección de push sigue configurada. Las migraciones de estas integraciones
 3. **Alta de cuentas para el entorno elegido.** El GPS del seguimiento ya está conectado (C5); falta revisar la identidad de staging antes de habilitar cuentas reales de repartidores de la red.
 4. **Integrar liquidaciones y reembolsos.** Stores transaccionales, permisos por comercio, conciliación, reintentos y validación con pasarela sandbox; comprobar recuperación de eventos pendientes.
 5. **Cerrar revisión de seguridad y compatibilidad.** Revalidar dependencias y avisos actuales, secretos propios del marketplace, separación de PIN de recogida/entrega y límites de intentos en todos los caminos. El bloqueo del PIN de reparto propio está implementado; no extender esa conclusión a toda la red compartida.
-6. **Preparar publicación controlada.** Verificar destinos, variables y automatizaciones remotas; plan de migración y reversión; ejecutar aceptación en staging persistente y conservar evidencia. Publicar requiere una instrucción explícita.
+6. **Preparar publicación controlada.** El plan está en [activacion-migracion-reversion.md](activacion-migracion-reversion.md) (C7): qué dispara el merge, las 9 migraciones y sus riesgos, verificaciones previas en producción, fases de activación por bandera y reversión. Publicar requiere una instrucción explícita.
 7. **Confirmar configuración comercial antes de habilitar ventas.** Comisión efectiva, responsables de aprobación, alcance de red compartida y reglas de liquidación. El código configurable no confirma una decisión de negocio.
 
 ## Coordinación y entrega entre agentes
