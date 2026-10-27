@@ -292,9 +292,14 @@ test('pickup is the only transition that moves Order.status to ON_THE_WAY', () =
   const f = fixture('OWN_ONLY'); f.start(); assert.equal(f.order.status, 'READY');
   f.accept('own'); assert.equal(f.order.status, 'READY');
   const before = snapshot(f);
+  let failures = 0;
   for (const pickupPin of [undefined, '0000', 1234]) {
     assert.throws(() => f.engine.confirmPickup({ taskId: 't1', courierId: 'own', pickupPin }), code('INVALID_PIN'));
-    assert.equal(snapshot(f), before);
+    // Solo cambia la evidencia de intentos: pedido, asignación y versión no avanzan.
+    assert.deepEqual(f.task.pinAttempts, { pickup: { failures: ++failures, windowStartedAt: NOW.toISOString() } });
+    const withoutAttempts = JSON.parse(snapshot(f));
+    delete withoutAttempts.tasks[0][1].pinAttempts;
+    assert.deepEqual(withoutAttempts, JSON.parse(before));
   }
   f.engine.confirmPickup({ taskId: 't1', courierId: 'own', pickupPin: '1234' });
   assert.equal(f.order.status, 'ON_THE_WAY'); assert.equal(f.task.status, 'PICKED_UP');
@@ -363,6 +368,25 @@ test('cancelled/cross-tenant orders cannot dispatch, accept or pick up; tick cre
   assert.equal(f.offers().length, count); assert.equal(active(f).length, 0);
   const g = fixture(); g.order.restaurantId = 'r2'; assert.throws(g.start, code('ORDER_UNAVAILABLE'));
 });
+
+for (const status of ['PENDING_PAYMENT', 'PENDING_MERCHANT']) {
+  test(`${status}: no permite ofertar, asignar, tomar ni recoger`, () => {
+    const f = fixture(); f.order.status = status;
+    const before = snapshot(f);
+    for (const operation of ['startDispatch', 'requestShared', 'assignOwn']) {
+      assert.throws(() => f.engine[operation]({ taskId: 't1', courierId: 'own' }), code('NOT_DISPATCHABLE'));
+      assert.equal(snapshot(f), before);
+    }
+    const offered = fixture(); offered.start(); offered.order.status = status;
+    assert.throws(() => offered.accept('own'), code('NOT_DISPATCHABLE'));
+    assert.deepEqual(offered.engine.offersForCourier('own'), []);
+    assert.equal(active(offered).length, 0);
+    const assigned = fixture(); assigned.start(); assigned.accept('own'); assigned.order.status = status;
+    assert.throws(() => assigned.engine.confirmPickup({ taskId: 't1', courierId: 'own', pickupPin: '1234' }), code('NOT_DISPATCHABLE'));
+    assert.equal(assigned.task.status, 'ASSIGNED');
+    assert.equal(assigned.task.pinAttempts, undefined);
+  });
+}
 
 test('HTTP v1 PUT policy validates fields, applies branch scope and saves all three settings', async () => {
   const f = fixture();

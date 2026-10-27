@@ -12,6 +12,10 @@ function createMarketplaceOpsDispatchV1Router({ Router, service, resolveActor, o
       res.set('Cache-Control', 'no-store');
       try {
         const actor = (await actorFor(req)) ?? null;
+        if (!service && !opsOptions && process.env.MARKETPLACE_NETWORK_ENABLED === 'true' && !defaultService) {
+          const { createNetworkPersistence, createNetworkOpsPorts } = require('../lib/marketplace-network-prisma');
+          defaultService = createMarketplaceOpsDispatchService(createNetworkOpsPorts(createNetworkPersistence({ prisma: require('@mrtpvrest/database').prisma })));
+        }
         const ops = service || (defaultService ||= createMarketplaceOpsDispatchService(opsOptions));
         return res.json(await run(ops, actor, req));
       } catch (error) {

@@ -25,6 +25,12 @@ const ROOT = resolve(__dirname, '..');
 // ============================================================================
 
 const TESTS = [
+  // Persistencia de red y finanzas: fixtures; PostgreSQL se ensaya por separado.
+  { path: 'apps/backend/scripts/marketplace-network-pin.test.cjs', name: 'Backend: Intentos del PIN de red' },
+  { path: 'apps/backend/scripts/marketplace-network-prisma.test.cjs', name: 'Backend: Persistencia de red y commit HTTP' },
+  { path: 'apps/backend/scripts/marketplace-settlements-prisma.test.cjs', name: 'Backend: Persistencia financiera y recuperación' },
+  { path: 'apps/delivery/scripts/marketplace-network-visibility.test.mjs', name: 'Delivery: Visibilidad de la red' },
+  { path: 'apps/saas/scripts/marketplace-overview.test.mjs', name: 'SaaS: Métricas reales del marketplace' },
   // ── CLIENT (Tienda Online / Marketplace PWA) ──
   { path: 'apps/client/scripts/marketplace.test.mjs', name: 'Client: Catálogo Multi-Giro & Filtros' },
   { path: 'apps/client/scripts/marketplace-checkout.test.mjs', name: 'Client: Checkout Dividido & Escrow' },
@@ -90,6 +96,7 @@ const TESTS = [
   { path: 'apps/backend/scripts/marketplace-buyer-addresses.test.cjs', name: 'Backend: Direcciones del comprador' },
   { path: 'apps/backend/scripts/store-delivery-pin.test.cjs', name: 'Backend: PIN de entrega propia' },
   ...[
+    'admin.location-coordinates.test.js',
     'delivery-marketplace-store.routes.test.js',
     'delivery-pin.routes.test.js',
     'delivery-pin.whatsapp.test.js',

@@ -198,7 +198,7 @@ function createMarketplaceOpsDispatchService({ taskStore, courierStore, unitOfWo
       check(Array.isArray(courier.auditTrail ?? []), 'OPS_STORE_INTEGRITY', 'Historial invalido', 503);
       const event = audit('COURIER_APPROVED', operator, { courierId, previousStatus: courier.status,
         previousVerificationStatus: courier.verificationStatus, nextStatus: 'ACTIVE', nextVerificationStatus: 'VERIFIED' });
-      const next = { ...courier, verificationStatus: 'VERIFIED', status: 'ACTIVE', verifiedAt: event.at, verifiedBy: operator.id,
+      const next = { ...courier, verificationStatus: 'VERIFIED', status: 'ACTIVE', isShared: true, isActive: true, verifiedAt: event.at, verifiedBy: operator.id,
         version: previousVersion + 1, updatedAt: event.at, auditTrail: [...(courier.auditTrail ?? []), event] };
       const changed = await courierStore.compareAndSwap(tx, { id: courierId, expectedVersion: previousVersion,
         expectedStatus: courier.status, expectedVerificationStatus: courier.verificationStatus, record: next });

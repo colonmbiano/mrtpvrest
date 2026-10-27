@@ -76,6 +76,12 @@ function payoutView(row) {
     amount: Number(value) / 100, amountCents: Number(value) };
 }
 async function finances(tx, driverId, restaurantId) {
+  // Un reembolso reservado ya puede estar aprobado en la pasarela aunque su
+  // confirmación local siga pendiente. No disponer de ese saldo mientras tanto.
+  if (tx.marketplaceRefund) {
+    const pendingRefunds = await tx.marketplaceRefund.count({ where: { restaurantId, status: 'PENDING' } });
+    check(pendingRefunds === 0, 'REFUND_RECONCILIATION_REQUIRED', 'Concilia los reembolsos pendientes antes del retiro', 409);
+  }
   const balance = await getDriverBalance({ driverId, restaurantId, prismaClient: tx });
   const groups = await tx.marketplaceDriverPayout.groupBy({ by: ['currency'],
     where: { restaurantId, driverId, status: 'PENDING' }, _sum: { amount: true } });

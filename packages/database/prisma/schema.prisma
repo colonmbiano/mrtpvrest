@@ -406,6 +406,9 @@ enum BusinessType {
 }
 
 model Location {
+  // Coordenadas opcionales del punto de recogida; no se publican por defecto.
+  latitude Float?
+  longitude Float?
   id           String     @id @default(cuid())
   restaurantId String
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
@@ -945,6 +948,9 @@ model Order {
   payments      PaymentTransaction[]
   marketplacePayments MarketplacePayment[]
   marketplacePipeline MarketplaceOrderPipeline?
+  marketplaceNetworkTask MarketplaceNetworkTask?
+  marketplaceRefunds MarketplaceRefund[]
+  marketplaceFinanceEvents MarketplaceFinanceOutbox[]
   deliveryIncidents DeliveryIncident[]
   deliveryEvidence DeliveryEvidence?
   packingChecks OrderPackingCheck[]
@@ -5057,4 +5063,129 @@ model MarketplaceBuyerAddress {
   @@unique([accountId, fingerprint])
   @@index([accountId, updatedAt])
   @@map("marketplace_buyer_addresses")
+}
+
+// Red compartida: estado durable. MANUAL nunca se importa a estas tablas.
+model MarketplaceNetworkTask {
+  id String @id
+  orderId String @unique
+  restaurantId String
+  locationId String
+  merchantId String
+  status String
+  version Int @default(0)
+  payload Json
+  order Order @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict)
+  @@unique([orderId, restaurantId])
+  @@index([restaurantId, status])
+  @@index([merchantId, status, id])
+  @@map("marketplace_network_tasks")
+}
+model MarketplaceNetworkOffer {
+  id String @id
+  taskId String
+  restaurantId String
+  courierId String?
+  status String
+  expiresAt DateTime
+  payload Json
+  @@index([courierId, status, expiresAt])
+  @@index([restaurantId, taskId])
+  @@map("marketplace_network_offers")
+}
+model MarketplaceNetworkAssignment {
+  id String @id
+  taskId String
+  restaurantId String
+  courierId String
+  status String
+  payload Json
+  @@index([courierId, status])
+  @@index([restaurantId, taskId])
+  @@map("marketplace_network_assignments")
+}
+model MarketplaceNetworkCourier {
+  id String @id
+  accountId String @unique
+  status String
+  verificationStatus String
+  version Int @default(0)
+  payload Json
+  @@map("marketplace_network_couriers")
+}
+model MarketplaceNetworkMerchant {
+  id String @id
+  restaurantId String
+  locationId String
+  payload Json
+  @@unique([restaurantId, locationId])
+  @@map("marketplace_network_merchants")
+}
+model MarketplaceNetworkAffiliation {
+  id String @id
+  courierId String
+  merchantId String
+  restaurantId String
+  status String
+  payload Json
+  @@unique([courierId, merchantId])
+  @@index([restaurantId, status])
+  @@map("marketplace_network_affiliations")
+}
+model MarketplaceNetworkPresence {
+  courierId String @id
+  assignmentId String?
+  taskId String?
+  orderId String?
+  restaurantId String?
+  locationId String?
+  lastSeenAt DateTime
+  payload Json
+  @@index([restaurantId, orderId])
+  @@map("marketplace_network_presence")
+}
+// Rutas agrupadas siguen limitadas a staging; persistirlas evita perder custodia.
+model MarketplaceNetworkTrip {
+  id String @id
+  kind String
+  payload Json
+  @@index([kind])
+  @@map("marketplace_network_trips")
+}
+model MarketplaceRefund {
+  id String @id
+  restaurantId String
+  orderId String
+  keyHash String @unique
+  requestHash String
+  activeOrderId String? @unique
+  status String @default("PENDING")
+  amountCents Int
+  data Json
+  providerRefundId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  order Order @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict)
+  @@index([restaurantId, orderId, status])
+  @@map("marketplace_refunds")
+}
+model MarketplaceFinanceOutbox {
+  id String @id
+  eventKey String @unique
+  restaurantId String
+  orderId String
+  eventType String
+  payload Json
+  status String @default("PENDING")
+  attempts Int @default(0)
+  availableAt DateTime @default(now())
+  leaseToken String?
+  leaseUntil DateTime?
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  order Order @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict)
+  @@index([status, availableAt])
+  @@index([restaurantId, orderId])
+  @@map("marketplace_finance_outbox")
 }

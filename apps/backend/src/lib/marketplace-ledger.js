@@ -381,8 +381,12 @@ function createInMemoryLedgerStore() {
 
 /** Persist every line of one balanced event, joining the caller's transaction when supplied.
  * No upserts, partial duplicate suppression or mutations of existing ledger lines.
+ * reservedAmountCents solo se proporciona desde el coordinador financiero después
+ * de bloquear la orden y reservar ese saldo. Sin reserva se conserva la igualdad
+ * estricta con el pago completo; captura nunca acepta importes parciales.
  */
-async function recordLedgerTransaction({ transaction, paymentId, restaurantId, idempotencyKey, courierId, prismaClient }) {
+async function recordLedgerTransaction({ transaction, paymentId, restaurantId, idempotencyKey, courierId, prismaClient,
+  reservedAmountCents }) {
   const { cents, decimal } = require('./marketplace-order-money');
   const fail = () => { throw new LedgerError('Asiento persistente invalido o inconsistente', 'LEDGER_INTEGRITY_ERROR'); };
   if (!prismaClient || !paymentId || !restaurantId || typeof idempotencyKey !== 'string' || !idempotencyKey
@@ -401,7 +405,10 @@ async function recordLedgerTransaction({ transaction, paymentId, restaurantId, i
     const payment = await tx.marketplacePayment.findFirst({ where: { id: paymentId, restaurantId, orderId: transaction.orderId },
       select: { id: true, restaurantId: true, orderId: true, currency: true, amount: true, status: true } });
     if (!payment || payment.restaurantId !== restaurantId || payment.orderId !== transaction.orderId
-      || payment.currency !== transaction.currency || payment.status !== 'CAPTURED' || cents(payment.amount) !== debit) fail();
+      || payment.currency !== transaction.currency || payment.status !== 'CAPTURED'
+      || (reservedAmountCents === undefined ? cents(payment.amount) !== debit
+        : !['ORDER_SETTLED', 'ORDER_REFUNDED'].includes(transaction.eventType) || reservedAmountCents !== debit
+          || cents(payment.amount) < debit)) fail();
     const existing = await tx.marketplaceLedgerEntry.findMany({ where: { paymentId, restaurantId,
       orderId: transaction.orderId, idempotencyKey }, orderBy: { lineNumber: 'asc' } });
     const lines = transaction.entries.map((entry, index) => ({ id: entry.id, restaurantId,

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { C, S, ORDER_STATUS_CONFIG } from '@/lib/tokens';
 import { MarketplaceOffers } from '../MarketplaceOffers';
+import { marketplaceNetworkEnabled } from '@/lib/marketplaceNetwork';
 
 interface Order {
   id: string;
@@ -224,6 +225,8 @@ export function HomeScreen({
   isSharedCourier = false, onToggleShared, onMarketplaceOfferAccepted,
 }: HomeScreenProps) {
   const [activeTab, setActiveTab] = useState<'store' | 'marketplace'>('store');
+  const networkEnabled = marketplaceNetworkEnabled(process.env.NEXT_PUBLIC_MARKETPLACE_NETWORK_ENABLED);
+  const visibleTab = networkEnabled ? activeTab : 'store';
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: C.fontBody }}>
@@ -353,16 +356,16 @@ export function HomeScreen({
           onClick={() => setActiveTab('store')}
           style={{
             flex: 1, height: 44, borderRadius: 12, cursor: 'pointer',
-            background: activeTab === 'store' ? C.green : 'rgba(136,214,108,0.1)',
-            border: activeTab === 'store' ? 'none' : `1px solid ${C.border}`,
-            color: activeTab === 'store' ? '#090909' : C.text,
+            background: visibleTab === 'store' ? C.green : 'rgba(136,214,108,0.1)',
+            border: visibleTab === 'store' ? 'none' : `1px solid ${C.border}`,
+            color: visibleTab === 'store' ? '#090909' : C.text,
             fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
             transition: 'all 0.2s ease',
           }}
         >
           🏪 Mi Tienda
         </button>
-        <button
+        {networkEnabled && <button
           onClick={() => setActiveTab('marketplace')}
           style={{
             flex: 1, height: 44, borderRadius: 12, cursor: 'pointer',
@@ -374,11 +377,11 @@ export function HomeScreen({
           }}
         >
           🌐 Red Marketplace
-        </button>
+        </button>}
       </div>
 
       {/* ── Contenido según pestaña activa ── */}
-      {activeTab === 'store' ? (
+      {visibleTab === 'store' ? (
         <>
           {/* ── Daily metrics ── */}
           <div style={{ padding: '16px 16px 0' }}>

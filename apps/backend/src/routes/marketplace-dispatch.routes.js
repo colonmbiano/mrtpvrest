@@ -3,11 +3,11 @@
 const { DispatchError, createHybridDispatchEngine, validCoordinates, validateDeliveryPolicy } = require('../lib/marketplace-dispatch');
 const { createMultiStopEngine } = require('../lib/marketplace-multistop');
 
-function createMarketplaceDispatchRouter({ Router, getStore, authenticate, now = () => new Date() } = {}) {
+function createMarketplaceDispatchRouter({ Router, getStore, authenticate, persistence, networkEnabled = process.env.MARKETPLACE_NETWORK_ENABLED === 'true', now = () => new Date() } = {}) {
   const router = (Router || require('express').Router)();
   const engine = createHybridDispatchEngine({ store: getStore ? getStore() : {}, now });
   const { store } = engine;
-  // Synthetic/staging-only: these maps do NOT persist across process restarts.
+  // Multitienda sigue limitada a staging; su aceptación completa es independiente.
   const multiStopEnabled = process.env.NODE_ENV !== 'production'
     && process.env.MARKETPLACE_MULTISTOP_STAGING_ENABLED === 'true'
     && process.env.MARKETPLACE_IDENTITY_MODE === 'staging';
@@ -29,7 +29,7 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, now =
   }
   function courierAccess(req) {
     const user = actor(req);
-    const courier = store.couriers.get(user.id);
+    const courier = req.dispatchRuntime.store.couriers.get(user.id);
     if (user.role !== 'DELIVERY' || !courier || courier.isActive !== true) fail('Repartidor no autorizado', 'COURIER_FORBIDDEN');
     // Legacy clients may send an ID, but it is never the identity authority.
     if ((req.body?.courierId !== undefined && req.body.courierId !== user.id)
@@ -54,21 +54,54 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, now =
   function endpoint(method, paths, handler) {
     for (const path of Array.isArray(paths) ? paths : [paths]) router[method](path, (req, res, next) => {
       res.set('Cache-Control', 'no-store');
-      function run() {
-        try { actor(req); return handler(req, res); }
-        catch (error) {
-          if (error instanceof DispatchError) return res.status(error.statusCode).json({ error: error.message, errorCode: error.code });
-          return res.status(503).json({ error: 'Despacho temporalmente no disponible', errorCode: 'DISPATCH_UNAVAILABLE' });
-        }
+      let durable;
+      async function runDurable() {
+        try {
+          actor(req);
+          durable = persistence || require('../lib/marketplace-network-prisma').createNetworkPersistence({
+            prisma: require('@mrtpvrest/database').prisma, now });
+          const reply = await durable.run(async runtime => {
+            req.dispatchRuntime = runtime;
+            // No cambiar la versión antes de una mutación CAS explícita.
+            if (method === 'get') await durable.tick(runtime);
+            const out = { statusCode: 200, payload: undefined,
+              status(code) { this.statusCode=code; return this; },
+              json(value) { this.payload=value; return this; } };
+            await handler(req, out, runtime.engine, runtime.store, multiStopEnabled ? runtime.multiStop : null);
+            return out;
+          });
+          return res.status(reply.statusCode).json(reply.payload);
+        } catch (error) { return failure(error); }
       }
-      // Lazy import keeps offline tests and catalog reads free of DB initialization.
+      function failure(error) {
+        if (error instanceof DispatchError) return res.status(error.statusCode).json({ error: error.message, errorCode: error.code });
+        return res.status(503).json({ error: 'Despacho temporalmente no disponible', errorCode: 'DISPATCH_UNAVAILABLE' });
+      }
+      function run() {
+        if (networkEnabled || persistence) return runDurable();
+        // El adaptador de memoria existe únicamente para fixtures inyectados.
+        if (!getStore) return res.status(503).json({ error: 'Red deshabilitada', errorCode: 'NETWORK_DISABLED' });
+        try { actor(req); req.dispatchRuntime={engine,store,multiStop}; return handler(req,res,engine,store,multiStop); }
+        catch (error) { return failure(error); }
+      }
+      if (!authenticate && networkEnabled && req.headers?.cookie && !req.headers?.authorization) {
+        const prisma=require('@mrtpvrest/database').prisma;
+        const resolver=require('../lib/marketplace-network-prisma').createNetworkActorResolver({prisma,now});
+        return resolver(req).then(async identity => {
+          if (!identity?.roles.includes('COURIER')) throw new DispatchError('Repartidor requerido','COURIER_FORBIDDEN',403);
+          const row=await prisma.marketplaceNetworkCourier.findUnique({where:{accountId:identity.accountId}});
+          if (!row || row.status!=='ACTIVE' || row.verificationStatus!=='VERIFIED') throw new DispatchError('Repartidor no aprobado','COURIER_FORBIDDEN',403);
+          req.user={id:row.id,accountId:identity.accountId,role:'DELIVERY',isActive:true,isDevice:false};
+          return run();
+        }).catch(failure);
+      }
       return (authenticate || require('../middleware/auth.middleware').authenticate)(req, res, run, next);
     });
   }
 
   // Private read for the active Admin branch. Never infer merchantId from a
   // restaurant id or pick the first merchant when a restaurant has branches.
-  endpoint('get', '/merchants/me/delivery-policy', (req, res) => {
+  endpoint('get', '/merchants/me/delivery-policy', (req, res, engine, store, multiStop) => {
     const user = actor(req);
     if (!['OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) fail('Administrador requerido', 'MERCHANT_FORBIDDEN');
     const headers = req.headers || {};
@@ -88,30 +121,30 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, now =
     return res.json({ merchantId: merchant.id, ...validateDeliveryPolicy({ deliveryPolicy: merchant.deliveryPolicy ?? 'OWN_THEN_SHARED',
       fallbackSeconds: merchant.fallbackSeconds ?? 30, maxDistanceKm: merchant.maxDistanceKm ?? 10 }) });
   });
-  endpoint('put', '/merchants/:id/delivery-policy', (req, res) => {
+  endpoint('put', '/merchants/:id/delivery-policy', (req, res, engine, store, multiStop) => {
     const merchant = engine.merchantFor(req.params.id); merchantAccess(req, merchant);
     const policy = body(req, ['deliveryPolicy', 'fallbackSeconds', 'maxDistanceKm']);
     return res.json(engine.configurePolicy({ merchantId: merchant.id, ...policy }));
   });
-  endpoint('post', ['/dispatch/tasks/:id/request-shared', '/tasks/:id/request-shared'], (req, res) => {
+  endpoint('post', ['/dispatch/tasks/:id/request-shared', '/tasks/:id/request-shared'], (req, res, engine, store, multiStop) => {
     const task = engine.taskFor(req.params.id); merchantAccess(req, engine.merchantFor(task));
     const input = body(req, ['expectedVersion']);
     const result = engine.requestShared({ taskId: task.id, ...input });
     return res.json({ success: true, task: view(result.task), idempotent: result.idempotent });
   });
-  endpoint('post', '/dispatch/tasks/:id/assign-own', (req, res) => {
+  endpoint('post', '/dispatch/tasks/:id/assign-own', (req, res, engine, store, multiStop) => {
     const task = engine.taskFor(req.params.id); merchantAccess(req, engine.merchantFor(task));
     const input = body(req, ['courierId', 'expectedVersion']);
     if (typeof input.courierId !== 'string' || !input.courierId) fail('courierId requerido', 'INVALID_COURIER_ID', 422);
     const result = engine.assignOwn({ taskId: task.id, ...input });
     return res.json({ success: true, task: view(result.task) });
   });
-  endpoint('post', '/dispatch/tasks/:id/start', (req, res) => {
+  endpoint('post', '/dispatch/tasks/:id/start', (req, res, engine, store, multiStop) => {
     const task = engine.taskFor(req.params.id); merchantAccess(req, engine.merchantFor(task));
     const result = engine.startDispatch({ taskId: task.id, ...body(req, ['expectedVersion']) });
     return res.json({ success: true, task: view(result.task) });
   });
-  endpoint('get', ['/dispatch/tasks/:id', '/tasks/:id'], (req, res) => {
+  endpoint('get', ['/dispatch/tasks/:id', '/tasks/:id'], (req, res, engine, store, multiStop) => {
     const task = engine.taskFor(req.params.id);
     if (req.user.role === 'DELIVERY') {
       const courier = courierAccess(req);
@@ -120,7 +153,7 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, now =
     engine.tick();
     return res.json(view(task));
   });
-  endpoint('post', '/couriers/me/presence', (req, res) => {
+  endpoint('post', '/couriers/me/presence', (req, res, engine, store, multiStop) => {
     const courier = courierAccess(req);
     const input = body(req, ['courierId', 'isOnline', 'lat', 'lng', 'accuracy', 'acceptingShared']);
     if (typeof input.isOnline !== 'boolean' || input.isOnline && !validCoordinates(input.lat, input.lng)
@@ -133,18 +166,18 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, now =
       accuracy: input.accuracy ?? 10, lastSeenAt: now(), acceptingShared: input.acceptingShared ?? courier.presence?.acceptingShared ?? false };
     return res.json({ success: true, presence: courier.presence });
   });
-  endpoint('get', '/couriers/me/offers', (req, res) => {
+  endpoint('get', '/couriers/me/offers', (req, res, engine, store, multiStop) => {
     const courier = courierAccess(req);
     const offers = engine.offersForCourier(courier.id).map(offer => ({ id: offer.id, taskId: offer.taskId,
       payoutAmount: offer.payoutAmount, currency: offer.currency, source: offer.source, expiresAt: offer.expiresAt }));
     return res.json({ offers });
   });
-  endpoint('post', '/couriers/offers/:id/accept', (req, res) => {
+  endpoint('post', '/couriers/offers/:id/accept', (req, res, engine, store, multiStop) => {
     const courier = courierAccess(req); body(req, ['courierId']);
     const { task, assignment } = engine.acceptOffer({ offerId: req.params.id, courierId: courier.id });
     return res.json({ success: true, taskId: task.id, assignment });
   });
-  for (const kind of ['pickup', 'deliver']) endpoint('post', `/couriers/tasks/:id/${kind}`, (req, res) => {
+  for (const kind of ['pickup', 'deliver']) endpoint('post', `/couriers/tasks/:id/${kind}`, (req, res, engine, store, multiStop) => {
     const courier = courierAccess(req);
     const input = body(req, ['courierId', kind === 'pickup' ? 'pickupPin' : 'deliveryPin', 'expectedVersion']);
     const result = engine[kind === 'pickup' ? 'confirmPickup' : 'confirmDelivery']({ ...input, taskId: req.params.id, courierId: courier.id });
@@ -153,34 +186,34 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, now =
   if (multiStop) {
     // Only a platform-level human administrator may compose a group from
     // existing server-owned orders/tasks. No customer-controlled routes.
-    endpoint('post', '/ops/multi-trips', (req, res) => {
+    endpoint('post', '/ops/multi-trips', (req, res, engine, store, multiStop) => {
       if (req.user.role !== 'SUPER_ADMIN') fail('Administrador de plataforma requerido', 'PLATFORM_FORBIDDEN', 403);
       const input = body(req, ['checkoutGroupId', 'taskIds', 'payoutAmount', 'ttlSeconds']);
       return res.status(201).json(multiStop.createTrip(input));
     });
-    endpoint('get', '/couriers/me/multi-offers', (req, res) => {
+    endpoint('get', '/couriers/me/multi-offers', (req, res, engine, store, multiStop) => {
       const courier = courierAccess(req);
       return res.json({ offers: multiStop.offersFor(courier.id) });
     });
-    endpoint('post', '/couriers/multi-offers/:offerId/accept', (req, res) => {
+    endpoint('post', '/couriers/multi-offers/:offerId/accept', (req, res, engine, store, multiStop) => {
       const courier = courierAccess(req);
       body(req, []);
       return res.json({ success: true, trip: multiStop.accept({
         offerId: req.params.offerId, courierId: courier.id,
       }) });
     });
-    endpoint('get', '/couriers/me/multi-trips', (req, res) => {
+    endpoint('get', '/couriers/me/multi-trips', (req, res, engine, store, multiStop) => {
       const courier = courierAccess(req);
       return res.json({ trips: multiStop.listAssigned(courier.id) });
     });
-    endpoint('post', '/couriers/multi-trips/:tripId/stops/:taskId/pickup', (req, res) => {
+    endpoint('post', '/couriers/multi-trips/:tripId/stops/:taskId/pickup', (req, res, engine, store, multiStop) => {
       const courier = courierAccess(req);
       const input = body(req, ['pickupPin', 'expectedVersion']);
       return res.json({ success: true, trip: multiStop.pickup({
         tripId: req.params.tripId, taskId: req.params.taskId, courierId: courier.id, ...input,
       }) });
     });
-    endpoint('post', '/couriers/multi-trips/:tripId/deliver', (req, res) => {
+    endpoint('post', '/couriers/multi-trips/:tripId/deliver', (req, res, engine, store, multiStop) => {
       const courier = courierAccess(req);
       const input = body(req, ['deliveryPin', 'expectedVersion']);
       return res.json({ success: true, trip: multiStop.deliver({

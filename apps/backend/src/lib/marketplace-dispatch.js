@@ -166,12 +166,48 @@ function atomicAcceptOffer({ task, offer, courierId, now = new Date() }) {
 
 // ── Verification Transitions ──────────────────────────────────────────────────
 
+const NETWORK_PIN_MAX_FAILURES = 10;
+const NETWORK_PIN_WINDOW_MS = 15 * 60 * 1000;
+
+// El contador vive en el agregado persistido, separado por recogida/entrega.
+// El adaptador transaccional debe guardar pinAttempts incluso cuando se rechaza
+// el código; hacer rollback de ese contador permitiría intentos ilimitados.
+function assertNetworkPin({ record, kind, pin, expectedHash, now = new Date(), invalidError }) {
+  const at = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  if (!record || !['pickup', 'delivery'].includes(kind) || !Number.isFinite(at)) {
+    throw new DispatchError('Verificacion de PIN no disponible', 'PIN_STATE_INVALID', 503);
+  }
+  const attempts = record.pinAttempts ?? {};
+  const previous = attempts[kind];
+  if (previous && (!Number.isSafeInteger(previous.failures) || previous.failures < 0
+    || !Number.isFinite(new Date(previous.windowStartedAt).getTime()))) {
+    throw new DispatchError('Contador de PIN invalido', 'PIN_STATE_INVALID', 503);
+  }
+  const started = previous ? new Date(previous.windowStartedAt).getTime() : at;
+  // Un reloj que retrocede no debe desbloquear el pedido.
+  const expired = previous && at - started >= NETWORK_PIN_WINDOW_MS;
+  const failures = !previous || expired ? 0 : previous.failures;
+  if (failures >= NETWORK_PIN_MAX_FAILURES) {
+    throw new DispatchError('Demasiados intentos; espera unos minutos o pide ayuda a la tienda', 'DELIVERY_PIN_LOCKED', 429);
+  }
+  if (!verifyPin(pin, expectedHash)) {
+    record.pinAttempts = { ...attempts, [kind]: {
+      failures: failures + 1,
+      windowStartedAt: new Date(!previous || expired ? at : started).toISOString(),
+    } };
+    throw invalidError || new InvalidPinError(kind === 'pickup' ? 'recogida' : 'entrega');
+  }
+  if (previous) {
+    const next = { ...attempts };
+    delete next[kind];
+    record.pinAttempts = next;
+  }
+}
+
 function confirmPickup({ task, pickupPin, now = new Date() }) {
   assertTaskTransition(task, TASK_STATUS.PICKED_UP);
 
-  if (!verifyPin(pickupPin, task.pickupPinHash)) {
-    throw new InvalidPinError('recogida');
-  }
+  assertNetworkPin({ record: task, kind: 'pickup', pin: pickupPin, expectedHash: task.pickupPinHash, now });
 
   const currentTime = now instanceof Date ? now : new Date(now);
   task.status = TASK_STATUS.PICKED_UP;
@@ -192,9 +228,7 @@ function confirmPickup({ task, pickupPin, now = new Date() }) {
 function confirmDelivery({ task, deliveryPin, now = new Date() }) {
   assertTaskTransition(task, TASK_STATUS.DELIVERED);
 
-  if (!verifyPin(deliveryPin, task.deliveryPinHash)) {
-    throw new InvalidPinError('entrega');
-  }
+  assertNetworkPin({ record: task, kind: 'delivery', pin: deliveryPin, expectedHash: task.deliveryPinHash, now });
 
   const currentTime = now instanceof Date ? now : new Date(now);
   task.status = TASK_STATUS.DELIVERED;
@@ -341,6 +375,9 @@ function createHybridDispatchEngine({ store, now = () => new Date() }) {
     if (!order || order.restaurantId !== task.restaurantId || order.locationId !== task.locationId
       || ['CANCELLED', 'DELIVERED', 'REFUNDED'].includes(order.status)) {
       throw new DispatchError('Orden no disponible', 'ORDER_UNAVAILABLE', 409);
+    }
+    if (['PENDING_PAYMENT', 'PENDING_MERCHANT'].includes(order.status)) {
+      throw new DispatchError('La orden debe pagarse y ser aceptada antes del reparto', 'NOT_DISPATCHABLE', 409);
     }
     return order;
   }
@@ -566,6 +603,7 @@ module.exports = {
   InvalidPinError,
   hashPin,
   verifyPin,
+  assertNetworkPin,
   haversineDistanceKm,
   canTransitionTask,
   assertTaskTransition,

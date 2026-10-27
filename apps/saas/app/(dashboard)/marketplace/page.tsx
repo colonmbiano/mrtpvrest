@@ -1,38 +1,12 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import { AlertCircle } from 'lucide-react';
 import { DispatchAuditSection } from './DispatchAuditSection';
 import { MerchantApplicationsSection } from './MerchantApplicationsSection';
+import { loadMarketplaceOverview, type MarketplaceOverview } from '@/lib/marketplaceOverview';
 
-interface Store {
-  id: string;
-  name: string;
-  businessType: 'RESTAURANT' | 'GROCERY' | 'RETAIL' | 'HARDWARE' | 'AUTOPARTS';
-  collectorId?: string;
-  orderCount: number;
-  gmv: number;
-  createdAt: string;
-}
-
-interface Order {
-  id: string;
-  orderNumber: string;
-  storeId: string;
-  storeName: string;
-  subtotal: number;
-  deliveryFee: number;
-  total: number;
-  status: string;
-  createdAt: string;
-}
-
-interface LedgerEntry {
-  type: 'GATEWAY_ESCROW' | 'MERCHANT_PAYABLE' | 'COURIER_PAYABLE' | 'PLATFORM_FEES';
-  amount: number;
-}
-
-const BUSINESS_TYPE_LABELS = {
+const BUSINESS_TYPE_LABELS: Record<string, string> = {
   RESTAURANT: '🍽️ Restaurante',
   GROCERY: '🥑 Abarrotes',
   RETAIL: '🛍️ Tienda',
@@ -40,54 +14,36 @@ const BUSINESS_TYPE_LABELS = {
   AUTOPARTS: '🚗 Refaccionaria',
 };
 
+const EVENT_LABELS: Record<string, string> = {
+  ORDER_CAPTURED: 'Pago recibido', ORDER_SETTLED: 'Pedido liquidado', ORDER_REFUNDED: 'Reembolso',
+  PAYOUT_DISBURSED: 'Retiro pagado', MANUAL_ADJUSTMENT: 'Ajuste manual',
+};
+
 export default function MarketplacePage() {
-  const [stores, setStores] = useState<Store[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+  const [overview, setOverview] = useState<MarketplaceOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    let active = true;
     const loadData = async () => {
       try {
-        const [storesRes, ordersRes, ledgerRes] = await Promise.all([
-          api.get('/api/admin/marketplace/stores'),
-          api.get('/api/admin/marketplace/orders'),
-          api.get('/api/admin/marketplace/ledger'),
-        ]);
-
-        setStores(storesRes.data || []);
-        setOrders(ordersRes.data || []);
-        setLedger(ledgerRes.data || []);
+        const result = await loadMarketplaceOverview(api);
+        if (active) setOverview(result);
       } catch (err: any) {
-        setError(err?.response?.data?.error || 'Error al cargar datos');
-        setStores([]);
-        setOrders([]);
-        setLedger([]);
+        if (active) { setError(err?.response?.data?.error || err?.message || 'Error al cargar datos'); setOverview(null); }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     loadData();
+    return () => { active = false; };
   }, []);
 
-  const metrics = useMemo(() => {
-    const gmvTotal = orders.reduce((s, o) => s + o.total, 0);
-    const platformFees = orders.reduce((s, o) => s + (o.total * 0.05), 0);
-    const totalOrders = orders.length;
-    const activeStores = stores.filter(s => s.orderCount > 0).length;
-
-    const gatewayEscrow = ledger.filter(l => l.type === 'GATEWAY_ESCROW').reduce((s, l) => s + l.amount, 0);
-    const merchantPayable = ledger.filter(l => l.type === 'MERCHANT_PAYABLE').reduce((s, l) => s + l.amount, 0);
-    const courierPayable = ledger.filter(l => l.type === 'COURIER_PAYABLE').reduce((s, l) => s + l.amount, 0);
-
-    return { gmvTotal, platformFees, totalOrders, activeStores, gatewayEscrow, merchantPayable, courierPayable };
-  }, [orders, ledger]);
-
-  const recentOrders = useMemo(() => orders.slice(-10).reverse(), [orders]);
-
-  const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`;
+  const stores = overview?.merchants ?? [];
+  const transactions = overview?.recentTransactions ?? [];
+  const formatCurrency = (amount: number | undefined) => amount === undefined ? '—' : `$${amount.toFixed(2)}`;
   const formatDate = (iso: string) => new Date(iso).toLocaleDateString('es-MX');
 
   return (
@@ -120,10 +76,10 @@ export default function MarketplacePage() {
         {/* Métricas */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '32px' }}>
           {[
-            { label: 'GMV Total', value: formatCurrency(metrics.gmvTotal), icon: '💰' },
-            { label: 'Comisiones (5%)', value: formatCurrency(metrics.platformFees), icon: '📊' },
-            { label: 'Total Órdenes', value: metrics.totalOrders.toString(), icon: '📦' },
-            { label: 'Comercios Activos', value: metrics.activeStores.toString(), icon: '🏪' },
+            { label: 'GMV pagado', value: formatCurrency(overview?.gmvTotal), icon: '💰' },
+            { label: 'Comisiones contabilizadas', value: formatCurrency(overview?.platformFees), icon: '📊' },
+            { label: 'Total Órdenes', value: overview?.totalOrders.toString() ?? '—', icon: '📦' },
+            { label: 'Comercios Activos', value: overview?.activeMerchants.toString() ?? '—', icon: '🏪' },
           ].map((m, i) => (
             <div key={i} style={{
               background: 'var(--surf-1)',
@@ -151,9 +107,9 @@ export default function MarketplacePage() {
           <h2 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 16px 0' }}>Balance del Ledger</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
             {[
-              { label: 'Fondos en Pasarela (ESCROW)', value: formatCurrency(metrics.gatewayEscrow), color: '#3b82f6' },
-              { label: 'Por Pagar a Comercios', value: formatCurrency(metrics.merchantPayable), color: '#10b981' },
-              { label: 'Por Pagar a Repartidores', value: formatCurrency(metrics.courierPayable), color: '#f59e0b' },
+              { label: 'Fondos en Pasarela (ESCROW)', value: formatCurrency(overview?.balances.GATEWAY_ESCROW), color: '#3b82f6' },
+              { label: 'Por Pagar a Comercios', value: formatCurrency(overview?.balances.MERCHANT_PAYABLE), color: '#10b981' },
+              { label: 'Por Pagar a Repartidores', value: formatCurrency(overview?.balances.COURIER_PAYABLE), color: '#f59e0b' },
             ].map((l, i) => (
               <div key={i} style={{
                 background: 'var(--surf-1)',
@@ -180,24 +136,24 @@ export default function MarketplacePage() {
             {loading ? (
               <div style={{ padding: '40px', textAlign: 'center', color: 'var(--tx-mut)' }}>Cargando...</div>
             ) : stores.length === 0 ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--tx-mut)' }}>No hay comercios</div>
+              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--tx-mut)' }}>{error ? 'Auditoría no disponible' : 'No hay comercios'}</div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--bd-1)' }}>
-                      {['Nombre', 'Giro', 'Mercado Pago', 'Órdenes', 'GMV'].map(h => (
+                      {['Nombre', 'Giro', 'Estado', 'Órdenes', 'GMV'].map(h => (
                         <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: 'var(--tx-mut)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {stores.map((s, i) => (
-                      <tr key={i} style={{ borderBottom: i < stores.length - 1 ? '1px solid var(--bd-1)' : 'none' }}>
+                      <tr key={s.id} style={{ borderBottom: i < stores.length - 1 ? '1px solid var(--bd-1)' : 'none' }}>
                         <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '500' }}>{s.name}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '14px' }}>{BUSINESS_TYPE_LABELS[s.businessType]}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '14px' }}>{BUSINESS_TYPE_LABELS[s.businessType] ?? s.businessType}</td>
                         <td style={{ padding: '12px 16px', fontSize: '14px' }}>
-                          {s.collectorId ? '✓ Activo' : '—'}
+                          {s.isActive ? 'Activo' : 'Inactivo'}
                         </td>
                         <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '500' }}>{s.orderCount}</td>
                         <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '500' }}>{formatCurrency(s.gmv)}</td>
@@ -210,9 +166,9 @@ export default function MarketplacePage() {
           </div>
         </div>
 
-        {/* Órdenes Recientes */}
+        {/* Movimientos reales publicados por la auditoría contable */}
         <div style={{ marginBottom: '32px' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 16px 0' }}>Órdenes Recientes</h2>
+          <h2 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 16px 0' }}>Movimientos contables recientes</h2>
           <div style={{
             background: 'var(--surf-1)',
             border: '1px solid var(--bd-1)',
@@ -221,26 +177,24 @@ export default function MarketplacePage() {
           }}>
             {loading ? (
               <div style={{ padding: '40px', textAlign: 'center', color: 'var(--tx-mut)' }}>Cargando...</div>
-            ) : recentOrders.length === 0 ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--tx-mut)' }}>No hay órdenes</div>
+            ) : transactions.length === 0 ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--tx-mut)' }}>{error ? 'Auditoría no disponible' : 'No hay movimientos contables'}</div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--bd-1)' }}>
-                      {['Orden', 'Tienda', 'Subtotal', 'Envío', 'Total', 'Estado', 'Fecha'].map(h => (
+                      {['Orden', 'Tienda', 'Importe', 'Movimiento', 'Fecha'].map(h => (
                         <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: 'var(--tx-mut)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {recentOrders.map((o, i) => (
-                      <tr key={i} style={{ borderBottom: i < recentOrders.length - 1 ? '1px solid var(--bd-1)' : 'none' }}>
-                        <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '500' }}>{o.orderNumber}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '14px' }}>{o.storeName}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '14px' }}>{formatCurrency(o.subtotal)}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '14px' }}>{formatCurrency(o.deliveryFee)}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '500' }}>{formatCurrency(o.total)}</td>
+                    {transactions.map((o, i) => (
+                      <tr key={o.id} style={{ borderBottom: i < transactions.length - 1 ? '1px solid var(--bd-1)' : 'none' }}>
+                        <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '500' }}>{o.orderId}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '14px' }}>{stores.find(s => s.id === o.restaurantId)?.name ?? o.restaurantId}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '500' }}>{formatCurrency(o.amount)}</td>
                         <td style={{ padding: '12px 16px', fontSize: '14px' }}>
                           <span style={{
                             display: 'inline-block',
@@ -248,10 +202,10 @@ export default function MarketplacePage() {
                             borderRadius: '4px',
                             fontSize: '12px',
                             fontWeight: '600',
-                            background: o.status === 'DELIVERED' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(107, 114, 128, 0.1)',
-                            color: o.status === 'DELIVERED' ? '#10b981' : '#6b7280',
+                            background: 'rgba(107, 114, 128, 0.1)',
+                            color: 'var(--tx-mut)',
                           }}>
-                            {o.status}
+                            {EVENT_LABELS[o.eventType] ?? o.eventType}
                           </span>
                         </td>
                         <td style={{ padding: '12px 16px', fontSize: '14px', color: 'var(--tx-mut)' }}>{formatDate(o.createdAt)}</td>

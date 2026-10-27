@@ -163,6 +163,12 @@ function createSettlementsV1Service(ports = {}) {
     const requestHash = digest(JSON.stringify({ orderId, ...request }));
     const keyHash = digest(`${actor.accountId}:${idempotencyKey}`);
 
+    // El adaptador persistente reserva primero y recupera el reembolso después
+    // de reinicios. La vía de puertos simple se conserva para fixtures existentes.
+    if (ports.refundCoordinator) return ports.refundCoordinator.refund({
+      actor, orderId, request, requestHash, keyHash,
+    });
+
     // A replay returns the stored refund and never repeats the provider call or the ledger write.
     const existing = await refundStore.findByKey(keyHash);
     if (existing) {

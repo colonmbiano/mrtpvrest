@@ -63,6 +63,24 @@ async function createMarketplacePaymentGateway({ restaurantId, prismaClient, req
           currency: result.currency_id, marketplaceFeeCents: fee };
       } catch { throw new MarketplaceGatewayError('INVALID_PAYMENT_RESPONSE'); }
     },
+    // La identidad del pago y el importe vienen de la reserva persistente del
+    // servidor. El mismo Idempotency-Key se reutiliza tras una respuesta perdida.
+    async refundPayment({ paymentId, amountCents, idempotencyKey }) {
+      if (!/^\d+$/.test(String(paymentId)) || !Number.isSafeInteger(amountCents) || amountCents <= 0
+        || amountCents > 100000000 || typeof idempotencyKey !== 'string' || !idempotencyKey) {
+        throw new MarketplaceGatewayError('INVALID_REFUND_REQUEST');
+      }
+      const result = await call(`/v1/payments/${encodeURIComponent(paymentId)}/refunds`, {
+        method: 'POST', headers: { 'X-Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ amount: amountCents / 100 }),
+      });
+      try {
+        if (!result.id || String(result.payment_id) !== String(paymentId) || cents(result.amount) !== amountCents) {
+          throw new Error('refund');
+        }
+        return { id: String(result.id), paymentId: String(result.payment_id), amountCents: cents(result.amount), status: result.status };
+      } catch { throw new MarketplaceGatewayError('INVALID_REFUND_RESPONSE'); }
+    },
   };
 }
 

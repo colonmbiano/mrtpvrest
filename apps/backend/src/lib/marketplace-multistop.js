@@ -7,7 +7,7 @@
  */
 const crypto = require('node:crypto');
 const {
-  DispatchError, verifyPin, validCoordinates,
+  DispatchError, assertNetworkPin, validCoordinates,
   TASK_STATUS, rankCandidates,
 } = require('./marketplace-dispatch');
 
@@ -233,8 +233,10 @@ function createMultiStopEngine({ store, now = () => new Date() }) {
     if (!task || task.currentAssignment?.courierId !== courierId
       || task.status !== TASK_STATUS.ASSIGNED || !order || order.status !== 'READY')
       bad('TASK_NOT_READY', 409);
-    if (!verifyPin(pickupPin, task.pickupPinHash)) bad('INVALID_PICKUP_PIN', 403);
-    const stamp = clock().toISOString();
+    const date = clock();
+    assertNetworkPin({ record: task, kind: 'pickup', pin: pickupPin, expectedHash: task.pickupPinHash, now: date,
+      invalidError: new DispatchError('Codigo de recogida incorrecto', 'INVALID_PICKUP_PIN', 403) });
+    const stamp = date.toISOString();
     stop.status = 'PICKED_UP'; stop.pickedUpAt = stamp;
     task.status = TASK_STATUS.PICKED_UP; task.pickedUpAt = stamp;
     task.currentAssignment.pickedUpAt = stamp;
@@ -248,7 +250,6 @@ function createMultiStopEngine({ store, now = () => new Date() }) {
     const trip = tripFor(tripId); assigned(trip, courierId);
     if (trip.status !== 'ASSIGNED' || expectedVersion !== trip.version) bad('STALE_TRIP', 409);
     if (!allPicked(trip)) bad('PICKUPS_PENDING', 409);
-    if (!verifyPin(deliveryPin, trip.deliveryPinHash)) bad('INVALID_DELIVERY_PIN', 403);
     for (const row of trip.stops) {
       const task = taskFor(row.taskId);
       const order = task && store.orders.get(task.orderId);
@@ -257,7 +258,10 @@ function createMultiStopEngine({ store, now = () => new Date() }) {
         || task.currentAssignment.status !== 'ACTIVE')
         bad('INCONSISTENT_STOP', 409);
     }
-    const stamp = clock().toISOString();
+    const date = clock();
+    assertNetworkPin({ record: trip, kind: 'delivery', pin: deliveryPin, expectedHash: trip.deliveryPinHash, now: date,
+      invalidError: new DispatchError('Codigo de entrega incorrecto', 'INVALID_DELIVERY_PIN', 403) });
+    const stamp = date.toISOString();
     for (const row of trip.stops) {
       const task = taskFor(row.taskId);
       const order = store.orders.get(task.orderId);
