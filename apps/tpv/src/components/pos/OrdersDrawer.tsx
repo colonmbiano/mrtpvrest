@@ -24,6 +24,7 @@ import {
   User,
 } from "lucide-react";
 import { hapticMedium } from "@/lib/haptics";
+import { PAY_FILTERS, matchesPayFilter } from "@/lib/paid-order-filters";
 
 export interface DrawerOrder {
   id: string;
@@ -142,23 +143,6 @@ const payMethodLabel = (m?: string | null): string =>
 
 const FILTERS = ["Todos", "Mesa", "Llevar", "Domicilio"] as const;
 type FilterKey = (typeof FILTERS)[number];
-
-// Filtro por método de pago — solo en modo "Cobradas". Cada chip agrupa los
-// métodos equivalentes (efectivo contra-entrega cuenta como efectivo, SPEI/OXXO
-// como transferencia, etc.). `methods: null` = sin filtrar (Todos).
-const PAY_FILTERS: { key: string; label: string; methods: string[] | null }[] = [
-  { key: "Todos", label: "Todos", methods: null },
-  { key: "CASH", label: "Efectivo", methods: ["CASH", "CASH_ON_DELIVERY"] },
-  { key: "TRANSFER", label: "Transfer.", methods: ["TRANSFER", "SPEI", "OXXO"] },
-  { key: "CARD", label: "Tarjeta", methods: ["CARD", "CARD_PRESENT"] },
-  { key: "OTHER", label: "Otros", methods: ["ONLINE", "MIXED", "COURTESY", "OTHER"] },
-];
-
-const matchesPayFilter = (order: DrawerOrder, payKey: string): boolean => {
-  const group = PAY_FILTERS.find((p) => p.key === payKey);
-  if (!group || group.methods === null) return true;
-  return group.methods.includes((order.paymentMethod || "").toUpperCase());
-};
 
 // Orden del listado. `time` es string de display (no timestamp), así que
 // no ordenamos por tiempo; orden por monto y nombre son confiables.

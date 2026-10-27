@@ -1,7 +1,7 @@
 {
   "framework": "nextjs",
   "ignoreCommand": "npx turbo-ignore @mrtpvrest/saas",
-  "installCommand": "cd ../.. && npx pnpm@9.15.0 install --no-frozen-lockfile",
+  "installCommand": "cd ../.. && npx pnpm@9.15.0 install --frozen-lockfile --prod=false",
   "buildCommand": "cd ../.. && npx pnpm@9.15.0 turbo build --filter @mrtpvrest/saas",
   "outputDirectory": ".next"
 }
