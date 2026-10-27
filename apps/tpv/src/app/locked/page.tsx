@@ -9,6 +9,7 @@ import { useAuthStore } from "@/store/authStore";
 import { initBackgroundSync } from "@/lib/offline";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { getTenantIds } from "@/lib/tenant";
+import { homeRouteFor } from "@/lib/homeRoute";
 import api from "@/lib/api";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -41,7 +42,7 @@ export default function LockedPage() {
       }
 
       if (isAuthenticated) {
-        router.replace("/hub");
+        router.replace(homeRouteFor(useAuthStore.getState().employee?.role));
       }
     };
 
@@ -108,7 +109,7 @@ export default function LockedPage() {
       }
 
       initBackgroundSync();
-      router.replace("/hub");
+      router.replace(homeRouteFor(useAuthStore.getState().employee?.role));
     } catch (err) {
       console.error("PIN validation error:", err);
       setError("Error al validar PIN");
