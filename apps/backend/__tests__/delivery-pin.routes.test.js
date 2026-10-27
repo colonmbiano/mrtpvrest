@@ -18,6 +18,9 @@ jest.mock('@mrtpvrest/database', () => ({
   prisma: {
     employee: { findFirst: jest.fn() },
     order: { findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+    // Freno de intentos en PostgreSQL (delivery_pin_attempts).
+    deliveryPinAttempt: { findFirst: jest.fn().mockResolvedValue(null), deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
   },
 }));
 
@@ -80,6 +83,9 @@ test('verificación sin efectos: acepta el PIN correcto y rechaza los demás', a
   const bad = await request(makeApp()).post('/api/delivery/d1/orders/o1/delivery-pin').send({ deliveryPin: WRONG });
   expect(bad.status).toBe(400);
   expect(bad.body.code).toBe('INVALID_DELIVERY_PIN');
+  // El fallo se cuenta en PostgreSQL, compartido entre instancias del backend.
+  expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+  expect(prisma.$executeRaw.mock.calls[0].slice(1, 3)).toEqual(['r1', 'o1']);
   const empty = await request(makeApp()).post('/api/delivery/d1/orders/o1/delivery-pin').send({});
   expect(empty.status).toBe(400);
   expect(prisma.order.update).not.toHaveBeenCalled();

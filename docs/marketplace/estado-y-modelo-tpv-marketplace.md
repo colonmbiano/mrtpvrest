@@ -130,7 +130,7 @@ La protección de push sigue configurada. Las migraciones de estas integraciones
 3. **Alta de cuentas para el entorno elegido.** El GPS del seguimiento ya está conectado (C5); falta revisar la identidad de staging antes de habilitar cuentas reales de repartidores de la red.
 4. **Integrar liquidaciones y reembolsos.** Stores transaccionales, permisos por comercio, conciliación, reintentos y validación con pasarela sandbox; comprobar recuperación de eventos pendientes.
 5. **Cerrar revisión de seguridad y compatibilidad.** Revalidar dependencias y avisos actuales, secretos propios del marketplace, separación de PIN de recogida/entrega y límites de intentos en todos los caminos. El bloqueo del PIN de reparto propio está implementado; no extender esa conclusión a toda la red compartida.
-6. **Preparar publicación controlada.** El plan está en [activacion-migracion-reversion.md](activacion-migracion-reversion.md) (C7): qué dispara el merge, las 9 migraciones y sus riesgos, verificaciones previas en producción, fases de activación por bandera y reversión. Publicar requiere una instrucción explícita.
+6. **Preparar publicación controlada.** El plan está en [activacion-migracion-reversion.md](activacion-migracion-reversion.md) (C7): qué dispara el merge, las 10 migraciones y sus riesgos, verificaciones previas en producción, fases de activación por bandera y reversión. Publicar requiere una instrucción explícita.
 7. **Confirmar configuración comercial antes de habilitar ventas.** Comisión efectiva, responsables de aprobación, alcance de red compartida y reglas de liquidación. El código configurable no confirma una decisión de negocio.
 
 ## Coordinación y entrega entre agentes

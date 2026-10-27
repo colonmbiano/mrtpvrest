@@ -2977,6 +2977,19 @@ model DriverLocation {
   @@index([driverId, orderId, createdAt])
 }
 
+// Freno de intentos del PIN de entrega del reparto propio (lib/store-delivery-pin.js):
+// compartido entre instancias y reinicios del backend. Una fila por pedido con fallos.
+model DeliveryPinAttempt {
+  restaurantId String
+  orderId      String
+  failures     Int      @default(0)
+  windowStart  DateTime
+  updatedAt    DateTime @updatedAt
+
+  @@id([restaurantId, orderId])
+  @@map("delivery_pin_attempts")
+}
+
 model DriverRoute {
   id         String    @id @default(cuid())
   driverId   String

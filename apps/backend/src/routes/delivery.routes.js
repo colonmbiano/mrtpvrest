@@ -6,14 +6,15 @@ const { authenticate, requireTenantAccess, requireRole } = require('../middlewar
 const { localDayRange } = require('../utils/dayRange');
 const { sendPushToDriver, notifyDriversNewDeliveryOrder, notifyOrderStatus } = require('../services/notifications.service');
 const { createDeliveryIncidentsService, DeliveryIncidentError } = require('../lib/delivery-incidents');
-const { createStoreDeliveryPin, StoreDeliveryPinError } = require('../lib/store-delivery-pin');
+const { createStoreDeliveryPin, createPrismaPinAttempts, StoreDeliveryPinError } = require('../lib/store-delivery-pin');
 // Pedidos del marketplace que entregan los repartidores propios (política MANUAL).
 // Los de la red compartida no entran a la bolsa ni a la asignación de la tienda.
 const { NOT_DISPATCHABLE, PIPELINE_SELECT, networkMarketplace, courierView } = require('../lib/marketplace-store-delivery');
 const router = express.Router();
-// PIN de entrega de pedidos propios (STORE_DELIVERY_PIN_MODE). Una sola
-// instancia: lleva el freno de intentos fallidos por pedido.
-const storeDeliveryPin = createStoreDeliveryPin();
+// PIN de entrega de pedidos propios (STORE_DELIVERY_PIN_MODE). El freno de
+// intentos fallidos por pedido vive en PostgreSQL: vale para todas las instancias
+// del backend y sobrevive a un reinicio.
+const storeDeliveryPin = createStoreDeliveryPin({ attempts: createPrismaPinAttempts({ prisma }) });
 if (storeDeliveryPin.misconfigured) {
   console.warn('[delivery] STORE_DELIVERY_PIN_MODE sin STORE_DELIVERY_PIN_SECRET valido: PIN de entrega desactivado');
 }
@@ -607,7 +608,7 @@ router.post('/:driverId/orders/:orderId/delivery-pin', authenticate, requireTena
     if (pin === undefined || pin === null || pin === '') {
       return res.status(400).json({ error: 'Escribe el código de entrega', code: 'INVALID_DELIVERY_PIN' });
     }
-    storeDeliveryPin.assertCourierPin(order, pin);
+    await storeDeliveryPin.assertCourierPin(order, pin);
     res.json({ ok: true, required: true });
   } catch (error) {
     if (error instanceof StoreDeliveryPinError) return res.status(error.statusCode).json({ error: error.message, code: error.code });
@@ -629,7 +630,7 @@ router.put('/:driverId/orders/:orderId/deliver', authenticate, requireTenantAcce
       return res.status(409).json({ error: 'Entrega este pedido del marketplace con el código del cliente desde la app.', code: 'PIN_CONFIRMATION_REQUIRED' });
     }
     if (req.user?.role === 'DELIVERY' && existing.status !== 'DELIVERED') {
-      try { storeDeliveryPin.assertCourierPin(existing, req.body?.deliveryPin); }
+      try { await storeDeliveryPin.assertCourierPin(existing, req.body?.deliveryPin); }
       catch (error) {
         if (error instanceof StoreDeliveryPinError) return res.status(error.statusCode).json({ error: error.message, code: error.code });
         throw error;

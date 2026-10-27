@@ -216,7 +216,7 @@ function createDeliveryIncidentsService({ now = () => new Date(), logger = conso
       if (storeDeliveryPin && !marketplace && actor.role === 'DELIVERY' && status === 'DELIVERED'
         && existing.status !== 'DELIVERED') {
         try {
-          storeDeliveryPin.assertCourierPin(existing, body.deliveryPin);
+          await storeDeliveryPin.assertCourierPin(existing, body.deliveryPin);
         } catch (error) {
           if (error && error.code && error.statusCode) throw new DeliveryIncidentError(error.code, error.message, error.statusCode);
           throw error;

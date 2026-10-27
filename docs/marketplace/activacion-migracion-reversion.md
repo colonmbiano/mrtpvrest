@@ -23,9 +23,9 @@ Un push a `master` dispara, sin intervención:
 
 **No se activa sin banderas:** pedidos v1, entrega v1, pago en línea, red compartida, Ops de la red, finanzas e identidad global.
 
-## 2. Migraciones nuevas frente a master (9, en este orden)
+## 2. Migraciones nuevas frente a master (10, en este orden)
 
-Todas usan `IF NOT EXISTS` o bloques `DO … IF NOT EXISTS`: una segunda corrida no hace nada. Verificado en PostgreSQL desechable: las 101 migraciones aplican desde cero, una segunda corrida es no-op y no queda desfase nuevo frente a `schema.prisma` (persiste el desfase previo de master: `retail_sales_priceListId_idx`, `Ingredient.imageUrl` y `DEFAULT` de `updatedAt` en tablas de nómina/retail).
+Todas usan `IF NOT EXISTS` o bloques `DO … IF NOT EXISTS`: una segunda corrida no hace nada. Verificado en PostgreSQL desechable: las 102 migraciones aplican desde cero, una segunda corrida es no-op y no queda desfase nuevo frente a `schema.prisma` (persiste el desfase previo de master: `retail_sales_priceListId_idx`, `Ingredient.imageUrl` y `DEFAULT` de `updatedAt` en tablas de nómina/retail).
 
 | Migración | Qué hace | Riesgo en producción | ¿Reversible? |
 | --- | --- | --- | --- |
@@ -38,6 +38,7 @@ Todas usan `IF NOT EXISTS` o bloques `DO … IF NOT EXISTS`: una segunda corrida
 | `20261024160000_marketplace_buyer_addresses` | Libreta de direcciones del comprador | Ninguno | Inerte |
 | `20261025100000_marketplace_network_persistence` | 10 tablas de red, Ops y finanzas; `locations.latitude/longitude` (opcionales) y una restricción que exige ambas o ninguna, en rango | Bajo. La restricción valida filas existentes, que no tienen esas columnas: pasa | Aditiva |
 | `20261027000000_driver_location_order_index` | Índice `DriverLocation(driverId, orderId, createdAt)` para el seguimiento | Bajo. Bloquea escrituras de GPS mientras se construye; depende del tamaño de la tabla | Aditiva |
+| `20261027120000_delivery_pin_attempts` | Tabla `delivery_pin_attempts`: freno de intentos del PIN del reparto propio, compartido entre instancias | Ninguno sobre datos existentes | Inerte si se revierte el código (el código anterior usa su contador en memoria) |
 
 Llaves foráneas que la reconciliación valida contra filas existentes:
 
@@ -104,7 +105,7 @@ Si 3.1 o 3.4 no dan 0, **no fusionar**: corregir primero los datos o la migraci�
 1. Fusionar el PR #162 en `master`.
 2. Verificar:
    - Despliegue de Railway en `success` y `GET /health` en 200.
-   - `_prisma_migrations` con 101 filas terminadas y ninguna fallida.
+   - `_prisma_migrations` con 102 filas terminadas y ninguna fallida.
    - Logs del backend sin errores nuevos.
    - Vercel publicado para TPV, admin, SaaS, tienda y repartidor.
    - Versión OTA publicada.
@@ -153,7 +154,7 @@ Requiere C6, la prueba real en sandbox de Mercado Pago:
 - `MARKETPLACE_IDENTITY_ENABLED` hoy exige `MARKETPLACE_IDENTITY_MODE=staging` y un origen HTTPS: el código no la permite en producción.
 
 Antes de esta fase:
-- Cerrar los hallazgos del [informe G8](auditoria-seguridad-codex-2026-10-26.md): dependencias, claves JWT separadas y contador del PIN propio compartido.
+- Cerrar los hallazgos del [informe G8](auditoria-seguridad-codex-2026-10-26.md): dependencias y claves JWT separadas. El contador del PIN propio ya es compartido (`delivery_pin_attempts`).
 - Decidir qué comercios y con qué política.
 - Probar en staging con navegador.
 

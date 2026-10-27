@@ -8,6 +8,9 @@ jest.mock('@mrtpvrest/database', () => ({
   prisma: {
     employee: { findFirst: jest.fn() },
     order: { findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
+    // Freno de intentos en PostgreSQL (delivery_pin_attempts).
+    deliveryPinAttempt: { findFirst: jest.fn().mockResolvedValue(null), deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
   },
 }));
 

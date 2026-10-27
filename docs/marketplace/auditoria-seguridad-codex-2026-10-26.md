@@ -64,7 +64,7 @@ Las respuestas públicas del despacho usan proyecciones y las del reparto propio
 
 1. Actualizar Next/sharp/axios mediante cambio autorizado y validar los artefactos que se publicarán.
 2. Separar obligatoriamente JWT entre contextos y añadir `issuer`/`audience` con migración de sesiones compatible.
-3. Llevar el límite del PIN propio a almacenamiento compartido; probar dos procesos y reinicio. Corregir o retirar el adaptador legado antes de exponerlo.
+3. Llevar el límite del PIN propio a almacenamiento compartido; probar dos procesos y reinicio. Corregir o retirar el adaptador legado antes de exponerlo. **Actualización 27/oct (Claude):** el límite del PIN propio ya vive en PostgreSQL (`delivery_pin_attempts`, migración `20261027120000`); probado con dos clientes, un proceso nuevo, 30 fallos simultáneos y una transacción deshecha en base desechable. El adaptador legado sigue pendiente.
 4. Confirmar en el entorno de aceptación que los rechazos no revelan hashes, los permisos no cruzan comercios y las banderas están en el estado previsto. Mantener separadas la evidencia de mocks, PostgreSQL, navegador y producción.
 
 G8 queda entregado como informe. Las correcciones de dependencias y los cambios de identidad/reparto propio aquí propuestos permanecen pendientes; no se incluyeron silenciosamente en G1–G7.
