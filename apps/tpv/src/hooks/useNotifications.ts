@@ -1,7 +1,8 @@
 /**
  * useNotifications.ts
  * Escucha eventos Socket.io del backend y genera notificaciones en tiempo real.
- * Eventos: order:new, new:order (kiosk), order:updated, order:payment:confirmed
+ * Eventos: order:new, new:order (kiosk), order:updated, order:payment:confirmed,
+ * order:table-pending (pedido de mesa por QR que espera confirmación)
  */
 "use client";
 import { useEffect, useRef, useCallback } from "react";
@@ -40,6 +41,7 @@ export type NotifType =
   | "order_delivered"  // Entrega confirmada por repartidor
   | "order_paid"       // Pago confirmado
   | "order_updated"    // Cambio de estado genérico
+  | "table_pending"    // Pedido de mesa por QR que la caja debe confirmar
   | "waiter_call";     // Un mesero llama a la caja desde una mesa
 
 export interface Notification {
@@ -123,17 +125,23 @@ export const useNotifStore = create<NotifState>()(
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
+export function useNotifications(opts?: {
+  onOrderNew?: (order: any) => void;
+  /** Llegó un pedido de mesa por QR por confirmar (p.ej. refrescar la lista). */
+  onTablePending?: (data: any) => void;
+}) {
   const socketRef = useRef<Socket | null>(null);
   const { addNotification } = useNotifStore();
 
-  // El callback se guarda en un ref que se refresca tras cada render (vía
-  // effect — escribirlo durante el render viola react-hooks), así
-  // handleOrderNew permanece estable (no re-suscribe el socket) pero siempre
-  // invoca la última versión del consumidor (p.ej. la auto-impresión del POS).
+  // Los callbacks se guardan en refs que se refrescan tras cada render (vía
+  // effect — escribirlo durante el render viola react-hooks), así los handlers
+  // permanecen estables (no re-suscriben el socket) pero siempre invocan la
+  // última versión del consumidor (p.ej. la auto-impresión del POS).
   const onOrderNewRef = useRef(opts?.onOrderNew);
+  const onTablePendingRef = useRef(opts?.onTablePending);
   useEffect(() => {
     onOrderNewRef.current = opts?.onOrderNew;
+    onTablePendingRef.current = opts?.onTablePending;
   });
 
   const handleOrderNew = useCallback((order: any) => {
@@ -235,6 +243,32 @@ export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
     fireLocalNotification("🔔 Mesa te llama", body);
   }, [addNotification]);
 
+  // Pedido de mesa hecho por QR desde internet a una mesa libre: no entra a
+  // cocina hasta que la caja confirme que hay gente sentada. Toast persistente
+  // como la llamada de mesero: si nadie lo ve, el cliente se queda esperando.
+  const handleTablePending = useCallback((data: any) => {
+    const folio = data?.orderNumber || (data?.id ? `#${String(data.id).slice(-6).toUpperCase()}` : "");
+    const mesa = data?.tableNumber != null ? `Mesa ${data.tableNumber}` : "Una mesa";
+    const body = `${mesa} · Pedido ${folio} · revisa que haya clientes y acéptalo en Pedidos web`.trim();
+
+    addNotification({
+      type: "table_pending",
+      title: "🪑 Mesa por confirmar",
+      body,
+      orderNumber: data?.orderNumber,
+      total: typeof data?.total === "number" ? data.total : undefined,
+    });
+
+    toast("🪑 Mesa por confirmar", {
+      description: body,
+      duration: 15_000,
+    });
+
+    fireLocalNotification("🪑 Mesa por confirmar", body);
+
+    try { onTablePendingRef.current?.(data); } catch { /* noop */ }
+  }, [addNotification]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -292,6 +326,7 @@ export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
       socket.on("order:paid",              handleOrderPaid);
       socket.on("order:payment:confirmed", handleOrderPaid);
       socket.on("waiter:call",             handleWaiterCall);
+      socket.on("order:table-pending",     handleTablePending);
     })();
 
     return () => {
@@ -304,8 +339,9 @@ export function useNotifications(opts?: { onOrderNew?: (order: any) => void }) {
       socket.off("order:paid",              handleOrderPaid);
       socket.off("order:payment:confirmed", handleOrderPaid);
       socket.off("waiter:call",             handleWaiterCall);
+      socket.off("order:table-pending",     handleTablePending);
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [handleOrderNew, handleOrderKiosk, handleOrderUpdated, handleOrderPaid, handleWaiterCall]);
+  }, [handleOrderNew, handleOrderKiosk, handleOrderUpdated, handleOrderPaid, handleWaiterCall, handleTablePending]);
 }

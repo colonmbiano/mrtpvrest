@@ -69,6 +69,8 @@ router.get('/', async (req, res) => {
             tableId: { in: tableIds },
             status: { in: OPEN_TABLE_STATUSES },
             paymentStatus: { not: 'PAID' },
+            // Un pedido de QR por confirmar no ocupa la mesa: la caja aún no lo acepta.
+            awaitingTableConfirmation: false,
           },
           select: {
             id: true, orderNumber: true, status: true,
@@ -152,6 +154,7 @@ router.get('/:id', async (req, res) => {
         tableId: table.id,
         status: { in: OPEN_TABLE_STATUSES },
         paymentStatus: { not: 'PAID' },
+        awaitingTableConfirmation: false, // QR por confirmar: aún no es la cuenta de la mesa
       },
       select: {
         id: true,

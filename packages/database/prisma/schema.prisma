@@ -867,6 +867,9 @@ model Order {
   tableNumber      Int?
   tableId          String?
   table            Table?    @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  // Pedido de mesa desde internet (QR) que la caja aún no confirma: no va a
+  // cocina ni ocupa la mesa hasta que lo aceptan (ver store.routes POST /orders).
+  awaitingTableConfirmation Boolean @default(false)
   // Cantidad de comensales declarada al iniciar la orden DINE_IN. Se usa
   // para generar tabs por comensal en el POS y para split del ticket al
   // cobrar. Nullable porque flujos no-dine-in (TAKEOUT/DELIVERY) no la

@@ -842,6 +842,8 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           status: { in: OPEN_TABLE_STATUSES },
           paymentStatus: { not: 'PAID' },
           locationId: req.locationId,
+          // Un pedido de QR por confirmar no es la cuenta de la mesa: el mesero puede abrirla.
+          awaitingTableConfirmation: false,
         },
         orderBy: { createdAt: 'desc' },
         select: {
@@ -2083,7 +2085,7 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
     // transición real → CANCELLED (no si la orden ya estaba cancelada).
     const existing = await prisma.order.findFirst({
       where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.restaurantId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, awaitingTableConfirmation: true },
     });
     if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
 
@@ -2096,10 +2098,19 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
       return res.status(409).json({ error: `Transición inválida (${existing.status} → ${status})`, code: 'INVALID_TRANSITION' });
     }
 
+    // Pedido de mesa por confirmar (QR desde internet, ver store.routes): aceptarlo
+    // lo manda a cocina y ocupa la mesa; cancelarlo lo descarta sin tocar la mesa.
+    // Aceptar resuelve aunque el estado no cambie (p.ej. ya CONFIRMED por otro
+    // camino): la caja confirmó la mesa y el pedido debe llegar a cocina.
+    const confirmsTable = existing.awaitingTableConfirmation === true && status !== 'CANCELLED';
+    const resolvesTable = confirmsTable || (existing.awaitingTableConfirmation === true && statusChanged);
     const order = await prisma.order.update({
       where: { id: existing.id },
-      data: { status }
+      data: { status, ...(resolvesTable ? { awaitingTableConfirmation: false } : {}) },
     });
+    if (confirmsTable && order.tableId) {
+      await prisma.table.update({ where: { id: order.tableId }, data: { status: 'OCCUPIED' } }).catch(() => {});
+    }
 
     // Cancelar repone el stock que la orden descontó al venderse. Best-effort:
     // la cancelación no debe fallar por inventario, pero sí queda log.
@@ -2113,18 +2124,28 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
     // Cancelar un dine-in libera la mesa (AVAILABLE), no DIRTY: el ticket
     // nunca llegó a usarse. Si no se libera, la mesa queda OCCUPIED con
     // un ticket fantasma y el siguiente flow de "Comer Aquí" se rompe.
-    // Idempotente: si la mesa ya fue eliminada o liberada, no fallar.
-    if (status === 'CANCELLED' && order.tableId && order.orderType === 'DINE_IN') {
+    // Idempotente: si la mesa ya fue eliminada o liberada, no fallar. Un pedido
+    // por confirmar nunca ocupó la mesa: rechazarlo no la libera (quizá ya hay
+    // gente sentada con otra cuenta).
+    if (status === 'CANCELLED' && order.tableId && order.orderType === 'DINE_IN' && !existing.awaitingTableConfirmation) {
       await prisma.table.update({
         where: { id: order.tableId },
         data: { status: 'AVAILABLE' },
       }).catch(() => {});
     }
 
+    const io = req.app.get('io');
+    // Recién confirmada la mesa: ahora sí entra como pedido nuevo para cocina/KDS
+    // y para la tablet que imprime la comanda de los pedidos web.
+    if (io && confirmsTable) {
+      io.to(`restaurant:${order.restaurantId}:kitchen`).emit('order:new', order);
+      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:new', order);
+      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:kitchen`).emit('order:new', order);
+    }
+
     // Solo emitimos/notificamos si el estado realmente cambió (un no-op no debe
     // disparar push/WhatsApp duplicados en replays).
     if (statusChanged) {
-      const io = req.app.get('io');
       if (io) {
         io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
       }
@@ -3282,9 +3303,11 @@ router.post('/:id/claim-kitchen-print', authenticate, requireTenantAccess, async
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
     const order = await prisma.order.findFirst({
       where: { id: req.params.id, restaurantId },
-      select: { id: true },
+      select: { id: true, awaitingTableConfirmation: true },
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    // Pedido de mesa por confirmar: aún no va a cocina, ninguna tablet lo imprime.
+    if (order.awaitingTableConfirmation) return res.json({ claimed: false, reason: 'TABLE_CONFIRMATION_PENDING' });
     const claimed = await claimKitchenPrint(`${restaurantId}:${order.id}`);
     res.json({ claimed });
   } catch (e) {

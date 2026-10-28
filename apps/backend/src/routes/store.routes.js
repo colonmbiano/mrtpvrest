@@ -1102,6 +1102,7 @@ router.post('/orders', async (req, res) => {
         estimatedMinutes: dup.estimatedMinutes || 30,
         couponWarnings: [],
         deduped: true,
+        awaitingTableConfirmation: dup.awaitingTableConfirmation === true,
       });
     }
 
@@ -1243,6 +1244,9 @@ router.post('/orders', async (req, res) => {
     // (evita mesas inexistentes desde el QR/kiosko). Sin mapa configurado no
     // bloqueamos: el negocio sin planímetro sigue usando el número plano.
     let resolvedTableId = null;
+    // Estado de la mesa del QR firmado (AVAILABLE/OCCUPIED/DIRTY): decide si el
+    // pedido entra directo a cocina o queda por confirmar (ver más abajo).
+    let signedTableStatus = null;
 
     // QR firmado (esquema nuevo): el token trae el tableId real, así que no hay
     // que adivinar por nombre — renombrar la mesa no reasigna el papel pegado y
@@ -1261,7 +1265,7 @@ router.post('/orders', async (req, res) => {
       }
       const table = await prisma.table.findFirst({
         where: { id: claim.tableId, isActive: true, location: { restaurantId: restaurant.id } },
-        select: { id: true, name: true, locationId: true },
+        select: { id: true, name: true, locationId: true, status: true },
       });
       if (!table) {
         return res.status(400).json({
@@ -1271,6 +1275,7 @@ router.post('/orders', async (req, res) => {
       }
       resolvedTableId = table.id;
       resolvedLocationId = table.locationId;
+      signedTableStatus = table.status;
       // Número para el ticket: el del nombre ACTUAL de la mesa (si la
       // renombraron, el ticket dice el nuevo), con el firmado como respaldo.
       const current = (String(table.name).match(/\d+/) || [])[0];
@@ -1295,6 +1300,31 @@ router.post('/orders', async (req, res) => {
         }
         // Empate (mismo número en dos mesas): no enlazamos tableId pero tampoco
         // bloqueamos — el número es válido; la desambiguación queda en el TPV.
+      }
+    }
+
+    // Pedido de mesa desde internet (comensal, no personal ni kiosko físico):
+    // el QR es fijo y se puede fotografiar, y el número de mesa se adivina, así
+    // que el pedido puede venir de fuera del local. Solo entra directo a cocina
+    // con el QR firmado de una mesa que el personal ya tiene abierta (OCCUPIED).
+    // Si la mesa está libre o el pedido no trae QR firmado, queda POR CONFIRMAR:
+    // no va a cocina ni ocupa la mesa hasta que la caja lo acepta (PUT
+    // /api/orders/:id/status) o lo rechaza.
+    const remoteDineIn = resolvedOrderType === 'DINE_IN' && !isStaff && source !== 'KIOSK';
+    const awaitingTableConfirmation = remoteDineIn && signedTableStatus !== 'OCCUPIED';
+
+    // Igual que el bot de WhatsApp: sin turno de caja abierto en la sucursal,
+    // nadie atendería ni cobraría ese pedido de mesa.
+    if (remoteDineIn && resolvedLocationId) {
+      const openShift = await prisma.cashShift.findFirst({
+        where: { locationId: resolvedLocationId, isOpen: true },
+        select: { id: true },
+      });
+      if (!openShift) {
+        return res.status(409).json({
+          error: 'La caja todavía no abre. Pide tu orden al personal.',
+          code: 'NO_ACTIVE_SHIFT',
+        });
       }
     }
 
@@ -1372,6 +1402,7 @@ router.post('/orders', async (req, res) => {
           tableNumber,
           // Enlace a la mesa real del mapa (si se resolvió) → el TPV la ubica.
           tableId:         resolvedTableId,
+          awaitingTableConfirmation,
           paymentMethod,
           paymentStatus:   'PENDING',
           subtotal,
@@ -1404,8 +1435,9 @@ router.post('/orders', async (req, res) => {
       // igual que una cuenta abierta desde caja — si no, el mapa de piso la
       // muestra libre y el mesero abre una segunda cuenta encima. Va DENTRO de
       // la tx: si la orden no llega a crearse, la mesa no queda ocupada por
-      // error. Se libera en releaseTableAfterPayment al cobrar.
-      if (resolvedTableId) {
+      // error. Se libera en releaseTableAfterPayment al cobrar. Un pedido por
+      // confirmar NO la ocupa: la ocupa la caja al aceptarlo.
+      if (resolvedTableId && !awaitingTableConfirmation) {
         await tx.table.update({
           where: { id: resolvedTableId },
           data: { status: 'OCCUPIED' },
@@ -1443,7 +1475,18 @@ router.post('/orders', async (req, res) => {
     // ruido en restaurantes que no usan KDS, el cliente KDS filtra por
     // restaurantId.
     const io = req.app.get('io');
-    if (io) {
+    if (io && awaitingTableConfirmation) {
+      // Por confirmar: solo la caja se entera, con su propio evento. Sin
+      // order:new, nadie imprime la comanda (la tablet imprime los pedidos web
+      // al recibir order:new) y cocina no lo ve; al aceptarlo, la ruta de estado
+      // emite order:new y entonces sigue el camino normal.
+      const room = resolvedLocationId
+        ? `restaurant:${restaurant.id}:location:${resolvedLocationId}:admins`
+        : `restaurant:${restaurant.id}`;
+      io.to(room).emit('order:table-pending', {
+        id: order.id, orderNumber: order.orderNumber, tableNumber: order.tableNumber, total: order.total,
+      });
+    } else if (io) {
       // Cocina/KDS: SIEMPRE al canal general del restaurante como respaldo de
       // impresora (si la impresora LAN falla, la orden sigue visible en la
       // pantalla KDS y nadie pierde el pedido). El KDS refresca con fetchOrders
@@ -1546,6 +1589,9 @@ router.post('/orders', async (req, res) => {
       estimatedMinutes: order.estimatedMinutes || 30,
       couponWarnings,
       reward: milestoneReward,
+      // Pedido de mesa por confirmar: la tienda le avisa al comensal que la caja
+      // confirma su mesa antes de mandarlo a cocina.
+      awaitingTableConfirmation: order.awaitingTableConfirmation === true,
     });
   } catch (e) {
     // Replay exacto que se CRUZÓ en carrera con su primer intento (timeout del
@@ -1571,7 +1617,7 @@ router.get('/orders/:id', async (req, res) => {
     const order = await prisma.order.findUnique({
       where: { id: req.params.id },
       select: {
-        id: true, orderNumber: true, status: true, orderType: true,
+        id: true, orderNumber: true, status: true, orderType: true, awaitingTableConfirmation: true,
         subtotal: true, deliveryFee: true, total: true,
         estimatedMinutes: true, createdAt: true, paidAt: true,
         paymentMethod: true, paymentStatus: true,
@@ -1766,6 +1812,7 @@ router.get('/orders/by-number/:orderNumber', async (req, res) => {
         status: true,
         estimatedMinutes: true,
         paymentStatus: true,
+        awaitingTableConfirmation: true,
         createdAt: true,
       },
     });
@@ -1784,6 +1831,9 @@ router.get('/orders/by-number/:orderNumber', async (req, res) => {
 async function applyStorePaymentResult(orderId, { status, rawStatus, providerId }, io) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return;
+  // Un pedido de mesa por confirmar que ya se pagó en línea cuenta como
+  // confirmado: no hay riesgo de pedido falso y rechazarlo exigiría reembolso.
+  const confirmsTable = status === 'PAID' && order.awaitingTableConfirmation === true;
   await prisma.order.update({
     where: { id: orderId },
     data: {
@@ -1792,8 +1842,12 @@ async function applyStorePaymentResult(orderId, { status, rawStatus, providerId 
       paymentStatus:         status,
       status:                status === 'PAID' ? 'CONFIRMED' : order.status,
       paidAt:                status === 'PAID' ? new Date() : undefined,
+      ...(confirmsTable ? { awaitingTableConfirmation: false } : {}),
     },
   });
+  if (confirmsTable && order.tableId) {
+    await prisma.table.update({ where: { id: order.tableId }, data: { status: 'OCCUPIED' } }).catch(() => {});
+  }
   if (io && status === 'PAID') {
     // Payload enriquecido para que el push nativo del TPV muestre folio y monto.
     const paidPayload = {

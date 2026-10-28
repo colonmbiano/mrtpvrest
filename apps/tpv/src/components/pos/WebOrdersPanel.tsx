@@ -12,6 +12,8 @@ import {
   Loader2,
   CreditCard,
   Wallet,
+  XCircle,
+  AlertTriangle,
 } from "lucide-react";
 
 // Shape reducido de un pedido web que consume el panel. Lo arma el layout a
@@ -35,6 +37,10 @@ export interface WebOrder {
   paymentMethod?: string | null;
   /** true si el efectivo ya entró a caja (contra entrega cobrado). */
   cashCollected?: boolean;
+  /** Nombre de la mesa en pedidos DINE_IN. */
+  tableName?: string | null;
+  /** Pedido de mesa por QR que la caja aún no confirma (no está en cocina). */
+  awaitingTableConfirmation?: boolean;
 }
 
 interface Props {
@@ -47,6 +53,10 @@ interface Props {
   onAccept: (id: string) => void;
   /** Id del pedido que se está aceptando ahora (bloquea su botón). */
   acceptingId?: string | null;
+  /** Rechaza un pedido de mesa por confirmar: PENDING → CANCELLED. */
+  onReject?: (id: string) => void;
+  /** Id del pedido que se está rechazando ahora (bloquea su botón). */
+  rejectingId?: string | null;
   /** Oculta importes (modo préstamo de caja). */
   hideMoney?: boolean;
 }
@@ -90,6 +100,8 @@ export default function WebOrdersPanel({
   onShowDetail,
   onAccept,
   acceptingId,
+  onReject,
+  rejectingId,
   hideMoney,
 }: Props) {
   // Separa pendientes (requieren que el cajero los acepte) del resto en curso.
@@ -193,6 +205,8 @@ export default function WebOrdersPanel({
                   hideMoney={hideMoney}
                   accepting={acceptingId === o.id}
                   onAccept={() => onAccept(o.id)}
+                  rejecting={rejectingId === o.id}
+                  onReject={onReject ? () => onReject(o.id) : undefined}
                   onShowDetail={() => onShowDetail(o.id)}
                 />
               ))}
@@ -251,18 +265,33 @@ function WebOrderCard({
   hideMoney,
   accepting,
   onAccept,
+  rejecting,
+  onReject,
   onShowDetail,
 }: {
   order: WebOrder;
   hideMoney?: boolean;
   accepting?: boolean;
   onAccept?: () => void;
+  rejecting?: boolean;
+  onReject?: () => void;
   onShowDetail: () => void;
 }) {
   const isPending = order.status === "PENDING";
+  // Pedido de mesa por QR sin confirmar: no está en cocina ni ocupa la mesa
+  // hasta que el cajero revise que de verdad hay clientes sentados.
+  const awaitingTable = isPending && order.awaitingTableConfirmation === true;
+  const busy = accepting || rejecting;
   const typeKey = (order.orderType || "").toUpperCase();
   const typeTone = TYPE_TONE[typeKey] || TYPE_TONE.TAKEOUT;
-  const typeLabel = TYPE_LABEL[typeKey] || order.orderType || "Pedido";
+  const baseTypeLabel = TYPE_LABEL[typeKey] || order.orderType || "Pedido";
+  // Las mesas suelen llamarse "Mesa 7"; solo un número suelto lleva el prefijo.
+  const typeLabel =
+    typeKey === "DINE_IN" && order.tableName
+      ? /^\d+$/.test(order.tableName)
+        ? `${baseTypeLabel} ${order.tableName}`
+        : order.tableName
+      : baseTypeLabel;
 
   // ¿Ya entró el dinero? PAID = pagado en línea (o efectivo ya cobrado).
   // PENDING = falta cobrar (contra entrega / pago en línea no completado).
@@ -274,9 +303,11 @@ function WebOrderCard({
   return (
     <div
       className={`rounded-2xl border p-4 transition-all ${
-        isPending
-          ? "bg-[#5e6ad2]/8 border-[#5e6ad2]/30"
-          : "bg-white/[0.03] border-white/8"
+        awaitingTable
+          ? "bg-amber-400/8 border-amber-400/40"
+          : isPending
+            ? "bg-[#5e6ad2]/8 border-[#5e6ad2]/30"
+            : "bg-white/[0.03] border-white/8"
       }`}
     >
       {/* Encabezado: cliente + total */}
@@ -301,6 +332,11 @@ function WebOrderCard({
               {paid ? <CreditCard size={11} /> : <Wallet size={11} />}
               {paidLabel}
             </span>
+            {awaitingTable && (
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border inline-flex items-center gap-1 bg-amber-400/15 text-amber-300 border-amber-400/40">
+                <AlertTriangle size={11} /> Confirma la mesa
+              </span>
+            )}
             <span className="text-[11px] font-bold text-white/40">
               {order.orderNumber}
             </span>
@@ -338,6 +374,12 @@ function WebOrderCard({
           <Phone size={12} className="shrink-0" /> {order.customerPhone}
         </p>
       )}
+      {awaitingTable && (
+        <p className="mt-2 text-[11px] font-semibold text-amber-200/90 leading-snug">
+          Pedido por QR. Revisa que haya clientes en la mesa antes de aceptar; al
+          aceptarlo entra a cocina.
+        </p>
+      )}
 
       {/* Acciones */}
       <div className="flex gap-2 mt-3.5">
@@ -347,10 +389,24 @@ function WebOrderCard({
         >
           <Eye size={16} /> Ver detalle
         </button>
+        {awaitingTable && onReject && (
+          <button
+            onClick={onReject}
+            disabled={busy}
+            className="flex-1 h-11 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 flex items-center justify-center gap-2 text-[13px] font-bold active:scale-95 transition-all disabled:opacity-60"
+          >
+            {rejecting ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <XCircle size={16} />
+            )}
+            {rejecting ? "Rechazando…" : "Rechazar"}
+          </button>
+        )}
         {isPending && onAccept && (
           <button
             onClick={onAccept}
-            disabled={accepting}
+            disabled={busy}
             className="flex-1 h-11 rounded-xl bg-[#88D66C] text-[#0C0C0E] flex items-center justify-center gap-2 text-[13px] font-black active:scale-95 transition-all disabled:opacity-60"
           >
             {accepting ? (

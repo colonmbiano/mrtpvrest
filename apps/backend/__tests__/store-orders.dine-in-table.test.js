@@ -6,6 +6,12 @@
 // además de guardarse en la orden, debe dejar la mesa OCCUPIED en la MISMA
 // transacción: si no, el mapa del TPV la pinta libre y el mesero abre una
 // segunda cuenta encima del pedido del comensal.
+//
+// El QR viejo por número (sin firma) se adivina desde fuera del local: si lo
+// manda el comensal, el pedido queda por confirmar y NO ocupa la mesa hasta que
+// la caja lo acepta. Si lo captura el personal, ocupa la mesa como siempre.
+
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'jwt-de-pruebas-dine-in';
 
 jest.mock('@mrtpvrest/database', () => ({
   prisma: {
@@ -36,6 +42,7 @@ jest.mock('../src/lib/payment-providers', () => ({
 
 const express = require('express');
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const { prisma } = require('@mrtpvrest/database');
 const { nextOrderNumber } = require('../src/lib/order-number');
 
@@ -68,14 +75,17 @@ const QR_PAYLOAD = {
 // la misma transacción que crea la orden.
 function txMock(created) {
   const tableUpdate = jest.fn();
+  const create = jest.fn().mockImplementation(async ({ data }) => ({
+    ...created, awaitingTableConfirmation: data.awaitingTableConfirmation,
+  }));
   const impl = async (fn) => fn({
-    order: { create: jest.fn().mockResolvedValue(created) },
+    order: { create },
     table: { update: tableUpdate },
     coupon: { updateMany: jest.fn() },
     loyaltyAccount: { updateMany: jest.fn() },
     loyaltyTransaction: { create: jest.fn() },
   });
-  return { impl, tableUpdate };
+  return { impl, tableUpdate, create };
 }
 
 const CREATED = {
@@ -92,15 +102,36 @@ describe('POST /api/store/orders — QR de mesa', () => {
     prisma.location.findFirst.mockResolvedValue({ id: 'loc1' });
     prisma.menuItem.findFirst.mockResolvedValue(MENU_ITEM);
     prisma.order.findMany.mockResolvedValue([]);
+    prisma.cashShift.findFirst.mockResolvedValue({ id: 'shift-1' });
     nextOrderNumber.mockResolvedValue(2001);
   });
 
-  it('mesa del mapa → orden con tableId y mesa OCCUPIED en la misma tx', async () => {
+  it('personal: mesa del mapa → orden con tableId y mesa OCCUPIED en la misma tx', async () => {
     prisma.table.findMany.mockResolvedValue([
       { id: 't3', name: 'Mesa 3' },
       { id: 't4', name: 'Mesa 4' },
     ]);
-    const { impl, tableUpdate } = txMock(CREATED);
+    const { impl, tableUpdate, create } = txMock(CREATED);
+    prisma.$transaction.mockImplementation(impl);
+    const staffToken = jwt.sign({ restaurantId: 'r1', role: 'CASHIER' }, process.env.JWT_SECRET);
+
+    const res = await request(buildApp())
+      .post('/api/store/orders')
+      .set('x-restaurant-id', 'r1')
+      .set('Authorization', `Bearer ${staffToken}`)
+      .send(QR_PAYLOAD);
+
+    expect(res.status).toBe(201);
+    expect(create.mock.calls[0][0].data).toMatchObject({ tableId: 't3', awaitingTableConfirmation: false });
+    expect(tableUpdate).toHaveBeenCalledWith({
+      where: { id: 't3' },
+      data: { status: 'OCCUPIED' },
+    });
+  });
+
+  it('comensal con QR por número → orden con tableId pero por confirmar, sin ocupar la mesa', async () => {
+    prisma.table.findMany.mockResolvedValue([{ id: 't3', name: 'Mesa 3' }]);
+    const { impl, tableUpdate, create } = txMock(CREATED);
     prisma.$transaction.mockImplementation(impl);
 
     const res = await request(buildApp())
@@ -109,10 +140,9 @@ describe('POST /api/store/orders — QR de mesa', () => {
       .send(QR_PAYLOAD);
 
     expect(res.status).toBe(201);
-    expect(tableUpdate).toHaveBeenCalledWith({
-      where: { id: 't3' },
-      data: { status: 'OCCUPIED' },
-    });
+    expect(create.mock.calls[0][0].data).toMatchObject({ tableId: 't3', awaitingTableConfirmation: true });
+    expect(res.body.awaitingTableConfirmation).toBe(true);
+    expect(tableUpdate).not.toHaveBeenCalled();
   });
 
   it('mesa inexistente en la sucursal → 400 INVALID_TABLE sin crear nada', async () => {
