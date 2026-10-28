@@ -44,12 +44,15 @@ function normalizeActor(source) {
 }
 
 /** Local-only identity bridge. req.user must be populated by trusted middleware.
- * Otherwise verify a staff Bearer JWT using HS256, expiry and activation time.
+ * Otherwise verify a staff Bearer JWT using HS256, expiry and activation time:
+ * a marketplace staff token (dedicated key, issuer and audience; lib/marketplace-jwt.js)
+ * or, during the transition, a store session JWT (jwtSecret, without issuer/audience).
  * verifyToken is an optional trusted verification port, never a decode-only port.
  * No auth middleware, database, dotenv or network imports are needed.
  */
 function createStaffActorResolver({ verifyToken,
-  jwtSecret = () => process.env.MARKETPLACE_STAFF_JWT_SECRET || process.env.JWT_SECRET,
+  jwtSecret = () => require('./marketplace-jwt').storeSecret(process.env),
+  marketplaceSecret = () => require('./marketplace-jwt').dedicatedSecret('staff', process.env),
   now = () => new Date() } = {}) {
   return async req => {
     // A rejected middleware identity must not fall back to another credential.
@@ -66,9 +69,12 @@ function createStaffActorResolver({ verifyToken,
     try {
       if (verifyToken) claims = await verifyToken(token);
       else {
-        const secret = jwtSecret();
-        check(typeof secret === 'string' && secret.length > 0, 'STAFF_AUTH_UNAVAILABLE', 'Autenticacion de personal no configurada', 503);
-        claims = require('jsonwebtoken').verify(token, secret, { algorithms: ['HS256'], clockTimestamp: timestamp });
+        const usable = value => (typeof value === 'string' && value.length > 0 ? value : undefined);
+        const dedicated = usable(marketplaceSecret());
+        const store = usable(jwtSecret());
+        check(dedicated || store, 'STAFF_AUTH_UNAVAILABLE', 'Autenticacion de personal no configurada', 503);
+        claims = require('./marketplace-jwt').verifyMarketplaceToken('staff', token, { marketplaceSecret: dedicated,
+          storeSecret: store, clockTimestamp: timestamp });
       }
     } catch (error) {
       if (error instanceof StaffIdentityError) throw error;

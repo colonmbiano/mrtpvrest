@@ -77,6 +77,7 @@ const TESTS = [
   { path: 'apps/backend/scripts/marketplace-ops-dispatch-v1.test.cjs', name: 'Backend: Panel Ops de Despacho & Reasignación v1' },
   { path: 'apps/backend/scripts/marketplace-settlements-v1.test.cjs', name: 'Backend: Liquidaciones & Reembolsos en Partida Doble v1' },
   { path: 'apps/backend/scripts/marketplace-staff-identity.test.cjs', name: 'Backend: Identidad Staff & JWT HS256' },
+  { path: 'apps/backend/scripts/marketplace-jwt.test.cjs', name: 'Backend: JWT del marketplace separado por contexto' },
   { path: 'apps/backend/scripts/runtime-policy.test.cjs', name: 'Backend: Runtime Policy & Tenant Guard' },
 
   // ── INTEGRACIÓN MAESTRA & AISLAMIENTO ──

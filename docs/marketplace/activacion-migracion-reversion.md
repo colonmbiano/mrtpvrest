@@ -122,6 +122,8 @@ Backend (Railway):
 | `MARKETPLACE_PIN_SECRET` / `MARKETPLACE_PIN_KEY_ID` | Secreto nuevo y propio / `v1` | Sin el secreto, crear una orden responde 503 |
 | `MARKETPLACE_DIRECTORY_APPROVED` | `true` | El directorio incluye comercios aprobados |
 | `MARKETPLACE_STORE_SLUGS` | Opcional | Lista fija de comercios, sin pasar por aprobación |
+| `MARKETPLACE_BUYER_JWT_SECRET` / `MARKETPLACE_STAFF_JWT_SECRET` | Opcional; secretos nuevos de 32+ bytes, distintos entre sí y de `JWT_SECRET` | Claves de los tokens propios del marketplace. Hoy no cambian nada visible: nadie emite esos tokens y la sesión de la tienda se sigue aceptando |
+| `MARKETPLACE_ACCEPT_STORE_JWT` | **No poner en `false`** todavía | Retira la sesión de la tienda en el marketplace. Sin un emisor de tokens del marketplace, compradores con sesión y personal quedarían fuera |
 
 Comercio piloto: módulo `marketplace` activo (en el tenant o por su plan) y aprobación en el SaaS (`POST /api/saas/marketplace/memberships/:restaurantId/review`). Los tenants demo nunca entran.
 
@@ -154,7 +156,7 @@ Requiere C6, la prueba real en sandbox de Mercado Pago:
 - `MARKETPLACE_IDENTITY_ENABLED` hoy exige `MARKETPLACE_IDENTITY_MODE=staging` y un origen HTTPS: el código no la permite en producción.
 
 Antes de esta fase:
-- Cerrar los hallazgos del [informe G8](auditoria-seguridad-codex-2026-10-26.md): dependencias y claves JWT separadas. El contador del PIN propio ya es compartido (`delivery_pin_attempts`).
+- Cerrar los hallazgos del [informe G8](auditoria-seguridad-codex-2026-10-26.md): dependencias y el emisor de tokens del marketplace. El contador del PIN propio ya es compartido (`delivery_pin_attempts`) y la separación JWT por contexto ya existe (`lib/marketplace-jwt.js`), pero sigue aceptando la sesión de la tienda hasta que haya emisor.
 - Decidir qué comercios y con qué política.
 - Probar en staging con navegador.
 

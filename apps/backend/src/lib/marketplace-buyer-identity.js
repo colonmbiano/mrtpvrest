@@ -23,13 +23,16 @@ function guestAccount(value) {
 }
 
 /** Local-only resolver: no auth middleware, database, network or dotenv import.
- * Bearer accepts HS256 CUSTOMER/BUYER JWTs (including existing storefront JWTs).
- * jwtSecret/verifyToken/now are injectable for offline fixtures. A custom
- * resolveAccount on either router still overrides this default completely.
+ * Bearer accepts HS256 CUSTOMER/BUYER JWTs: marketplace buyer tokens (dedicated
+ * key, issuer and audience; lib/marketplace-jwt.js) and, during the transition,
+ * storefront session JWTs (jwtSecret, without issuer/audience).
+ * jwtSecret/marketplaceSecret/verifyToken/now are injectable for offline fixtures.
+ * A custom resolveAccount on either router still overrides this default completely.
  * IP/UA fingerprints are quote-only correlation, not authenticated identities.
  */
 function createBuyerAccountResolver({ allowGuest = false, verifyToken,
-  jwtSecret = () => process.env.MARKETPLACE_BUYER_JWT_SECRET || process.env.JWT_SECRET,
+  jwtSecret = () => require('./marketplace-jwt').storeSecret(process.env),
+  marketplaceSecret = () => require('./marketplace-jwt').dedicatedSecret('buyer', process.env),
   now = () => new Date() } = {}) {
   function at() {
     const value = now();
@@ -46,9 +49,12 @@ function createBuyerAccountResolver({ allowGuest = false, verifyToken,
       try {
         if (verifyToken) claims = await verifyToken(token);
         else {
-          const secret = jwtSecret();
-          check(typeof secret === 'string' && secret.length > 0, 'BUYER_AUTH_UNAVAILABLE', 'Autenticacion de comprador no configurada', 503);
-          claims = require('jsonwebtoken').verify(token, secret, { algorithms: ['HS256'], clockTimestamp: Math.floor(at() / 1000) });
+          const usable = value => (typeof value === 'string' && value.length > 0 ? value : undefined);
+          const dedicated = usable(marketplaceSecret());
+          const store = usable(jwtSecret());
+          check(dedicated || store, 'BUYER_AUTH_UNAVAILABLE', 'Autenticacion de comprador no configurada', 503);
+          claims = require('./marketplace-jwt').verifyMarketplaceToken('buyer', token, { marketplaceSecret: dedicated,
+            storeSecret: store, clockTimestamp: Math.floor(at() / 1000) });
         }
       } catch (error) {
         if (error instanceof BuyerIdentityError) throw error;
