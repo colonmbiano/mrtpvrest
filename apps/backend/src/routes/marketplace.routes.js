@@ -29,7 +29,9 @@ function createMarketplaceRouter({ Router, getAdapter, storeSlugs = process.env.
   router.get('/products', handler(catalog.listProducts));
   let orders;
   function orderService() {
-    return orders ||= require('../lib/marketplace-orders').createMarketplaceOrdersService({ ...orderOptions, storeSlugs });
+    // Freno de intentos del PIN compartido en PostgreSQL (lib/pin-attempts.js), salvo que se inyecte otro.
+    return orders ||= require('../lib/marketplace-orders').createMarketplaceOrdersService({
+      pinAttempts: require('../lib/pin-attempts').createPrismaPinAttempts({ prisma: getPrisma() }), ...orderOptions, storeSlugs });
   }
   function orderError(res, error) {
     const { MarketplaceOrderError } = require('../lib/marketplace-orders');

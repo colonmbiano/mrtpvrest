@@ -9,6 +9,7 @@ const { createMarketplacePaymentGateway } = require('./marketplace-payment-gatew
 const { buildOrderCaptureTransaction, buildOrderSettlementTransaction, recordLedgerTransaction } = require('./marketplace-ledger');
 const { createOffer, hashPin, verifyPin, atomicAcceptOffer, confirmPickup, confirmDelivery } = require('./marketplace-dispatch');
 const { cents, decimal, MAX_CENTS } = require('./marketplace-order-money');
+const { createMemoryPinAttempts } = require('./pin-attempts');
 
 const TX = { isolationLevel: 'Serializable', maxWait: 5000, timeout: 15000 };
 const ORDER_SELECT = { id: true, restaurantId: true, orderNumber: true, status: true, paymentStatus: true,
@@ -72,9 +73,12 @@ function normalize(input) {
     deliveryFeeCents: input.deliveryFee === undefined ? null : money(input.deliveryFee), key };
 }
 
+// pinAttempts: freno de intentos del PIN de recogida y de entrega (lib/pin-attempts.js);
+// el backend pasa el de PostgreSQL. Cada etapa lleva su propio contador.
 function createMarketplaceOrdersService({ storeSlugs = process.env.MARKETPLACE_STORE_SLUGS || '',
   pinSecrets, activePinKeyId = process.env.MARKETPLACE_PIN_KEY_ID || 'v1',
-  getPaymentGateway = createMarketplacePaymentGateway, now = () => new Date() } = {}) {
+  getPaymentGateway = createMarketplacePaymentGateway, now = () => new Date(),
+  pinAttempts = createMemoryPinAttempts() } = {}) {
   function at() {
     const value = now(); check(value instanceof Date && Number.isFinite(value.getTime()), 'INVALID_CLOCK', 'Reloj no disponible', 503);
     return new Date(value.getTime());
@@ -344,7 +348,16 @@ function createMarketplaceOrdersService({ storeSlugs = process.env.MARKETPLACE_S
     check(courier && text(courier.id) && courier.isActive === true && courier.isShared === true,
       'COURIER_FORBIDDEN', 'Repartidor no autorizado', 403);
     const before = await load(client(prismaClient), orderId);
-    return prismaClient.$transaction(async tx => {
+    // Recogida y entrega: 10 PIN erróneos por etapa en 15 min bloquean (lib/pin-attempts.js).
+    // El fallo se cuenta DESPUÉS de que la transacción se deshace, nunca dentro de ella.
+    const pinKey = operation === 'accept' ? null : { restaurantId: before.restaurantId, orderId: `${orderId}:${operation}` };
+    const startedAt = at().getTime();
+    if (pinKey) {
+      check(!(await pinAttempts.isLocked(pinKey, startedAt)), 'DELIVERY_PIN_LOCKED',
+        'Demasiados intentos; espera unos minutos o pide ayuda a la tienda', 429);
+    }
+    let wrongPin = false;
+    const run = async tx => {
       const row = await locked(tx, before);
       check(row.dispatch && row.order.status !== 'CANCELLED', 'DISPATCH_UNAVAILABLE', 'Despacho no disponible', 409);
       const dispatch = json(row.dispatch); const task = dispatch.task;
@@ -356,8 +369,8 @@ function createMarketplaceOrdersService({ storeSlugs = process.env.MARKETPLACE_S
         atomicAcceptOffer({ task, offer: dispatch.offer, courierId: courier.id, now: at() });
       } else {
         check(task.currentAssignment?.courierId === courier.id, 'COURIER_FORBIDDEN', 'Asignacion no autorizada', 403);
-        check(verifyPin(operation === 'pickup' ? pickupPin : deliveryPin, operation === 'pickup' ? task.pickupPinHash : task.deliveryPinHash),
-          'INVALID_PIN', 'PIN invalido');
+        wrongPin = !verifyPin(operation === 'pickup' ? pickupPin : deliveryPin, operation === 'pickup' ? task.pickupPinHash : task.deliveryPinHash);
+        check(!wrongPin, 'INVALID_PIN', 'PIN invalido');
         if (operation === 'pickup') {
           if (task.status === 'PICKED_UP') return receipt(row);
           check(row.order.status === 'READY', 'ORDER_NOT_READY', 'La tienda aun no confirma el pedido listo', 409);
@@ -383,7 +396,15 @@ function createMarketplaceOrdersService({ storeSlugs = process.env.MARKETPLACE_S
       }
       await saveDispatch(tx, row, dispatch);
       return receipt(await load(tx, orderId, row.restaurantId));
-    }, TX);
+    };
+    try {
+      const result = await prismaClient.$transaction(run, TX);
+      if (pinKey) await pinAttempts.clear(pinKey);
+      return result;
+    } catch (error) {
+      if (wrongPin) await pinAttempts.recordFailure(pinKey, startedAt);
+      throw error;
+    }
   }
   async function refreshMarketplaceOffer({ orderId, restaurantId, prismaClient }) {
     // Internal dispatcher/merchant boundary; IDs must come from authenticated server context.

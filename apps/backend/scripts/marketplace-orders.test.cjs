@@ -393,3 +393,35 @@ test('both schemas are byte-identical and all persisted pipeline/finance models 
   const { SCOPED_MODELS } = require('../../../packages/database/tenant-guard');
   for (const name of ['MarketplacePayment', 'MarketplaceLedgerEntry', 'MarketplaceOrderPipeline']) assert.ok(SCOPED_MODELS.has(name));
 });
+
+test('adaptador legado (G8): 10 PIN erróneos por etapa bloquean 15 min aun con el PIN correcto; cada etapa cuenta aparte', async () => {
+  const f = fixture(); const order = await create(f); const paid = await capture(f, order);
+  const params = { orderId: order.id, courier, prismaClient: f.prisma };
+  await f.service.acceptMarketplaceOffer({ ...params, offerId: paid.dispatch.offerId });
+  const { pickupPin } = await f.service.getMarketplacePickupPin({ orderId: order.id, restaurantId: 'r1', prismaClient: f.prisma });
+  f.state.order[0].status = 'READY';
+  const wrong = pickupPin === '000000' ? '111111' : '000000';
+  for (let i = 0; i < 10; i++) await assert.rejects(f.service.confirmMarketplacePickup({ ...params, pickupPin: wrong }), { code: 'INVALID_PIN' });
+  await assert.rejects(f.service.confirmMarketplacePickup({ ...params, pickupPin }), { code: 'DELIVERY_PIN_LOCKED', statusCode: 429 });
+  assert.equal(f.state.order[0].status, 'READY');
+  // La entrega lleva su propio contador: no hereda el bloqueo de la recogida.
+  await assert.rejects(f.service.confirmMarketplaceDelivery({ ...params, deliveryPin: 'bad' }), { code: 'INVALID_PIN' });
+  f.setDate(new Date(NOW.getTime() + 15 * 60 * 1000 + 1));
+  const picked = await f.service.confirmMarketplacePickup({ ...params, pickupPin });
+  assert.equal(picked.status, 'ON_THE_WAY');
+});
+
+test('adaptador legado (G8): el fallo se cuenta en el almacén compartido después de deshacer la transacción', async () => {
+  const recorded = [];
+  const attempts = { async isLocked() { return false; }, async clear(key) { recorded.push(['clear', key]); },
+    async recordFailure(key) { recorded.push(['fail', key]); } };
+  const f = fixture({ pinAttempts: attempts }); const order = await create(f); const paid = await capture(f, order);
+  const params = { orderId: order.id, courier, prismaClient: f.prisma };
+  await f.service.acceptMarketplaceOffer({ ...params, offerId: paid.dispatch.offerId });
+  await assert.rejects(f.service.confirmMarketplaceDelivery({ ...params, deliveryPin: 'bad' }), { code: 'INVALID_PIN' });
+  assert.deepEqual(recorded, [['fail', { restaurantId: 'r1', orderId: `${order.id}:delivery` }]]);
+  // Aceptar la oferta no usa PIN ni toca el contador; un error ajeno al PIN tampoco cuenta.
+  const { pickupPin } = await f.service.getMarketplacePickupPin({ orderId: order.id, restaurantId: 'r1', prismaClient: f.prisma });
+  await assert.rejects(f.service.confirmMarketplacePickup({ ...params, pickupPin }), { code: 'ORDER_NOT_READY' });
+  assert.equal(recorded.length, 1);
+});
