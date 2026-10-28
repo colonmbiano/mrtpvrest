@@ -98,3 +98,6 @@ open-design
 # Supabase CLI
 supabase/.temp/
 supabase/.branches/
+
+# Playwright client QR checks
+/test-results/

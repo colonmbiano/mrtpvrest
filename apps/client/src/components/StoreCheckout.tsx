@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useCart } from '../lib/cartStore';
 import { authHeader } from '../lib/customerAuth';
 import { cartShareUrl } from '../lib/cartLink';
@@ -419,7 +419,7 @@ export default function StoreCheckout({
     <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={onClose}>
       <div className="bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] max-h-[94vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-white z-10 px-6 pt-6 pb-3 flex items-center justify-between border-b border-gray-50">
-          <h2 className="text-2xl font-black uppercase tracking-tighter">Finalizar Compra</h2>
+          <h2 className="text-2xl font-black uppercase tracking-tighter">{fromTableQr ? 'Confirma tu pedido' : 'Finalizar Compra'}</h2>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-800" aria-label="Cerrar">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
@@ -438,11 +438,12 @@ export default function StoreCheckout({
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm text-gray-800 leading-tight">{l.name}</p>
                       <p className="text-xs font-bold" style={{ color: primary }}>{fmt(l.price)} × {l.quantity}</p>
+                      {l.note && <p className="mt-1 text-xs text-gray-500">Nota: {l.note}</p>}
                     </div>
                     <div className="flex items-center gap-1 bg-white rounded-xl p-1 border border-gray-100">
-                      <button type="button" onClick={() => remove(l.id)} className="w-9 h-9 font-bold text-lg text-gray-500">−</button>
+                      <button type="button" onClick={() => remove(l.id)} aria-label={`Quitar uno de ${l.name}`} className="w-11 h-11 font-bold text-lg text-gray-500">−</button>
                       <span className="text-sm font-bold w-5 text-center">{l.quantity}</span>
-                      <button type="button" onClick={() => add({ id: l.id, menuItemId: l.menuItemId, name: l.name, price: l.price, variantId: l.variantId, modifierIds: l.modifierIds })} className="w-9 h-9 font-bold text-lg text-white rounded-lg" style={{ background: primary }}>+</button>
+                      <button type="button" onClick={() => add({ ...l, quantity: 1 })} aria-label={`Agregar uno de ${l.name}`} className="w-11 h-11 font-bold text-lg text-white rounded-lg" style={{ background: primary }}>+</button>
                     </div>
                   </div>
                 ))}
@@ -450,9 +451,9 @@ export default function StoreCheckout({
             </div>
 
             {/* Compartir el carrito por link (deep-link que rehidrata la tienda). */}
-            <button type="button" onClick={shareCart} className="w-full py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest border-2 transition-all active:scale-95" style={{ borderColor: `${primary}40`, color: primary }}>
+            {!fromTableQr && <button type="button" onClick={shareCart} className="w-full py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest border-2 transition-all active:scale-95" style={{ borderColor: `${primary}40`, color: primary }}>
               {shared ? '✓ Link copiado' : '🔗 Compartir mi pedido'}
-            </button>
+            </button>}
 
             {/* Tipo de pedido — oculto cuando el pedido viene de un QR de mesa */}
             {fromTableQr ? (
@@ -510,9 +511,12 @@ export default function StoreCheckout({
                   <button type="button" onClick={forgetProfile} className="text-[11px] font-bold text-gray-500 hover:text-gray-800">No soy yo</button>
                 </div>
               )}
-              <input required autoComplete="name" placeholder="Tu nombre" className={field} value={customerName} onChange={e => setCustomerName(e.target.value)} />
-              <input type="tel" inputMode="tel" autoComplete="tel" placeholder={isDineIn ? 'Tu teléfono (opcional, para tus puntos)' : 'Tu teléfono'} className={field} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
-              <input type="email" inputMode="email" autoComplete="email" placeholder="Tu correo (opcional, para tu confirmación)" className={field} value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
+              <label className="block text-sm font-bold" htmlFor="checkout-customer-name">{fromTableQr ? 'Tu nombre para identificar el pedido' : 'Tu nombre'}</label>
+              <input id="checkout-customer-name" required autoComplete="name" placeholder="Tu nombre" className={field} value={customerName} onChange={e => setCustomerName(e.target.value)} />
+              <OptionalSection collapsed={fromTableQr} title="Teléfono y correo (opcional)">
+              <input aria-label="Tu teléfono" type="tel" inputMode="tel" autoComplete="tel" placeholder={isDineIn ? 'Tu teléfono (opcional, para tus puntos)' : 'Tu teléfono'} className={field} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
+              <input aria-label="Tu correo" type="email" inputMode="email" autoComplete="email" placeholder="Tu correo (opcional, para tu confirmación)" className={field} value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
+              </OptionalSection>
               {isDelivery && (
                 <>
                   <textarea required placeholder="Dirección de entrega" className={`${field} h-20`} value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} />
@@ -555,6 +559,7 @@ export default function StoreCheckout({
               </>)}
             </div>
 
+            <OptionalSection collapsed={fromTableQr} title="Puntos, cupón y propina (opcional)">
             {/* Cliente frecuente (lealtad) */}
             <div>
               <p className={sectionTitle}>Cliente frecuente (opcional)</p>
@@ -636,6 +641,9 @@ export default function StoreCheckout({
               </div>
             </div>
 
+            </OptionalSection>
+
+            <OptionalSection collapsed={fromTableQr} title="Forma de pago al terminar">
             {/* Método de pago */}
             <div>
               <p className={sectionTitle}>Pago</p>
@@ -667,6 +675,9 @@ export default function StoreCheckout({
                     : 'El pago se realiza al recibir o en la sucursal.'}
               </p>
             </div>
+
+            </OptionalSection>
+            {fromTableQr && <p className="text-sm text-gray-500">Pagas al terminar, en tu mesa o en la caja. Este paso solo envía tu pedido a cocina.</p>}
 
             {/* Desglose (scrollea) */}
             <div className="pt-4 border-t border-gray-100 space-y-1.5">
@@ -708,5 +719,19 @@ function Row({ label, value, green }: { label: string; value: string; green?: bo
     <div className="flex items-center justify-between text-sm font-bold" style={{ color: green ? '#10b981' : '#6b7280' }}>
       <span>{label}</span><span>{value}</span>
     </div>
+  );
+}
+
+/** En mesa, los campos opcionales no deben interrumpir el camino a cocina.
+ * Fuera del QR se conserva la presentación abierta del checkout habitual. */
+function OptionalSection({ collapsed, title, children }: {
+  collapsed: boolean; title: string; children: ReactNode;
+}) {
+  if (!collapsed) return <>{children}</>;
+  return (
+    <details className="rounded-2xl border border-gray-200 px-4">
+      <summary className="min-h-11 cursor-pointer py-3 text-sm font-bold">{title}</summary>
+      <div className="space-y-4 pb-4">{children}</div>
+    </details>
   );
 }
