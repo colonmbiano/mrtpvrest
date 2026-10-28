@@ -2,7 +2,8 @@
  * useNotifications.ts
  * Escucha eventos Socket.io del backend y genera notificaciones en tiempo real.
  * Eventos: order:new, new:order (kiosk), order:updated, order:payment:confirmed,
- * order:table-pending (pedido de mesa por QR que espera confirmación)
+ * order:table-pending (pedido de mesa por QR que espera confirmación),
+ * order:web-round (pedido QR sumado como ronda a la cuenta de su mesa)
  */
 "use client";
 import { useEffect, useRef, useCallback } from "react";
@@ -129,6 +130,8 @@ export function useNotifications(opts?: {
   onOrderNew?: (order: any) => void;
   /** Llegó un pedido de mesa por QR por confirmar (p.ej. refrescar la lista). */
   onTablePending?: (data: any) => void;
+  /** Un pedido QR se sumó como ronda a la cuenta de su mesa (imprimir la comanda). */
+  onWebRound?: (data: any) => void;
 }) {
   const socketRef = useRef<Socket | null>(null);
   const { addNotification } = useNotifStore();
@@ -139,9 +142,11 @@ export function useNotifications(opts?: {
   // última versión del consumidor (p.ej. la auto-impresión del POS).
   const onOrderNewRef = useRef(opts?.onOrderNew);
   const onTablePendingRef = useRef(opts?.onTablePending);
+  const onWebRoundRef = useRef(opts?.onWebRound);
   useEffect(() => {
     onOrderNewRef.current = opts?.onOrderNew;
     onTablePendingRef.current = opts?.onTablePending;
+    onWebRoundRef.current = opts?.onWebRound;
   });
 
   const handleOrderNew = useCallback((order: any) => {
@@ -269,6 +274,25 @@ export function useNotifications(opts?: {
     try { onTablePendingRef.current?.(data); } catch { /* noop */ }
   }, [addNotification]);
 
+  // Pedido QR de una mesa con cuenta abierta: entra como ronda de esa cuenta
+  // (no como pedido aparte). Nadie la capturó en un TPV, así que la caja
+  // imprime su comanda igual que la de un pedido web (onWebRound).
+  const handleWebRound = useCallback((data: any) => {
+    const folio = data?.orderNumber || (data?.id ? `#${String(data.id).slice(-6).toUpperCase()}` : "");
+    const mesa = data?.tableName || (data?.tableNumber != null ? `Mesa ${data.tableNumber}` : "Una mesa");
+    const quien = data?.customerName ? ` · ${data.customerName}` : "";
+
+    addNotification({
+      type: "order_new",
+      title: "🍽️ Ronda por QR",
+      body: `${mesa} · cuenta ${folio}${quien} · $${Number(data?.total ?? 0).toFixed(2)}`,
+      orderNumber: data?.orderNumber,
+      total: typeof data?.total === "number" ? data.total : undefined,
+    });
+
+    try { onWebRoundRef.current?.(data); } catch { /* noop */ }
+  }, [addNotification]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -327,6 +351,7 @@ export function useNotifications(opts?: {
       socket.on("order:payment:confirmed", handleOrderPaid);
       socket.on("waiter:call",             handleWaiterCall);
       socket.on("order:table-pending",     handleTablePending);
+      socket.on("order:web-round",         handleWebRound);
     })();
 
     return () => {
@@ -340,8 +365,9 @@ export function useNotifications(opts?: {
       socket.off("order:payment:confirmed", handleOrderPaid);
       socket.off("waiter:call",             handleWaiterCall);
       socket.off("order:table-pending",     handleTablePending);
+      socket.off("order:web-round",         handleWebRound);
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [handleOrderNew, handleOrderKiosk, handleOrderUpdated, handleOrderPaid, handleWaiterCall, handleTablePending]);
+  }, [handleOrderNew, handleOrderKiosk, handleOrderUpdated, handleOrderPaid, handleWaiterCall, handleTablePending, handleWebRound]);
 }

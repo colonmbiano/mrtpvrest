@@ -15,6 +15,7 @@ const { validateQuantityGroups, compactQuantityModifiers, modifierSnapshotKey } 
  */
 
 const express = require('express');
+const { createHash } = require('node:crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('@mrtpvrest/database');
@@ -31,6 +32,7 @@ const { computeDeliveryFee } = require('../lib/delivery-fee');
 const { filterLiveBanners } = require('../lib/banner-schedule');
 const { nextOrderNumber } = require('../lib/order-number');
 const { verifyTableToken } = require('../lib/table-qr');
+const { webRoundTabWhere, canTakeWebRound, heldOrderRoundId } = require('../lib/table-status');
 const { sendOrderPaidEmail } = require('../lib/order-confirmation-mailer');
 const { computeOpenState } = require('../utils/storeHours');
 const { authenticate } = require('../middleware/auth.middleware');
@@ -577,6 +579,127 @@ function sendDedupReplay(res, order, dedupReason) {
     deduped: true,
     dedupReason,
   });
+}
+
+// Aviso al DUEÑO por WhatsApp de un pedido web (o de una ronda web sumada a una
+// cuenta). Opt-in por tenant. Número normalizado con lada aquí porque el envío
+// por integración no antepone la lada. Best-effort: la orden ya existe.
+function sendOwnerOrderAlert(config, restaurantId, order, heading) {
+  const alertNumber = config?.orderAlertEnabled
+    ? toWhatsappNumber(config.orderAlertWhatsapp || config.phone, config.countryCode)
+    : '';
+  if (!alertNumber) return;
+  const typeLabel = order.orderType === 'DELIVERY'
+    ? '🛵 Domicilio'
+    : order.orderType === 'DINE_IN'
+      ? `🍽 Mesa ${order.tableNumber ?? ''}`.trim()
+      : '🥡 Para llevar';
+  const itemsTxt = (order.items || [])
+    .map((it) => `• ${it.quantity}× ${it.menuItem?.name || 'Producto'}`)
+    .join('\n');
+  const addr = order.orderType === 'DELIVERY' && order.deliveryAddress ? `\n📍 ${order.deliveryAddress}` : '';
+  const totalTxt = `$${Number(order.total || 0).toLocaleString('es-MX')}`;
+  const alertMsg =
+    `${heading}\n${typeLabel}\n\n${itemsTxt}\n\n` +
+    `*Total: ${totalTxt}*${addr}\n` +
+    `Cliente: ${order.customerName || 's/n'}${order.customerPhone ? ` · ${order.customerPhone}` : ''}`;
+  require('../services/notifications.service')
+    .sendOrderWhatsApp(restaurantId, alertNumber, alertMsg)
+    .catch((e) => console.error('[store] aviso al dueño:', e.message));
+}
+
+// Pedido de mesa por QR que se suma a la cuenta abierta de su mesa como una
+// ronda más (ver POST /orders). La ronda la escribe el mismo núcleo que las
+// rondas del TPV (orders.routes appendWebRoundToTab): va a cocina como ronda y
+// se cobra con la cuenta, nunca aparte.
+//
+// Idempotencia: la tienda no manda clientOrderId, así que el id de la ronda se
+// deriva del comensal + carrito (la firma del dedupe anti doble-submit) + la
+// ventana de tiempo, y se busca en la ventana actual y en la anterior. Un doble
+// toque no crea dos rondas; dos comensales de la misma mesa que piden lo mismo
+// a la vez (otro nombre o teléfono) sí cuentan aparte, como con las órdenes.
+async function appendToOpenTab(req, res, ctx) {
+  const { tab, itemsData, subtotal, signature, customerName, customerPhone, notes,
+    loyaltyUserId, couponWarnings, config, windowMs } = ctx;
+  const { appendWebRoundToTab } = require('./orders.routes');
+  const bucket = Math.floor(Date.now() / windowMs);
+  const roundIdFor = (b) => `qr-${createHash('sha256')
+    .update(JSON.stringify([tab.restaurantId, tab.id, customerName, customerPhone, signature, b]))
+    .digest('hex')}`;
+  const findReplay = () => prisma.orderRound.findFirst({
+    where: { id: { in: [roundIdFor(bucket), roundIdFor(bucket - 1)] }, orderId: tab.id },
+  });
+  const respond = (round, extra = {}) => res.status(201).json({
+    id:          tab.id,
+    orderNumber: tab.orderNumber,
+    status:      tab.status,
+    // Lo de ESTA ronda: el comensal no ve el total de la cuenta de la mesa.
+    total:       subtotal,
+    discount:    0,
+    pointsUsed:  0,
+    pointsDiscount: 0,
+    tip:         0,
+    estimatedMinutes: tab.estimatedMinutes || 30,
+    couponWarnings,
+    awaitingTableConfirmation: false,
+    appendedToOpenTab: true,
+    roundNumber: round.roundNumber,
+    ...extra,
+  });
+  const replay = async () => {
+    const prior = await findReplay();
+    if (!prior) return null;
+    res.setHeader('X-Dedup-Replay', 'true');
+    return respond(prior, { deduped: true });
+  };
+
+  const prior = await replay();
+  if (prior) return prior;
+
+  let result;
+  try {
+    result = await appendWebRoundToTab({
+      tab, itemsData, roundId: roundIdFor(bucket), io: req.app.get('io'), customerName,
+      appendNote: notes ? `Ronda QR (${customerName}): ${notes}` : null,
+    });
+  } catch (e) {
+    // Doble envío que se cruzó en carrera: el primero ya guardó la ronda.
+    if (e?.code === 'P2002') {
+      const replayed = await replay();
+      if (replayed) return replayed;
+    }
+    throw e;
+  }
+  const { updated, round } = result;
+
+  // Lealtad: los puntos de lo que pidió el comensal, sobre su ronda.
+  if (loyaltyUserId) {
+    addLoyaltyPoints(loyaltyUserId, {
+      id: tab.id, restaurantId: tab.restaurantId, orderNumber: tab.orderNumber, subtotal, discount: 0,
+    }).catch(() => null);
+  }
+
+  const roundItems = (updated.items || []).filter((it) => it.roundId === round.id);
+  sendOwnerOrderAlert(config, tab.restaurantId, {
+    orderType: 'DINE_IN', tableNumber: tab.tableNumber, items: roundItems,
+    total: subtotal, customerName, customerPhone,
+  }, `🔔 *Ronda web en la cuenta #${tab.orderNumber}*`);
+
+  // Hitos por cliente (gateado por env): cuenta la compra del comensal sin
+  // reasignar la cuenta de la mesa, que es de quien la abrió.
+  let milestoneReward = null;
+  if (isMilestoneEnabled(tab.restaurantId)) {
+    try {
+      const r = await processCustomerMilestone(tab.restaurantId, {
+        phone: customerPhone, name: customerName, total: subtotal,
+      });
+      milestoneReward = r?.reward || null;
+    } catch (e) {
+      console.error('[store] milestone reward error:', e.message);
+    }
+  }
+
+  return respond(round, { status: updated.status, reward: milestoneReward });
 }
 
 // ── POST /api/store/orders ───────────────────────────────────────────────────
@@ -1328,6 +1451,30 @@ router.post('/orders', async (req, res) => {
       }
     }
 
+    // Mesa con la cuenta abierta (QR firmado a una mesa OCCUPIED): el pedido se
+    // suma a esa cuenta como una ronda más, igual que si el mesero la capturara
+    // en el TPV, en vez de abrir otra cuenta en la misma mesa que alguien
+    // tendría que unir o cobrar aparte. Cupón, puntos, recompensa o propina
+    // viven en la orden y no en sus líneas: esos pedidos siguen creando su
+    // propia orden, igual que antes. Un pedido por confirmar no entra aquí: se
+    // suma (o no) cuando la caja lo acepta (orders.routes PUT /:id/status).
+    if (remoteDineIn && !awaitingTableConfirmation && resolvedTableId
+        && !coupon && pointsUsed === 0 && !reward && tip === 0) {
+      const tab = await prisma.order.findFirst({
+        where: webRoundTabWhere(resolvedTableId, resolvedLocationId),
+        orderBy: { createdAt: 'desc' },
+      });
+      if (tab && canTakeWebRound(tab)) {
+        return appendToOpenTab(req, res, {
+          tab, itemsData, subtotal, signature: newSig,
+          customerName: customerName.trim(),
+          customerPhone: customerPhone?.trim() || null,
+          notes: typeof notes === 'string' ? notes.trim() : '',
+          loyaltyUserId, couponWarnings, config, windowMs: DEDUP_WINDOW_MS,
+        });
+      }
+    }
+
     // Crear la orden CON el consumo de cupón y puntos en la misma transacción:
     // si algo falla, no queda orden con descuento aplicado pero cupón/puntos
     // sin consumir (ni al revés). Los consumos son condicionales en el WHERE
@@ -1519,30 +1666,7 @@ router.post('/orders', async (req, res) => {
     }
 
     // Aviso al DUEÑO por WhatsApp del nuevo pedido web (además del push al TPV).
-    // Opt-in por tenant. Número normalizado con lada aquí porque el envío por
-    // integración no antepone la lada. Best-effort: la orden ya existe.
-    const alertNumber = config?.orderAlertEnabled
-      ? toWhatsappNumber(config.orderAlertWhatsapp || config.phone, config.countryCode)
-      : '';
-    if (alertNumber) {
-      const typeLabel = order.orderType === 'DELIVERY'
-        ? '🛵 Domicilio'
-        : order.orderType === 'DINE_IN'
-          ? `🍽 Mesa ${order.tableNumber ?? ''}`.trim()
-          : '🥡 Para llevar';
-      const itemsTxt = (order.items || [])
-        .map((it) => `• ${it.quantity}× ${it.menuItem?.name || 'Producto'}`)
-        .join('\n');
-      const addr = order.orderType === 'DELIVERY' && order.deliveryAddress ? `\n📍 ${order.deliveryAddress}` : '';
-      const totalTxt = `$${Number(order.total || 0).toLocaleString('es-MX')}`;
-      const alertMsg =
-        `🔔 *Nuevo pedido web #${order.orderNumber}*\n${typeLabel}\n\n${itemsTxt}\n\n` +
-        `*Total: ${totalTxt}*${addr}\n` +
-        `Cliente: ${order.customerName || 's/n'}${order.customerPhone ? ` · ${order.customerPhone}` : ''}`;
-      require('../services/notifications.service')
-        .sendOrderWhatsApp(restaurant.id, alertNumber, alertMsg)
-        .catch((e) => console.error('[store] aviso al dueño:', e.message));
-    }
+    sendOwnerOrderAlert(config, restaurant.id, order, `🔔 *Nuevo pedido web #${order.orderNumber}*`);
 
     // CRM de WhatsApp: registrar/actualizar el contacto (pestaña Clientes del
     // panel + remarketing). Solo pedidos del bot y solo si trae teléfono real
@@ -1817,6 +1941,24 @@ router.get('/orders/by-number/:orderNumber', async (req, res) => {
       },
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+    // Pedido de mesa por confirmar que, al aceptarlo, se sumó a la cuenta de la
+    // mesa (queda CANCELLED con sus líneas en una ronda de la cuenta): el
+    // comensal sigue el estado de esa cuenta, no un "rechazado".
+    if (order.status === 'CANCELLED') {
+      const round = await prisma.orderRound.findUnique({
+        where: { id: heldOrderRoundId(order.id) },
+        select: { roundNumber: true, order: { select: { orderNumber: true, status: true, paymentStatus: true } } },
+      });
+      if (round?.order) {
+        return res.json({
+          ...order,
+          status: round.order.status,
+          paymentStatus: round.order.paymentStatus,
+          awaitingTableConfirmation: false,
+          mergedInto: { orderNumber: round.order.orderNumber, roundNumber: round.roundNumber },
+        });
+      }
+    }
     res.json(order);
   } catch (e) {
     res.status(500).json({ error: e.message });

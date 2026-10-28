@@ -51,7 +51,8 @@ async function addLoyaltyPoints(userId, order) {
           orderId:     order.id,
         },
       }),
-      prisma.order.update({ where: { id: order.id }, data: { pointsEarned } }),
+      // increment: una cuenta de mesa puede sumar varias rondas web (store.routes).
+      prisma.order.update({ where: { id: order.id }, data: { pointsEarned: { increment: pointsEarned } } }),
     ])
     console.log(`Puntos agregados: ${pointsEarned} a usuario ${userId} (rest ${restaurantId})`)
   } catch (error) {
