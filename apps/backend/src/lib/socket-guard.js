@@ -64,10 +64,16 @@ async function isPrincipalActive(payload) {
   if (!id) return true // socket anónimo: el guard del handshake ya lo dejó sin rooms
   try {
     if (payload.isDevice) {
+      // Como en auth.middleware: un Device con la sucursal de otro tenant
+      // tampoco sigue conectado.
       const d = await runWithBypass(() => prisma.device.findUnique({
-        where: { id }, select: { isActive: true },
+        where: { id },
+        select: {
+          isActive: true, tenantId: true,
+          location: { select: { restaurant: { select: { tenantId: true } } } },
+        },
       }))
-      return !!d?.isActive
+      return !!d?.isActive && d.tenantId === d.location?.restaurant?.tenantId
     }
     const u = await runWithBypass(() => prisma.user.findUnique({
       where: { id }, select: { isActive: true },

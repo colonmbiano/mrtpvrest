@@ -37,6 +37,14 @@ router.post('/auth', async (req, res) => {
     if (!device || !device.isActive) {
       return res.status(401).json({ error: 'Dispositivo no autorizado' });
     }
+    // Antes de que /create validara la sucursal, un Device podía quedar con el
+    // tenant de quien lo vinculó y la sucursal de otro comercio: no se canjea.
+    if (device.tenantId !== device.location?.restaurant?.tenantId) {
+      return res.status(403).json({
+        error: 'Dispositivo vinculado a una sucursal de otro negocio. Vuelve a vincularlo.',
+        code: 'DEVICE_TENANT_MISMATCH',
+      });
+    }
     if (!device.location?.isActive || !device.location.restaurant?.isActive) {
       return res.status(403).json({ error: 'Sucursal o restaurante desactivado' });
     }

@@ -6,6 +6,8 @@
 // del body sin cruzarlos: un admin podía dar de alta un Device en la sucursal de
 // otro comercio y /api/devices/auth le firmaba un JWT con ese restaurante ajeno.
 // Ahora el tenant sale de la sucursal y solo SUPER_ADMIN puede cruzar tenants.
+// Los Devices que ya quedaron cruzados no canjean su deviceToken en /auth ni
+// entran con el JWT que ya tenían.
 //
 // Se usa el middleware de auth real (authenticate + requireTenantAccess); el
 // tenantMiddleware se emula con lo mínimo que deja en el request.
@@ -274,22 +276,98 @@ describe('POST /api/devices/create — SUPER_ADMIN', () => {
 
 describe('POST /api/devices/create — JWT de Device', () => {
   it('un Device no puede vincular otros Devices', async () => {
-    prisma.device.findUnique.mockResolvedValue({
-      id: 'dev-kds', type: 'KDS', isActive: true, locationId: 'loc-a1', tenantId: 'ten-a',
-      location: { restaurantId: 'rest-a' },
-    });
-    const deviceAuth = `Bearer ${jwt.sign(
-      { userId: 'dev-kds', deviceId: 'dev-kds', isDevice: true, role: 'KITCHEN', restaurantId: 'rest-a' },
-      process.env.JWT_SECRET,
-    )}`;
+    prisma.device.findUnique.mockResolvedValue(authDevice());
 
     const res = await createDevice(buildApp({ restaurantId: 'rest-a' }), {
-      auth: deviceAuth,
+      auth: deviceJwt(),
       body: { locationId: 'loc-a1', deviceType: 'POS' },
     });
 
     expect(res.status).toBe(403);
+    expect(res.body.error).toBe('Un dispositivo no puede vincular otros dispositivos');
     expect(prisma.location.findUnique).not.toHaveBeenCalled();
     expect(prisma.device.create).not.toHaveBeenCalled();
+  });
+});
+
+// Devices vinculados antes de este cambio con el tenant de quien los creó y la
+// sucursal de otro comercio (Device.tenantId ≠ tenant del restaurante).
+
+// Lo que authenticate lee del Device: sucursal loc-a1 del restaurante rest-a (ten-a).
+function authDevice(overrides = {}) {
+  return {
+    id: 'dev-kds', type: 'KDS', isActive: true, locationId: 'loc-a1', tenantId: 'ten-a',
+    location: { restaurantId: 'rest-a', restaurant: { tenantId: 'ten-a' } },
+    ...overrides,
+  };
+}
+
+function deviceJwt() {
+  return `Bearer ${jwt.sign(
+    { userId: 'dev-kds', deviceId: 'dev-kds', isDevice: true, role: 'KITCHEN', restaurantId: 'rest-a' },
+    process.env.JWT_SECRET,
+  )}`;
+}
+
+describe('POST /api/devices/auth — Device con tenant cruzado', () => {
+  // Lo que /auth lee del Device: sucursal con su restaurante.
+  function tokenDevice(tenantId, location = LOCATIONS['loc-b']) {
+    return { id: 'dev-x', name: 'KDS - 2026-10-01', type: 'KDS', isActive: true, tenantId, location };
+  }
+
+  it('no canjea el deviceToken: 403 DEVICE_TENANT_MISMATCH sin JWT', async () => {
+    prisma.device.findUnique.mockResolvedValue(tokenDevice('ten-a'));
+
+    const res = await request(buildApp()).post('/api/devices/auth').send({ deviceToken: 'tok' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('DEVICE_TENANT_MISMATCH');
+    expect(res.body.accessToken).toBeUndefined();
+    expect(prisma.device.update).not.toHaveBeenCalled();
+  });
+
+  it('con el tenant de su sucursal sigue emitiendo el JWT de ese restaurante', async () => {
+    prisma.device.findUnique.mockResolvedValue(tokenDevice('ten-b'));
+    prisma.device.update.mockResolvedValue({});
+
+    const res = await request(buildApp()).post('/api/devices/auth').send({ deviceToken: 'tok' });
+
+    expect(res.status).toBe(200);
+    const payload = jwt.verify(res.body.accessToken, process.env.JWT_SECRET);
+    expect(payload).toMatchObject({
+      isDevice: true, deviceId: 'dev-x', role: 'KITCHEN',
+      restaurantId: 'rest-b', locationId: 'loc-b', tenantId: 'ten-b',
+    });
+  });
+});
+
+describe('authenticate — JWT de un Device con tenant cruzado', () => {
+  function whoamiApp() {
+    const { authenticate } = require('../src/middleware/auth.middleware');
+    const app = express();
+    app.get('/whoami', authenticate, (req, res) => res.json(req.user));
+    return app;
+  }
+
+  it('el JWT ya emitido deja de valer: 401 DEVICE_TENANT_MISMATCH', async () => {
+    prisma.device.findUnique.mockResolvedValue(authDevice({
+      tenantId: 'ten-a',
+      locationId: 'loc-b',
+      location: { restaurantId: 'rest-b', restaurant: { tenantId: 'ten-b' } },
+    }));
+
+    const res = await request(whoamiApp()).get('/whoami').set('Authorization', deviceJwt());
+
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe('DEVICE_TENANT_MISMATCH');
+  });
+
+  it('un Device de su propio tenant sigue entrando', async () => {
+    prisma.device.findUnique.mockResolvedValue(authDevice());
+
+    const res = await request(whoamiApp()).get('/whoami').set('Authorization', deviceJwt());
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ isDevice: true, restaurantId: 'rest-a', tenantId: 'ten-a', role: 'KITCHEN' });
   });
 });
