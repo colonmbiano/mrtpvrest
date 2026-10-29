@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const { prisma } = require('@mrtpvrest/database');
+const { prisma, runWithBypass } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware');
 const router = express.Router();
 
@@ -85,39 +85,49 @@ router.post('/auth', async (req, res) => {
 
 // POST /api/devices/create — Vincular un nuevo dispositivo (Hardware Provisioning)
 // Build cache buster: forzar Railway a re-snapshot este archivo tras a450769.
+//
+// La sucursal manda: el Device queda en el tenant del restaurante dueño de la
+// sucursal, y /auth firma su JWT con ese restaurante. Por eso la sucursal debe
+// ser de un restaurante del mismo tenant que quien vincula (SUPER_ADMIN puede
+// cruzar, como en requireTenantAccess), y ambos deben estar activos. El
+// `restaurantId` del body ya no se usa: el restaurante sale de la sucursal.
 router.post('/create', authenticate, requireTenantAccess, async (req, res) => {
   try {
-    const { locationId: bodyLocationId, deviceType, restaurantId: bodyRestaurantId } = req.body;
-    
+    // Un Device no da de alta otros: con el JWT de un KDS o un kiosko se podría
+    // fabricar un Device de caja y canjearlo en /auth por un JWT de rol CASHIER.
+    if (req.user?.isDevice) {
+      return res.status(403).json({ error: 'Un dispositivo no puede vincular otros dispositivos' });
+    }
+
+    const { locationId: bodyLocationId, deviceType } = req.body || {};
     const locationId = req.locationId || bodyLocationId;
-    const restaurantId = req.restaurantId || req.user?.restaurantId || bodyRestaurantId;
 
     if (!locationId) return res.status(400).json({ error: 'Sucursal no identificada (locationId faltante)' });
     if (!deviceType) return res.status(400).json({ error: 'Tipo de dispositivo no proporcionado' });
 
-    // Determinar el tenantId a partir del restaurante.
-    // Ojo: el middleware setea `req.tenant = { ...restaurant, tenant }`, así
-    // que `req.tenant.id` es el id del Restaurant, NO del Tenant. Usamos
-    // `req.restaurant.tenantId` que sí es el id correcto del tenant.
-    let tenantId = req.restaurant?.tenantId;
-    if (!tenantId && restaurantId) {
-      const restaurant = await prisma.restaurant.findUnique({
-        where: { id: restaurantId },
-        select: { tenantId: true }
-      });
-      tenantId = restaurant?.tenantId;
+    // Bypass del guard: el contexto del request es el restaurante del header o
+    // del JWT, y la sucursal puede ser de otro restaurante del tenant (o de otro
+    // tenant, para SUPER_ADMIN). La autorización es la comparación de abajo.
+    const location = await runWithBypass(() => prisma.location.findUnique({
+      where: { id: locationId },
+      select: {
+        id: true,
+        isActive: true,
+        restaurant: { select: { id: true, tenantId: true, isActive: true } },
+      },
+    }));
+    if (!location?.restaurant) {
+      return res.status(404).json({ error: 'Sucursal no encontrada' });
     }
 
-    if (!tenantId) {
-       // Buscar a través de la location
-       const loc = await prisma.location.findUnique({
-         where: { id: locationId },
-         include: { restaurant: { select: { tenantId: true } } }
-       });
-       tenantId = loc?.restaurant?.tenantId;
+    const tenantId = location.restaurant.tenantId;
+    const restaurantId = location.restaurant.id;
+    if (req.user.role !== 'SUPER_ADMIN' && tenantId !== req.user.tenantId) {
+      return res.status(403).json({ error: 'La sucursal no pertenece a tu negocio' });
     }
-
-    if (!tenantId) return res.status(400).json({ error: 'No se pudo resolver el tenant de esta sucursal' });
+    if (!location.isActive || !location.restaurant.isActive) {
+      return res.status(403).json({ error: 'Sucursal o restaurante desactivado' });
+    }
 
     // Verificar que el tenant existe ANTES de crear el device. Sin esto, una
     // FK huérfana (restaurant.tenantId apuntando a un tenant ya borrado)
@@ -142,7 +152,7 @@ router.post('/create', authenticate, requireTenantAccess, async (req, res) => {
     const device = await prisma.device.create({
       data: {
         tenantId,
-        locationId,
+        locationId: location.id,
         type: deviceType,
         name: `${deviceType} - ${new Date().toISOString().split('T')[0]}`,
         deviceToken,
