@@ -20,7 +20,7 @@ jest.mock('@mrtpvrest/database', () => ({
     location: { findUnique: jest.fn(), findFirst: jest.fn() },
     restaurantConfig: { findUnique: jest.fn() },
     menuItem: { findFirst: jest.fn() },
-    order: { count: jest.fn(), findMany: jest.fn() },
+    order: { count: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
     table: { findMany: jest.fn(), findFirst: jest.fn() },
     user: { findUnique: jest.fn() },
     cashShift: { findFirst: jest.fn() },
@@ -112,12 +112,14 @@ beforeEach(() => {
   prisma.location.findFirst.mockResolvedValue({ id: 'loc-principal' });
   prisma.menuItem.findFirst.mockResolvedValue(MENU_ITEM);
   prisma.order.findMany.mockResolvedValue([]);
+  // Sin cuenta abierta en la mesa (la ronda sobre una cuenta: store-orders.qr-open-tab).
+  prisma.order.findFirst.mockResolvedValue(null);
   prisma.cashShift.findFirst.mockResolvedValue({ id: 'shift-1' });
   nextOrderNumber.mockResolvedValue(3001);
 });
 
 describe('POST /api/store/orders — QR de mesa firmado', () => {
-  it('ata el pedido al tableId del token y, con la mesa abierta, entra directo', async () => {
+  it('ata el pedido al tableId del token y, con la mesa abierta sin cuenta, entra directo', async () => {
     prisma.table.findFirst.mockResolvedValue({ id: 't-abc', name: 'Mesa 7', locationId: 'loc-terraza', status: 'OCCUPIED' });
     const { impl, create, tableUpdate } = txMock();
     prisma.$transaction.mockImplementation(impl);
@@ -277,7 +279,7 @@ describe('POST /api/store/orders — mesa por confirmar', () => {
     expect(create.mock.calls[0][0].data.awaitingTableConfirmation).toBe(true);
   });
 
-  it('mesa abierta → entra como siempre: order:new a cocina y sin aviso de confirmación', async () => {
+  it('mesa abierta sin cuenta → entra como siempre: order:new a cocina y sin aviso de confirmación', async () => {
     prisma.table.findFirst.mockResolvedValue({ id: 't-abc', name: 'Mesa 7', locationId: 'loc-terraza', status: 'OCCUPIED' });
     const { impl } = txMock();
     prisma.$transaction.mockImplementation(impl);
