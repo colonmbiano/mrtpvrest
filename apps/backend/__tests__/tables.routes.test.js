@@ -71,6 +71,7 @@ describe('GET /api/tables', () => {
           tableId: { in: ['table-7'] },
           status: { in: OPEN_TABLE_STATUSES },
           paymentStatus: { not: 'PAID' },
+          awaitingTableConfirmation: false,
         },
       }),
     );
