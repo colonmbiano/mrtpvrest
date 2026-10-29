@@ -25,7 +25,9 @@ Un push a `master` dispara, sin intervención:
 
 ## 2. Migraciones nuevas frente a master (10, en este orden)
 
-Todas usan `IF NOT EXISTS` o bloques `DO … IF NOT EXISTS`: una segunda corrida no hace nada. Verificado en PostgreSQL desechable: las 102 migraciones aplican desde cero, una segunda corrida es no-op y no queda desfase nuevo frente a `schema.prisma` (persiste el desfase previo de master: `retail_sales_priceListId_idx`, `Ingredient.imageUrl` y `DEFAULT` de `updatedAt` en tablas de nómina/retail).
+Todas usan `IF NOT EXISTS` o bloques `DO … IF NOT EXISTS`: una segunda corrida no hace nada. Verificado en PostgreSQL desechable: las 103 migraciones aplican desde cero, una segunda corrida es no-op y no queda desfase nuevo frente a `schema.prisma` (persiste el desfase previo de master: `retail_sales_priceListId_idx`, `Ingredient.imageUrl` y `DEFAULT` de `updatedAt` en tablas de nómina/retail).
+
+**Fuera de orden:** master ya aplicó en producción `20261028100000_order_awaiting_table_confirmation` (PR #164), que tiene fecha **posterior** a estas 10. `prisma migrate deploy` aplica igual las pendientes. Ensayado el 29/oct en PostgreSQL desechable con el orden de producción: primero las 93 de master y luego la rama encima. Aplicó las 10 y quedaron 103 terminadas y 0 fallidas, con `migrate status` "up to date" y sin desfase nuevo.
 
 | Migración | Qué hace | Riesgo en producción | ¿Reversible? |
 | --- | --- | --- | --- |
@@ -55,13 +57,13 @@ Llaves foráneas que la reconciliación valida contra filas existentes:
 
 ## 3. Verificaciones previas en producción (solo lectura)
 
-Correr en la base de producción (Supabase `Mrtpvrest`) **antes** del merge. Son solo `SELECT`.
+Correr en la base de producción (Supabase `Mrtpvrest`) **antes** del merge. Son solo `SELECT`. La misma revisión, en una sola consulta que devuelve un JSON y salta las tablas que aún no existen, está en [`fase0-verificaciones.sql`](fase0-verificaciones.sql).
 
 ```sql
 -- 3.1 Historial de migraciones sano: debe devolver 0 filas.
 SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL;
 
--- 3.2 Última migración aplicada: debe ser 20261017220000_add_kitchen_note_flags (la del #160).
+-- 3.2 Última migración aplicada: debe ser 20261028100000_order_awaiting_table_confirmation (la del #164; 93 terminadas).
 SELECT migration_name, finished_at FROM _prisma_migrations ORDER BY migration_name DESC LIMIT 3;
 
 -- 3.3 ¿Ya existen las tablas que crea la reconciliación? (NULL = no existe; la migración la crea vacía.)
@@ -105,7 +107,7 @@ Si 3.1 o 3.4 no dan 0, **no fusionar**: corregir primero los datos o la migraci�
 1. Fusionar el PR #162 en `master`.
 2. Verificar:
    - Despliegue de Railway en `success` y `GET /health` en 200.
-   - `_prisma_migrations` con 102 filas terminadas y ninguna fallida.
+   - `_prisma_migrations` con 103 filas terminadas y ninguna fallida.
    - Logs del backend sin errores nuevos.
    - Vercel publicado para TPV, admin, SaaS, tienda y repartidor.
    - Versión OTA publicada.
