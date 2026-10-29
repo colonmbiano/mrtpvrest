@@ -108,6 +108,7 @@ export default function OrderTypePage() {
   useNotifications({
     onOrderNew: (order) => autoPrintWebOrderRef.current?.(order),
     onTablePending: () => refreshOpenOrdersRef.current?.(),
+    onWebRound: (round) => autoPrintWebOrderRef.current?.(round),
   });
   const unreadCount = useNotifStore((s) => s.unreadCount);
 
@@ -268,10 +269,14 @@ export default function OrderTypePage() {
     autoPrintWebOrderRef.current = async (order: any) => {
       const id: string | undefined = order?.id || order?.orderId;
       if (!id) return;
+      // Ronda por QR sumada a una cuenta (order:web-round): se imprime SOLO esa
+      // ronda, con su propio reclamo y dedupe. Mismo criterio que /pos/menu.
+      const roundId: string | undefined = order?.roundId || undefined;
+      const key = roundId ? `${id}:${roundId}` : id;
       const src = String(order?.source || "").toUpperCase();
       if (src && !ONLINE_SOURCES.has(src)) return;
-      if (printedWebOrders.current.has(id)) return;
-      printedWebOrders.current.add(id);
+      if (printedWebOrders.current.has(key)) return;
+      printedWebOrders.current.add(key);
       try {
         let full: any = null;
         try {
@@ -280,52 +285,56 @@ export default function OrderTypePage() {
         } catch {
           full = null;
         }
-        if (!full) { printedWebOrders.current.delete(id); return; }
+        if (!full) { printedWebOrders.current.delete(key); return; }
         const fullSrc = String(full?.source || "").toUpperCase();
         // Mesa por QR sin confirmar: no va a cocina todavía. Al aceptarla llega
         // otro order:new y ahí sí se imprime (por eso se quita del dedupe).
-        if ((fullSrc && !ONLINE_SOURCES.has(fullSrc)) || full.awaitingTableConfirmation === true) {
-          printedWebOrders.current.delete(id);
+        if ((!roundId && fullSrc && !ONLINE_SOURCES.has(fullSrc)) || full.awaitingTableConfirmation === true) {
+          printedWebOrders.current.delete(key);
           return;
         }
-        const items = orderItemsToTicketItems(full.items || []);
-        if (items.length === 0) { printedWebOrders.current.delete(id); return; }
+        const items = orderItemsToTicketItems(
+          (full.items || []).filter((it: any) => !roundId || it.roundId === roundId),
+        );
+        if (items.length === 0) { printedWebOrders.current.delete(key); return; }
         // IMPRIME-UNA-VEZ (server-side): si hay varias tablets con la caja
         // abierta, solo la primera que reclama imprime; las demás reciben
         // claimed:false y se saltan. Fail-open: si el reclamo falla por red,
         // imprime igual (mejor un posible doble que una comanda perdida).
         let mayPrint = true;
         try {
-          const claim = await api.post(`/api/orders/${id}/claim-kitchen-print`);
+          const claim = await api.post(`/api/orders/${id}/claim-kitchen-print`, roundId ? { roundId } : undefined);
           mayPrint = claim?.data?.claimed !== false;
         } catch {
           mayPrint = true;
         }
+        const folio = full.orderNumber ? `#${full.orderNumber}` : "";
+        const what = roundId ? `Ronda QR de la cuenta ${folio}` : `Pedido web ${folio}`;
         if (!mayPrint) {
-          const folioOtra = full.orderNumber ? `#${full.orderNumber}` : "";
-          toast.info(`Pedido web ${folioOtra} lo imprime otra caja`);
+          toast.info(`${what} lo imprime otra caja`);
           return; // otra pantalla se encarga; el id queda marcado, no se reintenta aquí
         }
         const res = await printKitchenTickets(printers, {
           orderNumber: full.orderNumber || String(full.id).slice(-6).toUpperCase(),
           orderType: full.orderType || null,
           tableNumber: full.table?.name || full.tableNumber || null,
-          customerName: full.customerName || full.user?.name || null,
+          // Ronda: el nombre de quien la pidió por QR, no el de la cuenta.
+          customerName: (roundId && order?.customerName) || full.customerName || full.user?.name || null,
           items,
-          paid: full.paymentStatus === "PAID" || full.cashCollected === true,
-          paymentMethod: full.paymentMethod || null,
+          // La ronda se cobra con la cuenta: sin banner de pago, como las rondas del TPV.
+          paid: roundId ? undefined : full.paymentStatus === "PAID" || full.cashCollected === true,
+          paymentMethod: roundId ? null : full.paymentMethod || null,
           config: kitchenConfig ?? undefined,
         });
-        const folio = full.orderNumber ? `#${full.orderNumber}` : "";
         if (res.ok > 0) {
-          toast.success(`🖨️ Pedido web ${folio} impreso en cocina`);
+          toast.success(`🖨️ ${what} impreso en cocina`);
           fetchOpenOrders();
         } else {
-          printedWebOrders.current.delete(id);
-          toast.warning(`Pedido web ${folio} recibido — no se pudo imprimir, revisa la impresora`);
+          printedWebOrders.current.delete(key);
+          toast.warning(`${what} recibido — no se pudo imprimir, revisa la impresora`);
         }
       } catch {
-        printedWebOrders.current.delete(id);
+        printedWebOrders.current.delete(key);
       }
     };
   }, [printers, kitchenConfig, fetchOpenOrders]);
