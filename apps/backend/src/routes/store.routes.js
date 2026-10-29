@@ -91,8 +91,42 @@ function isAuthedStaff(req, restaurantId) {
   } catch { return false; }
 }
 
+// ¿La petición viene de un KIOSKO FÍSICO vinculado a ESTE restaurante?
+// `source: 'KIOSK'` exenta al pedido de reglas pensadas para internet (tienda
+// cerrada, saturación, mínimo de compra, confirmación de mesa), así que no basta
+// con declararlo en el body: el kiosko manda el JWT de dispositivo que obtiene
+// al vincularse (POST /api/devices/create + /api/devices/auth). Devuelve:
+//   { device }             → kiosko activo de este restaurante (y sucursal)
+//   { invalidToken: true } → JWT vencido o mal firmado: el kiosko lo renueva
+//   {}                     → sin JWT de kiosko: el pedido se trata como ONLINE
+async function resolveKioskDevice(req, restaurant, location) {
+  const h = req.headers.authorization;
+  if (!h || !h.startsWith('Bearer ')) return {};
+  let payload;
+  try {
+    payload = jwt.verify(h.split(' ')[1], process.env.JWT_SECRET);
+  } catch {
+    return { invalidToken: true };
+  }
+  if (!payload?.isDevice) return {};
+  const device = await prisma.device.findUnique({
+    where: { id: String(payload.deviceId || payload.userId || '') },
+    select: {
+      id: true, type: true, isActive: true, tenantId: true, locationId: true,
+      location: { select: { restaurantId: true, isActive: true } },
+    },
+  });
+  if (!device || !device.isActive || device.type !== 'KIOSK') return {};
+  // Device.tenantId sale de quien lo creó: exigirlo igual al del restaurante
+  // corta un Device dado de alta en otro tenant sobre una sucursal ajena.
+  if (device.tenantId !== restaurant.tenantId) return {};
+  if (device.location?.restaurantId !== restaurant.id || !device.location.isActive) return {};
+  if (location && device.locationId !== location.id) return {};
+  return { device };
+}
+
 // ── Anti-fraude: rate limit por kiosko ───────────────────────────────────
-// Cache en memoria de pedidos PENDING por terminal. Si un mismo terminal
+// Cache en memoria de pedidos PENDING por kiosko (Device). Si un mismo kiosko
 // crea muchas órdenes sin pagar en ventana corta, lo bloqueamos. Para
 // multi-instancia en Railway necesitaríamos Redis, pero 1 instancia
 // alcanza para el caso típico.
@@ -102,17 +136,17 @@ function isAuthedStaff(req, restaurantId) {
 //   KIOSK_RATE_WINDOW_MS     (default 10 min = 600000)
 const KIOSK_RATE_LIMIT = parseInt(process.env.KIOSK_RATE_LIMIT_PENDING || '8', 10);
 const KIOSK_RATE_WINDOW_MS = parseInt(process.env.KIOSK_RATE_WINDOW_MS || '600000', 10);
-const kioskPendingCache = new Map(); // terminalId → number[] (timestamps)
+const kioskPendingCache = new Map(); // deviceId → number[] (timestamps)
 
-function checkKioskRate(terminalId) {
-  if (!terminalId) return { ok: true };
+function checkKioskRate(deviceId) {
+  if (!deviceId) return { ok: true };
   const now = Date.now();
-  const list = (kioskPendingCache.get(terminalId) || []).filter((t) => now - t < KIOSK_RATE_WINDOW_MS);
+  const list = (kioskPendingCache.get(deviceId) || []).filter((t) => now - t < KIOSK_RATE_WINDOW_MS);
   if (list.length >= KIOSK_RATE_LIMIT) {
     return { ok: false, count: list.length };
   }
   list.push(now);
-  kioskPendingCache.set(terminalId, list);
+  kioskPendingCache.set(deviceId, list);
   return { ok: true, count: list.length };
 }
 
@@ -773,7 +807,23 @@ router.post('/orders', async (req, res) => {
   // compra) y caen en el panel "Pedidos Web" del TPV como PENDING para que el
   // cajero los confirme antes de mandarlos a cocina.
   const VALID_SOURCES = ['ONLINE', 'KIOSK', 'WHATSAPP'];
-  const source = VALID_SOURCES.includes(rawSource) ? rawSource : 'ONLINE';
+  const requestedSource = VALID_SOURCES.includes(rawSource) ? rawSource : 'ONLINE';
+  // KIOSK solo vale con el JWT del kiosko vinculado (ver resolveKioskDevice).
+  // Sin él, el pedido sigue como ONLINE con las reglas de la tienda web: así un
+  // `source: 'KIOSK'` escrito a mano no salta nada y los kioscos vinculados
+  // antes de esta credencial siguen vendiendo mientras se vuelven a vincular.
+  let kioskDevice = null;
+  if (requestedSource === 'KIOSK') {
+    const kiosk = await resolveKioskDevice(req, restaurant, location);
+    if (kiosk.invalidToken) {
+      return res.status(401).json({
+        error: 'La sesión del kiosko venció. Vuelve a intentarlo.',
+        code: 'KIOSK_DEVICE_TOKEN_INVALID',
+      });
+    }
+    kioskDevice = kiosk.device || null;
+  }
+  const source = requestedSource === 'KIOSK' && !kioskDevice ? 'ONLINE' : requestedSource;
   // `let` porque el token firmado del QR puede sobreescribirlo con el número
   // real de la mesa a la que apunta (más abajo, ya con la mesa leída de la BD).
   let tableNumber = resolvedOrderType === 'DINE_IN' && rawTableNumber
@@ -892,7 +942,7 @@ router.post('/orders', async (req, res) => {
   // Tienda cerrada: bloquear pedidos online (kioskos operan presencialmente y
   // no dependen de este flag). Considera override manual Y horario automático.
   // 423 Locked = recurso temporalmente no disponible.
-  if (rawSource !== 'KIOSK' && !isStaff && config) {
+  if (source !== 'KIOSK' && !isStaff && config) {
     const storeState = computeOpenState(config);
     if (!storeState.isOpen) {
       return res.status(423).json({
@@ -925,20 +975,16 @@ router.post('/orders', async (req, res) => {
     return res.status(400).json({ error: 'El nombre del cliente es requerido.' });
   }
 
-  // Anti-fraude para kioskos: si el terminalId envía más de N órdenes en
-  // ventana corta sin pagar, bloqueamos. Identificamos el terminal por
-  // header (kiosko lo manda al hacer setup).
+  // Anti-fraude para kioskos: si un mismo kiosko envía más de N órdenes en
+  // ventana corta sin pagar, bloqueamos. La llave es el Device autenticado,
+  // no el id de la terminal de cobro (opcional y lo escribe cualquiera).
   if (source === 'KIOSK') {
-    const terminalId = req.headers['x-kiosk-terminal-id'] || req.body?.terminalId || null;
-    if (!terminalId) {
-      return res.status(400).json({ error: 'terminalId requerido para pedidos de kiosko', code: 'KIOSK_TERMINAL_REQUIRED' });
-    }
-    const rate = checkKioskRate(terminalId);
+    const rate = checkKioskRate(kioskDevice.id);
     if (!rate.ok) {
       return res.status(429).json({
         error: 'Demasiadas órdenes desde este kiosko. Intenta de nuevo en unos minutos.',
         code: 'KIOSK_RATE_LIMIT',
-        terminalId,
+        deviceId: kioskDevice.id,
         currentCount: rate.count,
         limit: KIOSK_RATE_LIMIT,
       });
@@ -952,8 +998,9 @@ router.post('/orders', async (req, res) => {
   // por resolveStore; `bodyLocationId` llega crudo del cliente, así que hay que
   // validarla aquí antes de usarla: sin esto, el id de sucursal de otro tenant
   // se colaría al pedido (y ahora también al UPDATE de estado de la mesa). Si
-  // no es válida la ignoramos y caemos a la sucursal principal de abajo.
-  let resolvedLocationId = location?.id || null;
+  // no es válida la ignoramos y caemos a la sucursal principal de abajo. Un
+  // kiosko autenticado sin sucursal en la petición pide en la suya.
+  let resolvedLocationId = location?.id || kioskDevice?.locationId || null;
   if (!resolvedLocationId && bodyLocationId) {
     const fromBody = await prisma.location.findFirst({
       where: { id: String(bodyLocationId), restaurantId: restaurant.id, isActive: true },
@@ -1158,7 +1205,7 @@ router.post('/orders', async (req, res) => {
     // preparar y mandar un pedido fuera del local, no para impedir que el
     // comensal ya sentado pida una cerveza desde el QR de su mesa.
     if (
-      rawSource !== 'KIOSK' &&
+      source !== 'KIOSK' &&
       !isStaff &&
       resolvedOrderType !== 'DINE_IN' &&
       config?.minOrderAmount > 0 &&
