@@ -94,6 +94,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [showNotifs, setShowNotifs] = useState(false);
   const [showWebOrders, setShowWebOrders] = useState(false);
   const [acceptingWebId, setAcceptingWebId] = useState<string | null>(null);
+  const [rejectingWebId, setRejectingWebId] = useState<string | null>(null);
   const [showExpenses, setShowExpenses] = useState(false);
   const [showCatalogSettings, setShowCatalogSettings] = useState(false);
   const [mobileView, setMobileView] = useState<"menu" | "ticket">("menu");
@@ -105,7 +106,13 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const autoPrintWebOrderRef = useRef<((order: any) => void) | null>(null);
   // Lock in-flight para que flushPendingRound no POSTee la misma ronda 2x.
   const flushingRoundRef = useRef(false);
-  useNotifications({ onOrderNew: (order) => autoPrintWebOrderRef.current?.(order) });
+  // Refresca la lista al llegar un pedido de mesa por confirmar (sin esperar
+  // al poll de 30 s); se conecta a fetchOpenOrders más abajo.
+  const refreshOpenOrdersRef = useRef<(() => void) | null>(null);
+  useNotifications({
+    onOrderNew: (order) => autoPrintWebOrderRef.current?.(order),
+    onTablePending: () => refreshOpenOrdersRef.current?.(),
+  });
 
   // Mantener la pantalla encendida mientras esté abierto el shell de
   // cajero (Capacitor only — no-op en web). Si el cajero está esperando
@@ -190,6 +197,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       console.error("Error cargando órdenes abiertas:", err);
     }
   }, []);
+  useEffect(() => {
+    refreshOpenOrdersRef.current = fetchOpenOrders;
+  }, [fetchOpenOrders]);
 
   // Tickets COBRADOS del último mes (pestaña "Cobradas"). Local-first: pinta el
   // cache al instante (stale-while-revalidate) y revalida contra el backend.
@@ -682,7 +692,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         // printerGroups/categorías que necesita el ruteo a cocina.
         const full = await fetchFullOrder({ id });
         const fullSrc = String(full?.source || "").toUpperCase();
-        if (fullSrc && !ONLINE_SOURCES.has(fullSrc)) {
+        // Mesa por QR sin confirmar: no va a cocina todavía. Al aceptarla llega
+        // otro order:new y ahí sí se imprime (por eso se quita del dedupe).
+        if ((fullSrc && !ONLINE_SOURCES.has(fullSrc)) || full?.awaitingTableConfirmation === true) {
           printedWebOrders.current.delete(id);
           return;
         }
@@ -1172,6 +1184,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     paymentStatus: o.paymentStatus || null,
     paymentMethod: o.paymentMethod || null,
     cashCollected: o.cashCollected === true,
+    tableName: o.table?.name || (o.tableNumber != null ? String(o.tableNumber) : null),
+    awaitingTableConfirmation: o.awaitingTableConfirmation === true,
   }));
 
   const canMergeOpenOrders = currentEmployee?.role
@@ -1483,6 +1497,27 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     [fetchOpenOrders],
   );
 
+  // Rechazar un pedido de mesa por QR que nadie está esperando en el local:
+  // PENDING → CANCELLED. El backend no libera la mesa (nunca la ocupó).
+  const handleRejectWebOrder = useCallback(
+    async (id: string) => {
+      setRejectingWebId(id);
+      try {
+        await api.put(`/api/orders/${id}/status`, { status: "CANCELLED" });
+        toast.success("Pedido de mesa rechazado");
+        fetchOpenOrders();
+      } catch (err: any) {
+        toast.error(
+          "Error al rechazar: " +
+            (err?.response?.data?.error || err?.message || "fallo desconocido"),
+        );
+      } finally {
+        setRejectingWebId(null);
+      }
+    },
+    [fetchOpenOrders],
+  );
+
   // Los pedidos web también entran directo al catálogo para continuar la
   // cuenta y usar las acciones del ticket activo.
   const handleShowWebDetail = async (id: string) => {
@@ -1664,6 +1699,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         hideMoney={isLoanMode}
         acceptingId={acceptingWebId}
         onAccept={handleAcceptWebOrder}
+        rejectingId={rejectingWebId}
+        onReject={handleRejectWebOrder}
         onShowDetail={handleShowWebDetail}
       />
 

@@ -116,6 +116,9 @@ export default function StoreCheckout({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState<any>(null);
   const [liveStatus, setLiveStatus] = useState<string>('PENDING');
+  // Pedido de mesa por QR a una mesa libre: el personal confirma que hay gente
+  // sentada antes de mandarlo a cocina (ver store.routes POST /orders).
+  const [liveAwaitingTable, setLiveAwaitingTable] = useState(false);
 
   // Registro rápido: recordamos los datos del cliente en el dispositivo para
   // que no tenga que volver a escribirlos. Sin cuenta ni contraseña.
@@ -334,15 +337,15 @@ export default function StoreCheckout({
           if (payRes.ok && pay.checkoutUrl) { clear(); window.location.href = pay.checkoutUrl; return; }
           // Si falla la pasarela, el pedido ya existe: lo mostramos como pendiente de pago.
           setError(pay?.error || 'No se pudo iniciar el pago en línea. Tu pedido quedó registrado, paga en la tienda.');
-          setSuccess(data); setLiveStatus(data.status || 'PENDING'); clear();
+          setSuccess(data); setLiveStatus(data.status || 'PENDING'); setLiveAwaitingTable(data.awaitingTableConfirmation === true); clear();
         } catch {
           setError('No se pudo abrir la pasarela. Tu pedido quedó registrado.');
-          setSuccess(data); setLiveStatus(data.status || 'PENDING'); clear();
+          setSuccess(data); setLiveStatus(data.status || 'PENDING'); setLiveAwaitingTable(data.awaitingTableConfirmation === true); clear();
         }
         return;
       }
 
-      setSuccess(data); setLiveStatus(data.status || 'PENDING'); clear();
+      setSuccess(data); setLiveStatus(data.status || 'PENDING'); setLiveAwaitingTable(data.awaitingTableConfirmation === true); clear();
     } catch {
       setError('Error de red al enviar el pedido.');
     } finally { setIsSubmitting(false); }
@@ -355,7 +358,13 @@ export default function StoreCheckout({
     const poll = async () => {
       try {
         const res = await fetch(`${API}/api/store/orders/by-number/${encodeURIComponent(success.orderNumber)}?r=${encodeURIComponent(slug)}`);
-        if (res.ok) { const d = await res.json(); if (!stop && d.status) setLiveStatus(d.status); }
+        if (res.ok) {
+          const d = await res.json();
+          if (!stop && d.status) {
+            setLiveStatus(d.status);
+            if (typeof d.awaitingTableConfirmation === 'boolean') setLiveAwaitingTable(d.awaitingTableConfirmation);
+          }
+        }
       } catch {}
     };
     poll();
@@ -367,9 +376,14 @@ export default function StoreCheckout({
 
   // ── Pantalla de éxito + seguimiento ──────────────────────────────────────
   if (success) {
-    const st = STATUS_LABEL[liveStatus] || STATUS_LABEL.PENDING;
+    const awaitingTable = liveAwaitingTable && liveStatus === 'PENDING';
+    // El personal rechazó la mesa: el pedido nunca entró a cocina.
+    const tableRejected = success.awaitingTableConfirmation === true && liveStatus === 'CANCELLED';
+    const st = awaitingTable
+      ? { t: 'Esperando que el personal confirme tu mesa', c: '#f59e0b' }
+      : STATUS_LABEL[liveStatus] || STATUS_LABEL.PENDING;
     // En mesa no se ofrece mandar el pedido por WhatsApp: el comensal está en el
-    // local y su pedido ya entró al TPV y a cocina con su mesa puesta.
+    // local y su pedido ya entró al TPV con su mesa puesta.
     const isWa = whatsappOrder?.enabled && !!whatsappOrder?.number && !isDineIn;
     const waUrl = isWa ? `https://wa.me/${whatsappOrder.number}?text=${generateWhatsAppOrderMessage(success, '')}` : '';
 
@@ -394,6 +408,16 @@ export default function StoreCheckout({
               <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: st.c }} />{st.t}
             </p>
           </div>
+          {awaitingTable && (
+            <p className="text-xs text-gray-500 mb-3 font-bold">
+              Tu pedido entra a cocina en cuanto el personal confirme que estás en la mesa.
+            </p>
+          )}
+          {tableRejected && (
+            <p className="text-xs text-gray-500 mb-3 font-bold">
+              No pudimos confirmar tu mesa. Pide ayuda al personal del local.
+            </p>
+          )}
           <p className="text-xs text-gray-400 mb-5">El estado se actualiza automáticamente.</p>
 
           {isWa && (
