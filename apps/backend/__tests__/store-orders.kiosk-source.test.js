@@ -338,7 +338,7 @@ describe('POST /api/devices/auth — Device KIOSK', () => {
 
   it('emite un JWT de rol KIOSK (no CASHIER) para el Device KIOSK', async () => {
     prisma.device.findUnique.mockResolvedValue({
-      id: 'dev-k', name: 'KIOSK - 2026-10-29', type: 'KIOSK', isActive: true,
+      id: 'dev-k', name: 'KIOSK - 2026-10-29', type: 'KIOSK', isActive: true, tenantId: 'ten1',
       location: { id: 'loc1', isActive: true, restaurant: { id: 'r1', tenantId: 'ten1', isActive: true } },
     });
     prisma.device.update.mockResolvedValue({});
