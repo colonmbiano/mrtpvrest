@@ -109,6 +109,16 @@ router.post('/create', authenticate, requireTenantAccess, async (req, res) => {
     if (req.user?.isDevice) {
       return res.status(403).json({ error: 'Un dispositivo no puede vincular otros dispositivos' });
     }
+    // Solo vincula una cuenta ADMIN o SUPER_ADMIN, como piden los setups de TPV,
+    // KDS, Tokki y kiosko (login con correo). Un cliente de la tienda (CUSTOMER,
+    // con el tenant del comercio) o un empleado podían dar de alta un Device de
+    // caja y canjearlo en /auth por un JWT de rol CASHIER.
+    if (req.user?.isEmployee || !['ADMIN', 'SUPER_ADMIN'].includes(req.user?.role)) {
+      return res.status(403).json({
+        error: 'Solo un administrador puede vincular dispositivos',
+        code: 'DEVICE_LINK_FORBIDDEN',
+      });
+    }
 
     const { locationId: bodyLocationId, deviceType } = req.body || {};
     const locationId = req.locationId || bodyLocationId;

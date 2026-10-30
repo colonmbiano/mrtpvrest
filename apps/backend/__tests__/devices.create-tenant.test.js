@@ -52,6 +52,29 @@ const USERS = {
     id: 'u-super', name: 'Soporte', email: 'soporte@example.com', role: 'SUPER_ADMIN',
     isActive: true, restaurantId: 'rest-a', tenantId: 'ten-a',
   },
+  // Cliente registrado en la tienda en línea: el registro le pone el tenant del comercio.
+  'u-customer-a': {
+    id: 'u-customer-a', name: 'Cliente', email: 'cliente@example.com', role: 'CUSTOMER',
+    isActive: true, restaurantId: 'rest-a', tenantId: 'ten-a',
+  },
+  'u-kitchen-a': {
+    id: 'u-kitchen-a', name: 'Cocina', email: 'cocina@example.com', role: 'KITCHEN',
+    isActive: true, restaurantId: 'rest-a', tenantId: 'ten-a',
+  },
+};
+
+// Empleados (login por PIN): authenticate los resuelve con su sucursal.
+function employee(id, role) {
+  return {
+    id, name: `Empleado ${role}`, role, isActive: true, locationId: 'loc-a1',
+    location: { restaurantId: 'rest-a', restaurant: { tenantId: 'ten-a' } },
+  };
+}
+const EMPLOYEES = {
+  'e-owner-a': employee('e-owner-a', 'OWNER'),
+  'e-admin-a': employee('e-admin-a', 'ADMIN'),
+  'e-cashier-a': employee('e-cashier-a', 'CASHIER'),
+  'e-waiter-a': employee('e-waiter-a', 'WAITER'),
 };
 
 const REST_A = { id: 'rest-a', tenantId: 'ten-a', isActive: true };
@@ -287,6 +310,48 @@ describe('POST /api/devices/create — JWT de Device', () => {
     expect(res.body.error).toBe('Un dispositivo no puede vincular otros dispositivos');
     expect(prisma.location.findUnique).not.toHaveBeenCalled();
     expect(prisma.device.create).not.toHaveBeenCalled();
+  });
+});
+
+// Con el JWT de cliente que da la tienda en línea se podía dar de alta un Device
+// POS en la sucursal del comercio y canjearlo en /auth por un JWT de caja.
+describe('POST /api/devices/create — solo ADMIN o SUPER_ADMIN', () => {
+  beforeEach(() => {
+    prisma.employee.findUnique.mockImplementation(async ({ where }) => EMPLOYEES[where.id] || null);
+  });
+
+  it.each([
+    ['un cliente de la tienda (CUSTOMER)', 'u-customer-a'],
+    ['una cuenta de cocina (KITCHEN)', 'u-kitchen-a'],
+    ['un empleado OWNER', 'e-owner-a'],
+    ['un empleado ADMIN', 'e-admin-a'],
+    ['un empleado CASHIER', 'e-cashier-a'],
+    ['un empleado WAITER', 'e-waiter-a'],
+  ])('%s recibe 403 DEVICE_LINK_FORBIDDEN y no crea el Device', async (_label, id) => {
+    const res = await createDevice(buildApp({ restaurantId: 'rest-a' }), {
+      auth: userJwt(id),
+      body: { locationId: 'loc-a1', deviceType: 'POS' },
+      headers: { 'x-restaurant-id': 'rest-a', 'x-location-id': 'loc-a1' },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ code: 'DEVICE_LINK_FORBIDDEN' });
+    expect(prisma.location.findUnique).not.toHaveBeenCalled();
+    expect(prisma.device.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['ADMIN', 'u-admin-a'],
+    ['SUPER_ADMIN', 'u-super'],
+  ])('una cuenta %s sigue vinculando', async (_label, id) => {
+    const res = await createDevice(buildApp({ restaurantId: 'rest-a' }), {
+      auth: userJwt(id),
+      body: { locationId: 'loc-a1', deviceType: 'POS' },
+      headers: { 'x-restaurant-id': 'rest-a', 'x-location-id': 'loc-a1' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(prisma.device.create).toHaveBeenCalledTimes(1);
   });
 });
 
