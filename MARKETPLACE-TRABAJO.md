@@ -28,3 +28,5 @@ Rama codex/menu-mesas-practico; merge de master y pruebas de espera/rechazo, NO_
 - Primer intento con dependencias anteriores: faltó parser de ESLint y Chromium administrado por Playwright; se resolvió usando copia aislada y Chrome instalado.
 - PostgreSQL y producción: no utilizados para T1. CI remoto pendiente de publicación; PR permanece borrador.
 - T4 quedó en codex/triage-prs-2026-10, commit 55892d55. T3 sigue pendiente de la fusión de T2 por el usuario.
+
+- Verificación final T1: los 2 casos de caja cerrada se repitieron con el texto exacto del backend y aprobaron; son los mismos escenarios de la suite de 16, no pruebas adicionales. Se cerró el mock huérfano del intento interrumpido antes de repetirlos. PostgreSQL desechable apagado al terminar T2.
