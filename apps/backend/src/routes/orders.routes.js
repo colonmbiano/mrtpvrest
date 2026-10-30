@@ -2760,7 +2760,7 @@ router.patch('/:id/table', authenticate, requireTenantAccess,
         typeof fromTableId !== 'string' || !fromTableId.trim()) {
       return res.status(400).json({ error: 'Indica la mesa de origen y la mesa destino' });
     }
-    const reject = (status, message) => { throw Object.assign(new Error(message), { status }); };
+    const reject = (status, message, code) => { throw Object.assign(new Error(message), { status, code }); };
     try {
       const order = await prisma.$transaction(async tx => {
         const source = await tx.order.findFirst({
@@ -2768,6 +2768,9 @@ router.patch('/:id/table', authenticate, requireTenantAccess,
           include: { table: true },
         });
         if (!source) reject(404, 'Cuenta no encontrada en esta sucursal');
+        if (source.awaitingTableConfirmation) {
+          reject(409, 'Confirma o rechaza primero el pedido de mesa', 'TABLE_CONFIRMATION_PENDING');
+        }
         if (source.orderType !== 'DINE_IN' || !source.tableId) {
           reject(400, 'Solo puedes cambiar de mesa una cuenta de consumo en mesa');
         }
@@ -2804,7 +2807,7 @@ router.patch('/:id/table', authenticate, requireTenantAccess,
           include: ORDER_DETAIL_INCLUDE,
         });
         const remaining = await tx.order.findFirst({
-          where: { tableId: source.tableId, status: { in: OPEN_TABLE_STATUSES }, paymentStatus: { not: 'PAID' } },
+          where: { tableId: source.tableId, awaitingTableConfirmation: false, status: { in: OPEN_TABLE_STATUSES }, paymentStatus: { not: 'PAID' } },
           select: { id: true },
         });
         await tx.table.update({
@@ -2825,7 +2828,10 @@ router.patch('/:id/table', authenticate, requireTenantAccess,
       if (e.code === 'P2034') {
         return res.status(409).json({ error: 'Las mesas cambiaron durante la operación; actualiza e inténtalo de nuevo' });
       }
-      return res.status(e.status || 500).json({ error: e.status ? e.message : 'No se pudo cambiar la cuenta de mesa' });
+      return res.status(e.status || 500).json({
+        error: e.status ? e.message : 'No se pudo cambiar la cuenta de mesa',
+        ...(e.status && e.code ? { code: e.code } : {}),
+      });
     }
   });
 

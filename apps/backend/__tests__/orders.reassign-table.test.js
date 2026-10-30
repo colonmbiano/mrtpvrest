@@ -51,6 +51,7 @@ beforeEach(() => {
     id: 'o1', restaurantId: 'r1', locationId: 'loc1', orderType: 'DINE_IN',
     tableId: 't1', tableNumber: 1, table: { id: 't1', name: 'Mesa 1' },
     orderNumber: 'TPV-001', status: 'PREPARING', paymentStatus: 'PENDING',
+    awaitingTableConfirmation: false,
     total: 150, subtotal: 170, discount: 20,
     items: [{ id: 'item-1', quantity: 2, roundId: 'round-1' }],
     rounds: [{ id: 'round-1', roundNumber: 1 }, { id: 'round-2', roundNumber: 2 }],
@@ -90,6 +91,37 @@ test('mantiene ocupada la mesa anterior si queda otra cuenta abierta', async () 
     where.id ? source : where.tableId === 't1' ? { id: 'split-order' } : null);
   await move().expect(200);
   expect(tx.table.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { status: 'OCCUPIED' } });
+});
+
+test('rechaza el traslado de un pedido retenido antes de reservar el destino', async () => {
+  source.awaitingTableConfirmation = true;
+  const res = await move().expect(409);
+  expect(res.body).toEqual({ code: 'TABLE_CONFIRMATION_PENDING', error: 'Confirma o rechaza primero el pedido de mesa' });
+  expect(tx.table.updateMany).not.toHaveBeenCalled();
+  expect(tx.order.update).not.toHaveBeenCalled();
+  expect(emit).not.toHaveBeenCalled();
+});
+
+test('un pedido QR retenido bloquea el destino aunque la mesa figure libre', async () => {
+  tx.order.findFirst.mockImplementation(async ({ where }) => where.id ? source :
+    where.tableId === 't2' ? { id: 'held-order', awaitingTableConfirmation: true } : null);
+  await move().expect(409);
+  expect(tx.order.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+    where: { tableId: 't2', status: { in: expect.any(Array) }, paymentStatus: { not: 'PAID' } },
+  }));
+  expect(tx.order.update).not.toHaveBeenCalled();
+  expect(emit).not.toHaveBeenCalled();
+});
+
+test('libera el origen cuando solo queda un pedido QR retenido', async () => {
+  tx.order.findFirst.mockImplementation(async ({ where }) => where.id ? source :
+    where.tableId === 't1' && where.awaitingTableConfirmation !== false ? { id: 'held-order' } : null);
+  await move().expect(200);
+  expect(tx.order.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+    where: expect.objectContaining({ tableId: 't1', awaitingTableConfirmation: false }),
+  }));
+  expect(tx.table.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { status: 'AVAILABLE' } });
+  expect(emit.mock.calls.map(([event]) => event)).toEqual(['order:updated']);
 });
 
 test.each(['KITCHEN', 'DELIVERY', 'CUSTOMER'])('rechaza el rol %s antes de tocar la base de datos', async role => {

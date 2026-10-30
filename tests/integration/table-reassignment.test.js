@@ -9,7 +9,8 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 
 const databaseUrl = new URL(process.env.DATABASE_URL || 'http://missing');
-assert(['127.0.0.1', 'localhost'].includes(databaseUrl.hostname) && /test/i.test(databaseUrl.pathname),
+assert(['127.0.0.1', 'localhost'].includes(databaseUrl.hostname) && /test/i.test(databaseUrl.pathname) &&
+  (databaseUrl.port === '55449' || (process.env.CI === 'true' && databaseUrl.port === '5432')),
   'Esta prueba requiere una base de datos local de pruebas');
 const { prisma, runWithBypass, runWithTenant } = require('../../packages/database');
 const routes = require('../../apps/backend/src/routes/orders.routes');
@@ -116,6 +117,31 @@ test('rollback de la reserva si una cuenta activa contradice el status libre', a
   assert.equal(result.status, 409);
   assert.equal((await readTable(f.target.id)).status, 'AVAILABLE');
   assert.equal((await readOrder(f.order.id)).tableId, f.source.id);
+});
+
+for (const placement of ['source', 'target']) {
+  test(`pedido retenido en ${placement}: conserva el estado correcto de ambas mesas`, async () => {
+    const f = await fixture();
+    await inTenant(() => prisma.order.create({ data: {
+      restaurantId: restaurant.id, locationId: location.id, orderNumber: 'held-' + sequence,
+      tableId: f[placement].id, orderType: 'DINE_IN', status: 'PENDING',
+      awaitingTableConfirmation: true, paymentMethod: 'CASH', subtotal: 75, total: 75,
+    } }));
+    const result = await invoke(moveHandler, f);
+    assert.equal(result.status, placement === 'source' ? 200 : 409, JSON.stringify(result.data));
+    assert.equal((await readTable(f.source.id)).status, placement === 'source' ? 'AVAILABLE' : 'OCCUPIED');
+    assert.equal((await readTable(f.target.id)).status, placement === 'source' ? 'OCCUPIED' : 'AVAILABLE');
+  });
+}
+
+test('un pedido retenido no puede trasladarse ni ocupar el destino', async () => {
+  const f = await fixture();
+  await inTenant(() => prisma.order.update({ where: { id: f.order.id }, data: { awaitingTableConfirmation: true } }));
+  const result = await invoke(moveHandler, f);
+  assert.equal(result.status, 409);
+  assert.equal(result.data.code, 'TABLE_CONFIRMATION_PENDING');
+  assert.equal((await readOrder(f.order.id)).tableId, f.source.id);
+  assert.equal((await readTable(f.target.id)).status, 'AVAILABLE');
 });
 
 test('dos empleados no pueden mover sus cuentas a la misma mesa', async () => {
