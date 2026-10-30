@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 import { MapPin, Phone, MessageCircle } from 'lucide-react';
 import { MochiTheme } from '@/components/themes/MochiTheme';
 import { BeverageTheme } from '@/components/themes/BeverageTheme';
@@ -10,9 +11,13 @@ import {
   type StoreInfo, type StoreLocation,
 } from '@/lib/store-data';
 import { cldImage } from '@/lib/cloudinary';
+import { getMarketplaceApiUrl, getStorePublicUrl, isMarketplaceCatalogEnabled, isMarketplaceIsolated } from '@/lib/config';
+import { fetchMerchantRef } from '@/lib/marketplace';
+import { MarketplaceMerchantProvider } from '@/components/MarketplaceMerchantProvider';
 import InstallPWABanner from '@/components/InstallPWABanner';
 import CartDeepLinkLoader from '@/components/CartDeepLinkLoader';
 import { DineInBanner } from '@/components/DineInBanner';
+import MarketplaceStoreBar from '@/components/MarketplaceStoreBar';
 
 // Normaliza un número a dígitos para construir el link de wa.me.
 function waLink(number?: string | null): string | null {
@@ -52,7 +57,9 @@ export async function generateMetadata({
   let store: StoreInfo | null = null;
   try { store = await fetchStore(slug); } catch { /* usa defaults */ }
   const name = store?.name ?? 'Tienda';
-  const base = `https://${slug}.mrtpvrest.com`;
+  // Subdominio productivo, o /<slug> del mismo origen en el marketplace; null
+  // = sin URL pública configurada, se omiten las URLs absolutas.
+  const base = getStorePublicUrl(slug);
   const description = `Haz tu pedido en línea en ${name}. Rápido y fácil, directo a tu domicilio.`;
   // store.logo ya es URL absoluta de Cloudinary. WhatsApp no resuelve relativas.
   const logo = store?.logo || undefined;
@@ -63,16 +70,18 @@ export async function generateMetadata({
   const ogImages = ogImage ? [{ url: ogImage, width: 800, height: 420, alt: name }] : undefined;
 
   return {
-    metadataBase: new URL(base),
+    metadataBase: base ? new URL(base) : undefined,
     title: `${name} | Pedidos en línea`,
     description,
     applicationName: name,
     icons: iconUrl ? { icon: iconUrl } : undefined,
-    alternates: { canonical: '/' },
+    // Canonical absoluto: con base /<slug>, un '/' relativo apuntaría a la raíz.
+    alternates: base ? { canonical: base } : undefined,
+    robots: isMarketplaceIsolated() ? { index: false, follow: false } : undefined,
     openGraph: {
       type: 'website',
       locale: 'es_MX',
-      url: base,
+      url: base ?? undefined,
       siteName: name,
       title: `${name} | Pedidos en línea`,
       description,
@@ -204,6 +213,12 @@ export default async function StorefrontPage({
               Escríbenos por WhatsApp
             </a>
           )}
+
+          {isMarketplaceCatalogEnabled() && (
+            <Link href="/" className="mt-6 block font-bold text-[#9a3412] underline underline-offset-2">
+              Volver al catálogo
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -234,12 +249,17 @@ export default async function StorefrontPage({
   const data = { info, menu, locations };
   // Menú aplanado para el deep-link de carrito (rehidratar `?cart=`).
   const allItems = (menu?.categories || []).flatMap((c: any) => c.items || []);
+  // Comercio del marketplace (id o slug para el checkout v1). Solo con la bandera activa.
+  const marketplaceMerchant = isMarketplaceCatalogEnabled() ? await fetchMerchantRef(getMarketplaceApiUrl(), slug) : null;
 
   return (
+    <MarketplaceMerchantProvider value={marketplaceMerchant}>
     <div
       style={{ ['--color-primary' as string]: primary } as React.CSSProperties}
       className="min-h-screen bg-white"
     >
+      {isMarketplaceCatalogEnabled() && <MarketplaceStoreBar store={store} />}
+
       {/* Llegó por el QR de mesa: que se vea desde el primer pintado, no solo
           al abrir el checkout. */}
       {dineIn && <DineInBanner table={dineIn.table} primary={primary} />}
@@ -250,7 +270,7 @@ export default async function StorefrontPage({
       {theme === 'ANTOJITOS' && <AntojitosTheme data={data} />}
 
       {/* Rehidrata el carrito si la URL trae ?cart= (deep-link compartible). */}
-      <CartDeepLinkLoader products={allItems} />
+      <CartDeepLinkLoader products={allItems} slug={slug} />
 
       {/* PWA — banner flotante de instalación con branding del tenant */}
       <InstallPWABanner
@@ -259,5 +279,6 @@ export default async function StorefrontPage({
         accentColor={primary}
       />
     </div>
+    </MarketplaceMerchantProvider>
   );
 }

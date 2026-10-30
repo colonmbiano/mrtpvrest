@@ -6,7 +6,6 @@ const config: CapacitorConfig = {
   appId: 'com.mrtpvrest.delivery',
   appName: 'MRTPV Delivery',
   webDir: 'out',
-  bundledWebRuntime: false,
   server: {
     androidScheme: 'https',
     // cleartext deshabilitado: la app solo habla https con el backend.

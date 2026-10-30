@@ -26,6 +26,10 @@ export default function GPSTracker({ driverId, activeOrderId, onRouteStart, onRo
   const watchRef  = useRef<number|null>(null);
   const timerRef  = useRef<any>(null);
   const lastPosRef = useRef<{lat:number,lng:number}|null>(null);
+  // El reloj y watchPosition conservan el sendLocation con el que arrancaron: el pedido
+  // activo se lee de aquí para que cada aviso lleve el pedido que va en camino AHORA.
+  const activeOrderRef = useRef(activeOrderId);
+  useEffect(() => { activeOrderRef.current = activeOrderId; }, [activeOrderId]);
 
   // Mantén la pantalla encendida mientras hay tracking activo: si se apaga,
   // iOS suspende el WebView y watchPosition deja de emitir ubicaciones.
@@ -48,12 +52,12 @@ export default function GPSTracker({ driverId, activeOrderId, onRouteStart, onRo
     setAccuracy(Math.round(accuracy));
     try {
       const { data } = await api.post(`/api/gps/${driverId}/location`, {
-        lat, lng, accuracy, speed, heading, orderId: activeOrderId || null
+        lat, lng, accuracy, speed, heading, orderId: activeOrderRef.current || null
       });
       setDistFromOrigin(data.distFromOrigin);
       setPointsSent(p => p + 1);
     } catch {}
-  }, [driverId, activeOrderId]);
+  }, [driverId]);
 
   // Iniciar tracking manual
   async function handleStartTracking() {

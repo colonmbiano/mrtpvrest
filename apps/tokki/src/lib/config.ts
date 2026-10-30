@@ -68,8 +68,25 @@ export function sanitizeApiUrl(url: string): string | null {
   }
 }
 
+// Copia aislada del marketplace (NEXT_PUBLIC_MARKETPLACE_ISOLATED=true, ver
+// MARKETPLACE-STAGING.md): solo vale la API loopback horneada. Se ignoran el
+// override de /setup, la config remota y DEFAULT_API_URL; sin URL loopback
+// válida se usa un destino bloqueado para que el fallo sea visible.
+export const BLOCKED_API_URL = "http://127.0.0.1:9";
+
+export function isolatedApiUrl(): string | null {
+  if (process.env.NEXT_PUBLIC_MARKETPLACE_ISOLATED !== "true") return null;
+  try {
+    const u = new URL(process.env.NEXT_PUBLIC_API_URL || "");
+    const loopback = u.hostname === "127.0.0.1" || u.hostname === "localhost" || u.hostname === "[::1]";
+    return loopback && (u.protocol === "http:" || u.protocol === "https:") ? u.origin : BLOCKED_API_URL;
+  } catch {
+    return BLOCKED_API_URL;
+  }
+}
+
 /**
- * Resolución en orden:
+ * Resolución en orden (salvo copia aislada, ver isolatedApiUrl):
  *   1. Override manual guardado en /setup → localStorage.apiBaseUrl
  *   2. apiUrl servido por la config remota cacheada
  *   3. NEXT_PUBLIC_API_URL bakeado en el APK
@@ -77,6 +94,9 @@ export function sanitizeApiUrl(url: string): string | null {
  * Los niveles 1 y 2 se descartan si no pasan sanitizeApiUrl (cae al siguiente).
  */
 export function getApiUrl(): string {
+  const isolated = isolatedApiUrl();
+  if (isolated) return isolated;
+
   const baked = process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL;
 
   if (typeof window === "undefined") return baked;

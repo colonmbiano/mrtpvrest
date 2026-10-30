@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { Sparkles, Bot, Trash2, Zap, Store, Tag, TrendingUp, Percent, Target, Lightbulb, Clock } from "lucide-react";
+import { Sparkles, Bot, Trash2, Zap, Store, Tag, TrendingUp, Percent, Target, Lightbulb, Clock, Eye, Check } from "lucide-react";
 import api from "@/lib/api";
 import {
   PageShell,
@@ -14,11 +14,12 @@ import {
   EmptyState,
   useToast,
   useConfirm,
+  Modal,
 } from "@/components/ds";
 import { LocationCard } from "./_components/LocationCard";
 import { LocationConfigModal } from "./_components/LocationConfigModal";
 import { PromoItemCard } from "./_components/PromoItemCard";
-import { type Location, type ConfigDraft, type PromoItem, discountPct } from "./_components/types";
+import { type Location, type ConfigDraft, type PromoItem, type DryRunResult, type PromoSettings, discountPct, ALL_DAYS } from "./_components/types";
 
 export default function PromocionesPage() {
   const [locations, setLocations] = useState<Location[]>([]);
@@ -31,10 +32,12 @@ export default function PromocionesPage() {
   const [drafts, setDrafts] = useState<Record<string, ConfigDraft>>({});
   const [configLoc, setConfigLoc] = useState<Location | null>(null);
   const [clearing, setClearing] = useState(false);
-  // Ventana horaria de promos (RestaurantConfig): fuera de este horario los
-  // platillos promo se ocultan del TPV/tienda/bot y se cobran a precio normal.
   const [promoWindow, setPromoWindow] = useState<{ startTime: string; endTime: string }>({ startTime: "", endTime: "" });
   const [savingWindow, setSavingWindow] = useState(false);
+  const [dryRunResult, setDryRunResult] = useState<DryRunResult | null>(null);
+  const [dryRunLocation, setDryRunLocation] = useState<Location | null>(null);
+  const [dryRunLoading, setDryRunLoading] = useState(false);
+  const [applyingDryRun, setApplyingDryRun] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -52,6 +55,7 @@ export default function PromocionesPage() {
               autoPromoThreshold: l.autoPromoThreshold,
               autoPromoDiscount: l.autoPromoDiscount,
               autoPromoMaxItems: l.autoPromoMaxItems ?? 0,
+              activeDays: l.activeDays ?? ALL_DAYS,
             },
           ]),
         ),
@@ -146,12 +150,58 @@ export default function PromocionesPage() {
   const handleSaveConfig = async (loc: Location) => {
     const d = drafts[loc.id];
     if (!d) return;
-    await updateLocation(loc, {
+    const promoSettings: PromoSettings = {
       autoPromoThreshold: Math.max(1, d.autoPromoThreshold || 0),
       autoPromoDiscount: Math.min(100, Math.max(1, d.autoPromoDiscount || 0)),
       autoPromoMaxItems: Math.max(0, d.autoPromoMaxItems || 0),
-    });
+      activeDays: d.activeDays,
+    };
+    setSavingLoc(loc.id);
+    try {
+      await api.put(`/api/locations/${loc.id}/promo-settings`, promoSettings);
+      setLocations((prev) =>
+        prev.map((l) => (l.id === loc.id ? { ...l, ...promoSettings, activeDays: promoSettings.activeDays } : l)),
+      );
+      toast.success("Configuración guardada");
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      toast.error(err?.response?.data?.error || "Error al guardar");
+      fetchData();
+    } finally {
+      setSavingLoc(null);
+    }
     setConfigLoc(null);
+  };
+
+  const handleDryRun = async (loc: Location) => {
+    setDryRunLoading(true);
+    setDryRunLocation(loc);
+    try {
+      const { data } = await api.post(`/api/locations/${loc.id}/run-promo-engine`, { dryRun: true });
+      setDryRunResult(data);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      toast.error(err?.response?.data?.error || "Error en la previsualización");
+    } finally {
+      setDryRunLoading(false);
+    }
+  };
+
+  const handleApplyDryRun = async () => {
+    if (!dryRunLocation) return;
+    setApplyingDryRun(true);
+    try {
+      await api.post(`/api/locations/${dryRunLocation.id}/run-promo-engine`, { dryRun: false });
+      toast.success("Promociones aplicadas");
+      setDryRunResult(null);
+      setDryRunLocation(null);
+      fetchData();
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      toast.error(err?.response?.data?.error || "Error al aplicar");
+    } finally {
+      setApplyingDryRun(false);
+    }
   };
 
   const handleClearAll = async () => {
@@ -330,9 +380,11 @@ export default function PromocionesPage() {
               loc={loc}
               savingLoc={savingLoc}
               triggering={triggering}
+              dryRunLoading={dryRunLoading && dryRunLocation?.id === loc.id}
               onToggle={handleToggleLocation}
               onConfigure={setConfigLoc}
               onTrigger={handleTrigger}
+              onDryRun={handleDryRun}
             />
           ))}
         </div>
@@ -390,6 +442,7 @@ export default function PromocionesPage() {
             autoPromoThreshold: loc.autoPromoThreshold,
             autoPromoDiscount: loc.autoPromoDiscount,
             autoPromoMaxItems: loc.autoPromoMaxItems ?? 0,
+            activeDays: loc.activeDays ?? ALL_DAYS,
           };
           return (
             <LocationConfigModal
@@ -402,6 +455,85 @@ export default function PromocionesPage() {
             />
           );
         })()}
+
+      {/* Modal de previsualización (Dry Run) */}
+      {dryRunResult && dryRunLocation && (
+        <Modal
+          open
+          onClose={() => {
+            setDryRunResult(null);
+            setDryRunLocation(null);
+          }}
+          title="Previsualizar promociones"
+          subtitle={dryRunLocation.name}
+          size="md"
+          footer={
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setDryRunResult(null);
+                  setDryRunLocation(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                icon={Check}
+                onClick={handleApplyDryRun}
+                loading={applyingDryRun}
+                disabled={applyingDryRun}
+              >
+                {applyingDryRun ? "Aplicando…" : "Aplicar ahora"}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div className="rounded-ds-md bg-surf-2 p-3">
+              <p className="text-[13px] font-semibold text-tx">
+                {dryRunResult.estimatedImpact.itemsInPromo} platillos en promo
+              </p>
+              <p className="mt-0.5 text-[11px] text-tx-mut">
+                Descuento promedio: {dryRunResult.estimatedImpact.averageDiscount}%
+              </p>
+            </div>
+
+            {dryRunResult.recommendedItems.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-[12px] font-bold uppercase text-tx-mut">Platillos recomendados</p>
+                <div className="max-h-64 space-y-2 overflow-y-auto">
+                  {dryRunResult.recommendedItems.map((item) => (
+                    <div key={item.id} className="rounded-ds-md border p-3" style={{ borderColor: "var(--bd-1)" }}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-tx-hi">{item.name}</p>
+                          <p className="mt-0.5 text-[11px] text-tx-mut">
+                            Vendidos: {item.soldLast7Days} unidades
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="line-through text-[11px] text-tx-mut">
+                            ${item.currentPrice.toFixed(2)}
+                          </p>
+                          <p className="font-bold text-primary">
+                            ${item.recommendedPrice.toFixed(2)}
+                          </p>
+                          <p className="text-[10px] text-tx-mut">-{item.discount}%</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-ds-md bg-surf-2 p-4 text-center">
+                <p className="text-[12px] text-tx-mut">No hay platillos que cumplan los criterios para promo</p>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
     </PageShell>
   );
 }

@@ -14,6 +14,7 @@ export default function OrdersKanban({
   onCobrar,
   onPrint,
   onOpenConversation,
+  onViewEvidence,
 }: {
   orders: Order[];
   drivers: Driver[];
@@ -23,6 +24,7 @@ export default function OrdersKanban({
   onCobrar?: (order: Order) => void;
   onPrint?: (orderId: string) => void;
   onOpenConversation?: (order: Order) => void;
+  onViewEvidence?: (order: Order) => void;
 }) {
   return (
     <div className="ds-scrollbar flex gap-4 overflow-x-auto pb-4">
@@ -65,6 +67,7 @@ export default function OrdersKanban({
                   onCobrar={onCobrar}
                   onPrint={onPrint}
                   onOpenConversation={onOpenConversation}
+                  onViewEvidence={onViewEvidence}
                 />
               ))
             )}

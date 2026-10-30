@@ -36,14 +36,14 @@ describe("OrdersDrawer multiselección", () => {
         { ...orders[0]!, id: 'order-3', customerName: 'Rosa', status: 'PAID', paymentMethod: 'CARD' },
       ]}
       onShowDetail={jest.fn()} onConfirmPayment={jest.fn()} onReprintOrder={jest.fn()} />);
-    await user.click(screen.getByRole('button', { name: 'Tarjeta', exact: true }));
+    await user.click(screen.getByRole('button', { name: 'Tarjeta' }));
     expect(screen.queryByText('Ana')).not.toBeInTheDocument();
     expect(screen.getByText('Luis')).toBeInTheDocument();
     expect(screen.getByText('Rosa')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Mesa', exact: true }));
+    await user.click(screen.getByRole('button', { name: 'Mesa' }));
     expect(screen.queryByText('Luis')).not.toBeInTheDocument();
     expect(screen.getByText('Rosa')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Transfer.', exact: true }));
+    await user.click(screen.getByRole('button', { name: 'Transfer.' }));
     expect(screen.getByText('Ana')).toBeInTheDocument();
     expect(screen.queryByText('Rosa')).not.toBeInTheDocument();
   });

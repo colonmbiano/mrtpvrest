@@ -16,7 +16,8 @@ const TILE_ATTR = '© OpenStreetMap';
 type LatLng = { lat: number; lng: number };
 
 // Carga Leaflet (CSS + JS) una sola vez y resuelve cuando window.L está listo.
-function loadLeaflet(): Promise<any> {
+// También la usa el mapa del seguimiento (MarketplaceTrackingMap).
+export function loadLeaflet(): Promise<any> {
   return new Promise((resolve) => {
     if (typeof window === 'undefined') return;
     const w = window as any;
