@@ -41,11 +41,14 @@ router.post('/auth', async (req, res) => {
       return res.status(403).json({ error: 'Sucursal o restaurante desactivado' });
     }
 
-    // Mapear tipo de dispositivo a rol funcional para el JWT.
+    // Mapear tipo de dispositivo a rol funcional para el JWT. El kiosko queda
+    // al público: su rol propio no entra en ningún requireRole ni cuenta como
+    // personal en /api/store (solo lo usa para acreditar `source: 'KIOSK'`).
     const roleByType = {
       KDS:   'KITCHEN',
       POS:   'CASHIER',
       WAITER: 'WAITER',
+      KIOSK: 'KIOSK',
     };
     const role = roleByType[device.type] || 'CASHIER';
 
