@@ -1,6 +1,10 @@
 const { validateQuantityGroups, compactQuantityModifiers, modifierSnapshotKey } = require('../lib/quantity-modifiers');
 require('dotenv').config();
 const { createHash } = require('node:crypto');
+// Pedidos del marketplace: sin editar productos/montos en el TPV y sin cobrarlos en caja si no
+// se han aceptado o ya se pagaron en línea.
+const { marketplaceEditBlock, marketplaceChargeBlock } = require('../lib/marketplace-order-lock');
+const sendBlock = (res, block) => res.status(block.status).json(block.body);
 
 // ─────────────────────────────────────────────────────────────────────────
 // expandSubRecipeToIngredients · devuelve los ingredientes finales (hojas)
@@ -424,7 +428,9 @@ const router = express.Router();
 // Estados en los que una cuenta de mesa DINE_IN sigue "abierta" (con saldo por
 // cobrar). Definición única en lib/table-status.js — incluye PENDING porque los
 // pedidos del QR de mesa entran así hasta que el cajero los acepta.
-const { OPEN_TABLE_STATUSES } = require('../lib/table-status');
+const {
+  OPEN_TABLE_STATUSES, webRoundTabWhere, canTakeWebRound, canJoinTab, heldOrderRoundId,
+} = require('../lib/table-status');
 
 function extractIds(value, key) {
   return Array.isArray(value)
@@ -481,7 +487,8 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
     // estado (mayormente cerrados) con todos sus items, y el TPV los descargaba
     // solo para descartar ~el 90% en el cliente → el drawer tardaba en cargar.
     // Las páginas admin siguen pidiendo el historial completo (sin el param).
-    const ACTIVE_ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING', 'OPEN', 'ON_THE_WAY'];
+    // PENDING_MERCHANT: pedidos del marketplace que el comercio debe aceptar.
+    const ACTIVE_ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING', 'OPEN', 'ON_THE_WAY', 'PENDING_MERCHANT'];
     const isPaidScope = req.query.scope === 'paid';
     if (req.query.scope === 'active' || req.query.status === 'active') {
       where.status = { in: ACTIVE_ORDER_STATUSES };
@@ -842,6 +849,8 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           status: { in: OPEN_TABLE_STATUSES },
           paymentStatus: { not: 'PAID' },
           locationId: req.locationId,
+          // Un pedido de QR por confirmar no es la cuenta de la mesa: el mesero puede abrirla.
+          awaitingTableConfirmation: false,
         },
         orderBy: { createdAt: 'desc' },
         select: {
@@ -1330,6 +1339,179 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Rondas: núcleo compartido ──────────────────────────────────────────
+// Ronda nueva en una cuenta abierta, dentro de `tx`: crea la OrderRound
+// (roundNumber = max+1), le asigna sus líneas y recalcula subtotal/total/promo
+// NxM sobre la cuenta completa. Las líneas llegan como `itemsData` (datos de
+// OrderItem por crear) o con `moveItemsFromOrderId` (las de otro pedido, p.ej.
+// uno de mesa por confirmar que se suma a la cuenta al aceptarlo). `appendNote`
+// agrega una línea a las notas de la cuenta.
+async function insertRoundInTx(tx, { order, roundId, itemsData = [], moveItemsFromOrderId, activeBulkPromos, appendNote }) {
+  const lastRound = await tx.orderRound.findFirst({
+    where: { orderId: order.id },
+    orderBy: { roundNumber: 'desc' },
+    select: { roundNumber: true },
+  });
+  const nextNumber = (lastRound?.roundNumber || 0) + 1;
+
+  const newRound = await tx.orderRound.create({
+    data: { ...(roundId ? { id: roundId } : {}), orderId: order.id, roundNumber: nextNumber },
+  });
+
+  if (moveItemsFromOrderId) {
+    await tx.orderItem.updateMany({
+      where: { orderId: moveItemsFromOrderId },
+      data: { orderId: order.id, roundId: newRound.id },
+    });
+  }
+  await Promise.all(itemsData.map((data) => tx.orderItem.create({
+    data: { ...data, orderId: order.id, roundId: newRound.id },
+  })));
+
+  const all = await tx.orderItem.findMany({
+    where: { orderId: order.id },
+    include: { menuItem: { select: { categoryId: true } } },
+  });
+  // Re-evaluar la promo NxM sobre la cuenta completa (la categoría de cada
+  // línea sale del menuItem, no se guarda en OrderItem).
+  const { promoDiscount: bulkPromoDiscount } = computeBulkPromoDiscount(
+    all.map((it) => ({ price: Number(it.price), quantity: it.quantity, categoryId: it.menuItem?.categoryId })),
+    activeBulkPromos,
+  );
+  // Mismo helper que el create: subtotal/total siempre desde las líneas en DB.
+  const { subtotal, total, promoDiscount } = computeOrderTotals(all, {
+    discount: order.discount || 0,
+    deliveryFee: order.deliveryFee || 0,
+    promoDiscount: bulkPromoDiscount,
+  });
+
+  const finalOrder = await tx.order.update({
+    where: { id: order.id },
+    data: {
+      subtotal, total, promoDiscount,
+      ...(appendNote ? { notes: [order.notes, appendNote].filter(Boolean).join('\n') } : {}),
+    },
+    include: {
+      user: { select: { name: true, phone: true } },
+      items: { include: { menuItem: { select: { name: true, categoryId: true } }, modifiers: true } },
+      rounds: { orderBy: { roundNumber: 'asc' } },
+      address: true,
+      table: true,
+    },
+  });
+
+  return { updated: finalOrder, round: newRound };
+}
+
+// Efectos de una ronda ya guardada. `web` = la ronda vino de la tienda (QR de
+// mesa): la del TPV la imprime el propio TPV que la captura, esta no tiene
+// quién, así que además se avisa order:web-round para que la tablet de caja
+// imprima la comanda de esa ronda (como hace con order:new de un pedido web).
+function dispatchRound(io, { updated, round, restaurantId, locationId, web = null }) {
+  // Descontar inventario SOLO de los items de la nueva ronda. Filtramos
+  // por roundId para no re-descontar items de rondas anteriores que ya
+  // habían sido procesados al crearse.
+  // OPTIMIZACIÓN: Se manda al background (sin await).
+  const newRoundItems = (updated.items || []).filter((it) => it.roundId === round.id);
+  discountInventory(prisma, newRoundItems, updated.id, restaurantId, locationId).catch(err => console.error('[discountInventory round background] Error:', err.message));
+
+  // Imprimir SOLO los items de esta ronda en cocina. Fire-and-forget.
+  try {
+    const { printOrderRoundTicket } = require('../services/printer.service');
+    printOrderRoundTicket(updated, round.id).catch(() => {});
+  } catch (err) { console.error('Print round ticket no disponible:', err.message); }
+
+  // Notificar a clientes conectados (admin/cocina) para refresco en vivo.
+  if (io) {
+    const room = `restaurant:${restaurantId}:location:${locationId}:admins`;
+    io.to(room).emit('order:updated', updated);
+    if (web) {
+      io.to(room).emit('order:web-round', {
+        id: updated.id,
+        orderNumber: updated.orderNumber,
+        roundId: round.id,
+        roundNumber: round.roundNumber,
+        tableNumber: updated.tableNumber ?? null,
+        tableName: updated.table?.name || null,
+        customerName: web.customerName || null,
+        total: round2(newRoundItems.reduce((s, it) => s + Number(it.subtotal || 0), 0)),
+        source: 'ONLINE',
+      });
+    }
+  }
+}
+
+// Pedido de la tienda (QR de mesa) que se suma a la cuenta abierta de su mesa
+// como una ronda más (store.routes POST /orders): mismas escrituras y efectos
+// que POST /:id/rounds del TPV. `roundId` lo fija la tienda para que un doble
+// envío no duplique la ronda.
+async function appendWebRoundToTab({ tab, itemsData, roundId, io, customerName, appendNote }) {
+  const activeBulkPromos = await loadActiveBulkPromos(prisma, tab.restaurantId);
+  const { updated, round } = await prisma.$transaction((tx) => insertRoundInTx(tx, {
+    order: tab, roundId, itemsData, activeBulkPromos, appendNote,
+  }));
+  dispatchRound(io, {
+    updated, round, restaurantId: tab.restaurantId, locationId: tab.locationId, web: { customerName },
+  });
+  return { updated, round };
+}
+
+// Pedido de mesa por confirmar que la caja acepta cuando la mesa YA tiene una
+// cuenta abierta (otro pedido QR aceptado antes, el mesero la abrió mientras
+// esperaba, o vino por el QR viejo por número a una mesa ocupada): en vez de
+// dejar dos cuentas en la mesa, sus líneas pasan a esa cuenta como una ronda
+// más y el pedido queda CANCELLED con la nota de a dónde fue (mismo rastro que
+// "Unir cuentas"; cancelado no cuenta en ventas ni se cobra). Devuelve null si
+// no aplica y la aceptación sigue el camino normal (el pedido se vuelve la
+// cuenta de la mesa).
+async function mergeHeldOrderIntoTab(io, held) {
+  if (!held.tableId || held.orderType !== 'DINE_IN' || !canJoinTab(held)) return null;
+  const tab = await prisma.order.findFirst({
+    where: webRoundTabWhere(held.tableId, held.locationId, held.id),
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!tab || tab.id === held.id || !canTakeWebRound(tab)) return null;
+
+  const roundId = heldOrderRoundId(held.id);
+  const mergedInto = (round) => ({ id: tab.id, orderNumber: tab.orderNumber, roundNumber: round.roundNumber });
+  const activeBulkPromos = await loadActiveBulkPromos(prisma, tab.restaurantId);
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
+      const { updated, round } = await insertRoundInTx(tx, {
+        order: tab, roundId, moveItemsFromOrderId: held.id, activeBulkPromos,
+        appendNote: held.notes ? `Ronda QR (${held.customerName || 'mesa'}): ${held.notes}` : null,
+      });
+      const heldOrder = await tx.order.update({
+        where: { id: held.id },
+        data: {
+          status: 'CANCELLED',
+          awaitingTableConfirmation: false,
+          subtotal: 0,
+          total: 0,
+          notes: [held.notes, `[Unido a la cuenta ${tab.orderNumber} como ronda ${round.roundNumber}]`].filter(Boolean).join('\n'),
+        },
+      });
+      return { updated, round, heldOrder };
+    });
+  } catch (e) {
+    // Dos cajas aceptaron a la vez: la primera ya sumó la ronda (id fijo).
+    if (e.code !== 'P2002') throw e;
+    const round = await prisma.orderRound.findUnique({ where: { id: roundId } });
+    if (!round) throw e;
+    const heldOrder = await prisma.order.findUnique({ where: { id: held.id } });
+    return { ...heldOrder, mergedInto: mergedInto(round) };
+  }
+
+  const { updated, round, heldOrder } = result;
+  await prisma.table.update({ where: { id: held.tableId }, data: { status: 'OCCUPIED' } }).catch(() => {});
+  dispatchRound(io, {
+    updated, round, restaurantId: tab.restaurantId, locationId: tab.locationId,
+    web: { customerName: held.customerName },
+  });
+  return { ...heldOrder, mergedInto: mergedInto(round) };
+}
+
 // ── POST /:id/items — Añadir ronda a una orden activa ──────────────────
 // Crea una nueva OrderRound (roundNumber = max+1), inserta los items con
 // roundId tagueado y manda a cocina SOLO los items de esa ronda (no
@@ -1356,6 +1538,8 @@ async function addRoundHandler(req, res) {
     if (existing.locationId !== req.locationId || existing.restaurantId !== restaurantId) {
       return res.status(403).json({ error: 'La orden pertenece a otra sucursal' });
     }
+    const locked = marketplaceEditBlock(existing);
+    if (locked) return sendBlock(res, locked);
     // The round itself is the durable receipt: retries after cache expiry or
     // process restart cannot insert its products twice. No schema migration.
     const roundId = clientOrderId ? `tpv-${createHash('sha256')
@@ -1505,86 +1689,20 @@ async function addRoundHandler(req, res) {
     }
 
     // Transaccional: crear OrderRound, insertar items con roundId, recalcular totales.
-    const { updated, round } = await prisma.$transaction(async (tx) => {
-      const lastRound = await tx.orderRound.findFirst({
-        where: { orderId: id },
-        orderBy: { roundNumber: 'desc' },
-        select: { roundNumber: true },
-      });
-      const nextNumber = (lastRound?.roundNumber || 0) + 1;
+    const itemsCreateData = newItemsData.map(({ _modifiers, _comboSelections, ...data }) => ({
+      ...data,
+      modifiers: _modifiers.length
+        ? { create: _modifiers.map(m => ({ modifierId: m.modifierId, name: m.name, priceAdd: m.priceAdd })) }
+        : undefined,
+      comboSelections: (_comboSelections && _comboSelections.length)
+        ? { create: _comboSelections.map(s => ({ componentId: s.componentId, optionId: s.optionId, optionMenuItemId: s.optionMenuItemId, name: s.name, priceDelta: s.priceDelta })) }
+        : undefined,
+    }));
+    const { updated, round } = await prisma.$transaction((tx) => insertRoundInTx(tx, {
+      order: existing, roundId, itemsData: itemsCreateData, activeBulkPromos,
+    }));
 
-      const newRound = await tx.orderRound.create({
-        data: { ...(roundId ? { id: roundId } : {}), orderId: id, roundNumber: nextNumber },
-      });
-
-      await Promise.all(newItemsData.map((itemData) => {
-        const { _modifiers, _comboSelections, ...data } = itemData;
-        return tx.orderItem.create({
-          data: {
-            ...data,
-            orderId: id,
-            roundId: newRound.id,
-            modifiers: _modifiers.length
-              ? { create: _modifiers.map(m => ({ modifierId: m.modifierId, name: m.name, priceAdd: m.priceAdd })) }
-              : undefined,
-            comboSelections: (_comboSelections && _comboSelections.length)
-              ? { create: _comboSelections.map(s => ({ componentId: s.componentId, optionId: s.optionId, optionMenuItemId: s.optionMenuItemId, name: s.name, priceDelta: s.priceDelta })) }
-              : undefined,
-          },
-        });
-      }));
-
-      const all = await tx.orderItem.findMany({
-        where: { orderId: id },
-        include: { menuItem: { select: { categoryId: true } } },
-      });
-      // Re-evaluar la promo NxM sobre la cuenta completa (la categoría de cada
-      // línea sale del menuItem, no se guarda en OrderItem).
-      const { promoDiscount: bulkPromoDiscount } = computeBulkPromoDiscount(
-        all.map((it) => ({ price: Number(it.price), quantity: it.quantity, categoryId: it.menuItem?.categoryId })),
-        activeBulkPromos,
-      );
-      // Mismo helper que el create: subtotal/total siempre desde las líneas en DB.
-      const { subtotal, total, promoDiscount } = computeOrderTotals(all, {
-        discount: existing.discount || 0,
-        deliveryFee: existing.deliveryFee || 0,
-        promoDiscount: bulkPromoDiscount,
-      });
-
-      const finalOrder = await tx.order.update({
-        where: { id },
-        data: { subtotal, total, promoDiscount },
-        include: {
-          user: { select: { name: true, phone: true } },
-          items: { include: { menuItem: { select: { name: true, categoryId: true } }, modifiers: true } },
-          rounds: { orderBy: { roundNumber: 'asc' } },
-          address: true,
-          table: true,
-        },
-      });
-
-      return { updated: finalOrder, round: newRound };
-    });
-
-    // Descontar inventario SOLO de los items de la nueva ronda. Filtramos
-    // por roundId para no re-descontar items de rondas anteriores que ya
-    // habían sido procesados al crearse.
-    // OPTIMIZACIÓN: Se manda al background (sin await).
-    const newRoundItems = (updated.items || []).filter((it) => it.roundId === round.id);
-    discountInventory(prisma, newRoundItems, id, restaurantId, req.locationId).catch(err => console.error('[discountInventory round background] Error:', err.message));
-
-    // Imprimir SOLO los items de esta ronda en cocina. Fire-and-forget.
-    try {
-      const { printOrderRoundTicket } = require('../services/printer.service');
-      printOrderRoundTicket(updated, round.id).catch(() => {});
-    } catch (err) { console.error('Print round ticket no disponible:', err.message); }
-
-    // Notificar a clientes conectados (admin/cocina) para refresco en vivo.
-    const io = req.app.get('io');
-    if (io) {
-      io.to(`restaurant:${restaurantId}:location:${req.locationId}:admins`)
-        .emit('order:updated', updated);
-    }
+    dispatchRound(req.app.get('io'), { updated, round, restaurantId, locationId: req.locationId });
 
     res.json({ ...updated, lastRound: round });
   } catch (e) {
@@ -1632,6 +1750,9 @@ router.put('/items/:itemId', authenticate, requireTenantAccess, requireRole('ADM
       return res.status(400).json({ error: 'La orden ya está cancelada' });
     }
     if (!isNotesOnly) {
+      // La nota sí se permite en un pedido del marketplace (no toca dinero ni productos).
+      const locked = marketplaceEditBlock(orderItem.order);
+      if (locked) return sendBlock(res, locked);
       if (orderItem.order.status === 'DELIVERED') {
         return res.status(400).json({ error: 'La orden ya está cerrada' });
       }
@@ -1741,6 +1862,8 @@ router.delete('/items/:itemId', authenticate, requireTenantAccess, requireRole('
     if (orderItem.order.locationId && req.locationId && orderItem.order.locationId !== req.locationId) {
       return res.status(403).json({ error: 'Item de otra sucursal' });
     }
+    const locked = marketplaceEditBlock(orderItem.order);
+    if (locked) return sendBlock(res, locked);
     if (['DELIVERED', 'CANCELLED'].includes(orderItem.order.status)) {
       return res.status(400).json({ error: 'La orden ya está cerrada' });
     }
@@ -1831,6 +1954,8 @@ router.delete('/items/:itemId/modifiers/:modRowId',
     if (orderItem.order.locationId && req.locationId && orderItem.order.locationId !== req.locationId) {
       return res.status(403).json({ error: 'Item de otra sucursal' });
     }
+    const locked = marketplaceEditBlock(orderItem.order);
+    if (locked) return sendBlock(res, locked);
     if (['DELIVERED', 'CANCELLED'].includes(orderItem.order.status)) {
       return res.status(400).json({ error: 'La orden ya está cerrada' });
     }
@@ -1982,9 +2107,11 @@ router.put('/:id/discount', authenticate, requireTenantAccess, requireRole('CASH
 
     const order = await prisma.order.findFirst({
       where: { id: req.params.id, restaurantId },
-      select: { id: true, subtotal: true, discount: true, deliveryFee: true, total: true, orderNumber: true, status: true },
+      select: { id: true, subtotal: true, discount: true, deliveryFee: true, total: true, orderNumber: true, status: true, source: true },
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const locked = marketplaceEditBlock(order);
+    if (locked) return sendBlock(res, locked);
     if (['DELIVERED', 'CANCELLED'].includes(order.status)) {
       return res.status(409).json({ error: 'No se puede modificar un pedido cerrado' });
     }
@@ -2083,7 +2210,13 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
     // transición real → CANCELLED (no si la orden ya estaba cancelada).
     const existing = await prisma.order.findFirst({
       where: { id: req.params.id, restaurantId: req.user?.restaurantId || req.restaurantId },
-      select: { id: true, status: true },
+      select: {
+        id: true, status: true, awaitingTableConfirmation: true,
+        // Para sumar un pedido por confirmar a la cuenta de su mesa (abajo).
+        tableId: true, locationId: true, orderType: true, customerName: true, notes: true,
+        tip: true, discount: true, pointsUsed: true, couponId: true,
+        paymentStatus: true, paymentProviderRef: true,
+      },
     });
     if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
 
@@ -2096,10 +2229,33 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
       return res.status(409).json({ error: `Transición inválida (${existing.status} → ${status})`, code: 'INVALID_TRANSITION' });
     }
 
+    // Pedido de mesa por confirmar (QR desde internet, ver store.routes): aceptarlo
+    // lo manda a cocina y ocupa la mesa; cancelarlo lo descarta sin tocar la mesa.
+    // Aceptar resuelve aunque el estado no cambie (p.ej. ya CONFIRMED por otro
+    // camino): la caja confirmó la mesa y el pedido debe llegar a cocina.
+    const confirmsTable = existing.awaitingTableConfirmation === true && status !== 'CANCELLED';
+    const resolvesTable = confirmsTable || (existing.awaitingTableConfirmation === true && statusChanged);
+    // Si la mesa ya tiene cuenta, el pedido aceptado entra como ronda de esa
+    // cuenta (ver mergeHeldOrderIntoTab) y aquí termina: la respuesta es el
+    // pedido ya cancelado con `mergedInto`, sin el aviso de cambio de estado al
+    // cliente (su pedido no se canceló, se sumó a la cuenta).
+    if (confirmsTable) {
+      const merged = await mergeHeldOrderIntoTab(req.app.get('io'), existing);
+      if (merged) {
+        audit.record(req, audit.AUDIT_EVENTS.TAB_MERGE, {
+          resource: `order:${merged.mergedInto.id}`,
+          after: { ...merged.mergedInto, tableId: existing.tableId, fromOrderId: existing.id },
+        }).catch(() => {});
+        return res.json(merged);
+      }
+    }
     const order = await prisma.order.update({
       where: { id: existing.id },
-      data: { status }
+      data: { status, ...(resolvesTable ? { awaitingTableConfirmation: false } : {}) },
     });
+    if (confirmsTable && order.tableId) {
+      await prisma.table.update({ where: { id: order.tableId }, data: { status: 'OCCUPIED' } }).catch(() => {});
+    }
 
     // Cancelar repone el stock que la orden descontó al venderse. Best-effort:
     // la cancelación no debe fallar por inventario, pero sí queda log.
@@ -2113,18 +2269,28 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
     // Cancelar un dine-in libera la mesa (AVAILABLE), no DIRTY: el ticket
     // nunca llegó a usarse. Si no se libera, la mesa queda OCCUPIED con
     // un ticket fantasma y el siguiente flow de "Comer Aquí" se rompe.
-    // Idempotente: si la mesa ya fue eliminada o liberada, no fallar.
-    if (status === 'CANCELLED' && order.tableId && order.orderType === 'DINE_IN') {
+    // Idempotente: si la mesa ya fue eliminada o liberada, no fallar. Un pedido
+    // por confirmar nunca ocupó la mesa: rechazarlo no la libera (quizá ya hay
+    // gente sentada con otra cuenta).
+    if (status === 'CANCELLED' && order.tableId && order.orderType === 'DINE_IN' && !existing.awaitingTableConfirmation) {
       await prisma.table.update({
         where: { id: order.tableId },
         data: { status: 'AVAILABLE' },
       }).catch(() => {});
     }
 
+    const io = req.app.get('io');
+    // Recién confirmada la mesa: ahora sí entra como pedido nuevo para cocina/KDS
+    // y para la tablet que imprime la comanda de los pedidos web.
+    if (io && confirmsTable) {
+      io.to(`restaurant:${order.restaurantId}:kitchen`).emit('order:new', order);
+      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:new', order);
+      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:kitchen`).emit('order:new', order);
+    }
+
     // Solo emitimos/notificamos si el estado realmente cambió (un no-op no debe
     // disparar push/WhatsApp duplicados en replays).
     if (statusChanged) {
-      const io = req.app.get('io');
       if (io) {
         io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
       }
@@ -2193,8 +2359,11 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
       // Atribuir el cobro al turno abierto AHORA, no al de creación (ver
       // openShiftIdForCobro). Se resuelve dentro de la $transaction del cobro.
       const target = await tx.order.findFirst({
-        where: { id: req.params.id, restaurantId }, select: { locationId: true },
+        where: { id: req.params.id, restaurantId }, select: { locationId: true, source: true, status: true, paymentStatus: true },
       });
+      // Marketplace: no se cobra en caja si aún no se acepta o si ya se pagó en línea.
+      const chargeLocked = marketplaceChargeBlock(target);
+      if (chargeLocked) throw Object.assign(new Error(chargeLocked.body.error), { marketplaceBlock: chargeLocked });
       const cobroShiftId = target ? await openShiftIdForCobro(tx, target.locationId) : null;
       let resolvedMethod;
       let cashCollected;
@@ -2251,6 +2420,7 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
 
     res.json(order);
   } catch (e) {
+    if (e.marketplaceBlock) return sendBlock(res, e.marketplaceBlock);
     if (req.body.expectedTotal != null && e.code === 'P2025') {
       return res.status(409).json({ code: 'OFFLINE_TOTAL_CHANGED',
         error: 'La cuenta cambió de importe, ya fue cobrada o no está disponible. Revisa el cobro local antes de conciliar.' });
@@ -2281,10 +2451,13 @@ router.post('/:id/charge-to-employee',
         where: { id: req.params.id, restaurantId },
         select: {
           id: true, restaurantId: true, locationId: true, paymentStatus: true,
-          subtotal: true, promoDiscount: true, deliveryFee: true,
+          subtotal: true, promoDiscount: true, deliveryFee: true, source: true,
         },
       });
       if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+      // Un pedido del marketplace no se carga a la cuenta de un empleado.
+      const locked = marketplaceEditBlock(order);
+      if (locked) return sendBlock(res, locked);
       if (order.paymentStatus === 'PAID') {
         return res.status(409).json({ error: 'La orden ya está pagada' });
       }
@@ -2390,9 +2563,11 @@ router.patch('/:id/type', authenticate, requireTenantAccess, requireRole('ADMIN'
 
     const existing = await prisma.order.findFirst({
       where: { id: req.params.id, restaurantId },
-      select: { id: true, orderType: true, tableId: true, locationId: true, status: true, paymentStatus: true },
+      select: { id: true, orderType: true, tableId: true, locationId: true, status: true, paymentStatus: true, source: true },
     });
     if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const locked = marketplaceEditBlock(existing);
+    if (locked) return sendBlock(res, locked);
     if (existing.paymentStatus === 'PAID') {
       return res.status(400).json({ error: 'No se puede cambiar el tipo de una orden ya pagada' });
     }
@@ -2461,6 +2636,9 @@ async function transferOrderHandler(req, res) {
       return res.status(400).json({ error: 'Las órdenes son de sucursales distintas' });
     }
     for (const o of [source, target]) {
+      // Ni juntar un pedido del marketplace con otro ni meterle productos ajenos.
+      const locked = marketplaceEditBlock(o);
+      if (locked) return sendBlock(res, locked);
       if (['DELIVERED', 'CANCELLED'].includes(o.status)) {
         return res.status(400).json({ error: `Orden ${o.id === id ? 'origen' : 'destino'} cerrada` });
       }
@@ -2714,6 +2892,8 @@ async function splitOrderHandler(req, res) {
           return { source: sourceFull, created: createdFull };
         }
       }
+      const locked = marketplaceEditBlock(source);
+      if (locked) throw Object.assign(splitError(locked.status, locked.body.error), { code: locked.body.code });
       if (['DELIVERED', 'CANCELLED'].includes(source.status)) {
         throw splitError(400, 'La orden está cerrada');
       }
@@ -2852,7 +3032,7 @@ async function splitOrderHandler(req, res) {
     }
 
     res.json(result);
-  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, ...(e.code ? { code: e.code } : {}) }); }
 }
 
 router.post('/:id/split', authenticate, requireTenantAccess, requireOrderMergeRole, splitOrderHandler);
@@ -3269,6 +3449,16 @@ router.post('/:id/messages', authenticate, requireTenantAccess, validateBody(mes
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// `roundId` opcional del body de claim/release-kitchen-print (ronda web, ver
+// order:web-round): null si no viene, false si no es una ronda de este pedido.
+async function kitchenPrintRoundId(req, orderId) {
+  const roundId = req.body?.roundId;
+  if (roundId == null || roundId === '') return null;
+  if (typeof roundId !== 'string' || roundId.length > 200) return false;
+  const round = await prisma.orderRound.findFirst({ where: { id: roundId, orderId }, select: { id: true } });
+  return round ? round.id : false;
+}
+
 // Reclamo "imprime-una-vez" de la comanda de cocina de un pedido web. Lo llama
 // el TPV ANTES de auto-imprimir: solo la primera tablet que reclama imprime; las
 // demás reciben { claimed: false } y NO imprimen (evita comandas duplicadas
@@ -3282,10 +3472,16 @@ router.post('/:id/claim-kitchen-print', authenticate, requireTenantAccess, async
     if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
     const order = await prisma.order.findFirst({
       where: { id: req.params.id, restaurantId },
-      select: { id: true },
+      select: { id: true, awaitingTableConfirmation: true },
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
-    const claimed = await claimKitchenPrint(`${restaurantId}:${order.id}`);
+    // Pedido de mesa por confirmar: aún no va a cocina, ninguna tablet lo imprime.
+    if (order.awaitingTableConfirmation) return res.json({ claimed: false, reason: 'TABLE_CONFIRMATION_PENDING' });
+    // Ronda web sumada a una cuenta (order:web-round): cada ronda tiene su propio
+    // reclamo, no el del pedido (que ya se imprimió al abrirse).
+    const roundId = await kitchenPrintRoundId(req, order.id);
+    if (roundId === false) return res.status(404).json({ error: 'Ronda no encontrada' });
+    const claimed = await claimKitchenPrint(`${restaurantId}:${order.id}${roundId ? `:${roundId}` : ''}`);
     res.json({ claimed });
   } catch (e) {
     console.error('claim-kitchen-print error:', e?.message || e);
@@ -3305,7 +3501,9 @@ router.post('/:id/release-kitchen-print', authenticate, requireTenantAccess, asy
       select: { id: true },
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
-    await releaseKitchenPrint(`${restaurantId}:${order.id}`);
+    const roundId = await kitchenPrintRoundId(req, order.id);
+    if (roundId === false) return res.status(404).json({ error: 'Ronda no encontrada' });
+    await releaseKitchenPrint(`${restaurantId}:${order.id}${roundId ? `:${roundId}` : ''}`);
     res.json({ released: true });
   } catch (e) {
     console.error('release-kitchen-print error:', e?.message || e);
@@ -3319,3 +3517,5 @@ module.exports.discountInventory = discountInventory;
 module.exports.restoreInventoryForCancelledOrder = restoreInventoryForCancelledOrder;
 module.exports.resolveRecipeFlatItems = resolveRecipeFlatItems;
 module.exports.openShiftIdForCobro = openShiftIdForCobro;
+// Pedidos QR de la tienda que se suman a la cuenta de su mesa (store.routes).
+module.exports.appendWebRoundToTab = appendWebRoundToTab;

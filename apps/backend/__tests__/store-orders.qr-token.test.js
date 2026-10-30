@@ -5,8 +5,14 @@
 // Lo que fija este archivo es la promesa del token: el pedido se ata al tableId
 // que trae firmado — no al número, no al `?l=` de la URL — y un token que no
 // cuadra se rechaza en vez de degradar al esquema viejo por número.
+//
+// Y la protección contra pedidos desde fuera del local: el QR es fijo y se
+// puede fotografiar, así que sin turno de caja abierto no se aceptan pedidos de
+// mesa, y a una mesa libre el pedido queda por confirmar (sin cocina ni mesa
+// ocupada) hasta que la caja lo acepta.
 
 process.env.TABLE_QR_SECRET = 'llave-de-pruebas-para-el-qr-de-mesa';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'jwt-de-pruebas-qr-token';
 
 jest.mock('@mrtpvrest/database', () => ({
   prisma: {
@@ -14,7 +20,7 @@ jest.mock('@mrtpvrest/database', () => ({
     location: { findUnique: jest.fn(), findFirst: jest.fn() },
     restaurantConfig: { findUnique: jest.fn() },
     menuItem: { findFirst: jest.fn() },
-    order: { count: jest.fn(), findMany: jest.fn() },
+    order: { count: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
     table: { findMany: jest.fn(), findFirst: jest.fn() },
     user: { findUnique: jest.fn() },
     cashShift: { findFirst: jest.fn() },
@@ -37,15 +43,26 @@ jest.mock('../src/lib/payment-providers', () => ({
 
 const express = require('express');
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const { prisma } = require('@mrtpvrest/database');
 const { nextOrderNumber } = require('../src/lib/order-number');
 const { signTableToken } = require('../src/lib/table-qr');
 
-function buildApp() {
+function buildApp(io) {
   const app = express();
   app.use(express.json());
+  if (io) app.set('io', io);
   app.use('/api/store', require('../src/routes/store.routes'));
   return app;
+}
+
+// Socket.io falso: registra cada (sala, evento) emitido.
+function fakeIo() {
+  const emitted = [];
+  return {
+    emitted,
+    to: (room) => ({ emit: (event, payload) => emitted.push({ room, event, payload }) }),
+  };
 }
 
 const MENU_ITEM = {
@@ -67,10 +84,11 @@ const BASE = {
 
 // Captura lo que se le pasa a order.create para inspeccionar tableId/número.
 function txMock() {
-  const create = jest.fn().mockResolvedValue({
+  const create = jest.fn().mockImplementation(async ({ data }) => ({
     id: 'o1', orderNumber: 3001, status: 'PENDING', orderType: 'DINE_IN',
     total: 140, discount: 0, pointsUsed: 0, tip: 0, estimatedMinutes: 30, items: [],
-  });
+    tableNumber: data.tableNumber, awaitingTableConfirmation: data.awaitingTableConfirmation,
+  }));
   const tableUpdate = jest.fn();
   const impl = async (fn) => fn({
     order: { create },
@@ -82,7 +100,7 @@ function txMock() {
   return { impl, create, tableUpdate };
 }
 
-const post = (body) => request(buildApp())
+const post = (body, io) => request(buildApp(io))
   .post('/api/store/orders')
   .set('x-restaurant-id', 'r1')
   .send(body);
@@ -94,19 +112,25 @@ beforeEach(() => {
   prisma.location.findFirst.mockResolvedValue({ id: 'loc-principal' });
   prisma.menuItem.findFirst.mockResolvedValue(MENU_ITEM);
   prisma.order.findMany.mockResolvedValue([]);
+  // Sin cuenta abierta en la mesa (la ronda sobre una cuenta: store-orders.qr-open-tab).
+  prisma.order.findFirst.mockResolvedValue(null);
+  prisma.cashShift.findFirst.mockResolvedValue({ id: 'shift-1' });
   nextOrderNumber.mockResolvedValue(3001);
 });
 
 describe('POST /api/store/orders — QR de mesa firmado', () => {
-  it('ata el pedido al tableId del token y ocupa esa mesa', async () => {
-    prisma.table.findFirst.mockResolvedValue({ id: 't-abc', name: 'Mesa 7', locationId: 'loc-terraza' });
+  it('ata el pedido al tableId del token y, con la mesa abierta sin cuenta, entra directo', async () => {
+    prisma.table.findFirst.mockResolvedValue({ id: 't-abc', name: 'Mesa 7', locationId: 'loc-terraza', status: 'OCCUPIED' });
     const { impl, create, tableUpdate } = txMock();
     prisma.$transaction.mockImplementation(impl);
 
     const res = await post({ ...BASE, tableToken: signTableToken({ tableId: 't-abc', number: 7 }) });
 
     expect(res.status).toBe(201);
-    expect(create.mock.calls[0][0].data).toMatchObject({ tableId: 't-abc', tableNumber: 7 });
+    expect(create.mock.calls[0][0].data).toMatchObject({
+      tableId: 't-abc', tableNumber: 7, awaitingTableConfirmation: false,
+    });
+    expect(res.body.awaitingTableConfirmation).toBe(false);
     expect(tableUpdate).toHaveBeenCalledWith({ where: { id: 't-abc' }, data: { status: 'OCCUPIED' } });
     // Nunca se cae al matcheo por nombre del esquema viejo.
     expect(prisma.table.findMany).not.toHaveBeenCalled();
@@ -188,14 +212,112 @@ describe('POST /api/store/orders — QR de mesa firmado', () => {
     expect(create.mock.calls[0][0].data).toMatchObject({ tableId: 't-barra', tableNumber: null });
   });
 
-  it('sin token sigue funcionando el QR viejo por número', async () => {
+  it('sin token sigue funcionando el QR viejo por número, pero por confirmar', async () => {
+    // El número se adivina: aunque la mesa exista, el pedido espera a la caja.
     prisma.table.findMany.mockResolvedValue([{ id: 't-abc', name: 'Mesa 7' }]);
-    const { impl, create } = txMock();
+    const { impl, create, tableUpdate } = txMock();
     prisma.$transaction.mockImplementation(impl);
 
     const res = await post({ ...BASE, tableNumber: 7 });
 
     expect(res.status).toBe(201);
-    expect(create.mock.calls[0][0].data).toMatchObject({ tableId: 't-abc', tableNumber: 7 });
+    expect(create.mock.calls[0][0].data).toMatchObject({
+      tableId: 't-abc', tableNumber: 7, awaitingTableConfirmation: true,
+    });
+    expect(tableUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/store/orders — mesa por confirmar', () => {
+  const tokenMesa7 = () => signTableToken({ tableId: 't-abc', number: 7 });
+
+  it('sin turno de caja abierto → 409 NO_ACTIVE_SHIFT sin crear nada', async () => {
+    prisma.table.findFirst.mockResolvedValue({ id: 't-abc', name: 'Mesa 7', locationId: 'loc-terraza', status: 'OCCUPIED' });
+    prisma.cashShift.findFirst.mockResolvedValue(null);
+
+    const res = await post({ ...BASE, tableToken: tokenMesa7() });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('NO_ACTIVE_SHIFT');
+    // El turno se busca en la sucursal de la mesa, no en la de la URL.
+    expect(prisma.cashShift.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { locationId: 'loc-terraza', isOpen: true } }),
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('mesa libre → por confirmar: no ocupa la mesa, no va a cocina, avisa a la caja', async () => {
+    prisma.table.findFirst.mockResolvedValue({ id: 't-abc', name: 'Mesa 7', locationId: 'loc-terraza', status: 'AVAILABLE' });
+    const { impl, create, tableUpdate } = txMock();
+    prisma.$transaction.mockImplementation(impl);
+    const io = fakeIo();
+
+    const res = await post({ ...BASE, tableToken: tokenMesa7() }, io);
+
+    expect(res.status).toBe(201);
+    expect(create.mock.calls[0][0].data).toMatchObject({ tableId: 't-abc', awaitingTableConfirmation: true });
+    expect(res.body.awaitingTableConfirmation).toBe(true);
+    expect(tableUpdate).not.toHaveBeenCalled();
+    expect(io.emitted.filter((e) => e.event === 'order:new')).toEqual([]);
+    expect(io.emitted).toEqual([
+      {
+        room: 'restaurant:r1:location:loc-terraza:admins',
+        event: 'order:table-pending',
+        payload: { id: 'o1', orderNumber: 3001, tableNumber: 7, total: 140 },
+      },
+    ]);
+  });
+
+  it('mesa sucia (DIRTY) también queda por confirmar', async () => {
+    prisma.table.findFirst.mockResolvedValue({ id: 't-abc', name: 'Mesa 7', locationId: 'loc1', status: 'DIRTY' });
+    const { impl, create } = txMock();
+    prisma.$transaction.mockImplementation(impl);
+
+    const res = await post({ ...BASE, tableToken: tokenMesa7() });
+
+    expect(res.status).toBe(201);
+    expect(create.mock.calls[0][0].data.awaitingTableConfirmation).toBe(true);
+  });
+
+  it('mesa abierta sin cuenta → entra como siempre: order:new a cocina y sin aviso de confirmación', async () => {
+    prisma.table.findFirst.mockResolvedValue({ id: 't-abc', name: 'Mesa 7', locationId: 'loc-terraza', status: 'OCCUPIED' });
+    const { impl } = txMock();
+    prisma.$transaction.mockImplementation(impl);
+    const io = fakeIo();
+
+    const res = await post({ ...BASE, tableToken: tokenMesa7() }, io);
+
+    expect(res.status).toBe(201);
+    expect(io.emitted.some((e) => e.event === 'order:table-pending')).toBe(false);
+    expect(io.emitted).toContainEqual(expect.objectContaining({ room: 'restaurant:r1:kitchen', event: 'order:new' }));
+  });
+
+  it('personal autenticado → ni turno exigido ni confirmación', async () => {
+    prisma.table.findFirst.mockResolvedValue({ id: 't-abc', name: 'Mesa 7', locationId: 'loc1', status: 'AVAILABLE' });
+    const { impl, create, tableUpdate } = txMock();
+    prisma.$transaction.mockImplementation(impl);
+    const staffToken = jwt.sign({ restaurantId: 'r1', role: 'WAITER' }, process.env.JWT_SECRET);
+
+    const res = await request(buildApp())
+      .post('/api/store/orders')
+      .set('x-restaurant-id', 'r1')
+      .set('Authorization', `Bearer ${staffToken}`)
+      .send({ ...BASE, tableToken: tokenMesa7() });
+
+    expect(res.status).toBe(201);
+    expect(create.mock.calls[0][0].data.awaitingTableConfirmation).toBe(false);
+    expect(tableUpdate).toHaveBeenCalledWith({ where: { id: 't-abc' }, data: { status: 'OCCUPIED' } });
+    expect(prisma.cashShift.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('para llevar → no se exige turno ni confirmación', async () => {
+    const { impl, create } = txMock();
+    prisma.$transaction.mockImplementation(impl);
+
+    const res = await post({ ...BASE, orderType: 'TAKEOUT' });
+
+    expect(res.status).toBe(201);
+    expect(create.mock.calls[0][0].data.awaitingTableConfirmation).toBe(false);
+    expect(prisma.cashShift.findFirst).not.toHaveBeenCalled();
   });
 });

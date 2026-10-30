@@ -12,7 +12,8 @@ export type LocalOrderRecord = {
 };
 export type LocalOrders = Record<string, LocalOrderRecord>;
 export const LOCAL_ORDER_PREFIX = 'local-order-';
-export const ACTIVE_ORDER_STATUSES = new Set(['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING', 'OPEN', 'ON_THE_WAY']);
+// PENDING_MERCHANT: pedido del marketplace que espera que el comercio lo acepte.
+export const ACTIVE_ORDER_STATUSES = new Set(['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING', 'OPEN', 'ON_THE_WAY', 'PENDING_MERCHANT']);
 
 export function sameOrderScope(a: OrderScope, b: OrderScope): boolean {
   return !!a.restaurantId && !!a.locationId && a.restaurantId === b.restaurantId && a.locationId === b.locationId;

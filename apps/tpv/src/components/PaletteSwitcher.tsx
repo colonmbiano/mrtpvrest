@@ -2,6 +2,7 @@
 import { useThemeStore, type Palette } from "@/store/themeStore";
 
 const PALETTES: { id: Palette; label: string; color: string }[] = [
+  { id: "orange", label: "Naranja", color: "#FF7A1A" },
   { id: "amber",  label: "Miel",   color: "#E0A22A" },
   { id: "purple", label: "Cian",   color: "#9472FF" },
   { id: "green",  label: "Lima",   color: "#34C988" },

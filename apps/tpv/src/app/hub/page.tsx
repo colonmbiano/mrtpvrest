@@ -11,6 +11,7 @@ import {
 import api from '@/lib/api';
 import { setTenant, getTenantIds } from '@/lib/tenant';
 import { getApiUrl } from '@/lib/config';
+import { homeRouteFor } from '@/lib/homeRoute';
 import { useAuthStore } from '@/store/authStore';
 
 interface Workspace {
@@ -141,11 +142,8 @@ function HubPageInner() {
       // el panel del POS. Sin esto, cualquier llegada a /hub (botón hub del
       // POS, etc.) mandaba al mesero al TPV normal (/pos/order-type) en vez de
       // regresarlo a /meseros. Solo aplica a un WAITER en una tablet de mesero
-      // — un ADMIN/cajero conserva el flujo normal del POS.
-      const deviceRole = typeof window !== 'undefined'
-        ? localStorage.getItem('deviceRole')
-        : null;
-      if (deviceRole === 'WAITER' && employee?.role === 'WAITER') {
+      // — un ADMIN/cajero conserva el flujo normal del POS. Misma regla que /locked.
+      if (homeRouteFor(employee?.role) === '/meseros') {
         router.replace('/meseros');
         return;
       }

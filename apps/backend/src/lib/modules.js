@@ -28,12 +28,13 @@ const MODULE_EMPLOYEES    = 'employee_management'
 const MODULE_MULTICURRENCY = 'multi_currency'
 const MODULE_PAYROLL      = 'payroll'
 const MODULE_WHATSAPP_BOT = 'whatsapp_bot'
+const MODULE_MARKETPLACE  = 'marketplace'
 
 const MODULES = {
   MODULE_POS_STANDARD, MODULE_KIOSK, MODULE_DELIVERY, MODULE_WEBSTORE,
   MODULE_LOYALTY, MODULE_KDS, MODULE_REPORTS, MODULE_INVENTORY,
   MODULE_WAITERS, MODULE_CASH_SHIFT, MODULE_EMPLOYEES, MODULE_MULTICURRENCY,
-  MODULE_PAYROLL, MODULE_WHATSAPP_BOT,
+  MODULE_PAYROLL, MODULE_WHATSAPP_BOT, MODULE_MARKETPLACE,
 }
 
 const ENFORCE = String(process.env.ENFORCE_PLAN_FLAGS || '').toLowerCase() === 'true'
@@ -54,6 +55,7 @@ const MODULE_ALIASES = {
   INVENTORY: ['inventory'],
   FINANCE: ['finance'],
   WHATSAPP_BOT: ['whatsapp_bot'],
+  MARKETPLACE: ['marketplace'],
 }
 
 function moduleKeys(moduleKey) {

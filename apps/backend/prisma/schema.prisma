@@ -327,6 +327,9 @@ model Restaurant {
   coupons          Coupon[]
   integrations     IntegrationConfig[]
   orders           Order[]
+  driverPayouts     MarketplaceDriverPayout[]
+  marketplaceMembership MarketplaceMerchantMembership?
+  marketplaceQuotes MarketplaceQuote[]
   customers        Customer[]
   suppliers        Supplier[]
   whatsappSessions WhatsappSession[]
@@ -403,6 +406,9 @@ enum BusinessType {
 }
 
 model Location {
+  // Coordenadas opcionales del punto de recogida; no se publican por defecto.
+  latitude Float?
+  longitude Float?
   id           String     @id @default(cuid())
   restaurantId String
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
@@ -435,6 +441,9 @@ model Location {
   autoPromoEnabled   Boolean @default(false)
   autoPromoThreshold Int     @default(10) // Umbral: Ventas menores a X en los últimos 7 días
   autoPromoDiscount  Float   @default(15) // % de descuento automático
+  locationPromoEnabled Boolean @default(false)
+  autoPromoActiveDays String[] @default([])
+  autoPromoVersion Int @default(0)
   autoPromoMaxItems  Int     @default(0)  // Tope de platillos en promo a la vez (0 = sin tope)
 
   // Configuración de Ticket por sucursal
@@ -485,6 +494,9 @@ model Location {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  locationItemPromos LocationMenuItemPromo[]
+
+  @@unique([id, restaurantId])
   @@unique([restaurantId, slug])
   @@map("locations")
   // RETAIL · stock, ventas, traspasos y dispositivos por sucursal.
@@ -710,6 +722,9 @@ model MenuItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  locationPromos LocationMenuItemPromo[]
+
+  @@unique([id, restaurantId])
   @@index([restaurantId, isFavorite])
   @@map("menu_items")
 }
@@ -771,6 +786,9 @@ enum OrderStatus {
   // PACKING = en empaque (verificación final antes de salir/entregar). Al final
   // del enum por la misma razón que OPEN (Postgres ordena por declaración).
   PACKING
+  // Marketplace v1 distinguishes payment from merchant acceptance.
+  PENDING_PAYMENT
+  PENDING_MERCHANT
 }
 
 enum PaymentMethod {
@@ -867,6 +885,9 @@ model Order {
   tableNumber      Int?
   tableId          String?
   table            Table?    @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  // Pedido de mesa desde internet (QR) que la caja aún no confirma: no va a
+  // cocina ni ocupa la mesa hasta que lo aceptan (ver store.routes POST /orders).
+  awaitingTableConfirmation Boolean @default(false)
   // Cantidad de comensales declarada al iniciar la orden DINE_IN. Se usa
   // para generar tabs por comensal en el POS y para split del ticket al
   // cobrar. Nullable porque flujos no-dine-in (TAKEOUT/DELIVERY) no la
@@ -928,6 +949,13 @@ model Order {
   statusHistory OrderStatusHistory[]
   rounds        OrderRound[]
   payments      PaymentTransaction[]
+  marketplacePayments MarketplacePayment[]
+  marketplacePipeline MarketplaceOrderPipeline?
+  marketplaceNetworkTask MarketplaceNetworkTask?
+  marketplaceRefunds MarketplaceRefund[]
+  marketplaceFinanceEvents MarketplaceFinanceOutbox[]
+  deliveryIncidents DeliveryIncident[]
+  deliveryEvidence DeliveryEvidence?
   packingChecks OrderPackingCheck[]
 
   // FASE NÓMINA · si la orden se cobró "a cuenta de empleado", aquí cuelga el
@@ -938,6 +966,8 @@ model Order {
   updatedAt DateTime @updatedAt
 
   @@unique([restaurantId, orderNumber])
+  // Composite reference keeps marketplace payments in the order restaurant.
+  @@unique([id, restaurantId])
   @@index([tableId])
   @@index([customerId])
   @@index([createdById])
@@ -2021,6 +2051,7 @@ model Employee {
   charges      EmployeeCharge[]
   // Pagos de sueldo asignados a este empleado (gastos categoría SUELDOS).
   salaryPayments OperatingExpense[] @relation("EmployeeSalaryExpense")
+  marketplacePayouts MarketplaceDriverPayout[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2842,6 +2873,51 @@ model DeliveryMessage {
   createdAt  DateTime @default(now())
 }
 
+/// Immutable route incident audit. The composite FK prevents cross-restaurant links.
+model DeliveryIncident {
+  id String @id @default(cuid())
+  restaurantId String
+  orderId String
+  order Order @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict, onUpdate: Restrict)
+  courierId String
+  actorId String
+  type String
+  reason String @db.VarChar(500)
+  notes String @db.VarChar(4000)
+  callAttempts Int @default(0)
+  occurredAt DateTime @db.Timestamptz(3)
+  loggedAt DateTime @default(now()) @db.Timestamptz(3)
+  photoBase64 String? @db.Text
+  photoMimeType String? @db.VarChar(32)
+  photoBytes Int?
+  idempotencyKey String? @db.VarChar(200)
+  requestHash String @db.Char(64)
+
+  @@unique([restaurantId, orderId, idempotencyKey])
+  @@index([restaurantId, orderId, loggedAt, id])
+  @@index([orderId, restaurantId])
+  @@map("delivery_incidents")
+}
+
+/// One immutable proof per order; images stay private and never enter socket payloads.
+model DeliveryEvidence {
+  id String @id @default(cuid())
+  restaurantId String
+  orderId String @unique
+  order Order @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict, onUpdate: Restrict)
+  courierId String
+  actorId String
+  photoBase64 String? @db.Text
+  signatureBase64 String? @db.Text
+  deliveredAt DateTime @db.Timestamptz(3)
+  recordedAt DateTime @default(now()) @db.Timestamptz(3)
+  requestHash String @db.Char(64)
+
+  @@index([restaurantId, orderId])
+  @@unique([orderId, restaurantId])
+  @@map("delivery_evidence")
+}
+
 model DriverCashMovement {
   id          String    @id @default(cuid())
   driverId    String
@@ -2899,6 +2975,22 @@ model DriverLocation {
   speed     Float? // km/h
   heading   Float? // dirección en grados
   createdAt DateTime @default(now())
+
+  // Seguimiento v1 del comprador: último aviso del repartidor para un pedido.
+  @@index([driverId, orderId, createdAt])
+}
+
+// Freno de intentos del PIN de entrega del reparto propio (lib/store-delivery-pin.js):
+// compartido entre instancias y reinicios del backend. Una fila por pedido con fallos.
+model DeliveryPinAttempt {
+  restaurantId String
+  orderId      String
+  failures     Int      @default(0)
+  windowStart  DateTime
+  updatedAt    DateTime @updatedAt
+
+  @@id([restaurantId, orderId])
+  @@map("delivery_pin_attempts")
 }
 
 model DriverRoute {
@@ -4608,3 +4700,511 @@ model AdminDailyReport {
   @@map("admin_daily_reports")
 }
 
+// ---------------------------------------------------------------------------
+// MARKETPLACE FINANCE - persistent pipeline; applying this schema is a separate operation.
+// Monetary amounts use exact decimals, never Float. Entries are append-only by
+// contract; balance/immutability need transactional writers and DB constraints.
+// ---------------------------------------------------------------------------
+
+enum MarketplaceLedgerAccount {
+  GATEWAY_ESCROW
+  CUSTOMER_RECEIVABLE
+  MERCHANT_PAYABLE
+  COURIER_PAYABLE
+  PLATFORM_FEES
+  PLATFORM_PROMO_SUBSIDY
+  PAYOUT_CLEARING
+}
+
+enum MarketplaceLedgerEntryType {
+  DEBIT
+  CREDIT
+}
+
+enum MarketplaceLedgerEventType {
+  ORDER_CAPTURED
+  ORDER_SETTLED
+  ORDER_REFUNDED
+  PAYOUT_DISBURSED
+  MANUAL_ADJUSTMENT
+}
+
+enum MarketplacePaymentStatus {
+  PENDING
+  CAPTURED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+/// One provider payment attempt for a single-store order; retries may create new attempts.
+model MarketplacePayment {
+  id           String @id @default(cuid())
+  restaurantId String
+  orderId      String
+  order        Order  @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict, onUpdate: Restrict)
+
+  provider          String @default("MERCADOPAGO")
+  // Null only before the provider assigns an ID. Never store OAuth tokens here.
+  providerPaymentId String? @map("provider_payment_id")
+  providerStatus    String?
+  // Stable server-issued key for creating a payment attempt, not a webhook delivery ID.
+  idempotencyKey    String @unique
+  status            MarketplacePaymentStatus @default(PENDING)
+  amount            Decimal @db.Decimal(18, 2)
+  currency          String  @default("MXN") @db.Char(3)
+
+  capturedAt DateTime? @db.Timestamptz(3)
+  refundedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+
+  ledgerEntries MarketplaceLedgerEntry[]
+
+  @@unique([provider, providerPaymentId])
+  // Referenced by ledger lines to prevent cross-payment/order/restaurant links.
+  @@unique([id, restaurantId, orderId])
+  @@index([orderId, restaurantId])
+  @@index([restaurantId, status, createdAt])
+  @@map("marketplace_payments")
+}
+
+/// One debit/credit line. All lines of a transaction must be persisted atomically.
+model MarketplaceLedgerEntry {
+  id           String @id @default(uuid())
+  restaurantId String
+  orderId      String
+  paymentId    String
+  payment      MarketplacePayment @relation(fields: [paymentId, restaurantId, orderId], references: [id, restaurantId, orderId], onDelete: Restrict, onUpdate: Restrict)
+  payoutId String?
+  payout MarketplaceDriverPayout? @relation(fields: [payoutId, restaurantId], references: [id, restaurantId], onDelete: Restrict, onUpdate: Restrict)
+
+  // Shared by all lines produced by createLedgerTransaction; not unique per line.
+  transactionId   String
+  transactionHash String @db.Char(64)
+  // Stable key for this accounting event; capture, settlement and refund differ.
+  idempotencyKey  String
+  lineNumber      Int
+  eventType       MarketplaceLedgerEventType
+  account         MarketplaceLedgerAccount
+  // Snapshot of restaurant/driver identity for payable accounts; no contact data.
+  beneficiaryId   String?
+  type            MarketplaceLedgerEntryType
+  amount          Decimal @db.Decimal(18, 2)
+  currency        String  @default("MXN") @db.Char(3)
+  referenceId     String?
+  description     String  @default("")
+  // Allowlisted audit data only, never raw provider payloads, credentials or PII.
+  metadata        Json?
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+
+  // No updatedAt: corrections are new compensating transactions, never edits.
+  @@unique([paymentId, idempotencyKey, lineNumber])
+  @@index([transactionId])
+  @@index([payoutId, restaurantId])
+  @@index([restaurantId, orderId, createdAt])
+  @@index([restaurantId, account, beneficiaryId, createdAt])
+  @@map("marketplace_ledger_entries")
+}
+
+enum MarketplaceDriverPayoutStatus {
+  PENDING
+  PAID
+}
+
+/// Pending requests reserve ledger liability; approval atomically records a confirmed external payment.
+model MarketplaceDriverPayout {
+  id String @id @default(cuid())
+  restaurantId String
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  driverId String
+  driver Employee @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  amount Decimal @db.Decimal(18, 2)
+  currency String @default("MXN") @db.Char(3)
+  status MarketplaceDriverPayoutStatus @default(PENDING)
+  requestKey String @db.VarChar(200)
+  requestHash String @db.Char(64)
+  requestedBy String
+  requestedAt DateTime @default(now()) @db.Timestamptz(3)
+  approvedBy String?
+  approvalKey String? @db.VarChar(200)
+  approvalHash String? @db.Char(64)
+  paymentReference String? @db.VarChar(200)
+  paidAt DateTime? @db.Timestamptz(3)
+  ledgerEntries MarketplaceLedgerEntry[]
+
+  @@unique([id, restaurantId])
+  @@unique([restaurantId, driverId, requestKey])
+  @@unique([restaurantId, approvalKey])
+  @@unique([restaurantId, paymentReference])
+  @@index([restaurantId, driverId, status])
+  @@index([restaurantId, driverId, requestedAt, id])
+  @@index([driverId])
+  @@map("marketplace_driver_payouts")
+}
+
+// Per-location overrides; never write the shared MenuItem promotional fields.
+model LocationMenuItemPromo {
+  id           String @id @default(cuid())
+  restaurantId String
+  locationId   String
+  menuItemId   String
+  location     Location @relation(fields: [locationId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  menuItem     MenuItem @relation(fields: [menuItemId, restaurantId], references: [id, restaurantId], onDelete: Cascade)
+  isPromo      Boolean @default(false)
+  promoPrice   Decimal? @db.Decimal(18, 2)
+  activeDays   String[] @default([])
+  promoSource  String?
+  version      Int @default(0)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([locationId, menuItemId])
+  @@index([restaurantId, locationId])
+  @@index([menuItemId, restaurantId])
+  @@map("location_menu_item_promos")
+}
+
+
+/// Durable order orchestration snapshot. Dispatch transitions lock the parent Order.
+model MarketplaceOrderPipeline {
+  orderId String @id
+  restaurantId String
+  order Order @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict, onUpdate: Restrict)
+  storeSlug String
+  requestHash String @db.Char(64)
+  trackingTokenHash String @db.Char(64)
+  trackingExpiresAt DateTime @db.Timestamptz(3)
+  pinKeyId String
+  pickupPinHash String @db.Char(64)
+  deliveryPinHash String @db.Char(64)
+  paymentMethod String
+  collectorId String?
+  currency String @default("MXN") @db.Char(3)
+  // Immutable settlement in INTEGER CENTS, including the chosen commission rate.
+  settlement Json
+  // Bounded task + one current shared offer, including assignment after acceptance.
+  // Never store plaintext PINs, GPS, customer contact data or access tokens here.
+  dispatch Json?
+  checkoutUrl String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([orderId, restaurantId])
+  @@index([restaurantId, createdAt])
+  @@map("marketplace_order_pipelines")
+}
+
+
+// Marketplace v2 identities: global, never scoped to one restaurant.
+// Registration does NOT create SaaS tenants or authorize courier dispatch.
+enum MarketplaceSignupRole {
+  BUYER
+  MERCHANT
+  COURIER
+}
+
+enum MarketplaceApplicationStatus {
+  PENDING_EMAIL
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum MarketplaceTokenPurpose {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+model MarketplaceAccount {
+  id              String    @id @default(cuid())
+  email           String    @unique @db.VarChar(254)
+  fullName        String    @db.VarChar(120)
+  phone           String    @db.VarChar(20)
+  city            String    @db.VarChar(120)
+  passwordHash    String
+  emailVerifiedAt DateTime? @db.Timestamptz(3)
+  disabledAt      DateTime? @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
+  applications    MarketplaceApplication[]
+  authTokens      MarketplaceAuthToken[]
+  sessions        MarketplaceSession[]
+
+  @@map("marketplace_accounts")
+}
+
+model MarketplaceApplication {
+  id               String @id @default(cuid())
+  accountId        String
+  account          MarketplaceAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  role             MarketplaceSignupRole
+  status           MarketplaceApplicationStatus @default(PENDING_EMAIL)
+  businessName     String? @db.VarChar(120)
+  businessType     String? @db.VarChar(40)
+  deliveryMode     String? @db.VarChar(20)
+  vehicle          String? @db.VarChar(20)
+  network          String? @db.VarChar(20)
+  reviewedByUserId String?
+  reviewedAt       DateTime? @db.Timestamptz(3)
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([accountId, role])
+  @@index([role, status, createdAt])
+  @@map("marketplace_applications")
+}
+
+model MarketplaceAuthToken {
+  id         String @id @default(cuid())
+  accountId  String
+  account    MarketplaceAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tokenHash  String @unique @db.Char(64)
+  purpose    MarketplaceTokenPurpose
+  expiresAt  DateTime @db.Timestamptz(3)
+  consumedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([accountId, purpose, expiresAt])
+  @@map("marketplace_auth_tokens")
+}
+
+model MarketplaceSession {
+  id        String @id @default(cuid())
+  accountId String
+  account   MarketplaceAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tokenHash String @unique @db.Char(64)
+  expiresAt DateTime @db.Timestamptz(3)
+  revokedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([accountId, expiresAt])
+  @@map("marketplace_sessions")
+}
+
+// ── Marketplace: aprobación de comercios para el directorio ─────────────────
+// Un negocio con el módulo "marketplace" solicita aparecer en el directorio y la
+// plataforma (SUPER_ADMIN) lo aprueba, rechaza o suspende. Sin fila APPROVED el
+// restaurante no se publica (salvo la lista MARKETPLACE_STORE_SLUGS de preview).
+enum MarketplaceMembershipStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+model MarketplaceMerchantMembership {
+  id            String                      @id @default(cuid())
+  restaurantId  String                      @unique
+  restaurant    Restaurant                  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  status        MarketplaceMembershipStatus @default(PENDING)
+  requestedById String?
+  requestedAt   DateTime                    @default(now())
+  reviewedById  String?
+  reviewedAt    DateTime?
+  reviewNote    String?
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
+
+  @@index([status, requestedAt])
+  @@map("marketplace_merchant_memberships")
+}
+
+// ── Marketplace: cotizaciones v1 ────────────────────────────────────────────
+// Precio congelado en centavos (lib/marketplace-quote.js) que la orden consume
+// una sola vez (lib/marketplace-order-orchestrator.js). Pertenece a la cuenta del
+// comprador, no a un tenant: por eso usa merchantId (id del restaurante) y no la
+// columna restaurantId que la guardia de tenants exige filtrar.
+model MarketplaceQuote {
+  id                 String     @id
+  accountId          String
+  merchantId         String
+  merchant           Restaurant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  fulfillment        String // DELIVERY | PICKUP
+  deliveryAddressId  String?
+  status             String     @default("ACTIVE") // ACTIVE | CONSUMED
+  currency           String     @default("MXN") @db.Char(3)
+  itemsSnapshot      Json
+  priceSnapshot      Json
+  requestHash        String     @db.Char(64)
+  idempotencyKeyHash String     @unique @db.Char(64)
+  createdAt          DateTime   @default(now()) @db.Timestamptz(3)
+  expiresAt          DateTime   @db.Timestamptz(3)
+  // Consumo por la orden: una sola orden por cotización y por clave de la orden.
+  consumedAt         DateTime?  @db.Timestamptz(3)
+  orderId            String?    @unique
+  requestKeyHash     String?    @db.Char(64)
+
+  @@unique([accountId, requestKeyHash])
+  @@index([accountId, createdAt])
+  @@index([merchantId, createdAt])
+  @@map("marketplace_quotes")
+}
+
+// ── Marketplace: avisos (webhooks) de Mercado Pago ──────────────────────────
+// Una fila por entrega (data.id + x-request-id): evita procesar dos veces el
+// mismo aviso y deja auditoría del resultado (PAID, MISMATCH, UNMATCHED…).
+// Es de la plataforma, no de un tenant: no lleva restaurantId.
+model MarketplaceWebhookEvent {
+  id         String   @id
+  provider   String
+  eventId    String
+  dataId     String
+  requestId  String
+  action     String?
+  outcome    String
+  receivedAt DateTime @db.Timestamptz(3)
+
+  @@unique([provider, eventId])
+  @@index([dataId])
+  @@map("marketplace_webhook_events")
+}
+
+// ── Marketplace: libreta de direcciones del comprador (API v1) ─────────────
+// La cuenta es la misma identidad de la cotización y la orden (JWT de cliente o
+// invitado "guest:<hash>"), así solo quien guardó la dirección la ve y la usa.
+// Las filas no se editan: la cotización y la orden leen la misma dirección, y
+// cambiarla entre ambas movería un envío ya cotizado. fingerprint = sha256 de
+// [dirección, lat, lng]: guardar la misma dirección otra vez reutiliza la fila.
+// Es del comprador, no de un tenant: no lleva restaurantId.
+model MarketplaceBuyerAddress {
+  id          String   @id @default(uuid())
+  accountId   String   @db.VarChar(64)
+  fingerprint String   @db.Char(64)
+  address     String   @db.VarChar(500)
+  lat         Float
+  lng         Float
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  // Último uso: la libreta muestra primero las más recientes.
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([accountId, fingerprint])
+  @@index([accountId, updatedAt])
+  @@map("marketplace_buyer_addresses")
+}
+
+// Red compartida: estado durable. MANUAL nunca se importa a estas tablas.
+model MarketplaceNetworkTask {
+  id String @id
+  orderId String @unique
+  restaurantId String
+  locationId String
+  merchantId String
+  status String
+  version Int @default(0)
+  payload Json
+  order Order @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict)
+  @@unique([orderId, restaurantId])
+  @@index([restaurantId, status])
+  @@index([merchantId, status, id])
+  @@map("marketplace_network_tasks")
+}
+model MarketplaceNetworkOffer {
+  id String @id
+  taskId String
+  restaurantId String
+  courierId String?
+  status String
+  expiresAt DateTime
+  payload Json
+  @@index([courierId, status, expiresAt])
+  @@index([restaurantId, taskId])
+  @@map("marketplace_network_offers")
+}
+model MarketplaceNetworkAssignment {
+  id String @id
+  taskId String
+  restaurantId String
+  courierId String
+  status String
+  payload Json
+  @@index([courierId, status])
+  @@index([restaurantId, taskId])
+  @@map("marketplace_network_assignments")
+}
+model MarketplaceNetworkCourier {
+  id String @id
+  accountId String @unique
+  status String
+  verificationStatus String
+  version Int @default(0)
+  payload Json
+  @@map("marketplace_network_couriers")
+}
+model MarketplaceNetworkMerchant {
+  id String @id
+  restaurantId String
+  locationId String
+  payload Json
+  @@unique([restaurantId, locationId])
+  @@map("marketplace_network_merchants")
+}
+model MarketplaceNetworkAffiliation {
+  id String @id
+  courierId String
+  merchantId String
+  restaurantId String
+  status String
+  payload Json
+  @@unique([courierId, merchantId])
+  @@index([restaurantId, status])
+  @@map("marketplace_network_affiliations")
+}
+model MarketplaceNetworkPresence {
+  courierId String @id
+  assignmentId String?
+  taskId String?
+  orderId String?
+  restaurantId String?
+  locationId String?
+  lastSeenAt DateTime
+  payload Json
+  @@index([restaurantId, orderId])
+  @@map("marketplace_network_presence")
+}
+// Rutas agrupadas siguen limitadas a staging; persistirlas evita perder custodia.
+model MarketplaceNetworkTrip {
+  id String @id
+  kind String
+  payload Json
+  @@index([kind])
+  @@map("marketplace_network_trips")
+}
+model MarketplaceRefund {
+  id String @id
+  restaurantId String
+  orderId String
+  keyHash String @unique
+  requestHash String
+  activeOrderId String? @unique
+  status String @default("PENDING")
+  amountCents Int
+  data Json
+  providerRefundId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  order Order @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict)
+  @@index([restaurantId, orderId, status])
+  @@map("marketplace_refunds")
+}
+model MarketplaceFinanceOutbox {
+  id String @id
+  eventKey String @unique
+  restaurantId String
+  orderId String
+  eventType String
+  payload Json
+  status String @default("PENDING")
+  attempts Int @default(0)
+  availableAt DateTime @default(now())
+  leaseToken String?
+  leaseUntil DateTime?
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  order Order @relation(fields: [orderId, restaurantId], references: [id, restaurantId], onDelete: Restrict)
+  @@index([status, availableAt])
+  @@index([restaurantId, orderId])
+  @@map("marketplace_finance_outbox")
+}

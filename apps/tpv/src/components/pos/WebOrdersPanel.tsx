@@ -12,15 +12,21 @@ import {
   Loader2,
   CreditCard,
   Wallet,
+  Store,
+  XCircle,
+  AlertTriangle,
 } from "lucide-react";
+import { isMarketplaceOrder, needsAcceptance } from "@/lib/webOrders";
 
 // Shape reducido de un pedido web que consume el panel. Lo arma el layout a
-// partir de openOrders filtrado por source ONLINE/STORE.
+// partir de openOrders filtrado por los orígenes web (lib/webOrders).
 export interface WebOrder {
   id: string;
   orderNumber: string;
   customerName: string;
   customerPhone?: string | null;
+  /** ONLINE | STORE | WHATSAPP | MARKETPLACE. */
+  source?: string | null;
   /** Valor crudo del backend: DINE_IN / TAKEOUT / DELIVERY. */
   orderType: string;
   status: string;
@@ -35,6 +41,10 @@ export interface WebOrder {
   paymentMethod?: string | null;
   /** true si el efectivo ya entró a caja (contra entrega cobrado). */
   cashCollected?: boolean;
+  /** Nombre de la mesa en pedidos DINE_IN. */
+  tableName?: string | null;
+  /** Pedido de mesa por QR que la caja aún no confirma (no está en cocina). */
+  awaitingTableConfirmation?: boolean;
 }
 
 interface Props {
@@ -43,10 +53,15 @@ interface Props {
   orders: WebOrder[];
   /** Abre el detalle completo (modal existente) del pedido. */
   onShowDetail: (id: string) => void;
-  /** Acepta el pedido: PENDING → CONFIRMED. */
+  /** Acepta el pedido: PENDING / PENDING_MERCHANT → CONFIRMED. */
   onAccept: (id: string) => void;
   /** Id del pedido que se está aceptando ahora (bloquea su botón). */
   acceptingId?: string | null;
+  /** Rechaza un pedido por aceptar → CANCELLED: del marketplace (PENDING_MERCHANT)
+   *  o de mesa por QR por confirmar (PENDING). */
+  onReject?: (id: string) => void;
+  /** Id del pedido que se está rechazando ahora (bloquea sus botones). */
+  rejectingId?: string | null;
   /** Oculta importes (modo préstamo de caja). */
   hideMoney?: boolean;
 }
@@ -90,6 +105,8 @@ export default function WebOrdersPanel({
   onShowDetail,
   onAccept,
   acceptingId,
+  onReject,
+  rejectingId,
   hideMoney,
 }: Props) {
   // Separa pendientes (requieren que el cajero los acepte) del resto en curso.
@@ -97,7 +114,7 @@ export default function WebOrdersPanel({
     const pending: WebOrder[] = [];
     const inProgress: WebOrder[] = [];
     for (const o of orders) {
-      if (o.status === "PENDING") pending.push(o);
+      if (needsAcceptance(o)) pending.push(o);
       else inProgress.push(o);
     }
     return { pending, inProgress };
@@ -178,7 +195,7 @@ export default function WebOrdersPanel({
                   Sin pedidos web
                 </p>
                 <p className="text-[11px] mt-1 text-white/40">
-                  Los pedidos de la tienda en línea aparecerán aquí.
+                  Los pedidos de la tienda en línea, WhatsApp y el marketplace aparecerán aquí.
                 </p>
               </div>
             </div>
@@ -192,7 +209,9 @@ export default function WebOrdersPanel({
                   order={o}
                   hideMoney={hideMoney}
                   accepting={acceptingId === o.id}
+                  rejecting={rejectingId === o.id}
                   onAccept={() => onAccept(o.id)}
+                  onReject={onReject ? () => onReject(o.id) : undefined}
                   onShowDetail={() => onShowDetail(o.id)}
                 />
               ))}
@@ -250,19 +269,35 @@ function WebOrderCard({
   order,
   hideMoney,
   accepting,
+  rejecting,
   onAccept,
+  onReject,
   onShowDetail,
 }: {
   order: WebOrder;
   hideMoney?: boolean;
   accepting?: boolean;
+  rejecting?: boolean;
   onAccept?: () => void;
+  onReject?: () => void;
   onShowDetail: () => void;
 }) {
-  const isPending = order.status === "PENDING";
+  const isPending = needsAcceptance(order);
+  const fromMarketplace = isMarketplaceOrder(order);
+  // Pedido de mesa por QR sin confirmar: no está en cocina ni ocupa la mesa
+  // hasta que el cajero revise que de verdad hay clientes sentados.
+  const awaitingTable = order.status === "PENDING" && order.awaitingTableConfirmation === true;
+  const busy = accepting || rejecting;
   const typeKey = (order.orderType || "").toUpperCase();
   const typeTone = TYPE_TONE[typeKey] || TYPE_TONE.TAKEOUT;
-  const typeLabel = TYPE_LABEL[typeKey] || order.orderType || "Pedido";
+  const baseTypeLabel = TYPE_LABEL[typeKey] || order.orderType || "Pedido";
+  // Las mesas suelen llamarse "Mesa 7"; solo un número suelto lleva el prefijo.
+  const typeLabel =
+    typeKey === "DINE_IN" && order.tableName
+      ? /^\d+$/.test(order.tableName)
+        ? `${baseTypeLabel} ${order.tableName}`
+        : order.tableName
+      : baseTypeLabel;
 
   // ¿Ya entró el dinero? PAID = pagado en línea (o efectivo ya cobrado).
   // PENDING = falta cobrar (contra entrega / pago en línea no completado).
@@ -274,9 +309,11 @@ function WebOrderCard({
   return (
     <div
       className={`rounded-2xl border p-4 transition-all ${
-        isPending
-          ? "bg-[#5e6ad2]/8 border-[#5e6ad2]/30"
-          : "bg-white/[0.03] border-white/8"
+        awaitingTable
+          ? "bg-amber-400/8 border-amber-400/40"
+          : isPending
+            ? "bg-[#5e6ad2]/8 border-[#5e6ad2]/30"
+            : "bg-white/[0.03] border-white/8"
       }`}
     >
       {/* Encabezado: cliente + total */}
@@ -286,6 +323,11 @@ function WebOrderCard({
             {order.customerName}
           </p>
           <div className="flex flex-wrap items-center gap-2 mt-1">
+            {fromMarketplace && (
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border inline-flex items-center gap-1 bg-amber-400/15 text-amber-300 border-amber-400/35">
+                <Store size={11} /> Marketplace
+              </span>
+            )}
             <span
               className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md border ${typeTone}`}
             >
@@ -301,6 +343,11 @@ function WebOrderCard({
               {paid ? <CreditCard size={11} /> : <Wallet size={11} />}
               {paidLabel}
             </span>
+            {awaitingTable && (
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border inline-flex items-center gap-1 bg-amber-400/15 text-amber-300 border-amber-400/40">
+                <AlertTriangle size={11} /> Confirma la mesa
+              </span>
+            )}
             <span className="text-[11px] font-bold text-white/40">
               {order.orderNumber}
             </span>
@@ -338,6 +385,12 @@ function WebOrderCard({
           <Phone size={12} className="shrink-0" /> {order.customerPhone}
         </p>
       )}
+      {awaitingTable && (
+        <p className="mt-2 text-[11px] font-semibold text-amber-200/90 leading-snug">
+          Pedido por QR. Revisa que haya clientes en la mesa antes de aceptar; al
+          aceptarlo entra a cocina.
+        </p>
+      )}
 
       {/* Acciones */}
       <div className="flex gap-2 mt-3.5">
@@ -347,10 +400,24 @@ function WebOrderCard({
         >
           <Eye size={16} /> Ver detalle
         </button>
+        {isPending && (fromMarketplace || awaitingTable) && onReject && (
+          <button
+            onClick={onReject}
+            disabled={busy}
+            className="h-11 px-4 rounded-xl bg-rose-500/10 border border-rose-400/30 text-rose-300 flex items-center justify-center gap-2 text-[13px] font-bold active:scale-95 transition-all disabled:opacity-60"
+          >
+            {rejecting ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <XCircle size={16} />
+            )}
+            {rejecting ? "Rechazando…" : "Rechazar"}
+          </button>
+        )}
         {isPending && onAccept && (
           <button
             onClick={onAccept}
-            disabled={accepting}
+            disabled={busy}
             className="flex-1 h-11 rounded-xl bg-[#88D66C] text-[#0C0C0E] flex items-center justify-center gap-2 text-[13px] font-black active:scale-95 transition-all disabled:opacity-60"
           >
             {accepting ? (

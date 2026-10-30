@@ -14,6 +14,8 @@ import {
   type Product,
 } from "@/store/ticketStore";
 import { useUIStore } from "@/store/useUIStore";
+import { useActiveOrderStore } from "@/store/activeOrderStore";
+import { toast } from "sonner";
 import { CATALOG_REFRESH_EVENT, fuzzyFilter, sameCategory, getCategoryIdOrName } from "@/lib/catalog-helpers";
 import { CategoryGrid } from "@/components/pos/CategoryGrid";
 import { CategoryBar, DrilldownHeader } from "@/components/pos/CategoryBar";
@@ -292,6 +294,11 @@ export default function CatalogPage() {
 
   const handleProductClick = (product: Product) => {
     if (product.isAvailable === false) return;
+    // Pedido del marketplace abierto: sus productos no se editan (el backend también lo rechaza).
+    if (useActiveOrderStore.getState().itemsLocked) {
+      toast.warning("Este pedido del marketplace no admite productos nuevos: los fijó la compra del cliente.");
+      return;
+    }
     hapticLight();
     if (product.soldByWeight) {
       setWeightProduct(product);

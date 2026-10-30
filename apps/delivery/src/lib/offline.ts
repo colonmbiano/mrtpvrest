@@ -1,5 +1,6 @@
 import api from './api';
-import { useOfflineStore, OfflineTransaction } from '@/store/useOfflineStore';
+import { useOfflineStore, OfflineTransaction, isPinTransaction } from '@/store/useOfflineStore';
+import { isDeliveryPinRejection } from './storeDeliveryPin';
 
 let syncInterval: NodeJS.Timeout | null = null;
 
@@ -12,7 +13,8 @@ export function initBackgroundSync() {
   }, 5000); // Intentar cada 5 segundos
 }
 
-async function performSync() {
+export async function performSync() {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
   const store = useOfflineStore.getState();
   if (store.syncInProgress) return;
 
@@ -21,29 +23,47 @@ async function performSync() {
 
   store.setSyncInProgress(true);
 
-  for (const tx of unsynced) {
-    try {
-      await processTransaction(tx);
-      store.markSynced(tx.id);
-    } catch (err) {
-      console.error(`Error sincronizando ${tx.type}:`, err);
-      store.incrementRetry(tx.id);
-      
-      // Si ha fallado muchas veces, podríamos marcarla como fallida definitiva
-      if (tx.retryCount > 10) {
-        store.removeFailed(tx.id);
+  try {
+    for (const tx of unsynced) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) break;
+      // Re-read before replay: logout, expiry or a preceding action may have removed it.
+      const current = store.getUnsynced().find(item => item.id === tx.id);
+      if (!current) continue;
+      if (tx.type === 'CONFIRM_DELIVERY_PIN' && useOfflineStore.getState().queue.some(item => item.type === 'CONFIRM_PICKUP_PIN'
+        && item.data.courierId === tx.data.courierId && item.data.taskId === tx.data.taskId && !item.synced)) continue;
+      try {
+        await processTransaction(current);
+        store.markSynced(tx.id);
+      } catch (err) {
+        // Never log Axios errors here: their request config contains the PIN.
+        const status = (err as any)?.response?.status;
+        if ((err as Error)?.message === 'UNKNOWN_TRANSACTION_TYPE') store.markFailed(tx.id, 'UNKNOWN_TYPE');
+        else if (isPinTransaction(tx) && status >= 400 && status < 500 && ![408, 429].includes(status)) store.markFailed(tx.id, 'REJECTED');
+        // Entrega propia con código del cliente incorrecto o faltante: reintentar no
+        // lo arregla. El pedido sigue "en camino" en el servidor para volver a pedirlo.
+        else if (tx.type === 'CONFIRM_DELIVERY' && status !== 429
+          && isDeliveryPinRejection((err as any)?.response?.data?.code)) store.markFailed(tx.id, 'REJECTED');
+        else store.incrementRetry(tx.id);
       }
     }
+    store.setLastSync(Date.now());
+  } finally {
+    store.setSyncInProgress(false);
   }
-
-  store.setLastSync(Date.now());
-  store.setSyncInProgress(false);
 }
 
 async function processTransaction(tx: OfflineTransaction) {
   const { type, data } = tx;
 
   switch (type) {
+    case 'CONFIRM_PICKUP_PIN':
+    case 'CONFIRM_DELIVERY_PIN': {
+      const phase = type === 'CONFIRM_PICKUP_PIN' ? 'pickup' : 'deliver';
+      const result = await api.post(`/api/marketplace/dispatch/couriers/tasks/${encodeURIComponent(data.taskId)}/${phase}`,
+        data, { headers: { 'Idempotency-Key': tx.id } });
+      if (result.data?.ok !== true && result.data?.success !== true) throw new Error('PIN_NOT_CONFIRMED');
+      return result;
+    }
     case 'CONFIRM_DELIVERY':
       // DEBE ser el mismo endpoint que la entrega online: este dispara
       // ensureCashOnDeliveryMovement() (crea el INCOME del corte) y pone
@@ -66,8 +86,12 @@ async function processTransaction(tx: OfflineTransaction) {
     case 'CHAT_MESSAGE':
       return api.post(`/api/delivery/orders/${data.orderId}/messages`, data);
 
+    case 'DELIVERY_INCIDENT':
+      return api.post(`/api/delivery/orders/${data.orderId}/incidents`, data,
+        data.incident?.timestamp ? { headers: { 'Idempotency-Key': `incident-${data.orderId}-${data.incident.timestamp}` } } : undefined);
+
     default:
-      console.warn(`Tipo de transacción no soportado: ${type}`);
+      throw new Error('UNKNOWN_TRANSACTION_TYPE');
   }
 }
 

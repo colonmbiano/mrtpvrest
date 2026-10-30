@@ -3,12 +3,13 @@
 import { useState } from "react";
 import {
   Bike, ChevronDown, ChevronUp, Inbox, MapPin, MessageCircle, MessagesSquare,
-  Printer, StickyNote, Store, Wallet, X,
+  Printer, StickyNote, Store, Wallet, X, Eye, AlertTriangle,
 } from "lucide-react";
 import { Card, Pill, Select, TONE_FG } from "@/components/ds";
 import { formatMoney } from "@/lib/format";
 import {
   NEXT_STATUS, SOURCE_LABELS, STATUS_META, timeAgo,
+  getCollectionPin, hasActiveIncident,
   type Driver, type Order,
 } from "./orders";
 
@@ -23,18 +24,17 @@ export default function OrderCard({
   onCobrar,
   onPrint,
   onOpenConversation,
+  onViewEvidence,
 }: {
   order: Order;
   drivers: Driver[];
   onStatusChange: (id: string, status: string) => void;
   onAssignDriver: (orderId: string, driverId: string) => void;
   onUnassignDriver: (orderId: string) => void;
-  /** Acciones opcionales del tablero: cobrar, imprimir ticket y abrir la
-   *  conversación de WhatsApp que originó el pedido. Se muestran solo si el
-   *  contenedor las provee. */
   onCobrar?: (order: Order) => void;
   onPrint?: (orderId: string) => void;
   onOpenConversation?: (order: Order) => void;
+  onViewEvidence?: (order: Order) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const meta = STATUS_META[order.status];
@@ -60,6 +60,18 @@ export default function OrderCard({
             <Pill tone={meta?.tone ?? "neutral"}>
               <Icon size={11} strokeWidth={2} /> {meta?.label ?? order.status}
             </Pill>
+            {["READY", "PREPARING"].includes(order.status) && (
+              <Pill tone="info">
+                <span className="font-mono text-[10px] font-bold">
+                  PIN: {order.pickupPin || getCollectionPin(order.id)}
+                </span>
+              </Pill>
+            )}
+            {order.status === "ON_THE_WAY" && hasActiveIncident(order.deliveryIncidents) && (
+              <Pill tone="err">
+                <AlertTriangle size={11} strokeWidth={2} /> Incidencia
+              </Pill>
+            )}
             <Pill tone={paid ? "ok" : "warn"}>{paid ? "Pagado" : "Por cobrar"}</Pill>
           </div>
           <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-tx-mut">
@@ -186,9 +198,9 @@ export default function OrderCard({
         )}
       </div>
 
-      {/* Fila de acciones del tablero: cobrar, imprimir y ver conversación.
+      {/* Fila de acciones del tablero: cobrar, imprimir, ver conversación y ver evidencia.
           Solo aparece si el contenedor cablea al menos una acción. */}
-      {(onCobrar || onPrint || onOpenConversation) && (
+      {(onCobrar || onPrint || onOpenConversation || (onViewEvidence && order.status === "DELIVERED")) && (
         <div className="flex gap-2 px-3 pb-3">
           {onCobrar && !paid && (
             <button
@@ -200,11 +212,21 @@ export default function OrderCard({
               <Wallet size={14} strokeWidth={2.2} /> Cobrar
             </button>
           )}
+          {onViewEvidence && order.status === "DELIVERED" && (
+            <button
+              type="button"
+              onClick={() => onViewEvidence(order)}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-ds-md py-2 font-display text-xs font-extrabold text-white transition-transform active:scale-95"
+              style={{ background: "var(--info)" }}
+            >
+              <Eye size={14} strokeWidth={2.2} /> Evidencia
+            </button>
+          )}
           {onPrint && (
             <button
               type="button"
               onClick={() => onPrint(order.id)}
-              className={`flex items-center justify-center gap-1.5 rounded-ds-md py-2 text-xs font-semibold text-tx-mut ${onCobrar && !paid ? "px-3" : "flex-1"}`}
+              className={`flex items-center justify-center gap-1.5 rounded-ds-md py-2 text-xs font-semibold text-tx-mut ${onCobrar && !paid ? "px-3" : (onViewEvidence && order.status === "DELIVERED" ? "px-3" : "flex-1")}`}
               style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
             >
               <Printer size={14} strokeWidth={2} /> Ticket

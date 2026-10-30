@@ -69,6 +69,10 @@ export interface OpenAccount {
   isWeb?: boolean;
   /** Solo modo "Cobradas": método de pago crudo para el chip de la fila. */
   paymentMethod?: string | null;
+  /** Marketplace: motivo por el que no se cobra en caja ("Por aceptar", "Pagado en línea"…). */
+  chargeBlocked?: string | null;
+  /** Marketplace: sus productos no se editan; "Editar" pasa a "Ver". */
+  itemsLocked?: boolean;
 }
 
 // Etiqueta legible del método de pago (chip de la fila en modo "Cobradas").
@@ -219,7 +223,7 @@ type OrderTypeCard = {
 };
 
 const ORDER_TYPES: OrderTypeCard[] = [
-  { id: "DINE_IN",  title: ORDER_TYPE_ACTION.DINE_IN,  icon: Armchair,    accent: "#34C988", shortcut: "1" },
+  { id: "DINE_IN",  title: ORDER_TYPE_ACTION.DINE_IN,  icon: Armchair,    accent: "#E0A22A", shortcut: "1" },
   { id: "TAKEOUT",  title: ORDER_TYPE_ACTION.TAKEOUT,  icon: ShoppingBag, accent: "#3b82f6", shortcut: "2" },
   { id: "DELIVERY", title: ORDER_TYPE_ACTION.DELIVERY, icon: Moto,        accent: "#F97316", shortcut: "3" },
 ];
@@ -228,7 +232,7 @@ const ORDER_TYPES: OrderTypeCard[] = [
 const TYPE_META: Record<OrderType, { label: string; icon: typeof Utensils; accent: string }> = {
   DINE_IN:  { label: ORDER_TYPE_BADGE.DINE_IN,  icon: Utensils,    accent: "#E0A22A" },
   TAKEOUT:  { label: ORDER_TYPE_BADGE.TAKEOUT,  icon: ShoppingBag, accent: "#3b82f6" },
-  DELIVERY: { label: ORDER_TYPE_BADGE.DELIVERY, icon: Bike,        accent: "#10b981" },
+  DELIVERY: { label: ORDER_TYPE_BADGE.DELIVERY, icon: Bike,        accent: "#F97316" },
 };
 
 // Punto de estado por estado de la orden.
@@ -1120,11 +1124,11 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       <div className="flex items-stretch gap-2">
                         <button
                           type="button"
-                          aria-label={`Editar cuenta de ${title}`}
+                          aria-label={`${acc.itemsLocked ? "Ver" : "Editar"} cuenta de ${title}`}
                           onClick={() => onOpenAccount?.(acc.id)}
                           className="flex-1 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text-primary)] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                         >
-                          <Pencil size={15} strokeWidth={2.5} /> Editar
+                          <Pencil size={15} strokeWidth={2.5} /> {acc.itemsLocked ? "Ver" : "Editar"}
                         </button>
                         <button
                           type="button"
@@ -1134,7 +1138,15 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                         >
                           <Receipt size={15} strokeWidth={2.5} /> Imprimir
                         </button>
-                        {!hideMoney && (
+                        {!hideMoney && (acc.chargeBlocked ? (
+                          // Marketplace por aceptar o ya pagado en línea: no se cobra en caja.
+                          <span
+                            role="note"
+                            className="flex-[1.3] h-10 rounded-xl border border-[var(--border-strong)] text-[var(--text-secondary)] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5"
+                          >
+                            {acc.chargeBlocked}
+                          </span>
+                        ) : (
                           <button
                             type="button"
                             aria-label={`Cobrar cuenta de ${title}`}
@@ -1143,7 +1155,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                           >
                             <Zap size={15} strokeWidth={2.8} /> Cobrar
                           </button>
-                        )}
+                        ))}
                       </div>
                     ))}
                     </div>

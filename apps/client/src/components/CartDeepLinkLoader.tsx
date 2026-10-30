@@ -8,9 +8,11 @@ import { useCart } from '../lib/cartStore';
 import { hydrateCartFromUrl } from '../lib/cartLink';
 import type { StoreProduct } from './ProductModal';
 
-export default function CartDeepLinkLoader({ products }: { products: StoreProduct[] }) {
+export default function CartDeepLinkLoader({ products, slug }: { products: StoreProduct[]; slug: string }) {
   const add = useCart((s) => s.add);
   useEffect(() => {
+    // Primero se vincula la tienda: si el carrito era de otra, se descarta antes de hidratar.
+    useCart.getState().bindStore(slug);
     hydrateCartFromUrl(products || [], add);
     // Solo al montar: hydrateCartFromUrl ya quita el parámetro para no repetir.
     // eslint-disable-next-line react-hooks/exhaustive-deps

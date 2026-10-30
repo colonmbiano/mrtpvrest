@@ -5,7 +5,50 @@ const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const { localDayRange } = require('../utils/dayRange');
 const { sendPushToDriver, notifyDriversNewDeliveryOrder, notifyOrderStatus } = require('../services/notifications.service');
+const { createDeliveryIncidentsService, DeliveryIncidentError } = require('../lib/delivery-incidents');
+const { createStoreDeliveryPin, createPrismaPinAttempts, StoreDeliveryPinError } = require('../lib/store-delivery-pin');
+// Pedidos del marketplace que entregan los repartidores propios (política MANUAL).
+// Los de la red compartida no entran a la bolsa ni a la asignación de la tienda.
+const { NOT_DISPATCHABLE, PIPELINE_SELECT, networkMarketplace, courierView } = require('../lib/marketplace-store-delivery');
 const router = express.Router();
+// PIN de entrega de pedidos propios (STORE_DELIVERY_PIN_MODE). El freno de
+// intentos fallidos por pedido vive en PostgreSQL: vale para todas las instancias
+// del backend y sobrevive a un reinicio.
+const storeDeliveryPin = createStoreDeliveryPin({ attempts: createPrismaPinAttempts({ prisma }) });
+if (storeDeliveryPin.misconfigured) {
+  console.warn('[delivery] STORE_DELIVERY_PIN_MODE sin STORE_DELIVERY_PIN_SECRET valido: PIN de entrega desactivado');
+}
+const deliveryIncidents = createDeliveryIncidentsService({ storeDeliveryPin });
+
+function incidentError(req, res, error) {
+  if (error instanceof DeliveryIncidentError) {
+    return res.status(error.statusCode).json({ error: error.message, code: error.code });
+  }
+  // Do not log request bodies, Prisma arguments, photos or signatures.
+  console.error('[delivery] operation_failed', { method: req.method, code: error.code || 'INTERNAL_ERROR' });
+  return res.status(500).json({ error: 'Error interno' });
+}
+
+router.post('/orders/:orderId/incidents', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    res.json(await deliveryIncidents.logIncident({ orderId: req.params.orderId, body: req.body,
+      idempotencyKey: req.get('Idempotency-Key'), actor: req.user, restaurantId: req.restaurantId,
+      prismaClient: prisma, io: req.app.get('io') }));
+  } catch (error) { incidentError(req, res, error); }
+});
+
+router.get('/orders/:orderId/incidents', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const rawLimit = req.query.limit;
+    if (rawLimit !== undefined && (typeof rawLimit !== 'string' || !/^\d{1,3}$/.test(rawLimit))) {
+      throw new DeliveryIncidentError('INVALID_LIMIT', 'Limite invalido');
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json(await deliveryIncidents.listIncidents({ orderId: req.params.orderId, actor: req.user,
+      restaurantId: req.restaurantId, prismaClient: prisma, limit: rawLimit === undefined ? 50 : Number(rawLimit),
+      cursor: req.query.cursor }));
+  } catch (error) { incidentError(req, res, error); }
+});
 
 const STAFF_ROLES = ['CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'];
 
@@ -47,7 +90,9 @@ async function assertDriverAccess(req, res) {
   return driver;
 }
 
-async function findDriverOrder(req, orderId, driverId) {
+// withPipeline: solo para verificar el PIN del marketplace; el pipeline (lleva el
+// hash del PIN) nunca se devuelve tal cual al cliente.
+async function findDriverOrder(req, orderId, driverId, { withPipeline = false } = {}) {
   const where = { id: orderId };
   if (driverId && !isStaff(req.user)) where.deliveryDriverId = driverId;
   if (req.user?.role !== 'SUPER_ADMIN') {
@@ -56,8 +101,21 @@ async function findDriverOrder(req, orderId, driverId) {
   }
   return prisma.order.findFirst({
     where,
-    include: { items: { include: { menuItem: true, modifiers: true } }, user: true },
+    include: { items: { include: { menuItem: true, modifiers: true } }, user: true,
+      ...(withPipeline ? { marketplacePipeline: { select: PIPELINE_SELECT } } : {}) },
   });
+}
+
+// Un pedido del marketplace solo sale a reparto con la tienda si ella lo entrega
+// y ya lo aceptó. Devuelve el error para responder, o null si puede salir.
+function dispatchBlock(order) {
+  if (networkMarketplace(order)) {
+    return { error: 'Este pedido lo entrega la red del marketplace, no los repartidores de la tienda.', code: 'NETWORK_DELIVERY' };
+  }
+  if (NOT_DISPATCHABLE.includes(order?.status)) {
+    return { error: 'La tienda aún no acepta este pedido; no puede salir a reparto.', code: 'ORDER_NOT_ACCEPTED' };
+  }
+  return null;
 }
 
 // ── Envío pendiente de cotizar ───────────────────────────────────────────────
@@ -180,17 +238,19 @@ router.get('/available-orders', authenticate, requireTenantAccess, async (req, r
         restaurantId,
         orderType: 'DELIVERY',
         deliveryDriverId: null,
-        status: { notIn: ['DELIVERED', 'CANCELLED'] },
+        // Sin pagar o sin aceptar (marketplace) todavía no es de nadie.
+        status: { notIn: ['DELIVERED', 'CANCELLED', ...NOT_DISPATCHABLE] },
         createdAt: { gte: from, lte: to },
       },
       include: {
         items: { include: { menuItem: true, modifiers: true } },
         restaurant: { select: { config: { select: { countryCode: true } } } },
+        marketplacePipeline: { select: PIPELINE_SELECT },
       },
       orderBy: { createdAt: 'asc' }, // el más viejo primero: es el más urgente
     });
-    res.json(orders.map(o => ({
-      ...o,
+    res.json(orders.filter(o => !networkMarketplace(o)).map(o => ({
+      ...courierView(o),
       countryCode: o.restaurant?.config?.countryCode || 'MX',
     })));
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
@@ -211,9 +271,12 @@ router.post('/:driverId/claim/:orderId', authenticate, requireTenantAccess, asyn
     // (la app se lo pide al repartidor antes de tomar). Sin eso, 409.
     const preview = await prisma.order.findFirst({
       where: { id: req.params.orderId, restaurantId },
-      select: { orderType: true, deliveryFee: true, notes: true },
+      select: { id: true, restaurantId: true, orderType: true, source: true, status: true, deliveryFee: true, notes: true,
+        marketplacePipeline: { select: PIPELINE_SELECT } },
     });
     if (!preview) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const blocked = dispatchBlock(preview);
+    if (blocked) return res.status(409).json(blocked);
     const pendingFee = shippingFeePending(preview);
     const feeInput = parseFeeInput(req.body?.deliveryFee);
     if (pendingFee && !feeInput) {
@@ -229,7 +292,7 @@ router.post('/:driverId/claim/:orderId', authenticate, requireTenantAccess, asyn
         restaurantId,
         orderType: 'DELIVERY',
         deliveryDriverId: null,
-        status: { notIn: ['DELIVERED', 'CANCELLED'] },
+        status: { notIn: ['DELIVERED', 'CANCELLED', ...NOT_DISPATCHABLE] },
       },
       data: {
         deliveryDriverId: driver.id,
@@ -332,13 +395,17 @@ router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, r
         // País del restaurante → la app del repartidor arma el enlace de
         // WhatsApp con la lada correcta (ver packages/config/phone.js).
         restaurant: { select: { config: { select: { countryCode: true } } } },
+        // Solo para decidir el PIN; courierView lo quita de la respuesta.
+        marketplacePipeline: { select: PIPELINE_SELECT },
       },
       orderBy: { createdAt: 'desc' },
     });
     // Aplanar countryCode al nivel del pedido para simplificar el frontend.
+    // requiresDeliveryPin: la app pide el código del cliente antes de entregar.
     const withCountry = orders.map(o => ({
-      ...o,
+      ...courierView(o),
       countryCode: o.restaurant?.config?.countryCode || 'MX',
+      requiresDeliveryPin: storeDeliveryPin.requiresPin(o),
     }));
     res.json(withCountry);
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
@@ -378,9 +445,12 @@ router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_RO
     // viene, 409 con instrucción (el TPV/admin muestran el error tal cual).
     const preview = await prisma.order.findFirst({
       where: { id: orderId, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
-      select: { orderType: true, deliveryFee: true, notes: true },
+      select: { id: true, restaurantId: true, orderType: true, source: true, status: true, deliveryFee: true, notes: true,
+        marketplacePipeline: { select: PIPELINE_SELECT } },
     });
     if (!preview) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const blocked = dispatchBlock(preview);
+    if (blocked) return res.status(409).json(blocked);
     const pendingFee = shippingFeePending(preview);
     const feeInput = parseFeeInput(req.body?.deliveryFee);
     if (pendingFee && !feeInput) {
@@ -388,7 +458,8 @@ router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_RO
     }
 
     const order = await prisma.order.update({
-      where: { id: orderId, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
+      // El estado se vuelve a exigir en el mismo update: no sale si alguien lo regresó a "por aceptar".
+      where: { id: orderId, status: { notIn: NOT_DISPATCHABLE }, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
       data: {
         deliveryDriverId: driverId,
         status: 'ON_THE_WAY',
@@ -422,7 +493,11 @@ router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_RO
       console.error('[delivery] notifyOrderStatus:', err.message));
 
     res.json(order);
-  } catch (e) { console.error('PUT /delivery/assign:', e); res.status(500).json({ error: 'Error interno' }); }
+  } catch (e) {
+    // El pedido cambió de estado entre la revisión y la asignación.
+    if (e?.code === 'P2025') return res.status(409).json({ error: 'El pedido cambió; vuelve a intentarlo.', code: 'ORDER_CONFLICT' });
+    console.error('PUT /delivery/assign:', e); res.status(500).json({ error: 'Error interno' });
+  }
 });
 
 router.put('/unassign', authenticate, requireTenantAccess, requireRole(...STAFF_ROLES), async (req, res) => {
@@ -447,87 +522,23 @@ router.put('/unassign', authenticate, requireTenantAccess, requireRole(...STAFF_
 
 router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAccess, async (req, res) => {
   try {
-    const driver = await assertDriverAccess(req, res);
-    if (!driver) return;
-    const existing = await findDriverOrder(req, req.params.orderId, driver.id);
-    if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
-
-    const { status, paymentMethod } = req.body;
-    // El repartidor solo puede mover el pedido a estados válidos de su flujo.
-    const ALLOWED_DRIVER_STATUSES = ['ON_THE_WAY', 'DELIVERED'];
-    if (!ALLOWED_DRIVER_STATUSES.includes(status)) {
-      return res.status(400).json({ error: 'Estado no permitido' });
-    }
-    // Sin envío asignado no sale NI se cierra: al cerrar en DELIVERED con
-    // efectivo se genera el INCOME del corte con order.total — si el envío
-    // sigue en $0, el corte queda corto. La app captura el fee y reintenta.
-    if (shippingFeePending(existing)) {
-      return res.status(409).json({
-        error: 'Este pedido no tiene envío asignado. Captura el costo de envío antes de continuar.',
-        code: 'SHIPPING_FEE_PENDING',
-      });
-    }
-    const data = { status };
-    if (paymentMethod) data.paymentMethod = paymentMethod;
-    if (status === 'DELIVERED') {
-      if (paymentMethod === 'CASH') {
-        // Entregado con efectivo: el repartidor trae el dinero, pero el cobro
-        // queda PENDING hasta que la caja lo concilie (PUT /orders/:id/confirm-cash).
-        data.paymentStatus = 'PENDING';
-        data.cashCollected = false;
-        data.paidAt = null;
-      } else if (paymentMethod === 'TRANSFER_PENDING') {
-        // Transferencia que el repartidor REPORTA pero que aún no confirma que
-        // haya llegado: se guarda como "por cobrar" (no entra a caja) recordando
-        // que el método es transferencia. Aparece en "Pendientes de cobro" y la
-        // caja la liquida con PUT /orders/:id/confirm-cash {paymentMethod:'TRANSFER'}
-        // cuando el banco la refleje. No marcar PAID aquí evita contar como
-        // venta cobrada un dinero que nunca entró. (TRANSFER_PENDING no es un
-        // valor del enum PaymentMethod; se persiste como TRANSFER.)
-        data.paymentMethod = 'TRANSFER';
-        data.paymentStatus = 'PENDING';
-        data.cashCollected = false;
-        data.paidAt = null;
-      } else if (paymentMethod === 'PENDING' || !paymentMethod) {
-        // Entregado SIN cobrar (por cobrar / fiado): no entró dinero. El pedido
-        // queda abierto y aparece en "Pendientes de cobro" del admin hasta que
-        // la caja confirme el cobro.
-        data.paymentStatus = 'PENDING';
-        data.cashCollected = false;
-        data.paidAt = null;
-      } else {
-        // Transferencia/tarjeta confirmada por el repartidor en el momento.
-        data.paymentStatus = 'PAID';
-        data.paidAt = new Date();
-      }
-    }
-    const order = await prisma.order.update({
-      where: { id: existing.id },
-      data,
-      include: { items: { include: { menuItem: true } }, user: true },
+    const { order, changed } = await deliveryIncidents.updateStatus({
+      orderId: req.params.orderId, driverId: req.params.driverId, body: req.body,
+      actor: req.user, restaurantId: req.restaurantId, prismaClient: prisma,
     });
-
-    if (order.status === 'DELIVERED') await ensureCashOnDeliveryMovement(order);
-
     const io = req.app.get('io');
     if (io) {
-      // Emitimos SOLO al room de la sucursal del pedido para no cruzar avisos
-      // entre sucursales: la entrega únicamente la ve la caja de esa ubicación.
-      // El TPV se une a este room vía `join:location:admin` con su locationId
-      // (ver useNotifications.ts), así que la notificación llega a su caja.
-      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
-      io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
+      try {
+        // Only this location's cashier; private evidence images never leave the audit table.
+        io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('order:updated', order);
+        io.to(`restaurant:${order.restaurantId}:location:${order.locationId}:admins`).emit('orderUpdated');
+      } catch { console.warn('[delivery] order_socket_unavailable', { orderId: order.id }); }
     }
-
-    // Avisar al cliente el cambio (en camino / entregado). Solo si el estado
-    // realmente cambió, para no repetir push/WhatsApp. Best-effort.
-    if (existing.status !== order.status) {
-      notifyOrderStatus(order, order.status).catch((err) =>
-        console.error('[delivery] notifyOrderStatus:', err.message));
+    if (changed) {
+      notifyOrderStatus(order, order.status).catch(() => console.warn('[delivery] order_notification_unavailable', { orderId: order.id }));
     }
-
     res.json(order);
-  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+  } catch (error) { incidentError(req, res, error); }
 });
 
 router.get('/orders/:orderId/messages', authenticate, requireTenantAccess, async (req, res) => {
@@ -583,12 +594,48 @@ router.get('/', authenticate, requireTenantAccess, requireRole(...STAFF_ROLES), 
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
+// POST /api/delivery/:driverId/orders/:orderId/delivery-pin — solo verifica el
+// código que dicta el cliente (sin cambiar el pedido) para que la app avise al
+// momento si es incorrecto. La entrega lo vuelve a verificar al cerrar.
+router.post('/:driverId/orders/:orderId/delivery-pin', authenticate, requireTenantAccess, async (req, res) => {
+  try {
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
+    const order = await findDriverOrder(req, req.params.orderId, driver.id, { withPipeline: true });
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (!storeDeliveryPin.requiresPin(order)) return res.json({ ok: true, required: false });
+    const pin = req.body?.deliveryPin;
+    if (pin === undefined || pin === null || pin === '') {
+      return res.status(400).json({ error: 'Escribe el código de entrega', code: 'INVALID_DELIVERY_PIN' });
+    }
+    await storeDeliveryPin.assertCourierPin(order, pin);
+    res.json({ ok: true, required: true });
+  } catch (error) {
+    if (error instanceof StoreDeliveryPinError) return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    // Nunca registrar el cuerpo: contiene el PIN.
+    console.error('[delivery] delivery_pin_check_failed', { code: error?.code || 'INTERNAL_ERROR' });
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
 router.put('/:driverId/orders/:orderId/deliver', authenticate, requireTenantAccess, async (req, res) => {
   try {
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
     const existing = await findDriverOrder(req, req.params.orderId, driver.id);
     if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
+    // Ruta antigua: reinicia el cobro y no conoce el PIN del marketplace. Esos
+    // pedidos se entregan con PUT /:driverId/orders/:orderId/status.
+    if (existing.source === 'MARKETPLACE') {
+      return res.status(409).json({ error: 'Entrega este pedido del marketplace con el código del cliente desde la app.', code: 'PIN_CONFIRMATION_REQUIRED' });
+    }
+    if (req.user?.role === 'DELIVERY' && existing.status !== 'DELIVERED') {
+      try { await storeDeliveryPin.assertCourierPin(existing, req.body?.deliveryPin); }
+      catch (error) {
+        if (error instanceof StoreDeliveryPinError) return res.status(error.statusCode).json({ error: error.message, code: error.code });
+        throw error;
+      }
+    }
     const order = await prisma.order.update({
       where: { id: existing.id },
       data: {

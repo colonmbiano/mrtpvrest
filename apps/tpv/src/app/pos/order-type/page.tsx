@@ -37,6 +37,7 @@ import {
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 import { getLocalOrders, loadOpenOrders, loadOrder, mergeLocalPaidOrders, waitForOfflineHydration } from "@/lib/order-repository";
+import { ONLINE_SOURCES, chargeBlockedLabel, isMarketplaceOrder, itemsLocked, kitchenPrintReady, needsAcceptance } from "@/lib/webOrders";
 import { ORDER_TYPE_BADGE } from "@/lib/orderTypes";
 import { toast } from "sonner";
 
@@ -61,14 +62,16 @@ const ACTIVE_STATUSES = new Set([
   "READY",
   "OPEN",
   "ON_THE_WAY",
+  // Pedido del marketplace que espera que el comercio lo acepte.
+  "PENDING_MERCHANT",
 ]);
 
 const ORDER_TYPE_OF = (t: unknown): ExtendedOrderType =>
   t === "DINE_IN" || t === "TAKEOUT" || t === "DELIVERY" ? t : "TAKEOUT";
 
-// Orígenes que cuentan como "pedido web" (tienda en línea / WhatsApp), igual
-// que el layout del menú. Se marcan con color distinto en la lista.
-const ONLINE_SOURCES = new Set(["ONLINE", "STORE", "WHATSAPP"]);
+// Orígenes que cuentan como "pedido web" (tienda en línea / WhatsApp /
+// marketplace): lib/webOrders, igual que el layout del menú. Se marcan con
+// color distinto en la lista.
 
 // Etiqueta de tipo y "hace X" para el shape DrawerOrder del cajón (igual que
 // el layout del menú). Fuente única: lib/orderTypes.
@@ -102,7 +105,14 @@ export default function OrderTypePage() {
   // (order-type y menu nunca coexisten). De paso auto-imprime los pedidos web
   // entrantes: antes solo imprimían si el cajero estaba en /pos/menu.
   const autoPrintWebOrderRef = useRef<((order: any) => void) | null>(null);
-  useNotifications({ onOrderNew: (order) => autoPrintWebOrderRef.current?.(order) });
+  // Refresca la lista al llegar un pedido de mesa por confirmar (sin esperar
+  // al poll de 30 s); se conecta a fetchOpenOrders más abajo.
+  const refreshOpenOrdersRef = useRef<(() => void) | null>(null);
+  useNotifications({
+    onOrderNew: (order) => autoPrintWebOrderRef.current?.(order),
+    onTablePending: () => refreshOpenOrdersRef.current?.(),
+    onWebRound: (round) => autoPrintWebOrderRef.current?.(round),
+  });
   const unreadCount = useNotifStore((s) => s.unreadCount);
 
   // Config remota de la sucursal: define qué tipos de orden acepta. Un bar
@@ -117,6 +127,7 @@ export default function OrderTypePage() {
   const [showWebOrders, setShowWebOrders] = useState(false);
   const [showDrivers, setShowDrivers] = useState(false);
   const [acceptingWebId, setAcceptingWebId] = useState<string | null>(null);
+  const [rejectingWebId, setRejectingWebId] = useState<string | null>(null);
   // Cajón completo de tickets (juntar / repartidor / cocina) + config modal.
   const [showOrders, setShowOrders] = useState(false);
   const [deliveryDrivers, setDeliveryDrivers] = useState<
@@ -141,6 +152,9 @@ export default function OrderTypePage() {
       console.error("Error cargando cuentas abiertas:", err);
     }
   }, []);
+  useEffect(() => {
+    refreshOpenOrdersRef.current = fetchOpenOrders;
+  }, [fetchOpenOrders]);
 
   // Tickets COBRADOS del último mes (pestaña "Cobradas"). Local-first: pinta
   // el cache al instante y revalida contra el backend (scope=paid, payload
@@ -258,10 +272,14 @@ export default function OrderTypePage() {
     autoPrintWebOrderRef.current = async (order: any) => {
       const id: string | undefined = order?.id || order?.orderId;
       if (!id) return;
+      // Ronda por QR sumada a una cuenta (order:web-round): se imprime SOLO esa
+      // ronda, con su propio reclamo y dedupe. Mismo criterio que /pos/menu.
+      const roundId: string | undefined = order?.roundId || undefined;
+      const key = roundId ? `${id}:${roundId}` : id;
       const src = String(order?.source || "").toUpperCase();
       if (src && !ONLINE_SOURCES.has(src)) return;
-      if (printedWebOrders.current.has(id)) return;
-      printedWebOrders.current.add(id);
+      if (printedWebOrders.current.has(key)) return;
+      printedWebOrders.current.add(key);
       try {
         let full: any = null;
         try {
@@ -270,50 +288,63 @@ export default function OrderTypePage() {
         } catch {
           full = null;
         }
-        if (!full) { printedWebOrders.current.delete(id); return; }
+        if (!full) { printedWebOrders.current.delete(key); return; }
         const fullSrc = String(full?.source || "").toUpperCase();
-        if (fullSrc && !ONLINE_SOURCES.has(fullSrc)) {
-          printedWebOrders.current.delete(id);
+        // Mesa por QR sin confirmar: no va a cocina todavía. Al aceptarla llega
+        // otro order:new y ahí sí se imprime (por eso se quita del dedupe).
+        if ((!roundId && fullSrc && !ONLINE_SOURCES.has(fullSrc)) || full.awaitingTableConfirmation === true) {
+          printedWebOrders.current.delete(key);
           return;
         }
-        const items = orderItemsToTicketItems(full.items || []);
-        if (items.length === 0) { printedWebOrders.current.delete(id); return; }
+        // Marketplace: la comanda sale al aceptarlo, no al llegar. Sí se refresca la lista
+        // para que el pedido aparezca de inmediato en "Pedidos web" por aceptar.
+        if (!kitchenPrintReady(full)) {
+          printedWebOrders.current.delete(key);
+          fetchOpenOrders();
+          return;
+        }
+        const items = orderItemsToTicketItems(
+          (full.items || []).filter((it: any) => !roundId || it.roundId === roundId),
+        );
+        if (items.length === 0) { printedWebOrders.current.delete(key); return; }
         // IMPRIME-UNA-VEZ (server-side): si hay varias tablets con la caja
         // abierta, solo la primera que reclama imprime; las demás reciben
         // claimed:false y se saltan. Fail-open: si el reclamo falla por red,
         // imprime igual (mejor un posible doble que una comanda perdida).
         let mayPrint = true;
         try {
-          const claim = await api.post(`/api/orders/${id}/claim-kitchen-print`);
+          const claim = await api.post(`/api/orders/${id}/claim-kitchen-print`, roundId ? { roundId } : undefined);
           mayPrint = claim?.data?.claimed !== false;
         } catch {
           mayPrint = true;
         }
+        const folio = full.orderNumber ? `#${full.orderNumber}` : "";
+        const what = roundId ? `Ronda QR de la cuenta ${folio}` : `Pedido web ${folio}`;
         if (!mayPrint) {
-          const folioOtra = full.orderNumber ? `#${full.orderNumber}` : "";
-          toast.info(`Pedido web ${folioOtra} lo imprime otra caja`);
+          toast.info(`${what} lo imprime otra caja`);
           return; // otra pantalla se encarga; el id queda marcado, no se reintenta aquí
         }
         const res = await printKitchenTickets(printers, {
           orderNumber: full.orderNumber || String(full.id).slice(-6).toUpperCase(),
           orderType: full.orderType || null,
           tableNumber: full.table?.name || full.tableNumber || null,
-          customerName: full.customerName || full.user?.name || null,
+          // Ronda: el nombre de quien la pidió por QR, no el de la cuenta.
+          customerName: (roundId && order?.customerName) || full.customerName || full.user?.name || null,
           items,
-          paid: full.paymentStatus === "PAID" || full.cashCollected === true,
-          paymentMethod: full.paymentMethod || null,
+          // La ronda se cobra con la cuenta: sin banner de pago, como las rondas del TPV.
+          paid: roundId ? undefined : full.paymentStatus === "PAID" || full.cashCollected === true,
+          paymentMethod: roundId ? null : full.paymentMethod || null,
           config: kitchenConfig ?? undefined,
         });
-        const folio = full.orderNumber ? `#${full.orderNumber}` : "";
         if (res.ok > 0) {
-          toast.success(`🖨️ Pedido web ${folio} impreso en cocina`);
+          toast.success(`🖨️ ${what} impreso en cocina`);
           fetchOpenOrders();
         } else {
-          printedWebOrders.current.delete(id);
-          toast.warning(`Pedido web ${folio} recibido — no se pudo imprimir, revisa la impresora`);
+          printedWebOrders.current.delete(key);
+          toast.warning(`${what} recibido — no se pudo imprimir, revisa la impresora`);
         }
       } catch {
-        printedWebOrders.current.delete(id);
+        printedWebOrders.current.delete(key);
       }
     };
   }, [printers, kitchenConfig, fetchOpenOrders]);
@@ -341,6 +372,8 @@ export default function OrderTypePage() {
           driver: o.deliveryDriverName || null,
           takenBy: o.createdByName || null,
           isWeb: ONLINE_SOURCES.has(String(o.source || "").toUpperCase()),
+          chargeBlocked: chargeBlockedLabel(o),
+          itemsLocked: itemsLocked(o),
         };
       }),
     [openOrders],
@@ -386,18 +419,26 @@ export default function OrderTypePage() {
         orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
         customerName: o.customerName || o.user?.name || "Cliente",
         customerPhone: o.customerPhone || null,
+        source: o.source || null,
         orderType: o.orderType || "TAKEOUT",
         status: o.status,
         total: Number(o.total ?? 0),
         createdAt: o.createdAt,
         itemsCount: Array.isArray(o.items) ? o.items.length : 0,
         address: o.deliveryAddress || o.address?.street || null,
+        // Igual que el panel del menú: sin esto un pedido pagado en línea se veía "Por cobrar".
+        paymentStatus: o.paymentStatus || null,
+        paymentMethod: o.paymentMethod || null,
+        cashCollected: o.cashCollected === true,
+        tableName: o.table?.name || (o.tableNumber != null ? String(o.tableNumber) : null),
+        awaitingTableConfirmation: o.awaitingTableConfirmation === true,
       })),
     [webOrders],
   );
-  // Solo los PENDING requieren acción del cajero → ese es el número del badge.
+  // Solo los que esperan aceptación requieren acción del cajero → ese es el
+  // número del badge (PENDING de la tienda y PENDING_MERCHANT del marketplace).
   const pendingWebCount = useMemo(
-    () => webOrders.filter((o: any) => o.status === "PENDING").length,
+    () => webOrders.filter((o: any) => needsAcceptance(o)).length,
     [webOrders],
   );
 
@@ -429,7 +470,10 @@ export default function OrderTypePage() {
       o.tableId || o.table?.id || "",
       o.orderNumber ?? null,
     );
-    useActiveOrderStore.getState().setPendingAction(pendingAction);
+    // Marketplace: se abre en solo lectura y, si no se cobra en caja, sin cobro agendado.
+    const blocked = chargeBlockedLabel(o);
+    useActiveOrderStore.getState().setOrderLock({ itemsLocked: itemsLocked(o), chargeBlocked: blocked });
+    useActiveOrderStore.getState().setPendingAction(pendingAction === "pay" && blocked ? null : pendingAction);
     router.push("/pos/menu");
   };
 
@@ -540,14 +584,17 @@ export default function OrderTypePage() {
   // hideMoney del drawer de tickets en el menú).
   const hideMoney = employee?.role === "WAITER";
 
-  // Aceptar un pedido web: PENDING → CONFIRMED. Tras confirmar, refrescamos el
-  // listado para que salga de "nuevos por aceptar" y el badge baje.
+  // Aceptar un pedido web: PENDING / PENDING_MERCHANT → CONFIRMED. Tras
+  // confirmar, refrescamos el listado para que salga de "nuevos por aceptar" y
+  // el badge baje. Un pedido del marketplace imprime su comanda en este momento.
   const handleAcceptWebOrder = useCallback(
     async (id: string) => {
       setAcceptingWebId(id);
       try {
         await api.put(`/api/orders/${id}/status`, { status: "CONFIRMED" });
-        toast.success("Pedido web aceptado");
+        const fromMarketplace = isMarketplaceOrder(openOrders.find((o: any) => String(o.id) === id));
+        toast.success(fromMarketplace ? "Pedido del marketplace aceptado" : "Pedido web aceptado");
+        if (fromMarketplace) autoPrintWebOrderRef.current?.({ id, source: "MARKETPLACE" });
         fetchOpenOrders();
       } catch (err: any) {
         toast.error(
@@ -558,7 +605,32 @@ export default function OrderTypePage() {
         setAcceptingWebId(null);
       }
     },
-    [fetchOpenOrders],
+    [fetchOpenOrders, openOrders],
+  );
+
+  // Rechazar un pedido por aceptar → CANCELLED. Del marketplace (PENDING_MERCHANT):
+  // el backend avisa al cliente y un pago en línea ya cobrado se reembolsa aparte.
+  // De mesa por QR que nadie espera en el local (PENDING): el backend no libera la
+  // mesa (nunca la ocupó).
+  const handleRejectWebOrder = useCallback(
+    async (id: string) => {
+      const fromMarketplace = isMarketplaceOrder(openOrders.find((o: any) => String(o.id) === id));
+      if (fromMarketplace && !confirm("¿Rechazar este pedido del marketplace? Se avisará al cliente.")) return;
+      setRejectingWebId(id);
+      try {
+        await api.put(`/api/orders/${id}/status`, { status: "CANCELLED" });
+        toast.success(fromMarketplace ? "Pedido del marketplace rechazado" : "Pedido de mesa rechazado");
+        fetchOpenOrders();
+      } catch (err: any) {
+        toast.error(
+          "Error al rechazar: " +
+            (err?.response?.data?.error || err?.message || "fallo desconocido"),
+        );
+      } finally {
+        setRejectingWebId(null);
+      }
+    },
+    [fetchOpenOrders, openOrders],
   );
 
   // Ver detalle del pedido web → entra a la cuenta en el catálogo (igual que el
@@ -800,6 +872,8 @@ export default function OrderTypePage() {
     itemsCount: Array.isArray(o.items) ? o.items.length : 0,
     driver: o.deliveryDriverName || undefined,
     needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
+    chargeBlocked: chargeBlockedLabel(o),
+    itemsLocked: itemsLocked(o),
   }));
   const drawerPaidOrders: DrawerOrder[] = paidOrders.map((p) => ({
     id: p.id,
@@ -1029,6 +1103,8 @@ export default function OrderTypePage() {
         onShowDetail={handleShowWebDetail}
         onAccept={handleAcceptWebOrder}
         acceptingId={acceptingWebId}
+        onReject={handleRejectWebOrder}
+        rejectingId={rejectingWebId}
         hideMoney={hideMoney}
       />
 
