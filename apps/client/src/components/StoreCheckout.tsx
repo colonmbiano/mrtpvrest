@@ -827,9 +827,8 @@ export default function StoreCheckout({
                 ))}
               </div>
             </div>
-            </>)}
-
             </OptionalSection>
+            </>)}
 
             <OptionalSection collapsed={fromTableQr} title="Forma de pago al terminar">
             {/* Método de pago */}

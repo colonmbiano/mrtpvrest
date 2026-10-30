@@ -89,3 +89,47 @@ test('controles utilizables y sin desbordamiento en celular estrecho', async ({ 
   await expect(page.getByRole('button', { name: /ENVIAR A COCINA/ })).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath('confirmacion-320.png') });
 });
+
+async function prepareOrder(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: 'Agregar Hamburguesa clásica', exact: true }).click();
+  await page.getByRole('button', { name: /Revisar pedido/ }).click();
+  await page.getByLabel('Tu nombre para identificar el pedido').fill('Ana');
+}
+
+test('pedido retenido muestra espera y después mesa rechazada', async ({ page }) => {
+  await prepareOrder(page);
+  let cancelled = false;
+  await page.route('**/api/store/orders?*', route => route.fulfill({ json: {
+    id: 'held', orderNumber: 'HELD-001', status: 'PENDING', awaitingTableConfirmation: true,
+  } }));
+  await page.route('**/api/store/orders/by-number/**', route => route.fulfill({ json: {
+    status: cancelled ? 'CANCELLED' : 'PENDING', awaitingTableConfirmation: !cancelled,
+  } }));
+  await page.getByRole('button', { name: /ENVIAR A COCINA/ }).click();
+  await expect(page.getByText('Esperando que el personal confirme tu mesa', { exact: true })).toBeVisible();
+  cancelled = true;
+  await expect(page.getByText('No pudimos confirmar tu mesa. Pide ayuda al personal del local.')).toBeVisible({ timeout: 12000 });
+  await expect(page.getByText('Esperando que el personal confirme tu mesa', { exact: true })).toHaveCount(0);
+});
+
+test('caja cerrada muestra el error legible en la confirmación única', async ({ page }) => {
+  await prepareOrder(page);
+  const error = 'El restaurante aún no ha abierto caja. Pide ayuda al personal.';
+  await page.route('**/api/store/orders?*', route => route.fulfill({ status: 409, json: { code: 'NO_ACTIVE_SHIFT', error } }));
+  await page.getByRole('button', { name: /ENVIAR A COCINA/ }).click();
+  await expect(page.getByText(error, { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Confirma tu pedido' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '¡Pedido enviado!' })).toHaveCount(0);
+});
+
+test('ronda de cuenta abierta se confirma sin aviso de espera', async ({ page }) => {
+  await prepareOrder(page);
+  await page.route('**/api/store/orders?*', route => route.fulfill({ json: {
+    id: 'tab', orderNumber: 'TAB-001', status: 'PREPARING', roundId: 'qr-round-2', awaitingTableConfirmation: false,
+  } }));
+  await page.route('**/api/store/orders/by-number/**', route => route.fulfill({ json: { status: 'PREPARING', awaitingTableConfirmation: false } }));
+  await page.getByRole('button', { name: /ENVIAR A COCINA/ }).click();
+  await expect(page.getByText('Orden #TAB-001')).toBeVisible();
+  await expect(page.getByText('Esperando que el personal confirme tu mesa', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/No pudimos confirmar tu mesa/)).toHaveCount(0);
+});

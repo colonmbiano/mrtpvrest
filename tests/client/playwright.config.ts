@@ -14,6 +14,6 @@ export default defineConfig({
   ],
   webServer: [
     { command: 'node tests/client/mock-store.mjs', cwd: '../..', url: 'http://127.0.0.1:4318/api/store/info', reuseExistingServer: false },
-    { command: 'NEXT_PUBLIC_API_URL=http://127.0.0.1:4318 ./node_modules/.bin/next dev --port 4317 --hostname 127.0.0.1 --webpack', cwd: '../../apps/client', url: 'http://127.0.0.1:4317', timeout: 180_000, reuseExistingServer: false },
+    { command: 'node node_modules/next/dist/bin/next dev --port 4317 --hostname 127.0.0.1 --webpack', env: { NEXT_PUBLIC_API_URL: 'http://127.0.0.1:4318' }, cwd: '../../apps/client', url: 'http://127.0.0.1:4317', timeout: 180_000, reuseExistingServer: false },
   ],
 });
