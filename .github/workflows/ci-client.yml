@@ -13,12 +13,14 @@ on:
     branches: [master]
     paths:
       - "apps/client/**"
+      - "tests/client/**"
       - "packages/**"
       - ".github/workflows/ci-client.yml"
   pull_request:
     branches: [master]
     paths:
       - "apps/client/**"
+      - "tests/client/**"
       - "packages/**"
       - ".github/workflows/ci-client.yml"
 
@@ -64,6 +66,12 @@ jobs:
 
       - name: Typecheck tienda online
         run: pnpm --filter @mrtpvrest/client run type-check
+
+      - name: Instalar Chromium para pruebas del menú QR
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Probar pedido QR en móvil y escritorio (API simulada)
+        run: pnpm test:client
 
       # NEXT_PUBLIC_API_URL se inlinea en build-time: sin ella el bundle
       # quedaría apuntando al default y el build no representaría a producción.
