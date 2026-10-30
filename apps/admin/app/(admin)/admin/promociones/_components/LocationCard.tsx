@@ -1,5 +1,5 @@
 "use client";
-import { Settings2, Zap } from "lucide-react";
+import { Settings2, Zap, Eye } from "lucide-react";
 import { Card, Pill, Toggle } from "@/components/ds";
 import { type Location } from "./types";
 
@@ -7,16 +7,20 @@ export function LocationCard({
   loc,
   savingLoc,
   triggering,
+  dryRunLoading,
   onToggle,
   onConfigure,
   onTrigger,
+  onDryRun,
 }: {
   loc: Location;
   savingLoc: string | null;
   triggering: string | null;
+  dryRunLoading: boolean;
   onToggle: (loc: Location) => void;
   onConfigure: (loc: Location) => void;
   onTrigger: (locationId: string) => void;
+  onDryRun: (loc: Location) => void;
 }) {
   return (
     <Card className="p-4" style={loc.autoPromoEnabled ? { borderColor: "var(--brand-primary)" } : undefined}>
@@ -56,23 +60,34 @@ export function LocationCard({
               <div className="mt-0.5 font-mono text-[8.5px] uppercase tracking-wider text-tx-dim">Tope</div>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => onConfigure(loc)}
+                className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-ds-md text-xs font-bold text-tx"
+                style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+              >
+                <Settings2 size={15} /> Configurar
+              </button>
+              <button
+                type="button"
+                onClick={() => onTrigger(loc.id)}
+                disabled={triggering === loc.id}
+                className="flex min-h-11 items-center justify-center gap-1.5 rounded-ds-md px-4 text-xs font-bold text-primary disabled:opacity-50"
+                style={{ background: "var(--accent-soft)" }}
+              >
+                <Zap size={15} /> {triggering === loc.id ? "…" : "Analizar"}
+              </button>
+            </div>
             <button
               type="button"
-              onClick={() => onConfigure(loc)}
-              className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-ds-md text-xs font-bold text-tx"
-              style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)" }}
+              onClick={() => onDryRun(loc)}
+              disabled={dryRunLoading}
+              className="flex min-h-10 items-center justify-center gap-1.5 rounded-ds-md text-xs font-bold text-tx-hi disabled:opacity-50"
+              style={{ background: "var(--info-soft)", border: "1px solid var(--info)" }}
             >
-              <Settings2 size={15} /> Configurar
-            </button>
-            <button
-              type="button"
-              onClick={() => onTrigger(loc.id)}
-              disabled={triggering === loc.id}
-              className="flex min-h-11 items-center justify-center gap-1.5 rounded-ds-md px-4 text-xs font-bold text-primary disabled:opacity-50"
-              style={{ background: "var(--accent-soft)" }}
-            >
-              <Zap size={15} /> {triggering === loc.id ? "…" : "Analizar"}
+              <Eye size={14} /> {dryRunLoading ? "Previsualizando…" : "Previsualizar"}
             </button>
           </div>
         </div>

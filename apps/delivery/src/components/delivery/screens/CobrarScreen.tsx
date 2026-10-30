@@ -2,6 +2,7 @@
 // handoff/screens/CobrarScreen.tsx
 import React, { useState } from 'react';
 import { C, S } from '@/lib/tokens';
+import { marketplaceCollection } from '@/lib/storeDeliveryPin';
 
 interface CobrarScreenProps {
   order: any;
@@ -11,7 +12,8 @@ interface CobrarScreenProps {
   // 'TRANSFER_PENDING' = el cliente dijo que transfiere pero el dinero aún no
   //                       llega: queda "por cobrar" como transferencia (no se
   //                       da por pagado) hasta que la caja lo confirme.
-  onConfirm: (method: 'CASH' | 'TRANSFER' | 'TRANSFER_PENDING' | 'PENDING') => void;
+  // undefined          = pedido del marketplace ya pagado en línea: no se cobra.
+  onConfirm: (method?: 'CASH' | 'TRANSFER' | 'TRANSFER_PENDING' | 'PENDING') => void;
 }
 
 export function CobrarScreen({ order, onBack, onConfirm }: CobrarScreenProps) {
@@ -20,6 +22,48 @@ export function CobrarScreen({ order, onBack, onConfirm }: CobrarScreenProps) {
   const total = order?.total || 0;
   const received = parseFloat(cashReceived) || 0;
   const change = received > total ? received - total : 0;
+  // Marketplace que entrega la tienda: el cobro ya quedó fijado en la orden.
+  const collection = marketplaceCollection(order);
+
+  if (collection === 'PREPAID') {
+    return (
+      <div style={{ minHeight: '100vh', background: C.bg, fontFamily: C.fontBody }}>
+        <div style={S.header}>
+          <button onClick={onBack} style={S.iconBtn} aria-label="Volver">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+              <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+            </svg>
+          </button>
+          <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: C.text }}>Finalizar Entrega</div>
+        </div>
+        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 40 }}>
+          <div style={{
+            background: C.greenSoft, border: '1px solid rgba(136,214,108,0.25)',
+            borderRadius: 24, padding: '32px 20px', textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: C.green, letterSpacing: '0.22em', textTransform: 'uppercase', marginBottom: 10 }}>
+              Pagado en línea
+            </div>
+            <div style={{ fontFamily: C.fontDisplay, fontSize: 30, fontWeight: 700, color: C.text, lineHeight: 1.1 }}>
+              No cobres nada
+            </div>
+            <div style={{ fontSize: 11, color: C.textMuted, marginTop: 8 }}>
+              {order?.customerName} · #{order?.orderNumber}
+            </div>
+          </div>
+          <button onClick={() => onConfirm()} style={S.btnSuccess}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            CONFIRMAR ENTREGA
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: C.fontBody }}>
@@ -56,8 +100,8 @@ export function CobrarScreen({ order, onBack, onConfirm }: CobrarScreenProps) {
           </div>
         </div>
 
-        {/* Payment method */}
-        <div style={S.card}>
+        {/* Payment method — el pedido del marketplace en efectivo solo se cobra en efectivo */}
+        {collection !== 'CASH_ONLY' && <div style={S.card}>
           <div style={S.sectionLabel}>Método de pago</div>
           <div style={{ display: 'flex', gap: 10 }}>
             {([
@@ -81,7 +125,7 @@ export function CobrarScreen({ order, onBack, onConfirm }: CobrarScreenProps) {
               );
             })}
           </div>
-        </div>
+        </div>}
 
         {/* Cash input */}
         {payMethod === 'CASH' && (
@@ -165,8 +209,8 @@ export function CobrarScreen({ order, onBack, onConfirm }: CobrarScreenProps) {
         )}
 
         {/* Entregar sin cobrar — deja el pedido abierto (por cobrar) para que
-            la caja confirme el cobro más tarde. */}
-        <button
+            la caja confirme el cobro más tarde. No aplica al marketplace. */}
+        {!collection && <button
           onClick={() => onConfirm('PENDING')}
           style={{
             height: 56, borderRadius: 16, cursor: 'pointer',
@@ -181,7 +225,7 @@ export function CobrarScreen({ order, onBack, onConfirm }: CobrarScreenProps) {
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
           Entregar sin cobrar
-        </button>
+        </button>}
       </div>
     </div>
   );

@@ -57,6 +57,7 @@ import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import ChangeOrderTypeModal from "@/components/pos/ChangeOrderTypeModal";
 import { ORDER_TYPE_BADGE as ORDER_TYPE_LABEL } from "@/lib/orderTypes";
+import { ONLINE_SOURCES, chargeBlockedLabel, isMarketplaceOrder, itemsLocked, kitchenPrintReady } from "@/lib/webOrders";
 
 const ACTIVE_STATUSES = new Set([
   "PENDING",
@@ -69,13 +70,14 @@ const ACTIVE_STATUSES = new Set([
   // fantasma que nunca coincidía, por lo que el pedido asignado desaparecía
   // de "Tickets abiertos"). Sigue abierto hasta DELIVERED/CANCELLED.
   "ON_THE_WAY",
+  // Pedido del marketplace que espera que el comercio lo acepte.
+  "PENDING_MERCHANT",
 ]);
 
-// Orígenes que cuentan como "pedido web" (tienda en línea). KIOSK queda fuera
-// porque tiene su propio flujo de notificación. WHATSAPP entra aquí para que los
-// pedidos creados por el bridge de WhatsApp (packages/wa-orders) aparezcan en el
-// panel "Pedidos Web" y el cajero los confirme antes de cocina.
-const ONLINE_SOURCES = new Set(["ONLINE", "STORE", "WHATSAPP"]);
+// Orígenes que cuentan como "pedido web" (tienda en línea, WhatsApp y
+// marketplace): lib/webOrders. WHATSAPP entra para que los pedidos del bridge
+// (packages/wa-orders) aparezcan en el panel "Pedidos Web" y el cajero los
+// confirme antes de cocina; el marketplace, para que el comercio los acepte.
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -580,6 +582,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       o.tableId || o.table?.id || "",
       o.orderNumber ?? null,
     );
+    // Marketplace: solo lectura y, si toca, sin cobro en caja.
+    useActiveOrderStore.getState().setOrderLock({ itemsLocked: itemsLocked(o), chargeBlocked: chargeBlockedLabel(o) });
     setShowOrders(false);
     setShowWebOrders(false);
     setMobileView("menu");
@@ -589,9 +593,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const handleOpenOrderInCatalog = async (o: any) => {
     const full = await fetchFullOrder(o);
     openOrderInCatalog(full);
-    toast.success(
-      "Ticket abierto: agrega productos o usa el menú para reimprimir",
-    );
+    toast.success(itemsLocked(full)
+      ? "Pedido del marketplace abierto en solo lectura: se puede ver e imprimir"
+      : "Ticket abierto: agrega productos o usa el menú para reimprimir");
   };
 
   const handleOpenPayment = async (o: any) => {
@@ -702,6 +706,13 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         // otro order:new y ahí sí se imprime (por eso se quita del dedupe).
         if ((!roundId && fullSrc && !ONLINE_SOURCES.has(fullSrc)) || full?.awaitingTableConfirmation === true) {
           printedWebOrders.current.delete(key);
+          return;
+        }
+        // Marketplace: la comanda sale al aceptarlo, no al llegar. Sí se refresca la lista
+        // para que el pedido aparezca de inmediato en "Pedidos web" por aceptar.
+        if (!kitchenPrintReady(full)) {
+          printedWebOrders.current.delete(key);
+          fetchOpenOrders();
           return;
         }
         const items = orderItemsToTicketItems(
@@ -1154,6 +1165,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     driver: o.deliveryDriverName || undefined,
     needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
     takenBy: o.createdByName || undefined,
+    chargeBlocked: chargeBlockedLabel(o),
+    itemsLocked: itemsLocked(o),
   }));
 
   // Tickets cobrados → shape del drawer. El "createdAt" del tile muestra la
@@ -1183,6 +1196,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
     customerName: o.customerName || o.user?.name || "Cliente",
     customerPhone: o.customerPhone || null,
+    source: o.source || null,
     orderType: o.orderType || "TAKEOUT",
     status: o.status,
     total: Number(o.total ?? 0),
@@ -1486,14 +1500,17 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     }
   }, []);
 
-  // Aceptar un pedido web: PENDING → CONFIRMED. Tras confirmar, refrescamos el
-  // listado para que salga de "nuevos por aceptar" y el badge baje.
+  // Aceptar un pedido web: PENDING / PENDING_MERCHANT → CONFIRMED. Tras
+  // confirmar, refrescamos el listado para que salga de "nuevos por aceptar" y
+  // el badge baje. Un pedido del marketplace imprime su comanda en este momento.
   const handleAcceptWebOrder = useCallback(
     async (id: string) => {
       setAcceptingWebId(id);
       try {
         await api.put(`/api/orders/${id}/status`, { status: "CONFIRMED" });
-        toast.success("Pedido web aceptado");
+        const fromMarketplace = isMarketplaceOrder(openOrders.find((o: any) => o.id === id));
+        toast.success(fromMarketplace ? "Pedido del marketplace aceptado" : "Pedido web aceptado");
+        if (fromMarketplace) autoPrintWebOrderRef.current?.({ id, source: "MARKETPLACE" });
         fetchOpenOrders();
       } catch (err: any) {
         toast.error(
@@ -1504,17 +1521,21 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         setAcceptingWebId(null);
       }
     },
-    [fetchOpenOrders],
+    [fetchOpenOrders, openOrders],
   );
 
-  // Rechazar un pedido de mesa por QR que nadie está esperando en el local:
-  // PENDING → CANCELLED. El backend no libera la mesa (nunca la ocupó).
+  // Rechazar un pedido por aceptar → CANCELLED. Del marketplace (PENDING_MERCHANT):
+  // el backend avisa al cliente y un pago en línea ya cobrado se reembolsa aparte.
+  // De mesa por QR que nadie espera en el local (PENDING): el backend no libera la
+  // mesa (nunca la ocupó).
   const handleRejectWebOrder = useCallback(
     async (id: string) => {
+      const fromMarketplace = isMarketplaceOrder(openOrders.find((o: any) => o.id === id));
+      if (fromMarketplace && !confirm("¿Rechazar este pedido del marketplace? Se avisará al cliente.")) return;
       setRejectingWebId(id);
       try {
         await api.put(`/api/orders/${id}/status`, { status: "CANCELLED" });
-        toast.success("Pedido de mesa rechazado");
+        toast.success(fromMarketplace ? "Pedido del marketplace rechazado" : "Pedido de mesa rechazado");
         fetchOpenOrders();
       } catch (err: any) {
         toast.error(
@@ -1525,7 +1546,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         setRejectingWebId(null);
       }
     },
-    [fetchOpenOrders],
+    [fetchOpenOrders, openOrders],
   );
 
   // Los pedidos web también entran directo al catálogo para continuar la

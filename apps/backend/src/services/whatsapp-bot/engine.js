@@ -304,7 +304,7 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
       if (!yes) return result(m.invalidConfirm, STATES.CONFIRM);
 
       try {
-        const { order, estimatedMinutes } = await deps.createOrder(data);
+        const { order, estimatedMinutes, deliveryPin } = await deps.createOrder(data);
         const fresh = freshData(data.phone, order.id);
         const replies = [
           m.orderCreated({
@@ -312,6 +312,7 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
             total: order.total,
             orderType: order.orderType,
             estimatedMinutes,
+            deliveryPin,
           }),
         ];
         // Pago en línea: generamos el link de checkout y lo enviamos después.

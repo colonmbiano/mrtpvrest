@@ -30,6 +30,11 @@ interface ActiveOrderState {
   // Intención pendiente al abrir una cuenta desde la pantalla de inicio
   // (Imprimir / Cobrar). NO se persiste: se consume una sola vez en el menú.
   pendingAction: PendingAction;
+  // Pedido del marketplace abierto: sus productos no se editan (itemsLocked) y, si
+  // chargeBlocked trae motivo ("Por aceptar", "Pagado en línea"…), no se cobra en caja.
+  // Lo fija quien abre la cuenta y lo confirma el ticket al cargar la orden. En memoria.
+  itemsLocked: boolean;
+  chargeBlocked: string | null;
 
   setActiveOrder: (
     orderId: string,
@@ -37,6 +42,7 @@ interface ActiveOrderState {
     orderNumber?: string | null
   ) => void;
   bumpRoundsRevision: () => void;
+  setOrderLock: (lock: { itemsLocked: boolean; chargeBlocked: string | null }) => void;
   setPendingAction: (action: PendingAction) => void;
   /** Lee y limpia la intención pendiente (consumo atómico, dispara una vez). */
   consumePendingAction: () => PendingAction;
@@ -51,16 +57,23 @@ export const useActiveOrderStore = create<ActiveOrderState>()(
       activeOrderNumber: null,
       roundsRevision: 0,
       pendingAction: null,
+      itemsLocked: false,
+      chargeBlocked: null,
 
+      // Cambiar de cuenta borra el bloqueo de la anterior.
       setActiveOrder: (orderId, tableId, orderNumber = null) =>
         set({
           activeOrderId: orderId,
           activeTableId: tableId,
           activeOrderNumber: orderNumber,
+          itemsLocked: false,
+          chargeBlocked: null,
         }),
 
       bumpRoundsRevision: () =>
         set((state) => ({ roundsRevision: state.roundsRevision + 1 })),
+
+      setOrderLock: ({ itemsLocked, chargeBlocked }) => set({ itemsLocked, chargeBlocked }),
 
       setPendingAction: (action) => set({ pendingAction: action }),
 
@@ -76,6 +89,8 @@ export const useActiveOrderStore = create<ActiveOrderState>()(
           activeTableId: null,
           activeOrderNumber: null,
           pendingAction: null,
+          itemsLocked: false,
+          chargeBlocked: null,
         }),
     }),
     {

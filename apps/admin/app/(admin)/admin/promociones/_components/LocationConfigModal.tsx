@@ -1,6 +1,6 @@
 "use client";
 import { Modal, Field, Input, Button } from "@/components/ds";
-import { type ConfigDraft, type Location } from "./types";
+import { type ConfigDraft, type Location, DAY_LABELS, ALL_DAYS } from "./types";
 
 export function LocationConfigModal({
   loc,
@@ -64,6 +64,27 @@ export function LocationConfigModal({
           value={draft.autoPromoMaxItems}
           onChange={(e) => onChange({ autoPromoMaxItems: parseInt(e.target.value) || 0 })}
         />
+      </Field>
+
+      <Field label="Días activos" hint="Selecciona los días en que las promociones deben estar activas.">
+        <div className="grid grid-cols-2 gap-2">
+          {ALL_DAYS.map((day) => (
+            <label key={day} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={draft.activeDays.includes(day)}
+                onChange={(e) => {
+                  const newDays = e.target.checked
+                    ? [...draft.activeDays, day]
+                    : draft.activeDays.filter((d) => d !== day);
+                  onChange({ activeDays: newDays });
+                }}
+                className="h-4 w-4 rounded cursor-pointer"
+              />
+              <span className="text-sm">{DAY_LABELS[day]}</span>
+            </label>
+          ))}
+        </div>
       </Field>
     </Modal>
   );

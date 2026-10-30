@@ -1,4 +1,7 @@
 'use client';
+import { isMarketplaceCatalogEnabled } from '@/lib/config';
+import Link from 'next/link';
+
 // Boundary de error del storefront: un fallo transitorio (red / 5xx al cargar la
 // tienda) muestra esto con un botón de reintento, en vez de degradar a un 404
 // permanente. reset() re-renderiza el segmento.
@@ -21,6 +24,11 @@ export default function StoreError({ reset }: { error: Error & { digest?: string
         >
           Reintentar
         </button>
+        {isMarketplaceCatalogEnabled() && (
+          <Link href="/" className="mt-6 block font-bold text-[#9a3412] underline underline-offset-2">
+            Volver al catálogo
+          </Link>
+        )}
       </div>
     </main>
   );

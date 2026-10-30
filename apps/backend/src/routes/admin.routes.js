@@ -2,6 +2,7 @@ const express = require('express')
 const prisma  = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const { resolveTrialDays } = require('../lib/promo')
+const { locationCoordinates } = require('../lib/location-coordinates')
 const router  = express.Router()
 
 // Tenant de sistema — se excluye del listado visible de marcas.
@@ -477,10 +478,13 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
   try {
     const { name, slug, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount, hasDelivery, hasTakeaway, hasTableMap, hasOpenTabs } = req.body;
     const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const coordinates = locationCoordinates(req.body);
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
       include: { _count: { select: { locations: true } } }
     });
+    if (!restaurant) return res.status(404).json({ error: 'Restaurante no encontrado' });
     if (restaurant._count.locations >= restaurant.maxLocations) {
       return res.status(403).json({ error: `Límite de sucursales alcanzado (${restaurant.maxLocations}).` });
     }
@@ -492,6 +496,7 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
         slug: slug.toLowerCase(),
         address,
         phone,
+        ...coordinates,
         ...(autoPromoEnabled !== undefined && { autoPromoEnabled }),
         ...(autoPromoThreshold !== undefined && { autoPromoThreshold }),
         ...(autoPromoDiscount !== undefined && { autoPromoDiscount }),
@@ -503,7 +508,7 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
       },
     });
     res.json(location);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.statusCode || 500).json({ error: e.message, ...(e.code === 'INVALID_LOCATION_COORDINATES' && { errorCode: e.code }) }); }
 });
 
 router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
@@ -514,6 +519,7 @@ router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, as
     if (!location || location.restaurantId !== restaurantId)
       return res.status(404).json({ error: 'Sucursal no encontrada' });
     const data = {
+      ...locationCoordinates(req.body),
       ...(name && { name }),
       ...(address !== undefined && { address }),
       ...(phone !== undefined && { phone }),
@@ -535,7 +541,7 @@ router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, as
           data: { isCentralWarehouse: false },
         });
       }
-      return tx.location.update({ where: { id: req.params.id }, data });
+      return tx.location.update({ where: { id: req.params.id, restaurantId }, data });
     });
 
     // Si cambió el descuento, re-aplicar el nuevo % a las promos vigentes para
@@ -556,7 +562,7 @@ router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, as
     }
 
     res.json(updated);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.statusCode || 500).json({ error: e.message, ...(e.code === 'INVALID_LOCATION_COORDINATES' && { errorCode: e.code }) }); }
 });
 
 router.delete('/locations/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
