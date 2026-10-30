@@ -1,8 +1,13 @@
 'use client';
 // handoff/screens/DetailScreen.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { C, S, ORDER_STATUS_CONFIG } from '@/lib/tokens';
 import { whatsappUrl } from '@/lib/phone';
+import { PinVerificationModal } from '../PinVerificationModal';
+import { DeliveryEvidenceModal } from '../DeliveryEvidenceModal';
+import { DeliveryIncidentModal } from '../DeliveryIncidentModal';
+import { confirmPickupPin, confirmDeliveryPin } from '@/lib/marketplaceDispatch';
+import { isNetworkOrder } from '@/lib/storeDeliveryPin';
 
 interface DetailScreenProps {
   order: any;
@@ -10,6 +15,8 @@ interface DetailScreenProps {
   onBack: () => void;
   onCobrar: () => void;
   onChat: () => void;
+  onPickupConfirmed?: () => void;
+  onDeliveryConfirmed?: () => void;
 }
 
 function BackHeader({ title, onBack, right }: { title: string; onBack: () => void; right?: React.ReactNode }) {
@@ -27,9 +34,43 @@ function BackHeader({ title, onBack, right }: { title: string; onBack: () => voi
   );
 }
 
-export function DetailScreen({ order, orderDetail, onBack, onCobrar, onChat }: DetailScreenProps) {
+export function DetailScreen({
+  order,
+  orderDetail,
+  onBack,
+  onCobrar,
+  onChat,
+  onPickupConfirmed,
+  onDeliveryConfirmed,
+}: DetailScreenProps) {
   const items = (order?.items?.length ? order.items : orderDetail?.items) || [];
   const total = order?.total || 0;
+  const [showPickupPin, setShowPickupPin] = useState(false);
+  const [showDeliveryPin, setShowDeliveryPin] = useState(false);
+  const [showIncidentModal, setShowIncidentModal] = useState<'CUSTOMER_UNREACHABLE' | 'WRONG_ADDRESS' | null>(null);
+  const [showEvidenceModal, setShowEvidenceModal] = useState(false);
+  // Red del marketplace: PIN verificado por el despacho (tarea). Pedidos propios y los
+  // del marketplace que entrega la tienda: el código del cliente lo pide page.tsx
+  // antes de cobrar (requiresDeliveryPin).
+  const isMarketplaceOrder = isNetworkOrder(order);
+
+  const handlePickupPinConfirm = async (pin: string) => {
+    const result = await confirmPickupPin(order.courierId || '', order.taskId || order.id, pin);
+    if (result.success) {
+      setShowPickupPin(false);
+      onPickupConfirmed?.();
+    }
+    return result;
+  };
+
+  const handleDeliveryPinConfirm = async (pin: string) => {
+    const result = await confirmDeliveryPin(order.courierId || '', order.taskId || order.id, pin);
+    if (result.success) {
+      setShowDeliveryPin(false);
+      onDeliveryConfirmed?.();
+    }
+    return result;
+  };
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: C.fontBody }}>
@@ -142,32 +183,155 @@ export function DetailScreen({ order, orderDetail, onBack, onCobrar, onChat }: D
 
         {/* Excepciones */}
         <div style={{ display: 'flex', gap: 8 }}>
-          {[
-            { label: 'No contesta',  color: C.coral, bg: C.coralSoft, borderC: 'rgba(255,92,51,0.28)' },
-            { label: 'Dir. errónea', color: C.warn,  bg: C.warnSoft,  borderC: 'rgba(245,158,11,0.28)' },
-          ].map((e, i) => (
-            <button key={i} style={{
+          <button
+            onClick={() => setShowIncidentModal('CUSTOMER_UNREACHABLE')}
+            style={{
               flex: 1, height: 42, borderRadius: 12, cursor: 'pointer',
-              border: `1px solid ${e.borderC}`, background: e.bg,
-              fontSize: 9, fontWeight: 700, color: e.color,
+              border: `1px solid rgba(255,92,51,0.28)`, background: C.coralSoft,
+              fontSize: 9, fontWeight: 700, color: C.coral,
               letterSpacing: '0.08em', textTransform: 'uppercase',
               fontFamily: C.fontBody,
-            }}>{e.label}</button>
-          ))}
+            }}
+          >
+            No contesta
+          </button>
+          <button
+            onClick={() => setShowIncidentModal('WRONG_ADDRESS')}
+            style={{
+              flex: 1, height: 42, borderRadius: 12, cursor: 'pointer',
+              border: `1px solid rgba(245,158,11,0.28)`, background: C.warnSoft,
+              fontSize: 9, fontWeight: 700, color: C.warn,
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+              fontFamily: C.fontBody,
+            }}
+          >
+            Dir. errónea
+          </button>
         </div>
 
-        {/* CTA */}
-        {order?.status === 'ON_THE_WAY' && (
-          <button onClick={onCobrar} style={S.btnSuccess}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-              strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-              <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
-            CONFIRMAR ENTREGA
-          </button>
-        )}
+        {/* CTA — Recolección o Entrega */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {order?.status === 'READY' && (
+            <button
+              onClick={() => setShowPickupPin(true)}
+              style={{
+                ...S.btnSuccess,
+                background: C.amber,
+                boxShadow: `0 8px 24px rgba(255, 184, 77, 0.3)`,
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                width="18"
+                height="18"
+              >
+                <circle cx="9" cy="21" r="1" />
+                <circle cx="20" cy="21" r="1" />
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+              </svg>
+              RECOGER PEDIDO (PIN)
+            </button>
+          )}
+
+          {order?.status === 'ON_THE_WAY' && isMarketplaceOrder && (
+            <button
+              onClick={() => setShowDeliveryPin(true)}
+              style={{
+                ...S.btnSuccess,
+                background: C.green,
+                boxShadow: `0 8px 24px rgba(136, 214, 108, 0.3)`,
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                width="18"
+                height="18"
+              >
+                <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              ENTREGAR PEDIDO (PIN)
+            </button>
+          )}
+
+          {/* Pedidos propios: cobrar y entregar (con código del cliente si la tienda lo usa) */}
+          {order?.status === 'ON_THE_WAY' && !isMarketplaceOrder && (
+            <button onClick={onCobrar} style={S.btnSuccess}>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                width="18"
+                height="18"
+              >
+                <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              {order?.requiresDeliveryPin ? 'ENTREGAR CON CÓDIGO' : 'CONFIRMAR ENTREGA'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* PIN Modals */}
+      {showPickupPin && (
+        <PinVerificationModal
+          type="PICKUP"
+          orderNumber={order?.orderNumber || ''}
+          targetName={order?.store?.name || 'la tienda'}
+          onConfirm={handlePickupPinConfirm}
+          onCancel={() => setShowPickupPin(false)}
+        />
+      )}
+
+      {showDeliveryPin && (
+        <PinVerificationModal
+          type="DELIVERY"
+          orderNumber={order?.orderNumber || ''}
+          targetName={order?.customerName || 'el cliente'}
+          onConfirm={handleDeliveryPinConfirm}
+          onCancel={() => setShowDeliveryPin(false)}
+        />
+      )}
+
+      {/* Evidence Modal */}
+      {showEvidenceModal && (
+        <DeliveryEvidenceModal
+          orderId={order?.id || ''}
+          onClose={() => setShowEvidenceModal(false)}
+          onSubmit={(evidence) => {
+            console.log('Evidence submitted:', evidence);
+            setShowEvidenceModal(false);
+            onDeliveryConfirmed?.();
+          }}
+        />
+      )}
+
+      {/* Incident Modal */}
+      {showIncidentModal && (
+        <DeliveryIncidentModal
+          orderId={order?.id || ''}
+          taskId={order?.taskId || order?.id || ''}
+          courierId={order?.courierId || ''}
+          onClose={() => setShowIncidentModal(null)}
+          onSubmit={() => {
+            setShowIncidentModal(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -66,7 +66,7 @@ export function CategoryGrid({
             wings: "bg-red-500",
             snack: "bg-amber-400",
             drink: "bg-blue-500",
-            neutral: "bg-emerald-500",
+            neutral: "bg-iris-500",
           }[tone];
           return (
             <button

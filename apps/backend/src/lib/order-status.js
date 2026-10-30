@@ -6,11 +6,16 @@
 const ORDER_STATUSES = [
   'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING',
   'ON_THE_WAY', 'DELIVERED', 'CANCELLED', 'OPEN',
+  // Marketplace: PENDING_PAYMENT espera el pago en línea; PENDING_MERCHANT espera
+  // que el comercio acepte (ya pagado o contra entrega).
+  'PENDING_PAYMENT', 'PENDING_MERCHANT',
 ];
 
 // Estados "activos": la orden sigue viva (cuenta para tableros y colas).
+// PENDING_PAYMENT no: el comercio no debe ver ni preparar un pedido sin pagar.
 const ACTIVE_ORDER_STATUSES = [
   'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING', 'ON_THE_WAY', 'OPEN',
+  'PENDING_MERCHANT',
 ];
 
 // Transiciones permitidas desde el endpoint de orders. DELIVERY NO aparece: el
@@ -27,6 +32,10 @@ const ALLOWED_TRANSITIONS = {
   OPEN:       ['CANCELLED'],
   DELIVERED:  [],
   CANCELLED:  [],
+  // El comercio acepta (→ CONFIRMED, entra a cocina) o rechaza un pedido del
+  // marketplace. Solo el webhook de pago saca a una orden de PENDING_PAYMENT.
+  PENDING_MERCHANT: ['CONFIRMED', 'CANCELLED'],
+  PENDING_PAYMENT:  [],
 };
 
 // Roles con acceso total a la máquina (incluye SUPER_ADMIN para el operador del

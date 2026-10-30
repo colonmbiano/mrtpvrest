@@ -27,6 +27,8 @@ interface TicketLineProps {
   // editar este item. Solo se pasa cuando el producto tiene opciones.
   onEdit?: () => void;
   currency?: string;
+  // Solo lectura (pedido del marketplace): sin stepper de cantidad; se muestra la cantidad fija.
+  readOnly?: boolean;
 }
 
 const TicketLine: React.FC<TicketLineProps> = ({
@@ -45,6 +47,7 @@ const TicketLine: React.FC<TicketLineProps> = ({
   onUpdateNotes,
   onEdit,
   currency = "$",
+  readOnly = false,
 }) => {
   const inc = () => (onIncrease ? onIncrease() : onUpdateQty?.(quantity + 1));
   const dec = () =>
@@ -183,6 +186,10 @@ const TicketLine: React.FC<TicketLineProps> = ({
           <span className="mt-0.5 text-[8px] font-bold uppercase tracking-widest text-zinc-500">
             kg
           </span>
+        </div>
+      ) : readOnly ? (
+        <div className="flex w-9 self-center items-center justify-center rounded-lg border border-white/5 bg-[var(--surface-1)] py-2 shrink-0">
+          <span className="text-[13px] font-semibold text-white mono tnum leading-none">{quantity}</span>
         </div>
       ) : (
         /* STEPPER VERTICAL - TOUCH OPTIMIZED (compacto) */

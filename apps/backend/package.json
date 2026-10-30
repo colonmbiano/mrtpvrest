@@ -19,7 +19,7 @@
       "@mrtpvrest/database": "workspace:*",
       "@prisma/client": "^7.8.0",
       "@supabase/supabase-js": "^2.108.2",
-      "axios": "^1.18.0",
+      "axios": "~1.20.0",
       "bcryptjs": "^2.4.3",
       "bull": "^4.12.2",
       "cloudinary": "^2.10.0",

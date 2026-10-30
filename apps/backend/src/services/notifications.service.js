@@ -4,6 +4,10 @@ const { prisma } = require('@mrtpvrest/database');
 const axios = require('axios');
 const { resolveConfig, sendText } = require('./whatsapp-bot/provider');
 const { toWhatsappNumber } = require('@mrtpvrest/config/phone');
+const { createStoreDeliveryPin, customerPinText } = require('../lib/store-delivery-pin');
+
+// Código de entrega del pedido propio a domicilio (STORE_DELIVERY_PIN_MODE).
+const storeDeliveryPin = createStoreDeliveryPin();
 
 const vapidSubject = process.env.VAPID_EMAIL
   ? (process.env.VAPID_EMAIL.startsWith('mailto:') || process.env.VAPID_EMAIL.startsWith('https://')
@@ -219,7 +223,12 @@ async function notifyOrderStatus(order, status) {
       ? await prisma.restaurant.findUnique({ where: { id: order.restaurantId }, select: { name: true } })
       : null;
     const name = restaurant?.name || 'Tu pedido';
-    await sendOrderWhatsApp(order.restaurantId, phone, `*${name}*\n${msg.emoji} ${text}`);
+    // "En camino": recordatorio del código que el cliente dicta al repartidor.
+    // Solo por WhatsApp, no en el push (se ve en la pantalla bloqueada).
+    const pinText = status === 'ON_THE_WAY'
+      ? customerPinText(storeDeliveryPin.pinForCustomer({ ...order, status }))
+      : '';
+    await sendOrderWhatsApp(order.restaurantId, phone, `*${name}*\n${msg.emoji} ${text}${pinText ? `\n\n${pinText}` : ''}`);
   }
 }
 
@@ -233,6 +242,7 @@ async function notifyOrderStatusById(orderId, status) {
     where: { id: orderId },
     select: {
       id: true, orderNumber: true, userId: true, customerPhone: true, restaurantId: true,
+      orderType: true, source: true, // código de entrega en el aviso "en camino"
       user: { select: { phone: true } },
     },
   });

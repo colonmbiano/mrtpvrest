@@ -1,7 +1,7 @@
 'use client';
-// handoff/screens/CajaScreen.tsx
 import React, { useState } from 'react';
 import { C, S } from '@/lib/tokens';
+import { PayoutRequestModal } from '../PayoutRequestModal';
 
 interface Movement {
   id: string;
@@ -12,19 +12,38 @@ interface Movement {
   createdAt: string | Date;
 }
 
+interface PayoutRequest {
+  id: string;
+  amount: number;
+  bankAccount: string;
+  accountType: 'CLABE' | 'DEBIT';
+  status: 'PENDING' | 'APPROVED' | 'TRANSFERRED';
+  createdAt: string | Date;
+}
+
 interface CajaScreenProps {
   driverId?: string;
   movements: Movement[];
   summary: { balance?: number; float?: number; income?: number; expense?: number } | null;
+  payoutHistory?: PayoutRequest[];
   onBack: () => void;
   onGasto: () => void;
-  // Registra un retiro de efectivo (movimiento RETURN) que baja el balance.
   onRetiro: (amount: number) => Promise<void> | void;
-  // Avisa al admin que el repartidor quiere cerrar turno. Devuelve true si se envió.
   onCerrarTurno: () => Promise<boolean> | boolean;
+  onPayoutRequest?: (data: { amount: number; bankAccount: string; accountType: 'CLABE' | 'DEBIT' }) => Promise<void>;
 }
 
-export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCerrarTurno }: CajaScreenProps) {
+export function CajaScreen({
+  movements,
+  summary,
+  payoutHistory = [],
+  onBack,
+  onGasto,
+  onRetiro,
+  onCerrarTurno,
+  onPayoutRequest,
+  driverId,
+}: CajaScreenProps) {
   const balance = summary?.balance || 0;
   const fondo = summary?.float || 0;
   const cobrado = summary?.income || 0;
@@ -37,6 +56,8 @@ export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCe
   const [cerrarOpen, setCerrarOpen] = useState(false);
   const [cerrarBusy, setCerrarBusy] = useState(false);
   const [cerrarSent, setCerrarSent] = useState(false);
+
+  const [payoutModalOpen, setPayoutModalOpen] = useState(false);
 
   async function confirmRetiro() {
     const n = Number(retiroAmount);
@@ -119,7 +140,15 @@ export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCe
               border: '1px solid rgba(136,214,108,0.3)',
               background: C.greenSoft, fontSize: 9, fontWeight: 700, color: C.green,
               letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: C.fontBody,
-            }}>Solicitar retiro</button>
+            }}>Retiro efectivo</button>
+            {onPayoutRequest && balance > 0 && (
+              <button onClick={() => setPayoutModalOpen(true)} style={{
+                height: 38, paddingInline: 16, borderRadius: 10, cursor: 'pointer',
+                border: '1px solid rgba(59,130,246,0.3)',
+                background: 'rgba(59,130,246,0.12)', fontSize: 9, fontWeight: 700, color: '#3b82f6',
+                letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: C.fontBody,
+              }}>Retiro bancario</button>
+            )}
             <button onClick={() => { setCerrarSent(false); setCerrarOpen(true); }} style={{
               height: 38, paddingInline: 16, borderRadius: 10, cursor: 'pointer',
               border: `1px solid ${C.border}`,
@@ -174,6 +203,54 @@ export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCe
             </div>
           )}
         </div>
+
+        {/* Historial de Retiros Bancarios */}
+        {payoutHistory && payoutHistory.length > 0 && (
+          <>
+            <div style={S.sectionLabel}>Historial de retiros bancarios</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {payoutHistory.map(payout => {
+                const statusColor = payout.status === 'PENDING' ? C.amber : payout.status === 'APPROVED' ? C.iris : C.green;
+                const statusLabel = payout.status === 'PENDING' ? 'Pendiente' : payout.status === 'APPROVED' ? 'Aprobado' : 'Transferido';
+                return (
+                  <div key={payout.id} style={{
+                    background: C.surf1, border: `1px solid ${C.border}`,
+                    borderRadius: 16, padding: '14px 16px',
+                    display: 'flex', flexDirection: 'column', gap: 8,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        <div style={{
+                          width: 38, height: 38, borderRadius: 12, background: `${statusColor}20`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', color: statusColor,
+                          fontSize: 16,
+                        }}>
+                          {payout.status === 'PENDING' ? '⏳' : payout.status === 'APPROVED' ? '✓' : '💰'}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+                            ${payout.amount.toFixed(2)}
+                          </div>
+                          <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
+                            {new Date(payout.createdAt).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: statusColor, textTransform: 'uppercase' }}>
+                          {statusLabel}
+                        </div>
+                        <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
+                          {payout.accountType === 'CLABE' ? 'CLABE' : 'Débito'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Modal · Solicitar retiro (registra movimiento RETURN) */}
@@ -247,6 +324,23 @@ export function CajaScreen({ movements, summary, onBack, onGasto, onRetiro, onCe
             )}
           </div>
         </div>
+      )}
+
+      {/* Modal de solicitud de retiro bancario */}
+      {driverId && (
+        <PayoutRequestModal
+          isOpen={payoutModalOpen}
+          driverId={driverId}
+          availableBalance={balance}
+          pendingCashInHand={0}
+          onClose={() => setPayoutModalOpen(false)}
+          onSubmit={async (data) => {
+            if (onPayoutRequest) {
+              await onPayoutRequest(data);
+              setPayoutModalOpen(false);
+            }
+          }}
+        />
       )}
     </div>
   );

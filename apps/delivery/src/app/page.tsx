@@ -11,8 +11,9 @@ import GPSTracker from '@/components/delivery/GPSTracker';
 import { useOfflineStore } from '@/store/useOfflineStore';
 import { initBackgroundSync } from '@/lib/offline';
 import { ensureDriverPushSubscription } from '@/lib/push';
+import { updateCourierPresence, presenceRefreshDelay } from '@/lib/marketplaceDispatch';
 import { LoginScreen }     from '@/components/delivery/screens/LoginScreen';
-import { HomeScreen }      from '@/components/delivery/screens/HomeScreen';
+import { CourierDashboard } from '@/components/delivery/screens/CourierDashboard';
 import { DetailScreen }    from '@/components/delivery/screens/DetailScreen';
 import { CobrarScreen }    from '@/components/delivery/screens/CobrarScreen';
 import { CajaScreen }      from '@/components/delivery/screens/CajaScreen';
@@ -23,6 +24,8 @@ import { SetupScreen }     from '@/components/delivery/screens/SetupScreen';
 import { MapScreen }       from '@/components/delivery/screens/MapScreen';
 import { DispatchScreen }  from '@/components/delivery/screens/DispatchScreen';
 import { AvisosScreen }    from '@/components/delivery/screens/AvisosScreen';
+import { PinVerificationModal } from '@/components/delivery/PinVerificationModal';
+import { needsStoreDeliveryPin, isDeliveryPinRejection, withDeliveryPin } from '@/lib/storeDeliveryPin';
 
 type Screen =
   | 'setup' | 'login' | 'home' | 'detail'
@@ -142,6 +145,10 @@ export default function DeliveryApp() {
   const [orders, setOrders]             = useState<any[]>([]);
   const [history, setHistory]           = useState<any[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  // Pedido propio cuyo código de entrega se está pidiendo, y códigos ya
+  // capturados por pedido (solo en memoria: nunca se guardan ni se registran).
+  const [pinOrder, setPinOrder]         = useState<any>(null);
+  const deliveryPinsRef                 = useRef<Record<string, string>>({});
   const [messages, setMessages]         = useState<any[]>([]);
   const [cashSummary, setCashSummary]   = useState<any>(null);
   const [movements, setMovements]       = useState<any[]>([]);
@@ -160,6 +167,11 @@ export default function DeliveryApp() {
   const [isOnline, setIsOnline] = useState(true);
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [isSharedCourier, setIsSharedCourier] = useState(false);
+  const [networkBusy, setNetworkBusy] = useState(false);
+  const [networkError, setNetworkError] = useState('');
+  const lastPresenceRef = useRef<{ lat: number; lng: number; accuracy: number; at: number } | null>(null);
+  const presenceGenerationRef = useRef(0);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const selectedOrderIdRef = useRef<string | null>(null);
@@ -167,8 +179,21 @@ export default function DeliveryApp() {
   useEffect(() => {
     setMounted(true);
     setIsOnline(navigator.onLine);
-    window.addEventListener('online',  () => setIsOnline(true));
-    window.addEventListener('offline', () => setIsOnline(false));
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => {
+      setIsOnline(false);
+      ++presenceGenerationRef.current;
+      setIsSharedCourier(false); // No prometer disponibilidad con GPS vencido.
+      setNetworkBusy(false);
+      lastPresenceRef.current = null;
+      setNetworkError('Sin conexión: se pausó la red compartida. Reconéctala al volver a tener Internet.');
+    };
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    const removeNetworkListeners = () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
     audioRef.current = new Audio('/notification.mp3');
     initBackgroundSync();
 
@@ -183,12 +208,13 @@ export default function DeliveryApp() {
       const qrLn = params.get('ln');
       if (qrLn) localStorage.setItem('locationName', qrLn);
       window.history.replaceState({}, '', window.location.pathname); // limpia la URL
-      return; // ya hay IDs → queda en 'login' (PIN)
+      return removeNetworkListeners; // ya hay IDs → queda en 'login' (PIN)
     }
 
     const restId = localStorage.getItem('restaurantId');
     const locId  = localStorage.getItem('locationId');
     if (!restId || !locId) setScreen('setup');
+    return removeNetworkListeners;
   }, []);
 
   useEffect(() => {
@@ -407,6 +433,11 @@ export default function DeliveryApp() {
     setLoggingIn(true);
     try {
       const { data } = await api.post('/api/employees/login', { pin });
+      ++presenceGenerationRef.current;
+      setIsSharedCourier(false);
+      setNetworkBusy(false);
+      setNetworkError('');
+      lastPresenceRef.current = null;
       setDriver(data.employee);
       setLoginError('');
       localStorage.setItem('accessToken', data.token);
@@ -424,8 +455,37 @@ export default function DeliveryApp() {
     } finally { setLoggingIn(false); }
   }
 
+  // Entrar a cobrar: si el pedido propio requiere código del cliente y aún no
+  // se capturó, pedirlo primero.
+  function startDelivery(order: any) {
+    setSelectedOrder(order);
+    if (needsStoreDeliveryPin(order) && !deliveryPinsRef.current[order.id]) {
+      setPinOrder(order);
+      return;
+    }
+    setScreen('cobrar');
+  }
+
+  async function confirmStoreDeliveryPin(pin: string): Promise<{ success: boolean; error?: string }> {
+    const order = pinOrder;
+    if (!order) return { success: false, error: 'Pedido no disponible' };
+    // Sin conexión no se puede verificar aquí: el servidor lo verifica al
+    // sincronizar la entrega y, si no coincide, la cola la marca rechazada.
+    if (navigator.onLine) {
+      try {
+        await api.post(`/api/delivery/${driver.id}/orders/${order.id}/delivery-pin`, { deliveryPin: pin });
+      } catch (err: any) {
+        return { success: false, error: err?.response?.data?.error || 'No se pudo verificar el código' };
+      }
+    }
+    deliveryPinsRef.current[order.id] = pin;
+    setPinOrder(null);
+    setScreen('cobrar');
+    return { success: true };
+  }
+
   async function changeStatus(order: any, status: string, method?: string) {
-    const data = {
+    const data = withDeliveryPin({
       orderId: order.id, status,
       // driverId va en el payload para que la reproducción OFFLINE pueda pegarle
       // al MISMO endpoint que la ruta online (/api/delivery/:driverId/.../status)
@@ -433,9 +493,11 @@ export default function DeliveryApp() {
       // la cola caía en /confirm-cash y la entrega quedaba fuera del corte.
       driverId: driver.id,
       ...(method ? { paymentMethod: method } : {}),
-    };
+    }, order, status, deliveryPinsRef.current[order.id]);
+    const forgetPin = () => { if (status === 'DELIVERED') delete deliveryPinsRef.current[order.id]; };
     if (!navigator.onLine) {
       useOfflineStore.getState().addToQueue({ type: 'CONFIRM_DELIVERY', data });
+      forgetPin();
       if (status === 'DELIVERED') {
         setOrders(os => os.filter(o => o.id !== order.id));
         setScreen('home');
@@ -444,6 +506,7 @@ export default function DeliveryApp() {
     }
     try {
       await api.put(`/api/delivery/${driver.id}/orders/${order.id}/status`, data);
+      forgetPin();
       fetchOrders();
       if (status === 'DELIVERED') setScreen('home');
     } catch (err: any) {
@@ -462,9 +525,119 @@ export default function DeliveryApp() {
         }
         return;
       }
+      // Código del cliente rechazado: volver a pedirlo (nunca reintentar a ciegas).
+      if (isDeliveryPinRejection(err?.response?.data?.code)) {
+        forgetPin();
+        alert(err.response.data.error || 'El código de entrega no coincide');
+        setScreen('detail');
+        setPinOrder(order);
+        return;
+      }
       alert(err.response?.data?.error || 'Error');
     }
   }
+
+  // La disponibilidad de red compartida NO es el indicador navigator.onLine.
+  // Requiere consentimiento del repartidor, GPS real y acuse del servidor.
+  const getCourierPosition = useCallback((): Promise<{ lat: number; lng: number; accuracy: number }> =>
+    new Promise((resolve, reject) => {
+      if (!navigator.geolocation) { reject(new Error('Tu dispositivo no permite obtener ubicación.')); return; }
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude,
+          accuracy: Number.isFinite(pos.coords.accuracy) ? Math.max(0, pos.coords.accuracy) : 0 }),
+        () => reject(new Error('Para conectarte, activa el GPS y concede permiso de ubicación.')),
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 },
+      );
+    }), []);
+
+  const toggleSharedCourier = useCallback(async (enabled: boolean) => {
+    if (!driver || networkBusy) return;
+    if (enabled && !navigator.onLine) {
+      setNetworkError('Sin Internet. No es posible activar la red compartida.');
+      return;
+    }
+    const generation = ++presenceGenerationRef.current;
+    setNetworkBusy(true);
+    setNetworkError('');
+    if (!enabled) setIsSharedCourier(false); // Privacidad: dejar de actualizar GPS inmediatamente.
+    try {
+      if (enabled) {
+        const gps = await getCourierPosition();
+        if (generation !== presenceGenerationRef.current) return;
+        const response = await updateCourierPresence({
+          courierId: driver.id, isOnline: true, acceptingShared: true, ...gps,
+        });
+        if (!response.ok) throw new Error('El despachador no confirmó tu disponibilidad.');
+        if (generation !== presenceGenerationRef.current) return;
+        lastPresenceRef.current = { ...gps, at: Date.now() };
+        setIsSharedCourier(true);
+      } else {
+        const last = lastPresenceRef.current;
+        const recent = last && Date.now() - last.at < 75000;
+        // Si el GPS ya caducó, apagamos presencia hasta verificarla; nunca inventamos 0,0.
+        const response = await updateCourierPresence({
+          courierId: driver.id, acceptingShared: false, isOnline: Boolean(recent),
+          ...(recent ? { lat: last.lat, lng: last.lng, accuracy: last.accuracy } : {}),
+        });
+        if (!response.ok) throw new Error('El servidor no confirmó la desconexión.');
+        lastPresenceRef.current = null;
+      }
+    } catch (error) {
+      if (generation === presenceGenerationRef.current) {
+        setNetworkError(error instanceof Error ? error.message : 'No se pudo cambiar la disponibilidad.');
+        if (enabled) setIsSharedCourier(false);
+      }
+    } finally {
+      if (generation === presenceGenerationRef.current) setNetworkBusy(false);
+    }
+  }, [driver, getCourierPosition, networkBusy]);
+
+  // Presencia renovada cada minuto mientras el repartidor eligió conectarse.
+  // El ranking del despacho exige última muestra GPS en los últimos 90 segundos.
+  useEffect(() => {
+    if (!driver || !isSharedCourier || !isOnline) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    // true si el servidor recibió la muestra; solo entonces se agenda la siguiente.
+    const refresh = async (): Promise<boolean> => {
+      try {
+        const gps = await getCourierPosition();
+        if (cancelled) return false;
+        const response = await updateCourierPresence({
+          courierId: driver.id, isOnline: true, acceptingShared: true, ...gps,
+        });
+        if (!response.ok) throw new Error('El despachador no confirmó el GPS.');
+        if (cancelled) return false;
+        lastPresenceRef.current = { ...gps, at: Date.now() };
+        setNetworkError('');
+        return true;
+      } catch {
+        if (cancelled) return false;
+        // No asegurar que seguimos disponibles si no hay presencia actual.
+        setIsSharedCourier(false);
+        void updateCourierPresence({
+          courierId: driver.id, isOnline: false, acceptingShared: false,
+        }).catch(() => {}); // Falla de red: el backend dejará vencer la presencia.
+        setNetworkError('Se pausó la red: no fue posible actualizar tu GPS. Actívala nuevamente.');
+        return false;
+      }
+    };
+    // La siguiente muestra va 55 s después de la última aceptada. Al volver
+    // Internet tras un corte, la última ya puede rebasar los 90 s: va de inmediato.
+    const schedule = () => {
+      timer = window.setTimeout(async () => {
+        if (await refresh() && !cancelled) schedule();
+      }, presenceRefreshDelay(lastPresenceRef.current?.at, Date.now()));
+    };
+    schedule();
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [driver, isSharedCourier, isOnline, getCourierPosition]);
+
+  const handleMarketplaceOfferAccepted = useCallback((_result: { taskId: string; orderId?: string }) => {
+    // La API actual confirma taskId pero no entrega una orden legacy ni dirección.
+    // El componente Marketplace conserva el acuse y evita inventar una ruta.
+    void fetchOrders();
+  }, [fetchOrders]);
 
   async function saveExpense(cat: string, amount: string, desc: string, pending = false) {
     if (!amount || Number(amount) <= 0) return;
@@ -541,7 +714,9 @@ export default function DeliveryApp() {
 
   return (
     <>
-      {driver && screen === 'home' && (
+      {/* Montado en todas las pantallas con sesión: en el detalle del pedido (cuando entrega)
+          el GPS sigue enviando y el comprador ve al repartidor en su seguimiento. */}
+      {driver && screen !== 'setup' && screen !== 'login' && (
         <div style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
           <GPSTracker
             driverId={driver?.id}
@@ -571,7 +746,7 @@ export default function DeliveryApp() {
       )}
 
       {screen === 'home' && (
-        <HomeScreen
+        <CourierDashboard
           driver={driver}
           orders={orders}
           availableOrders={availableOrders}
@@ -580,15 +755,35 @@ export default function DeliveryApp() {
           isOnline={isOnline}
           unreadNotices={unreadNotices}
           pendingSync={useOfflineStore.getState().queue.length}
+          isSharedCourier={isSharedCourier}
+          networkBusy={networkBusy}
+          networkError={networkError}
+          onToggleShared={toggleSharedCourier}
+          onMarketplaceOfferAccepted={handleMarketplaceOfferAccepted}
           onSelectOrder={(order: any) => {
             setSelectedOrder(order);
             fetchOrderDetail(order.id);
             setScreen('detail');
           }}
           onChat={(order: any) => { setSelectedOrder(order); setScreen('chat'); }}
-          onDeliverOrder={(order: any) => { setSelectedOrder(order); setScreen('cobrar'); }}
+          onDeliverOrder={(order: any) => startDelivery(order)}
           onNavigate={(s: string) => {
-            if (s === 'login') { setDriver(null); }
+            if (s === 'login') {
+              ++presenceGenerationRef.current;
+              if (driver && isSharedCourier) {
+                // El token se borra abajo antes de que axios envíe: va explícito.
+                const authToken = localStorage.getItem('accessToken') || undefined;
+                void updateCourierPresence({
+                  courierId: driver.id, isOnline: false, acceptingShared: false,
+                }, { authToken }).catch(() => {}); // El servidor descartará GPS por TTL si no hay conexión.
+              }
+              setIsSharedCourier(false);
+              setNetworkBusy(false);
+              setNetworkError('');
+              lastPresenceRef.current = null;
+              setDriver(null);
+              localStorage.removeItem('accessToken');
+            }
             if (s === 'weekly') fetchHistory();
             setScreen(s as Screen);
           }}
@@ -600,8 +795,16 @@ export default function DeliveryApp() {
           order={selectedOrder}
           orderDetail={orderDetail}
           onBack={() => setScreen('home')}
-          onCobrar={() => setScreen('cobrar')}
+          onCobrar={() => startDelivery(selectedOrder)}
           onChat={() => setScreen('chat')}
+          onPickupConfirmed={() => {
+            // Cambiar estado a ON_THE_WAY después de confirmar recolección
+            changeStatus(selectedOrder, 'ON_THE_WAY');
+          }}
+          onDeliveryConfirmed={() => {
+            // Cambiar estado a DELIVERED y volver a home
+            changeStatus(selectedOrder, 'DELIVERED');
+          }}
         />
       )}
 
@@ -609,7 +812,18 @@ export default function DeliveryApp() {
         <CobrarScreen
           order={selectedOrder}
           onBack={() => setScreen('detail')}
-          onConfirm={(method: string) => changeStatus(selectedOrder, 'DELIVERED', method)}
+          onConfirm={(method?: string) => changeStatus(selectedOrder, 'DELIVERED', method)}
+        />
+      )}
+
+      {/* Código de entrega que dicta el cliente (pedidos propios de la tienda) */}
+      {pinOrder && (
+        <PinVerificationModal
+          type="DELIVERY"
+          orderNumber={pinOrder.orderNumber || ''}
+          targetName={pinOrder.customerName || 'el cliente'}
+          onConfirm={confirmStoreDeliveryPin}
+          onCancel={() => setPinOrder(null)}
         />
       )}
 
