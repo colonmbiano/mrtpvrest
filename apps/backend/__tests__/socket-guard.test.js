@@ -59,6 +59,18 @@ describe('isPrincipalActive', () => {
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 
+  it('Device activo con la sucursal de otro tenant → false', async () => {
+    prisma.device.findUnique.mockResolvedValue({
+      isActive: true, tenantId: 'ten-a', location: { restaurant: { tenantId: 'ten-b' } },
+    });
+    expect(await isPrincipalActive({ id: 'd1', isDevice: true })).toBe(false);
+
+    prisma.device.findUnique.mockResolvedValue({
+      isActive: true, tenantId: 'ten-b', location: { restaurant: { tenantId: 'ten-b' } },
+    });
+    expect(await isPrincipalActive({ id: 'd1', isDevice: true })).toBe(true);
+  });
+
   it('User activo → true; Employee desactivado → false', async () => {
     prisma.user.findUnique.mockResolvedValue({ isActive: true });
     expect(await isPrincipalActive({ userId: 'u1' })).toBe(true);

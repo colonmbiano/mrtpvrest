@@ -30,12 +30,19 @@ const authenticate = async (req, res, next) => {
         where: { id },
         select: {
           id: true, type: true, isActive: true, locationId: true, tenantId: true,
-          location: { select: { restaurantId: true } },
+          location: { select: { restaurantId: true, restaurant: { select: { tenantId: true } } } },
         },
       }));
       if (!device || !device.isActive) {
         increment('user_inactive');
         return res.status(401).json({ error: 'Dispositivo desactivado' });
+      }
+      // Device con la sucursal de otro tenant (vinculado antes de que
+      // /api/devices/create lo validara): su JWT ya emitido deja de valer.
+      if (device.tenantId !== device.location?.restaurant?.tenantId) {
+        increment('user_inactive');
+        log.warn('device_tenant_mismatch', { deviceId: device.id, path: req.path });
+        return res.status(401).json({ error: 'Dispositivo no autorizado', code: 'DEVICE_TENANT_MISMATCH' });
       }
       increment('success');
       req.user = {
