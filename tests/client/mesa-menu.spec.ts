@@ -114,7 +114,7 @@ test('pedido retenido muestra espera y después mesa rechazada', async ({ page }
 
 test('caja cerrada muestra el error legible en la confirmación única', async ({ page }) => {
   await prepareOrder(page);
-  const error = 'El restaurante aún no ha abierto caja. Pide ayuda al personal.';
+  const error = 'La caja todavía no abre. Pide tu orden al personal.';
   await page.route('**/api/store/orders?*', route => route.fulfill({ status: 409, json: { code: 'NO_ACTIVE_SHIFT', error } }));
   await page.getByRole('button', { name: /ENVIAR A COCINA/ }).click();
   await expect(page.getByText(error, { exact: true })).toBeVisible();
