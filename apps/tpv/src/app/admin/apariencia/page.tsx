@@ -52,6 +52,7 @@ import {
 // ── Tipos locales ──────────────────────────────────────────────────────────
 
 const THEMES: Array<{ id: PaletteType; label: string; color: string }> = [
+  { id: "orange", label: "Naranja", color: "#FF7A1A" },
   { id: "green",  label: "Fresco", color: "#34C988" },
   { id: "amber",  label: "Miel",   color: "#E0A22A" },
   { id: "purple", label: "Uva",    color: "#9472FF" },
@@ -231,9 +232,9 @@ export default function AparienciaPage() {
             </h2>
           </div>
           <p className="text-[11px] font-medium text-zinc-500 mb-4">
-            Tema del color principal. El verde Fresco es el default.
+            Tema del color principal. El naranja es el default.
           </p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {THEMES.map((t) => {
               const active = palette === t.id;
               return (

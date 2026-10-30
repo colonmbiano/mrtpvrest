@@ -13,6 +13,7 @@ import api from "@/lib/api";
 import { PageShell, PageHeader, Card, Button, Pill, Toggle, EmptyState } from "@/components/ds";
 import { formatMoney } from "@/lib/format";
 import { DeliveryZoneMap } from "@/components/DeliveryZoneMap";
+import { MarketplaceDeliveryPolicyCard } from "@/components/admin/MarketplaceDeliveryPolicyCard";
 
 type LatLng = { lat: number; lng: number };
 type Zone = {
@@ -125,6 +126,8 @@ export default function ZonasPage() {
         actions={<Button icon={Plus} full={false} onClick={startNew}>Nueva zona</Button>}
         mobileActions={<Button full icon={Plus} onClick={startNew}>Nueva zona</Button>}
       />
+
+      <MarketplaceDeliveryPolicyCard />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         {/* Columna izquierda: formulario + lista */}

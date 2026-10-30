@@ -94,3 +94,6 @@ jobs:
         run: |
           pnpm --filter @mrtpvrest/database exec prisma db push --schema=prisma/schema.prisma
           node --test tests/integration/table-reassignment.test.js
+
+      - name: Contratos seguros del registro Marketplace (sin BD ni correo)
+        run: node --test apps/backend/scripts/marketplace-identity.test.cjs

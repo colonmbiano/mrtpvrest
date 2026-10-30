@@ -5,10 +5,10 @@
 /* ============================================================
    MRTPVREST · globals.css  —  reskin "FRESCO"
    ------------------------------------------------------------
-   Acento por defecto: verde Fresco. Tipografía: Schibsted
-   Grotesk (display) + Onest (cuerpo) + DM Mono (cifras).
-   Las paletas amber/purple siguen disponibles como alternas
-   en Configuración (recoloreadas para convivir con Fresco).
+   Superficies negras y acento por defecto naranja. Tipografía:
+   Schibsted Grotesk (display) + Onest (cuerpo) + DM Mono (cifras).
+   Las paletas green (Fresco) / amber / purple siguen disponibles
+   como alternas en Configuración.
    ============================================================ */
 
 /* BUG-4: en Android+Capacitor el "300ms tap delay" hace que el primer
@@ -29,32 +29,32 @@
 }
 
 @layer base {
-  /* ─── Tema OSCURO (default) · Fresco ─── */
+  /* ─── Tema OSCURO (default) · negro ─── */
   :root {
-    --bg: #0E1512;
-    --surface-1: #16211C;
-    --surface-2: #111A16;
-    --surface-3: #1C2A23;
-    --surface-hover: #20302A;
-    --text-primary: #E8F0EB;
-    --text-secondary: #8DA396;
-    --text-muted: #5E7268;
-    --text-disabled: #44544B;
-    --border: #21302A;
-    --border-strong: rgba(232, 240, 235, 0.14);
+    --bg: #0A0A0A;
+    --surface-1: #161616;
+    --surface-2: #111111;
+    --surface-3: #1D1D1D;
+    --surface-hover: #252525;
+    --text-primary: #F2F0ED;
+    --text-secondary: #A29D97;
+    --text-muted: #6E6964;
+    --text-disabled: #4A4643;
+    --border: #272523;
+    --border-strong: rgba(242, 240, 237, 0.14);
     --border-focus: var(--brand);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
     --shadow-md: 0 8px 16px -4px rgba(0, 0, 0, 0.45);
     --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.55);
     --shadow-glow: 0 10px 40px -10px var(--brand-glow);
 
-    /* acento Fresco (verde) — oscuro */
-    --brand: #34C988;
-    --brand-hover: #2BB678;
-    --brand-active: #25A06A;
-    --brand-soft: rgba(52, 201, 136, 0.14);
-    --brand-glow: rgba(52, 201, 136, 0.30);
-    --brand-fg: #0B1410;
+    /* acento naranja — oscuro */
+    --brand: #FF7A1A;
+    --brand-hover: #F06A0B;
+    --brand-active: #D95E08;
+    --brand-soft: rgba(255, 122, 26, 0.14);
+    --brand-glow: rgba(255, 122, 26, 0.30);
+    --brand-fg: #160A02;
     --gold: var(--brand);
     --text: var(--text-primary);
 
@@ -62,8 +62,9 @@
     --success-soft: rgba(52, 201, 136, 0.14);
     --warning: #E0A22A;
     --warning-soft: rgba(224, 162, 42, 0.14);
-    --danger: #F2785A;
-    --danger-soft: rgba(242, 120, 90, 0.14);
+    /* rojo puro: el coral anterior se confundía con el acento naranja */
+    --danger: #F25555;
+    --danger-soft: rgba(242, 85, 85, 0.14);
     --info: #4FA3E0;
     --info-soft: rgba(79, 163, 224, 0.14);
 
@@ -104,44 +105,61 @@
     --font-secondary: var(--font-body);
   }
 
-  /* ─── Tema CLARO · Fresco ─── */
+  /* ─── Tema CLARO · neutro ─── */
   [data-mode="light"] {
-    --bg: #EEF2F0;
+    --bg: #F2F1EF;
     --surface-1: #FFFFFF;
-    --surface-2: #F6F9F7;
-    --surface-3: #E7EDEA;
-    --surface-hover: #DFE6E2;
-    --text-primary: #15201B;
-    --text-secondary: #5C6B62;
-    --text-muted: #93A399;
-    --text-disabled: #B6C2BB;
-    --border: #E1E8E4;
-    --border-strong: #CBD6D0;
-    --shadow-sm: 0 1px 2px rgba(20, 40, 30, 0.05);
-    --shadow-md: 0 8px 16px -4px rgba(30, 50, 40, 0.10);
-    --shadow-lg: 0 24px 60px -12px rgba(30, 50, 40, 0.14);
+    --surface-2: #F8F7F5;
+    --surface-3: #EAE8E5;
+    --surface-hover: #E2DFDB;
+    --text-primary: #1A1715;
+    --text-secondary: #635D57;
+    --text-muted: #9A938C;
+    --text-disabled: #BDB7B1;
+    --border: #E6E3DF;
+    --border-strong: #D2CEC9;
+    --shadow-sm: 0 1px 2px rgba(30, 25, 20, 0.05);
+    --shadow-md: 0 8px 16px -4px rgba(30, 25, 20, 0.10);
+    --shadow-lg: 0 24px 60px -12px rgba(30, 25, 20, 0.14);
 
-    /* acento Fresco (verde) — claro */
-    --brand: #1F9D63;
-    --brand-hover: #178354;
-    --brand-active: #0F6E45;
-    --brand-soft: rgba(31, 157, 99, 0.12);
-    --brand-glow: rgba(31, 157, 99, 0.28);
+    /* acento naranja — claro (más oscuro para texto blanco legible) */
+    --brand: #C4550B;
+    --brand-hover: #A9480A;
+    --brand-active: #8F3D08;
+    --brand-soft: rgba(196, 85, 11, 0.12);
+    --brand-glow: rgba(196, 85, 11, 0.28);
     --brand-fg: #FFFFFF;
 
     --success: #1F9D63;
     --success-soft: rgba(31, 157, 99, 0.12);
     --warning: #B9852A;
     --warning-soft: rgba(185, 133, 42, 0.12);
-    --danger: #C0512F;
-    --danger-soft: rgba(192, 81, 47, 0.10);
+    --danger: #C93434;
+    --danger-soft: rgba(201, 52, 52, 0.10);
     --info: #2E83C9;
     --info-soft: rgba(46, 131, 201, 0.10);
   }
 
-  /* ─── Paletas alternas (Configuración) ───
-     'green' = Fresco (igual al default). amber / purple quedan como
-     opciones; recoloreadas para convivir con las superficies Fresco. */
+  /* ─── Paletas (Configuración) ───
+     'orange' = default (igual a :root). green (Fresco) / amber / purple
+     quedan como opciones sobre las mismas superficies negras. */
+  [data-theme="orange"] {
+    --brand: #FF7A1A;
+    --brand-hover: #F06A0B;
+    --brand-active: #D95E08;
+    --brand-soft: rgba(255, 122, 26, 0.14);
+    --brand-glow: rgba(255, 122, 26, 0.30);
+    --brand-fg: #160A02;
+  }
+  [data-mode="light"][data-theme="orange"] {
+    --brand: #C4550B;
+    --brand-hover: #A9480A;
+    --brand-active: #8F3D08;
+    --brand-soft: rgba(196, 85, 11, 0.12);
+    --brand-glow: rgba(196, 85, 11, 0.28);
+    --brand-fg: #FFFFFF;
+  }
+
   [data-theme="green"] {
     --brand: #34C988;
     --brand-hover: #2BB678;

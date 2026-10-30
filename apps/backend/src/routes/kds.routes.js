@@ -62,6 +62,8 @@ router.get('/orders/:station', async (req, res) => {
 
     const orderWhere = {
       status: { in: ['OPEN', 'PENDING', 'CONFIRMED', 'PREPARING'] },
+      // Pedidos de mesa por confirmar (QR desde internet): cocina no los ve hasta que la caja los acepta.
+      awaitingTableConfirmation: false,
       createdAt: { gte: new Date(Date.now() - 4 * 60 * 60 * 1000) },
     };
     if (locationId) orderWhere.locationId = locationId;

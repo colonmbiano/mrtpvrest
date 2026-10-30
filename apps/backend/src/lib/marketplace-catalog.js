@@ -1,0 +1,206 @@
+'use strict';
+
+// No application, environment loader or database import: dependencies are injected.
+// The two helpers below are pure (no DB/env) and shared with /api/store/info and
+// /api/store/menu, so the catalog shows the same open state and promo windows.
+const { computeOpenState } = require('../utils/storeHours');
+const { itemPromoWindowOpen } = require('./promo-window');
+const SLUG = /^[a-z0-9-]{1,100}$/;
+// Same list the client offers as filters (apps/client/src/lib/marketplace.ts).
+const BUSINESS_TYPES = new Set(['RESTAURANT', 'RETAIL', 'GROCERY', 'HARDWARE', 'AUTOPARTS']);
+const CURRENCIES = new Set(Intl.supportedValuesOf('currency'));
+const ORDER = [{ name: 'asc' }, { id: 'asc' }];
+// Finite upper bound for public prices. It keeps Infinity and NaN (NaN sorts above
+// every number in PostgreSQL) out of the catalog. Number.MAX_VALUE cannot be used:
+// Prisma serializes it as a decimal that PostgreSQL rejects as out of range.
+const MAX_PUBLIC_PRICE = 1e12;
+
+class InvalidQuery extends Error {}
+
+function parseQuery(query = {}, kind) {
+  if (!query || typeof query !== 'object' || Array.isArray(query)) throw new InvalidQuery();
+  // Unknown scalar query strings are inert. Structured parameters are never accepted.
+  for (const value of Object.values(query)) {
+    if (typeof value !== 'string') throw new InvalidQuery();
+  }
+  const own = key => Object.hasOwn(query, key) ? query[key] : undefined;
+  const q = (own('q') || '').trim();
+  if (q.length > 80) throw new InvalidQuery();
+  function integer(key, fallback, max) {
+    const value = own(key);
+    if (value === undefined) return fallback;
+    if (!/^[1-9][0-9]*$/.test(value) || Number(value) > max) throw new InvalidQuery();
+    return Number(value);
+  }
+  const result = { q, page: integer('page', 1, 10000), pageSize: integer('pageSize', 12, 24) };
+  if (kind === 'stores') {
+    const businessType = own('businessType');
+    if (businessType !== undefined && businessType !== '' && !BUSINESS_TYPES.has(businessType)) throw new InvalidQuery();
+    result.businessType = businessType || undefined;
+  } else {
+    const store = own('store');
+    if (store !== undefined && store !== '' && !SLUG.test(store)) throw new InvalidQuery();
+    result.store = store || undefined;
+  }
+  return result;
+}
+
+function parseStoreSlugs(value = '') {
+  if (typeof value !== 'string') throw new Error('Invalid marketplace allowlist');
+  if (!value.trim()) return [];
+  const slugs = value.split(',').map(slug => slug.trim());
+  if (slugs.length > 100 || slugs.some(slug => !SLUG.test(slug))) {
+    throw new Error('Invalid marketplace allowlist');
+  }
+  return [...new Set(slugs)];
+}
+
+// Prisma contains uses LIKE on PostgreSQL. Escape its wildcards for literal search.
+function nameFilter(q) {
+  return q ? { name: { contains: q.replace(/[\\%_]/g, '\\$&'), mode: 'insensitive' } } : {};
+}
+
+// Comercio aprobado para el directorio: fila APPROVED y módulo marketplace activo
+// (override del tenant o plan), mismo criterio que lib/modules.js.
+const APPROVED_MERCHANT = {
+  marketplaceMembership: { is: { status: 'APPROVED' } },
+  tenant: { is: { isDemo: false, OR: [
+    { enabledModules: { hasSome: ['marketplace', 'MARKETPLACE'] } },
+    { subscription: { is: { plan: { is: { allowedModules: { hasSome: ['marketplace', 'MARKETPLACE'] } } } } } },
+  ] } },
+};
+
+// Sin directorio por aprobación, solo la lista explícita (MARKETPLACE_STORE_SLUGS).
+// Con él, también los comercios aprobados; `store` acota a una sola tienda.
+function eligibleStores(slugs, { includeApproved = false, store } = {}) {
+  const listed = { slug: { in: slugs }, isActive: true, tenant: { is: { hasWebStore: true, isDemo: false } } };
+  if (!includeApproved) return listed;
+  return { isActive: true, ...(store ? { slug: store } : {}),
+    OR: [{ slug: { in: slugs }, tenant: { is: { hasWebStore: true, isDemo: false } } }, APPROVED_MERCHANT] };
+}
+
+const STORE_CONFIG_SELECT = {
+  isOpen: true, scheduleEnabled: true, businessHours: true, timezone: true, closedMessage: true,
+  estimatedDelivery: true, deliveryMode: true, deliveryFee: true, freeDeliveryFrom: true, minOrderAmount: true,
+};
+
+// Sólo se publican imágenes HTTPs válidas; no se aceptan datos internos ni esquemas ejecutables.
+function publicImage(value) {
+  if (typeof value !== 'string' || value.length > 2048) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password ? url.href : undefined;
+  } catch { return undefined; }
+}
+
+function finiteOrNull(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+// Public delivery/open data for a store card. Without RestaurantConfig the store
+// is closed (same rule as /api/store/info) and no delivery terms are promised.
+// Only FLAT pricing has a fixed fee; DISTANCE/ZONES depend on the address (null).
+function storeTerms(config, now) {
+  const open = computeOpenState(config || null, now);
+  return {
+    isOpen: open.isOpen,
+    closedMessage: open.isOpen ? null : (open.message || config?.closedMessage || null),
+    estimatedDelivery: Number.isInteger(config?.estimatedDelivery) && config.estimatedDelivery > 0 ? config.estimatedDelivery : null,
+    deliveryFee: config && (config.deliveryMode || 'FLAT') === 'FLAT' ? finiteOrNull(config.deliveryFee) : null,
+    freeDeliveryFrom: config ? finiteOrNull(config.freeDeliveryFrom) : null,
+    minOrderAmount: config ? finiteOrNull(config.minOrderAmount) : null,
+  };
+}
+
+// Promo price only while it is a real discount and its time window is open.
+function activePromoPrice(row, promoConfig, now) {
+  const promo = finiteOrNull(row.promoPrice);
+  if (!row.isPromo || promo === null || promo >= row.price) return null;
+  return itemPromoWindowOpen(row, promoConfig, now) ? promo : null;
+}
+
+function createPrismaCatalogAdapter(prisma, { now = () => new Date() } = {}) {
+  return {
+    async listStores({ slugs, includeApproved, store, q, businessType, page, pageSize }) {
+      const where = { ...eligibleStores(slugs, { includeApproved, store }), ...nameFilter(q), ...(businessType ? { businessType } : {}) };
+      const [total, rows] = await Promise.all([
+        prisma.restaurant.count({ where }),
+        prisma.restaurant.findMany({ where, select: { slug: true, name: true, businessType: true, logoUrl: true, config: { select: STORE_CONFIG_SELECT } },
+          orderBy: ORDER, skip: (page - 1) * pageSize, take: pageSize }),
+      ]);
+      const at = now();
+      return { total, rows: rows.map(row => ({ slug: row.slug, name: row.name, businessType: row.businessType, logoUrl: row.logoUrl, ...storeTerms(row.config, at) })) };
+    },
+    async listProducts({ slugs, includeApproved, store, q, page, pageSize }) {
+      // At most 100 explicit stores. Resolve IDs server-side; no tenant header or query is used.
+      const eligible = eligibleStores(slugs, { includeApproved, store });
+      const stores = await prisma.restaurant.findMany({ where: eligible,
+        select: { id: true, slug: true, name: true }, orderBy: [{ id: 'asc' }], take: 100 });
+      if (!stores.length) return { total: 0, rows: [] };
+      const ids = stores.map(store => store.id);
+      const where = {
+        restaurantId: { in: ids },
+        restaurant: { is: eligible },
+        isAvailable: true, availableOnline: true,
+        // Both ownership checks are needed even for inconsistent cross-store category links.
+        OR: ids.map(restaurantId => ({ restaurantId, category: { is: { restaurantId, isActive: true } } })),
+        price: { gte: 0, lte: MAX_PUBLIC_PRICE },
+        ...nameFilter(q),
+      };
+      const [total, rows, configs] = await Promise.all([
+        prisma.menuItem.count({ where }),
+        prisma.menuItem.findMany({ where, select: { id: true, name: true, imageUrl: true, price: true,
+          isPromo: true, promoPrice: true, promoStartTime: true, promoEndTime: true,
+          restaurantId: true, category: { select: { name: true } }, _count: { select: { reactions: true } } },
+        orderBy: ORDER, skip: (page - 1) * pageSize, take: pageSize }),
+        prisma.restaurantConfig.findMany({ where: { restaurantId: { in: ids } },
+          select: { restaurantId: true, currency: true, promoStartTime: true, promoEndTime: true, timezone: true }, take: 100 }),
+      ]);
+      const at = now();
+      const byId = new Map(stores.map(store => [store.id, store]));
+      const configsById = new Map(configs.map(config => [config.restaurantId, config]));
+      return { total, rows: rows.map(row => {
+        const store = byId.get(row.restaurantId);
+        const config = configsById.get(row.restaurantId);
+        const currency = config ? config.currency : 'MXN';
+        if (!store || !row.category || !Number.isFinite(row.price) || row.price < 0 || !CURRENCIES.has(currency)) {
+          throw new Error('Invalid public product data');
+        }
+        return { id: row.id, name: row.name, imageUrl: row.imageUrl, categoryName: row.category.name,
+          price: row.price, promoPrice: activePromoPrice(row, config || null, at),
+          likes: row._count?.reactions ?? 0, currency, store: { slug: store.slug, name: store.name } };
+      }) };
+    },
+  };
+}
+
+// includeApproved (MARKETPLACE_DIRECTORY_APPROVED=true) suma al directorio los
+// comercios aprobados por la plataforma. Apagado, una lista vacía nunca toca la BD.
+function createCatalog({ getAdapter, storeSlugs = '', includeApproved = false }) {
+  let adapter;
+  async function list(kind, rawQuery) {
+    const query = parseQuery(rawQuery, kind);
+    let slugs = parseStoreSlugs(storeSlugs);
+    if (query.store) slugs = slugs.filter(slug => slug === query.store);
+    const envelope = { items: [], page: query.page, pageSize: query.pageSize, total: 0 };
+    if (!slugs.length && !includeApproved) return envelope;
+    adapter ||= getAdapter();
+    const { rows, total } = await (kind === 'stores' ? adapter.listStores : adapter.listProducts)({
+      ...query, slugs, ...(includeApproved ? { includeApproved: true } : {}) });
+    // Project again at the public boundary, even if an injected adapter returns extra fields.
+    const items = rows.map(row => kind === 'stores'
+      ? { slug: row.slug, name: row.name, businessType: row.businessType,
+        ...(publicImage(row.logoUrl) ? { logoUrl: publicImage(row.logoUrl) } : {}),
+        isOpen: row.isOpen === true, closedMessage: row.closedMessage ?? null,
+        estimatedDelivery: row.estimatedDelivery ?? null, deliveryFee: row.deliveryFee ?? null,
+        freeDeliveryFrom: row.freeDeliveryFrom ?? null, minOrderAmount: row.minOrderAmount ?? null }
+      : { id: row.id, name: row.name, ...(publicImage(row.imageUrl) ? { imageUrl: publicImage(row.imageUrl) } : {}), categoryName: row.categoryName, price: row.price,
+        promoPrice: row.promoPrice ?? null, likes: row.likes ?? 0,
+        currency: row.currency, store: { slug: row.store.slug, name: row.store.name } });
+    return { ...envelope, items, total };
+  }
+  return { listStores: query => list('stores', query), listProducts: query => list('products', query) };
+}
+
+module.exports = { InvalidQuery, parseQuery, parseStoreSlugs, createCatalog, createPrismaCatalogAdapter, storeTerms, activePromoPrice,
+  APPROVED_MERCHANT };

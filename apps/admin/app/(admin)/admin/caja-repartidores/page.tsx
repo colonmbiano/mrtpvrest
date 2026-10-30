@@ -10,6 +10,7 @@ import {
   PageShell, PageHeader, Card, StatTile, Pill, IconBadge, Avatar,
   Button, EmptyState, Modal, Textarea, useToast,
 } from "@/components/ds";
+import { PayoutApprovalModal } from "./PayoutApprovalModal";
 
 export default function CajaRepartidoresPage() {
   const toast = useToast();
@@ -17,6 +18,7 @@ export default function CajaRepartidoresPage() {
   const [cuts, setCuts]         = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
   const [pending, setPending]   = useState<any[]>([]);
+  const [payouts, setPayouts]   = useState<any[]>([]);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [selected, setSelected] = useState<any>(null);
   const [movements, setMovements] = useState<any[]>([]);
@@ -28,20 +30,23 @@ export default function CajaRepartidoresPage() {
   const [showFloatModal, setShowFloatModal] = useState<any>(null);
   const [floatAmount, setFloatAmount] = useState("");
   const [floatBusy, setFloatBusy] = useState(false);
+  const [selectedPayout, setSelectedPayout] = useState<any>(null);
 
   async function fetchAll() {
     setLoading(true);
     try {
-      const [s, c, r, p] = await Promise.all([
+      const [s, c, r, p, payoutsRes] = await Promise.all([
         api.get("/api/driver-cash/summary/today"),
         api.get("/api/driver-cash/cuts"),
         api.get("/api/driver-cash/shift-requests"),
         api.get("/api/driver-cash/pending-collection"),
+        api.get("/api/marketplace/payouts").catch(() => ({ data: [] })),
       ]);
       setSummary(s.data);
       setCuts(c.data);
       setRequests(r.data);
       setPending(p.data);
+      setPayouts(payoutsRes.data);
     } catch {} finally { setLoading(false); }
   }
 
@@ -110,6 +115,33 @@ export default function CajaRepartidoresPage() {
       toast.success(`Fondo de cambio asignado a ${driver.name}: $${n.toFixed(0)}`);
     } catch (err: any) { toast.error(err.response?.data?.error || "Error"); }
     finally { setFloatBusy(false); }
+  }
+
+  async function doApprovePayout(payoutId: string, paymentReference: string) {
+    try {
+      await api.post(`/api/marketplace/payouts/${payoutId}/approve`, {
+        paymentReference,
+        confirmPaid: true,
+      }, {
+        headers: { "Idempotency-Key": `approve-${payoutId}-${Date.now()}` },
+      });
+      setSelectedPayout(null);
+      fetchAll();
+    } catch (err: any) {
+      throw err;
+    }
+  }
+
+  async function doRejectPayout(payoutId: string, reason: string) {
+    try {
+      await api.post(`/api/marketplace/payouts/${payoutId}/reject`, {
+        reason,
+      });
+      setSelectedPayout(null);
+      fetchAll();
+    } catch (err: any) {
+      throw err;
+    }
   }
 
   const totalIncome  = summary.reduce((s, d) => s + d.income, 0);
@@ -211,6 +243,48 @@ export default function CajaRepartidoresPage() {
               </Button>
             </div>
           ))}
+        </Card>
+      )}
+
+      {/* retiros bancarios solicitados (repartidor → admin para aprobación) */}
+      {payouts.length > 0 && (
+        <Card className="mb-6 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 font-display font-bold text-tx-hi" style={{ borderBottom: "1px solid var(--bd-1)", background: "var(--surf-2)" }}>
+            <ArrowUpRight size={16} style={{ color: "var(--brand-primary)" }} /> Retiros Bancarios Solicitados
+            <Pill tone="warn">{payouts.filter((p: any) => p.status === "PENDING").length}</Pill>
+            <span className="ml-auto font-display text-sm font-extrabold text-primary">
+              ${payouts.reduce((s: number, p: any) => s + (p.amount || 0), 0).toFixed(2)}
+            </span>
+          </div>
+          {payouts.map((p: any) => {
+            const statusColor = p.status === "PENDING" ? "var(--warn)" : "var(--ok)";
+            const statusLabel = p.status === "PENDING" ? "Pendiente" : "Pagado";
+            return (
+              <div key={p.id} className="flex items-center gap-3 px-5 py-3" style={{ borderBottom: "1px solid var(--bd-1)" }}>
+                <IconBadge icon={ArrowUpRight} tone={p.status === "PENDING" ? "warn" : "ok"} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-bold text-tx">{p.driverName}</div>
+                  <div className="flex items-center gap-2 text-[11px] text-tx-mut">
+                    <span>{new Date(p.requestedAt).toLocaleString("es-MX", { timeZone: "America/Mexico_City", dateStyle: "short", timeStyle: "short" })}</span>
+                    <span>·</span>
+                    <span style={{ color: statusColor, fontWeight: 500 }}>{statusLabel}</span>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-[10px] text-tx-mut">Monto</div>
+                  <div className="font-display font-extrabold text-primary">${p.amount.toFixed(2)}</div>
+                </div>
+                {p.status === "PENDING" && (
+                  <Button
+                    size="sm"
+                    onClick={() => setSelectedPayout(p)}
+                  >
+                    Revisar
+                  </Button>
+                )}
+              </div>
+            );
+          })}
         </Card>
       )}
 
@@ -430,6 +504,15 @@ export default function CajaRepartidoresPage() {
           placeholder="Notas del corte (opcional)" rows={3}
         />
       </Modal>
+
+      {/* modal aprobación de retiro */}
+      <PayoutApprovalModal
+        open={!!selectedPayout}
+        payout={selectedPayout}
+        onClose={() => setSelectedPayout(null)}
+        onApprove={doApprovePayout}
+        onReject={doRejectPayout}
+      />
     </PageShell>
   );
 }

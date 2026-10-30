@@ -5,6 +5,8 @@ const { prisma } = require('@mrtpvrest/database')
 const { authenticate, requireRole } = require('../middleware/auth.middleware')
 const { invalidateModuleCache } = require('../middleware/module.middleware')
 const { deriveActiveKeys, syncTenantModuleRows, MODULE_DEFINITIONS } = require('../lib/tenantModules')
+const { restaurantHasModule, MODULES } = require('../lib/modules')
+const { createMerchantMembershipService, MembershipError } = require('../lib/marketplace-merchant-membership')
 
 // MODULE_DEFINITIONS (gating por plan) se deriva del catálogo único en
 // lib/tenantModules.js — no redefinir aquí.
@@ -184,6 +186,43 @@ router.patch('/:key', authenticate, requireRole('OWNER', 'ADMIN', 'SUPER_ADMIN')
   } catch (err) {
     console.error('[modules] PATCH /:key error:', err)
     res.status(500).json({ error: 'Error al actualizar módulo' })
+  }
+})
+
+// ─── Marketplace: solicitud para aparecer en el directorio ─────────────────
+// El negocio activa el módulo MARKETPLACE (arriba) y luego pide entrar al
+// directorio; la plataforma revisa la solicitud en /api/saas/marketplace/memberships.
+let membershipService
+function memberships() {
+  return membershipService ||= createMerchantMembershipService({
+    prismaClient: prisma,
+    hasMarketplaceModule: (restaurantId) => restaurantHasModule(restaurantId, MODULES.MODULE_MARKETPLACE),
+  })
+}
+function membershipError(res, err, label) {
+  if (err instanceof MembershipError) return res.status(err.statusCode).json({ error: err.message, errorCode: err.code })
+  console.error(`[modules] ${label} error:`, err)
+  return res.status(503).json({ error: 'Directorio del marketplace temporalmente no disponible', errorCode: 'MEMBERSHIP_UNAVAILABLE' })
+}
+
+// GET /api/modules/marketplace/membership — estado del módulo y de la solicitud
+router.get('/marketplace/membership', authenticate, requireRole('OWNER', 'ADMIN', 'MANAGER', 'SUPER_ADMIN'), async (req, res) => {
+  res.set('Cache-Control', 'no-store')
+  try {
+    res.json(await memberships().getMembership({ restaurantId: req.restaurantId }))
+  } catch (err) {
+    membershipError(res, err, 'GET /marketplace/membership')
+  }
+})
+
+// POST /api/modules/marketplace/membership — solicitar aparecer en el directorio
+router.post('/marketplace/membership', authenticate, requireRole('OWNER', 'ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+  res.set('Cache-Control', 'no-store')
+  try {
+    const result = await memberships().requestMembership({ restaurantId: req.restaurantId, actorId: req.user?.id })
+    res.status(result.created ? 201 : 200).json(result)
+  } catch (err) {
+    membershipError(res, err, 'POST /marketplace/membership')
   }
 })
 

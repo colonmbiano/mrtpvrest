@@ -5,7 +5,7 @@ import {
   Info, Wifi, WifiOff, Server, ServerOff,
   X, Check, ListChecks, Bike, Utensils, ShoppingBag,
   Trophy, RefreshCcw, LogOut, Radio, Trash2,
-  Clock3, UserRound, Settings2, PlugZap, Router,
+  Clock3, UserRound, Settings2, PlugZap, Router, Store,
 } from "lucide-react";
 import { io, type Socket } from "socket.io-client";
 import api, { getApiUrl } from "@/lib/api";
@@ -60,6 +60,8 @@ interface KdsOrder {
   orderType: "DINE_IN" | "TAKEOUT" | "DELIVERY";
   tableNumber?: string | null;
   customerName?: string | null;
+  /** Canal del pedido (TPV, ONLINE, WHATSAPP, MARKETPLACE…). */
+  source?: string | null;
   createdAt: string;
   notes?: string | null;
   items: KdsOrderItem[];
@@ -953,6 +955,12 @@ function OrderCard({
         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.07] border border-white/10 text-[12px] font-black text-white/80">
           <UserRound size={13} /> {orderLabel}
         </span>
+        {/* Llega a cocina solo después de que el comercio lo aceptó en el TPV. */}
+        {order.source?.toUpperCase() === "MARKETPLACE" && (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-400/12 border border-amber-400/25 text-[11px] font-black uppercase tracking-wider text-amber-300">
+            <Store size={13} /> Marketplace
+          </span>
+        )}
         {order.notes && (
           <span className="px-3 py-1.5 rounded-full bg-amber-400/12 border border-amber-400/20 text-[11px] font-bold text-amber-200">
             {order.notes}

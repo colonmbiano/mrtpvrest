@@ -25,7 +25,10 @@ export function getLocalOrders(mode: 'active' | 'paid' = 'active'): any[] {
   return Object.values(useOfflineStore.getState().orders)
     .filter(r => sameOrderScope(r.scope, scope))
     .map(r => r.order)
-    .filter(o => mode === 'paid' ? o.paymentStatus === 'PAID' : o.paymentStatus !== 'PAID' && ACTIVE_ORDER_STATUSES.has(o.status));
+    // Un pedido del marketplace pagado en línea sigue abierto mientras espera que
+    // el comercio lo acepte; si no, el TPV nunca se lo mostraría.
+    .filter(o => mode === 'paid' ? o.paymentStatus === 'PAID'
+      : (o.paymentStatus !== 'PAID' || o.status === 'PENDING_MERCHANT') && ACTIVE_ORDER_STATUSES.has(o.status));
 }
 export function mergeLocalPaidOrders(tickets: any[]): any[] {
   const merged = new Map(tickets.map(o => [o.id, o]));

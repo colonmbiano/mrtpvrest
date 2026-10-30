@@ -28,7 +28,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#0E1512",
+  themeColor: "#0A0A0A",
 };
 
 // Guard global contra el bug nativo de <input type="number">: con el campo
@@ -51,7 +51,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" data-theme="green" data-mode="dark" suppressHydrationWarning>
+    <html lang="es" data-theme="orange" data-mode="dark" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

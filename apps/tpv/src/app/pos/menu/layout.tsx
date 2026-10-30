@@ -58,6 +58,7 @@ import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import ChangeOrderTypeModal from "@/components/pos/ChangeOrderTypeModal";
 import { ORDER_TYPE_BADGE as ORDER_TYPE_LABEL } from "@/lib/orderTypes";
+import { ONLINE_SOURCES, chargeBlockedLabel, isMarketplaceOrder, itemsLocked, kitchenPrintReady } from "@/lib/webOrders";
 
 const ACTIVE_STATUSES = new Set([
   "PENDING",
@@ -70,13 +71,14 @@ const ACTIVE_STATUSES = new Set([
   // fantasma que nunca coincidía, por lo que el pedido asignado desaparecía
   // de "Tickets abiertos"). Sigue abierto hasta DELIVERED/CANCELLED.
   "ON_THE_WAY",
+  // Pedido del marketplace que espera que el comercio lo acepte.
+  "PENDING_MERCHANT",
 ]);
 
-// Orígenes que cuentan como "pedido web" (tienda en línea). KIOSK queda fuera
-// porque tiene su propio flujo de notificación. WHATSAPP entra aquí para que los
-// pedidos creados por el bridge de WhatsApp (packages/wa-orders) aparezcan en el
-// panel "Pedidos Web" y el cajero los confirme antes de cocina.
-const ONLINE_SOURCES = new Set(["ONLINE", "STORE", "WHATSAPP"]);
+// Orígenes que cuentan como "pedido web" (tienda en línea, WhatsApp y
+// marketplace): lib/webOrders. WHATSAPP entra para que los pedidos del bridge
+// (packages/wa-orders) aparezcan en el panel "Pedidos Web" y el cajero los
+// confirme antes de cocina; el marketplace, para que el comercio los acepte.
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -95,6 +97,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const [showNotifs, setShowNotifs] = useState(false);
   const [showWebOrders, setShowWebOrders] = useState(false);
   const [acceptingWebId, setAcceptingWebId] = useState<string | null>(null);
+  const [rejectingWebId, setRejectingWebId] = useState<string | null>(null);
   const [showExpenses, setShowExpenses] = useState(false);
   const [showCatalogSettings, setShowCatalogSettings] = useState(false);
   const [mobileView, setMobileView] = useState<"menu" | "ticket">("menu");
@@ -106,7 +109,14 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const autoPrintWebOrderRef = useRef<((order: any) => void) | null>(null);
   // Lock in-flight para que flushPendingRound no POSTee la misma ronda 2x.
   const flushingRoundRef = useRef(false);
-  useNotifications({ onOrderNew: (order) => autoPrintWebOrderRef.current?.(order) });
+  // Refresca la lista al llegar un pedido de mesa por confirmar (sin esperar
+  // al poll de 30 s); se conecta a fetchOpenOrders más abajo.
+  const refreshOpenOrdersRef = useRef<(() => void) | null>(null);
+  useNotifications({
+    onOrderNew: (order) => autoPrintWebOrderRef.current?.(order),
+    onTablePending: () => refreshOpenOrdersRef.current?.(),
+    onWebRound: (round) => autoPrintWebOrderRef.current?.(round),
+  });
 
   // Mantener la pantalla encendida mientras esté abierto el shell de
   // cajero (Capacitor only — no-op en web). Si el cajero está esperando
@@ -191,6 +201,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       console.error("Error cargando órdenes abiertas:", err);
     }
   }, []);
+  useEffect(() => {
+    refreshOpenOrdersRef.current = fetchOpenOrders;
+  }, [fetchOpenOrders]);
 
   // Tickets COBRADOS del último mes (pestaña "Cobradas"). Local-first: pinta el
   // cache al instante (stale-while-revalidate) y revalida contra el backend.
@@ -570,6 +583,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       o.tableId || o.table?.id || "",
       o.orderNumber ?? null,
     );
+    // Marketplace: solo lectura y, si toca, sin cobro en caja.
+    useActiveOrderStore.getState().setOrderLock({ itemsLocked: itemsLocked(o), chargeBlocked: chargeBlockedLabel(o) });
     setShowOrders(false);
     setShowWebOrders(false);
     setMobileView("menu");
@@ -579,9 +594,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const handleOpenOrderInCatalog = async (o: any) => {
     const full = await fetchFullOrder(o);
     openOrderInCatalog(full);
-    toast.success(
-      "Ticket abierto: agrega productos o usa el menú para reimprimir",
-    );
+    toast.success(itemsLocked(full)
+      ? "Pedido del marketplace abierto en solo lectura: se puede ver e imprimir"
+      : "Ticket abierto: agrega productos o usa el menú para reimprimir");
   };
 
   const handleOpenPayment = async (o: any) => {
@@ -671,25 +686,41 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     autoPrintWebOrderRef.current = async (order: any) => {
       const id: string | undefined = order?.id || order?.orderId;
       if (!id) return;
+      // Ronda por QR sumada a una cuenta (order:web-round): se imprime SOLO esa
+      // ronda, con su propio reclamo y dedupe (la comanda de la cuenta ya salió
+      // al abrirse). La cuenta puede ser del TPV, así que su source no cuenta.
+      const roundId: string | undefined = order?.roundId || undefined;
+      const key = roundId ? `${id}:${roundId}` : id;
       const src = String(order?.source || "").toUpperCase();
       // Si viene source y NO es web (p.ej. TPV/WAITER), no imprimir: esos ya
       // imprimieron localmente al crearse. Si no viene source (payload mínimo
       // de la tienda), lo confirmamos con el detalle más abajo.
       if (src && !ONLINE_SOURCES.has(src)) return;
-      if (printedWebOrders.current.has(id)) return;
-      printedWebOrders.current.add(id);
+      if (printedWebOrders.current.has(key)) return;
+      printedWebOrders.current.add(key);
       try {
         // Siempre pedimos el detalle: el payload del socket no trae los
         // printerGroups/categorías que necesita el ruteo a cocina.
         const full = await fetchFullOrder({ id });
         const fullSrc = String(full?.source || "").toUpperCase();
-        if (fullSrc && !ONLINE_SOURCES.has(fullSrc)) {
-          printedWebOrders.current.delete(id);
+        // Mesa por QR sin confirmar: no va a cocina todavía. Al aceptarla llega
+        // otro order:new y ahí sí se imprime (por eso se quita del dedupe).
+        if ((!roundId && fullSrc && !ONLINE_SOURCES.has(fullSrc)) || full?.awaitingTableConfirmation === true) {
+          printedWebOrders.current.delete(key);
           return;
         }
-        const items = orderItemsToTicketItems(full.items || []);
+        // Marketplace: la comanda sale al aceptarlo, no al llegar. Sí se refresca la lista
+        // para que el pedido aparezca de inmediato en "Pedidos web" por aceptar.
+        if (!kitchenPrintReady(full)) {
+          printedWebOrders.current.delete(key);
+          fetchOpenOrders();
+          return;
+        }
+        const items = orderItemsToTicketItems(
+          (full.items || []).filter((it: any) => !roundId || it.roundId === roundId),
+        );
         if (items.length === 0) {
-          printedWebOrders.current.delete(id);
+          printedWebOrders.current.delete(key);
           return;
         }
         // IMPRIME-UNA-VEZ (server-side): si hay varias tablets con la caja
@@ -698,38 +729,40 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         // imprime igual (mejor un posible doble que una comanda perdida).
         let mayPrint = true;
         try {
-          const claim = await api.post(`/api/orders/${id}/claim-kitchen-print`);
+          const claim = await api.post(`/api/orders/${id}/claim-kitchen-print`, roundId ? { roundId } : undefined);
           mayPrint = claim?.data?.claimed !== false;
         } catch {
           mayPrint = true;
         }
+        const folio = full.orderNumber ? `#${full.orderNumber}` : "";
+        const what = roundId ? `Ronda QR de la cuenta ${folio}` : `Pedido web ${folio}`;
         if (!mayPrint) {
-          const folioOtra = full.orderNumber ? `#${full.orderNumber}` : "";
-          toast.info(`Pedido web ${folioOtra} lo imprime otra caja`);
+          toast.info(`${what} lo imprime otra caja`);
           return; // otra pantalla se encarga; el id queda marcado, no se reintenta aquí
         }
         const res = await printKitchenTickets(printers, {
           orderNumber: full.orderNumber || String(full.id).slice(-6).toUpperCase(),
           orderType: full.orderType || null,
           tableNumber: full.table?.name || full.tableNumber || null,
-          customerName: full.customerName || full.user?.name || null,
+          // Ronda: el nombre de quien la pidió por QR, no el de la cuenta.
+          customerName: (roundId && order?.customerName) || full.customerName || full.user?.name || null,
           items,
           // Banner PAGADO / PENDIENTE DE PAGO en la comanda web: el pago online
           // llega PAID; el contra-entrega/efectivo llega PENDING y hay que cobrar.
-          paid: full.paymentStatus === "PAID" || full.cashCollected === true,
-          paymentMethod: full.paymentMethod || null,
+          // La ronda se cobra con la cuenta: sin banner, como las rondas del TPV.
+          paid: roundId ? undefined : full.paymentStatus === "PAID" || full.cashCollected === true,
+          paymentMethod: roundId ? null : full.paymentMethod || null,
           config: kitchenConfig ?? undefined,
         });
-        const folio = full.orderNumber ? `#${full.orderNumber}` : "";
         if (res.ok > 0) {
-          toast.success(`🖨️ Pedido web ${folio} impreso en cocina`);
+          toast.success(`🖨️ ${what} impreso en cocina`);
         } else {
           // Permitir reintento (manual o por re-evento) si la impresora falló.
-          printedWebOrders.current.delete(id);
-          toast.warning(`Pedido web ${folio} recibido — no se pudo imprimir, revisa la impresora`);
+          printedWebOrders.current.delete(key);
+          toast.warning(`${what} recibido — no se pudo imprimir, revisa la impresora`);
         }
       } catch {
-        printedWebOrders.current.delete(id);
+        printedWebOrders.current.delete(key);
       }
     };
   }, [printers, kitchenConfig]);
@@ -1134,6 +1167,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     driver: o.deliveryDriverName || undefined,
     needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
     takenBy: o.createdByName || undefined,
+    chargeBlocked: chargeBlockedLabel(o),
+    itemsLocked: itemsLocked(o),
   }));
 
   // Tickets cobrados → shape del drawer. El "createdAt" del tile muestra la
@@ -1163,6 +1198,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
     customerName: o.customerName || o.user?.name || "Cliente",
     customerPhone: o.customerPhone || null,
+    source: o.source || null,
     orderType: o.orderType || "TAKEOUT",
     status: o.status,
     total: Number(o.total ?? 0),
@@ -1174,6 +1210,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     paymentStatus: o.paymentStatus || null,
     paymentMethod: o.paymentMethod || null,
     cashCollected: o.cashCollected === true,
+    tableName: o.table?.name || (o.tableNumber != null ? String(o.tableNumber) : null),
+    awaitingTableConfirmation: o.awaitingTableConfirmation === true,
   }));
 
   const canMergeOpenOrders = currentEmployee?.role
@@ -1464,14 +1502,17 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     }
   }, []);
 
-  // Aceptar un pedido web: PENDING → CONFIRMED. Tras confirmar, refrescamos el
-  // listado para que salga de "nuevos por aceptar" y el badge baje.
+  // Aceptar un pedido web: PENDING / PENDING_MERCHANT → CONFIRMED. Tras
+  // confirmar, refrescamos el listado para que salga de "nuevos por aceptar" y
+  // el badge baje. Un pedido del marketplace imprime su comanda en este momento.
   const handleAcceptWebOrder = useCallback(
     async (id: string) => {
       setAcceptingWebId(id);
       try {
         await api.put(`/api/orders/${id}/status`, { status: "CONFIRMED" });
-        toast.success("Pedido web aceptado");
+        const fromMarketplace = isMarketplaceOrder(openOrders.find((o: any) => o.id === id));
+        toast.success(fromMarketplace ? "Pedido del marketplace aceptado" : "Pedido web aceptado");
+        if (fromMarketplace) autoPrintWebOrderRef.current?.({ id, source: "MARKETPLACE" });
         fetchOpenOrders();
       } catch (err: any) {
         toast.error(
@@ -1482,7 +1523,32 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         setAcceptingWebId(null);
       }
     },
-    [fetchOpenOrders],
+    [fetchOpenOrders, openOrders],
+  );
+
+  // Rechazar un pedido por aceptar → CANCELLED. Del marketplace (PENDING_MERCHANT):
+  // el backend avisa al cliente y un pago en línea ya cobrado se reembolsa aparte.
+  // De mesa por QR que nadie espera en el local (PENDING): el backend no libera la
+  // mesa (nunca la ocupó).
+  const handleRejectWebOrder = useCallback(
+    async (id: string) => {
+      const fromMarketplace = isMarketplaceOrder(openOrders.find((o: any) => o.id === id));
+      if (fromMarketplace && !confirm("¿Rechazar este pedido del marketplace? Se avisará al cliente.")) return;
+      setRejectingWebId(id);
+      try {
+        await api.put(`/api/orders/${id}/status`, { status: "CANCELLED" });
+        toast.success(fromMarketplace ? "Pedido del marketplace rechazado" : "Pedido de mesa rechazado");
+        fetchOpenOrders();
+      } catch (err: any) {
+        toast.error(
+          "Error al rechazar: " +
+            (err?.response?.data?.error || err?.message || "fallo desconocido"),
+        );
+      } finally {
+        setRejectingWebId(null);
+      }
+    },
+    [fetchOpenOrders, openOrders],
   );
 
   // Los pedidos web también entran directo al catálogo para continuar la
@@ -1683,6 +1749,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         hideMoney={isLoanMode}
         acceptingId={acceptingWebId}
         onAccept={handleAcceptWebOrder}
+        rejectingId={rejectingWebId}
+        onReject={handleRejectWebOrder}
         onShowDetail={handleShowWebDetail}
       />
 

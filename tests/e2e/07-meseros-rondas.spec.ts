@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { injectTPVDevice, enterPIN } from './helpers';
+import { injectTPVDevice, enterPIN, getAdminHeaders, getEmployeeHeaders } from './helpers';
 
 /**
  * 07 — Meseros v2: mesa → ronda 1 → ronda 2 → pedir cuenta.
@@ -15,25 +15,25 @@ import { injectTPVDevice, enterPIN } from './helpers';
  *   - CashShift abierto (requireActiveShift gatea POST /api/orders/tpv).
  */
 
-const TPV_URL = process.env.TPV_URL ?? 'http://localhost:3005';
 const WAITER_PIN = process.env.WAITER_PIN ?? '1111';
+const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 
 test.describe('Meseros — rondas y cuenta', () => {
-  test.beforeEach(async ({ page }) => {
+  let tableId: string;
+  test.beforeEach(async ({ page, request }, testInfo) => {
+    const response = await request.post(`${API_URL}/api/tables`, {
+      headers: getAdminHeaders(),
+      data: { name: `E2E rondas ${Date.now()}-${testInfo.workerIndex}-${testInfo.repeatEachIndex}` },
+    });
+    expect(response.status()).toBe(201);
+    tableId = (await response.json()).id;
     await injectTPVDevice(page);
-    await page.goto(TPV_URL);
+    // La comandera lleva al mesero al salón tras el PIN. Los page.goto()
+    // posteriores al login recargaban el documento y activaban el bloqueo
+    // intencional de sesión, antes de que comenzara el flujo de rondas.
+    await page.evaluate(() => localStorage.setItem('deviceRole', 'WAITER'));
     await enterPIN(page, WAITER_PIN);
-    // Pre-compila la ruta de detalle. Es una ruta ESTÁTICA con query param
-    // (/meseros/detalle/?id=<cuid>) — antes era el segmento dinámico
-    // /meseros/[id], que en el export estático del APK solo generaba un
-    // placeholder "_" y hacía 404 al abrir una mesa real. En `next dev` el
-    // primer hit la compila on-demand (~7s); sin este warm-up, el tap a una
-    // mesa real corría contra esa compilación y a veces excedía el timeout
-    // del click (flake). Un goto usa el timeout de navegación (30s).
-    await page.goto(`${TPV_URL}/meseros/detalle/?id=_`);
-    // El WAITER puede aterrizar en / (modo préstamo) o en /meseros según
-    // deviceRole; navegamos explícito a la sala para no depender de eso.
-    await page.goto(`${TPV_URL}/meseros`);
+    await expect(page).toHaveURL(/\/meseros\/?$/, { timeout: 20_000 });
     await expect(page.getByText(/gestión de salón/i)).toBeVisible({ timeout: 15_000 });
   });
 
@@ -43,14 +43,15 @@ test.describe('Meseros — rondas y cuenta', () => {
     // 1. Tomar una mesa LIBRE de la grilla (tiles = links a
     //    /meseros/detalle/?id=<cuid>; la nav inferior queda fuera de <main>).
     const freeTile = page
-      .locator('main a[href^="/meseros/"]')
+      .locator(`main a[href="/meseros/detalle/?id=${tableId}"]`)
       .filter({ hasText: /libre/i })
       .first();
     await expect(freeTile).toBeVisible({ timeout: 15_000 });
     await freeTile.click();
+    await expect(page).toHaveURL(new RegExp(`/meseros/detalle/\\?id=${tableId}$`));
 
     // 2. Detalle de mesa sin cuenta → abrir comanda.
-    await page.getByRole('button', { name: /abrir comanda/i }).click({ timeout: 15_000 });
+    await page.getByRole('button', { name: /abrir comanda/i }).click({ timeout: 30_000 });
 
     // 3. RONDA 1: agregar burger y enviar a cocina.
     await page.getByRole('button', { name: /E2E Burger/i }).first().click({ timeout: 15_000 });
@@ -80,5 +81,14 @@ test.describe('Meseros — rondas y cuenta', () => {
     //    el cobro es del TPV principal, fuera de este flujo).
     await page.getByRole('button', { name: /pedir cuenta/i }).click();
     await expect(page.getByRole('button', { name: /cuenta solicitada/i })).toBeVisible({ timeout: 15_000 });
+
+    const persisted = await page.request.get(`${API_URL}/api/tables/${tableId}`, {
+      headers: await getEmployeeHeaders(page),
+    });
+    expect(persisted.ok()).toBeTruthy();
+    const table = await persisted.json();
+    expect(table.status).toBe('OCCUPIED');
+    expect(Number(table.activeOrder.total)).toBe(150);
+    expect(table.activeOrder.rounds.map((round: { roundNumber: number }) => round.roundNumber)).toEqual([1, 2]);
   });
 });

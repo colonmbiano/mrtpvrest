@@ -34,6 +34,7 @@ import {
   Zap,
 } from "lucide-react";
 import { hapticMedium } from "@/lib/haptics";
+import { PAY_FILTERS, matchesPayFilter } from "@/lib/paid-order-filters";
 import { ORDER_TYPE_ACTION, ORDER_TYPE_BADGE, ORDER_TYPE_SHORT, type OrderTypeId as OrderType } from "@/lib/orderTypes";
 import UserBadge from "@/components/UserBadge";
 
@@ -68,6 +69,10 @@ export interface OpenAccount {
   isWeb?: boolean;
   /** Solo modo "Cobradas": método de pago crudo para el chip de la fila. */
   paymentMethod?: string | null;
+  /** Marketplace: motivo por el que no se cobra en caja ("Por aceptar", "Pagado en línea"…). */
+  chargeBlocked?: string | null;
+  /** Marketplace: sus productos no se editan; "Editar" pasa a "Ver". */
+  itemsLocked?: boolean;
 }
 
 // Etiqueta legible del método de pago (chip de la fila en modo "Cobradas").
@@ -218,7 +223,7 @@ type OrderTypeCard = {
 };
 
 const ORDER_TYPES: OrderTypeCard[] = [
-  { id: "DINE_IN",  title: ORDER_TYPE_ACTION.DINE_IN,  icon: Armchair,    accent: "#34C988", shortcut: "1" },
+  { id: "DINE_IN",  title: ORDER_TYPE_ACTION.DINE_IN,  icon: Armchair,    accent: "#E0A22A", shortcut: "1" },
   { id: "TAKEOUT",  title: ORDER_TYPE_ACTION.TAKEOUT,  icon: ShoppingBag, accent: "#3b82f6", shortcut: "2" },
   { id: "DELIVERY", title: ORDER_TYPE_ACTION.DELIVERY, icon: Moto,        accent: "#F97316", shortcut: "3" },
 ];
@@ -227,7 +232,7 @@ const ORDER_TYPES: OrderTypeCard[] = [
 const TYPE_META: Record<OrderType, { label: string; icon: typeof Utensils; accent: string }> = {
   DINE_IN:  { label: ORDER_TYPE_BADGE.DINE_IN,  icon: Utensils,    accent: "#E0A22A" },
   TAKEOUT:  { label: ORDER_TYPE_BADGE.TAKEOUT,  icon: ShoppingBag, accent: "#3b82f6" },
-  DELIVERY: { label: ORDER_TYPE_BADGE.DELIVERY, icon: Bike,        accent: "#10b981" },
+  DELIVERY: { label: ORDER_TYPE_BADGE.DELIVERY, icon: Bike,        accent: "#F97316" },
 };
 
 // Punto de estado por estado de la orden.
@@ -315,6 +320,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   const paidMode = mode === "paid";
   const [menuOpen, setMenuOpen] = useState(false);
   const [filter, setFilter] = useState<"ALL" | OrderType>("ALL");
+  const [payFilter, setPayFilter] = useState("Todos");
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Selección múltiple para juntar cuentas / asignar repartidor SIN abrir un
@@ -409,10 +415,12 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
 
   const visibleAccounts = useMemo(
     () =>
-      filter === "ALL"
-        ? openAccounts
-        : openAccounts.filter((a) => a.rawType === filter),
-    [openAccounts, filter],
+      openAccounts.filter(
+        (a) =>
+          (filter === "ALL" || a.rawType === filter) &&
+          (!paidMode || matchesPayFilter(a, payFilter)),
+      ),
+    [openAccounts, filter, paidMode, payFilter],
   );
 
   useEffect(() => {
@@ -653,16 +661,16 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <p
                 className="text-[10px] font-semibold uppercase tracking-[0.14em]"
                 style={{ color: paidMode ? "#88D66C" : "var(--brand)" }}
               >
                 {paidMode
-                  ? `Cobradas · último mes · ${openAccounts.length}`
+                  ? `Cobradas · último mes · ${visibleAccounts.length} de ${openAccounts.length}`
                   : `Cuentas abiertas · ${openAccounts.length}`}
               </p>
-              <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+              <div role="group" aria-label="Tipo de pedido" className="flex gap-1.5 overflow-x-auto scrollbar-hide">
                 {FILTERS.map((f) => {
                   const active = filter === f.key;
                   return (
@@ -670,6 +678,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       key={f.key}
                       type="button"
                       onClick={() => setFilter(f.key)}
+                      aria-pressed={active}
                       className={`shrink-0 rounded-lg px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] transition-all active:scale-95 ${
                         active
                           ? "bg-[var(--brand)] text-[var(--brand-fg)]"
@@ -682,6 +691,34 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                 })}
               </div>
             </div>
+
+            {paidMode && (
+              <div role="group" aria-label="Tipo de pago" className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/40">
+                  Pago
+                </span>
+                <div className="flex min-w-0 gap-1.5 overflow-x-auto scrollbar-hide">
+                  {PAY_FILTERS.map((p) => {
+                    const active = payFilter === p.key;
+                    return (
+                      <button
+                        key={p.key}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => setPayFilter(p.key)}
+                        className={`shrink-0 min-h-[44px] rounded-lg border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] transition-all active:scale-95 ${
+                          active
+                            ? "border-[#88D66C]/40 bg-[#88D66C]/20 text-[#88D66C]"
+                            : "border-white/10 bg-white/5 text-white/55"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Selección múltiple EN ESTA pantalla: juntar cuentas / asignar
                 repartidor sin abrir un cajón aparte. */}
@@ -718,7 +755,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                   {paidMode
                     ? openAccounts.length === 0
                       ? "Sin tickets cobrados este mes"
-                      : "Sin cobrados de este tipo"
+                      : "Sin cobrados con estos filtros"
                     : openAccounts.length === 0
                       ? "No hay cuentas abiertas"
                       : "Sin cuentas de este tipo"}
@@ -1087,11 +1124,11 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                       <div className="flex items-stretch gap-2">
                         <button
                           type="button"
-                          aria-label={`Editar cuenta de ${title}`}
+                          aria-label={`${acc.itemsLocked ? "Ver" : "Editar"} cuenta de ${title}`}
                           onClick={() => onOpenAccount?.(acc.id)}
                           className="flex-1 h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text-primary)] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                         >
-                          <Pencil size={15} strokeWidth={2.5} /> Editar
+                          <Pencil size={15} strokeWidth={2.5} /> {acc.itemsLocked ? "Ver" : "Editar"}
                         </button>
                         <button
                           type="button"
@@ -1101,7 +1138,15 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                         >
                           <Receipt size={15} strokeWidth={2.5} /> Imprimir
                         </button>
-                        {!hideMoney && (
+                        {!hideMoney && (acc.chargeBlocked ? (
+                          // Marketplace por aceptar o ya pagado en línea: no se cobra en caja.
+                          <span
+                            role="note"
+                            className="flex-[1.3] h-10 rounded-xl border border-[var(--border-strong)] text-[var(--text-secondary)] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5"
+                          >
+                            {acc.chargeBlocked}
+                          </span>
+                        ) : (
                           <button
                             type="button"
                             aria-label={`Cobrar cuenta de ${title}`}
@@ -1110,7 +1155,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                           >
                             <Zap size={15} strokeWidth={2.8} /> Cobrar
                           </button>
-                        )}
+                        ))}
                       </div>
                     ))}
                     </div>
