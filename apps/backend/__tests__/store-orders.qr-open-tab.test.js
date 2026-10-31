@@ -212,8 +212,8 @@ describe('POST /api/store/orders — QR a una mesa con cuenta abierta', () => {
     });
     // La mesa ya estaba ocupada por su cuenta: no se toca.
     expect(tx.table.update).not.toHaveBeenCalled();
-    // Inventario: SOLO la línea nueva (la de la ronda 1 ya se descontó al abrirla).
-    expect(prisma.comboSelection.findMany.mock.calls.map((c) => c[0].where.orderItemId)).toEqual(['li-2']);
+    // Inventario: la ronda no descuenta nada; la cuenta se consume completa al cobrarla.
+    expect(prisma.comboSelection.findMany).not.toHaveBeenCalled();
   });
 
   it('busca la cuenta viva y confirmada de esa mesa en la sucursal de la mesa', async () => {

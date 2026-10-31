@@ -238,6 +238,88 @@ describe('cuentas locales completas', () => {
     rememberServerOrder({ id: 'remote', status: 'CONFIRMED', items: [{ id: 'line', quantity: 2 }] });
     expect(getLocalOrder('remote').items[0].modifiers).toHaveLength(1);
   });
+
+  it('sincroniza 50 ventas cobradas sin pérdidas ni duplicados', async () => {
+    setOnline(false);
+
+    const localIds: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      const created = await apiOrQueue<any>('order', 'POST', '/api/orders/tpv', {
+        orderType: 'TAKEOUT',
+        items: [{ menuItemId: 'p1', quantity: 1 }],
+        subtotal: 20,
+        total: 20,
+      }, { localOrder: { items: firstItems, expectedTotal: 20 } });
+
+      expect(created).toMatchObject({ ok: true, queued: true });
+      const localId = created.data.id as string;
+      localIds.push(localId);
+
+      const paid = await apiOrQueue<any>(
+        'payment',
+        'PUT',
+        `/api/orders/${localId}/payment`,
+        { paymentMethod: i % 2 === 0 ? 'CASH' : 'CARD' },
+      );
+      expect(paid).toMatchObject({ ok: true, queued: true, data: { paymentStatus: 'PAID', total: 20 } });
+    }
+
+    // 50 creaciones + 50 pagos deben sobrevivir en FIFO antes de volver la red.
+    expect(new Set(localIds).size).toBe(50);
+    expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(100);
+    expect(getLocalOrders('paid')).toHaveLength(50);
+
+    let serverSeq = 0;
+    setOnline(true);
+    mockApi.get.mockResolvedValue({ data: [] });
+    mockApi.post.mockImplementation(async (requestPath, body) => {
+      expect(requestPath).toBe('/api/orders/tpv');
+      serverSeq += 1;
+      return {
+        data: {
+          id: `server-stress-${serverSeq}`,
+          orderNumber: String(9000 + serverSeq),
+          status: 'CONFIRMED',
+          paymentStatus: 'PENDING',
+          subtotal: 20,
+          total: 20,
+          items: firstItems,
+          clientOrderId: (body as any).clientOrderId,
+        },
+      };
+    });
+    mockApi.put.mockImplementation(async (requestPath) => {
+      const match = String(requestPath).match(/\/api\/orders\/(server-stress-\d+)\/payment/);
+      expect(match?.[1]).toBeTruthy();
+      return {
+        data: {
+          id: match![1],
+          status: 'DELIVERED',
+          paymentStatus: 'PAID',
+          total: 20,
+        },
+      };
+    });
+
+    await syncOfflineQueue();
+
+    expect(mockApi.post).toHaveBeenCalledTimes(50);
+    expect(mockApi.put).toHaveBeenCalledTimes(50);
+    expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(0);
+    expect(getLocalOrders('paid')).toHaveLength(50);
+
+    // Cada creación lleva una llave lógica distinta; ningún pedido se replayea
+    // de nuevo después de que el ACK quedó persistido.
+    const clientOrderIds = mockApi.post.mock.calls.map((call) => (call[1] as any).clientOrderId);
+    expect(new Set(clientOrderIds).size).toBe(50);
+    const paymentPaths = mockApi.put.mock.calls.map((call) => String(call[0]));
+    expect(new Set(paymentPaths).size).toBe(50);
+
+    await syncOfflineQueue();
+    expect(mockApi.post).toHaveBeenCalledTimes(50);
+    expect(mockApi.put).toHaveBeenCalledTimes(50);
+  });
+
 });
 
 describe('división de cuentas sin red', () => {

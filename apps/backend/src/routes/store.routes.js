@@ -35,6 +35,7 @@ const { nextOrderNumber } = require('../lib/order-number');
 const { verifyTableToken } = require('../lib/table-qr');
 const { webRoundTabWhere, canTakeWebRound, heldOrderRoundId } = require('../lib/table-status');
 const { sendOrderPaidEmail } = require('../lib/order-confirmation-mailer');
+const { consumePaidOrder } = require('../services/order-inventory.service');
 const { computeOpenState } = require('../utils/storeHours');
 const { authenticate } = require('../middleware/auth.middleware');
 const { addLoyaltyPoints, genLoyaltyQr, getTier } = require('../services/loyalty.service');
@@ -2054,6 +2055,16 @@ async function applyStorePaymentResult(orderId, { status, rawStatus, providerId 
       ...(confirmsTable ? { awaitingTableConfirmation: false } : {}),
     },
   });
+  // Pagado en línea: el inventario se consume con el cobro, como en caja. Va en
+  // su propia transacción: los webhooks responden 200 aunque fallen, así que un
+  // error de inventario no debe deshacer el pago. Un reintento no vuelve a
+  // descontar las líneas ya consumidas.
+  if (status === 'PAID') {
+    await prisma.$transaction(
+      (tx) => consumePaidOrder(tx, orderId, order.restaurantId, { confirmedExternalPayment: true }),
+      { timeout: 30000 },
+    ).catch((e) => console.error('[store] inventario al pagar en línea:', orderId, e.message));
+  }
   if (confirmsTable && order.tableId) {
     await prisma.table.update({ where: { id: order.tableId }, data: { status: 'OCCUPIED' } }).catch(() => {});
   }

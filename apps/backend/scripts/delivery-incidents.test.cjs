@@ -118,6 +118,8 @@ function http(f) {
     express: { Router: () => router }, bcryptjs: {}, jsonwebtoken: {}, '@mrtpvrest/database': { prisma: f.prisma },
     '../middleware/auth.middleware': auth, '../utils/dayRange': {},
     '../services/notifications.service': { notifyOrderStatus: async () => {}, sendPushToDriver: async () => {}, notifyDriversNewDeliveryOrder: async () => {} },
+    // Consumo de inventario al cobrar: fuera de alcance aquí (ver prueba del servicio abajo).
+    '../services/order-inventory.service': { consumePaidOrder: async () => {} },
     '../lib/delivery-incidents': require('../src/lib/delivery-incidents'),
     // PIN de pedidos propios: real; sin STORE_DELIVERY_PIN_MODE queda en off.
     '../lib/store-delivery-pin': require('../src/lib/store-delivery-pin'),
@@ -284,6 +286,25 @@ test('existing calls without evidence preserve status response and transfer-pend
   const paid = setup(); assert.equal((await paid.status({ status: 'DELIVERED', paymentMethod: 'CARD' })).order.paymentStatus, 'PAID');
   const moving = setup(); moving.state.order[0].status = 'READY';
   assert.equal((await moving.status({ status: 'ON_THE_WAY' })).order.status, 'ON_THE_WAY');
+});
+test('cobrado al entregar consume el inventario en la transacción; efectivo y por cobrar esperan a la caja', async () => {
+  for (const [paymentMethod, consumes] of [['CARD', true], ['TRANSFER', true], ['CASH', false], ['TRANSFER_PENDING', false], [undefined, false]]) {
+    const f = setup(); const calls = [];
+    const service = createDeliveryIncidentsService({ now: () => new Date(NOW), logger: { warn() {} },
+      consumePaidOrder: async (...args) => { calls.push(args); } });
+    await service.updateStatus({ ...f.args, driverId: 'd1', body: { status: 'DELIVERED', paymentMethod } });
+    assert.equal(calls.length, consumes ? 1 : 0, String(paymentMethod));
+    if (consumes) {
+      assert.equal(calls[0][1], 'o1'); assert.equal(calls[0][2], 'r1');
+      assert.deepEqual(calls[0][3], { confirmedExternalPayment: true });
+    }
+  }
+  // Un reintento de una entrega ya cerrada no vuelve a consumir.
+  const f = setup(); f.state.order[0].status = 'DELIVERED'; const calls = [];
+  const service = createDeliveryIncidentsService({ now: () => new Date(NOW), logger: { warn() {} },
+    consumePaidOrder: async (...args) => { calls.push(args); } });
+  await service.updateStatus({ ...f.args, driverId: 'd1', body: { status: 'DELIVERED', paymentMethod: 'CARD' } });
+  assert.equal(calls.length, 0);
 });
 test('pending shipping fee, inactive driver, unauthorized driver and cancelled order block evidence', async () => {
   for (const change of [f => { f.state.order[0].notes = 'ENVÍO POR ASIGNAR'; f.state.order[0].deliveryFee = 0; },

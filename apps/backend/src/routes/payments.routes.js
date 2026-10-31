@@ -1,3 +1,4 @@
+const { consumePaidOrder } = require('../services/order-inventory.service');
 const express = require('express');
 const crypto  = require('crypto');
 const { prisma } = require('@mrtpvrest/database');
@@ -118,8 +119,11 @@ router.post('/webhook', async (req, res) => {
     // hace los updates idempotentes y evita que un `rejected` tardío (p.ej. un
     // intento de pago fallido previo al que sí aprobó) cancele una orden pagada.
     if (status === 'approved') {
-      const updated = await prisma.order.updateMany({
-        where: { id: orderId, paymentStatus: { not: 'PAID' } },
+      const target = await prisma.order.findUnique({ where: { id: orderId }, select: { restaurantId: true } });
+      if (!target) return res.sendStatus(200);
+      const updated = await prisma.$transaction(async tx => {
+        const result = await tx.order.updateMany({
+        where: { id: orderId, restaurantId: target.restaurantId, status: { not: 'CANCELLED' }, paymentStatus: { not: 'PAID' } },
         data: {
           status: 'DELIVERED',
           paymentStatus: 'PAID',
@@ -128,6 +132,9 @@ router.post('/webhook', async (req, res) => {
                          paymentData.payment_type_id === 'bank_transfer' ? 'SPEI' : 'CARD',
         },
       });
+        if (result.count) await consumePaidOrder(tx, orderId, target.restaurantId, { confirmedExternalPayment: true });
+        return result;
+      }, { timeout: 30000 });
       if (updated.count > 0) {
         await releaseTableAfterPayment(prisma, orderId).catch(() => {});
         console.log('Pago aprobado para orden:', orderId);
@@ -142,7 +149,7 @@ router.post('/webhook', async (req, res) => {
     res.sendStatus(200);
   } catch (e) {
     console.error('Webhook error:', e);
-    res.sendStatus(200);
+    res.sendStatus(500); // The provider must retry if payment + inventory did not commit.
   }
 });
 

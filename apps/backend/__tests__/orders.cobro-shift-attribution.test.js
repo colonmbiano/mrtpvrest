@@ -1,5 +1,10 @@
 'use strict';
 
+jest.mock('../src/services/order-inventory.service', () => ({
+  ...jest.requireActual('../src/services/order-inventory.service'),
+  consumePaidOrder: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Atribución del cobro al turno ABIERTO (no al de creación de la cuenta).
 //
 // Bug que cubre: una cuenta abierta en un turno y cobrada en OTRO (mesa que

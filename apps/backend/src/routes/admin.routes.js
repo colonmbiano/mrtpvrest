@@ -323,8 +323,11 @@ router.get('/whatsapp-assistant/metrics', authenticate, requireTenantAccess, req
     const { computeBotMetrics } = require('../services/whatsapp-bot-metrics.service');
 
     let metrics = null;
-    try { metrics = await computeBotMetrics(restaurantId); }
-    catch (e) { console.error('bot metrics error:', e?.message || e); }
+    try {
+      metrics = await computeBotMetrics(restaurantId);
+      const { computeBotUsageMetrics } = require('../services/bot-usage.service');
+      metrics.usage = await computeBotUsageMetrics(restaurantId);
+    } catch (e) { console.error('bot metrics error:', e?.message || e); }
 
     let status = { reachable: false, ready: null, hasQr: null, qrUrl: null, url: null };
     const row = await prisma.integrationConfig.findUnique({

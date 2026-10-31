@@ -1,3 +1,4 @@
+const { consumePaidOrder } = require('../services/order-inventory.service');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -18,7 +19,7 @@ const storeDeliveryPin = createStoreDeliveryPin({ attempts: createPrismaPinAttem
 if (storeDeliveryPin.misconfigured) {
   console.warn('[delivery] STORE_DELIVERY_PIN_MODE sin STORE_DELIVERY_PIN_SECRET valido: PIN de entrega desactivado');
 }
-const deliveryIncidents = createDeliveryIncidentsService({ storeDeliveryPin });
+const deliveryIncidents = createDeliveryIncidentsService({ storeDeliveryPin, consumePaidOrder });
 
 function incidentError(req, res, error) {
   if (error instanceof DeliveryIncidentError) {

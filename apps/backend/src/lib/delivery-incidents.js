@@ -108,7 +108,10 @@ function receipt(row) { return { success: true, incidentId: row.id, loggedAt: ro
 
 // storeDeliveryPin: createStoreDeliveryPin() de ./store-delivery-pin. Opcional;
 // sin él (pruebas antiguas) la entrega de pedidos propios no pide PIN.
-function createDeliveryIncidentsService({ now = () => new Date(), logger = console, storeDeliveryPin = null } = {}) {
+// `consumePaidOrder(tx, orderId, restaurantId, options)`: descuenta el inventario
+// de un pedido al quedar pagado, en la misma transacción (services/order-inventory).
+function createDeliveryIncidentsService({ now = () => new Date(), logger = console, storeDeliveryPin = null,
+  consumePaidOrder = null } = {}) {
   async function logIncident({ orderId, body, idempotencyKey, actor, restaurantId, prismaClient, io }) {
     const scope = actorScope({ actor, restaurantId }); id(orderId);
     check(object(body) && (!body.orderId || body.orderId === orderId), 'ORDER_ID_MISMATCH', 'Pedido invalido');
@@ -250,6 +253,11 @@ function createDeliveryIncidentsService({ now = () => new Date(), logger = conso
         check(updated.count === 1, 'ORDER_CONFLICT', 'El pedido cambio; reintenta', 409);
         await tx.orderStatusHistory.create({ data: { orderId, status,
           note: JSON.stringify({ actorId: actor.id, courierId: driverId, evidenceId: evidenceReceipt?.id ?? null }) } });
+        // Cobrado al entregar (tarjeta/transferencia confirmada): el inventario se
+        // consume aquí. El efectivo se consume cuando la caja lo concilia.
+        if (data.paymentStatus === 'PAID' && consumePaidOrder) {
+          await consumePaidOrder(tx, orderId, scope, { confirmedExternalPayment: true });
+        }
       }
       const order = await tx.order.findFirst({ where: { id: orderId, restaurantId: scope },
         include: { items: { include: { menuItem: true } }, user: true } });

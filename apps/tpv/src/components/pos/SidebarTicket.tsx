@@ -1474,6 +1474,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
 
         <PaymentModal
           isOpen={showPayment && !isLoanMode}
+          orderId={activeOrderId}
           onClose={() => setShowPayment(false)}
           orderNumber={String(ticket.id)}
           orderType={ticket.type}

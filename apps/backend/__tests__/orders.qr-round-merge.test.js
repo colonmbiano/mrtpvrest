@@ -218,8 +218,8 @@ describe('PUT /api/orders/:id/status · aceptar un pedido de mesa que ya tiene c
       customerName: 'Ana', total: 140, source: 'ONLINE',
     });
     expect(printOrderRoundTicket).toHaveBeenCalledWith(expect.objectContaining({ id: 'tab-1' }), 'qr-held-o1');
-    // Inventario: solo las líneas que llegaron en la ronda.
-    expect(prisma.comboSelection.findMany.mock.calls.map((c) => c[0].where.orderItemId)).toEqual(['li-o1']);
+    // Inventario: la ronda no descuenta nada; la cuenta se consume completa al cobrarla.
+    expect(prisma.comboSelection.findMany).not.toHaveBeenCalled();
   });
 
   test('la nota del comensal pasa a las notas de la cuenta', async () => {
@@ -301,8 +301,9 @@ describe('PUT /api/orders/:id/status · cuándo el pedido aceptado se vuelve la 
     const res = await request(makeApp()).put('/api/orders/o1/status').send({ status: 'CANCELLED' });
 
     expect(res.status).toBe(200);
+    // Una sola lectura (el pedido): no busca la cuenta de la mesa. Reponer el
+    // inventario al cancelar abre su propia transacción en segundo plano.
     expect(prisma.order.findFirst).toHaveBeenCalledTimes(1);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.order.update.mock.calls[0][0].data).toEqual({ status: 'CANCELLED', awaitingTableConfirmation: false });
   });
 });
