@@ -105,7 +105,11 @@ test('rechaza el traslado de un pedido retenido antes de reservar el destino', a
 test('un pedido QR retenido bloquea el destino aunque la mesa figure libre', async () => {
   tx.order.findFirst.mockImplementation(async ({ where }) => where.id ? source :
     where.tableId === 't2' ? { id: 'held-order', awaitingTableConfirmation: true } : null);
-  await move().expect(409);
+  const res = await move().expect(409);
+  expect(res.body).toEqual({
+    code: 'TARGET_TABLE_CONFIRMATION_PENDING',
+    error: 'La mesa destino tiene un pedido por QR esperando confirmación; acéptalo o recházalo primero',
+  });
   expect(tx.order.findFirst).toHaveBeenCalledWith(expect.objectContaining({
     where: { tableId: 't2', status: { in: expect.any(Array) }, paymentStatus: { not: 'PAID' } },
   }));

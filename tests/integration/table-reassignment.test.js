@@ -10,7 +10,8 @@ const { randomUUID } = require('node:crypto');
 
 const databaseUrl = new URL(process.env.DATABASE_URL || 'http://missing');
 assert(['127.0.0.1', 'localhost'].includes(databaseUrl.hostname) && /test/i.test(databaseUrl.pathname) &&
-  (databaseUrl.port === '55449' || (process.env.CI === 'true' && databaseUrl.port === '5432')),
+  // 55439 y 55449: puertos de las bases desechables locales de Claude y Codex.
+  (['55439', '55449'].includes(databaseUrl.port) || (process.env.CI === 'true' && databaseUrl.port === '5432')),
   'Esta prueba requiere una base de datos local de pruebas');
 const { prisma, runWithBypass, runWithTenant } = require('../../packages/database');
 const routes = require('../../apps/backend/src/routes/orders.routes');

@@ -2800,8 +2800,14 @@ router.patch('/:id/table', authenticate, requireTenantAccess,
         if (!claimed.count) reject(409, 'La mesa destino no está libre');
         const occupied = await tx.order.findFirst({
           where: { tableId: target.id, status: { in: OPEN_TABLE_STATUSES }, paymentStatus: { not: 'PAID' } },
-          select: { id: true },
+          select: { id: true, awaitingTableConfirmation: true },
         });
+        // Un pedido QR retenido no ocupa la mesa ni sale en el TPV: decir por qué
+        // falla, si no la caja ve la mesa libre y "ya tiene una cuenta abierta".
+        if (occupied?.awaitingTableConfirmation) {
+          reject(409, 'La mesa destino tiene un pedido por QR esperando confirmación; acéptalo o recházalo primero',
+            'TARGET_TABLE_CONFIRMATION_PENDING');
+        }
         if (occupied) reject(409, 'La mesa destino ya tiene una cuenta abierta');
         const moved = await tx.order.update({
           where: { id: source.id },
