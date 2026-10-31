@@ -69,6 +69,9 @@ function computeBulkPromoDiscount(items, promos) {
   // Repartir las unidades (expandidas por cantidad) en su promo correspondiente.
   const unitsByPromo = new Map(); // promoId → number[] (precios unitarios)
   for (const item of safeItems) {
+    // Las líneas por kilo (báscula) quedan FUERA del pool: su `price` es por kg
+    // y `quantity` siempre es 1, así que no son unidades comparables.
+    if (item.weightKg != null) continue;
     const promo = item.categoryId ? categoryToPromo.get(item.categoryId) : null;
     if (!promo) continue;
     const qty = Math.max(0, Math.floor(Number(item.quantity) || 0));

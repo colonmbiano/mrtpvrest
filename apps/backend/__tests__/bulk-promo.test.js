@@ -80,6 +80,25 @@ describe('computeBulkPromoDiscount :: 3x2 pool combinado', () => {
   });
 });
 
+describe('computeBulkPromoDiscount :: líneas por kilo quedan fuera del pool', () => {
+  test('una línea por kilo no cuenta como unidad del 3x2', () => {
+    const items = [
+      { price: 300, quantity: 1, weightKg: 2.5, categoryId: ALITAS }, // kg
+      { price: 90, quantity: 2, categoryId: ALITAS },                 // piezas
+    ];
+    // Solo 2 piezas elegibles → sin bloque completo
+    expect(computeBulkPromoDiscount(items, [promo3x2]).promoDiscount).toBe(0);
+  });
+
+  test('3 piezas + una línea por kilo → regala la pieza más barata, no el kilo', () => {
+    const items = [
+      { price: 300, quantity: 1, weightKg: 0.5, categoryId: ALITAS }, // kg, excluido
+      { price: 90, quantity: 3, categoryId: ALITAS },
+    ];
+    expect(computeBulkPromoDiscount(items, [promo3x2]).promoDiscount).toBe(90);
+  });
+});
+
 describe('computeBulkPromoDiscount :: anti doble-conteo', () => {
   test('una unidad la consume solo la PRIMERA promo que cubra su categoría', () => {
     const promoA = { id: 'a', name: 'A', buyQuantity: 3, payQuantity: 2, categoryIds: [ALITAS] };

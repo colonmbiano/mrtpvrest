@@ -1050,7 +1050,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     // (precio real de DB) y se acotan dentro de computeOrderTotals.
     const activeBulkPromos = await loadActiveBulkPromos(prisma, restaurantId);
     const { promoDiscount: bulkPromoDiscount } = computeBulkPromoDiscount(
-      resolvedItems.map((it) => ({ price: it.price, quantity: it.quantity, categoryId: it._categoryId })),
+      resolvedItems.map((it) => ({ price: it.price, quantity: it.quantity, weightKg: it.weightKg, categoryId: it._categoryId })),
       activeBulkPromos,
     );
 
@@ -1375,7 +1375,7 @@ async function insertRoundInTx(tx, { order, roundId, itemsData = [], moveItemsFr
   // Re-evaluar la promo NxM sobre la cuenta completa (la categoría de cada
   // línea sale del menuItem, no se guarda en OrderItem).
   const { promoDiscount: bulkPromoDiscount } = computeBulkPromoDiscount(
-    all.map((it) => ({ price: Number(it.price), quantity: it.quantity, categoryId: it.menuItem?.categoryId })),
+    all.map((it) => ({ price: Number(it.price), quantity: it.quantity, weightKg: it.weightKg, categoryId: it.menuItem?.categoryId })),
     activeBulkPromos,
   );
   // Mismo helper que el create: subtotal/total siempre desde las líneas en DB.
