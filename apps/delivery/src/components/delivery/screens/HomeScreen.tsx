@@ -1,7 +1,9 @@
 'use client';
 // handoff/screens/HomeScreen.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { C, S, ORDER_STATUS_CONFIG } from '@/lib/tokens';
+import { MarketplaceOffers } from '../MarketplaceOffers';
+import { marketplaceNetworkEnabled } from '@/lib/marketplaceNetwork';
 
 interface Order {
   id: string;
@@ -31,6 +33,10 @@ interface HomeScreenProps {
   onChat: (order: Order) => void;
   onDeliverOrder: (order: Order) => void;
   onNavigate: (screen: string) => void;
+  isSharedCourier?: boolean;
+  onToggleShared?: (enabled: boolean) => void;
+  // El aceptar oferta del despacho regresa taskId; orderId no siempre viene.
+  onMarketplaceOfferAccepted?: (result: { taskId: string; orderId?: string }) => void;
 }
 
 // Tarjeta compacta del pool de disponibles: la acción única es TOMAR el pedido.
@@ -216,7 +222,11 @@ export function HomeScreen({
   driver, orders, availableOrders = [], claimingId = null, onClaimOrder,
   isOnline, pendingSync = 0, unreadNotices = 0,
   onSelectOrder, onChat, onDeliverOrder, onNavigate,
+  isSharedCourier = false, onToggleShared, onMarketplaceOfferAccepted,
 }: HomeScreenProps) {
+  const [activeTab, setActiveTab] = useState<'store' | 'marketplace'>('store');
+  const networkEnabled = marketplaceNetworkEnabled(process.env.NEXT_PUBLIC_MARKETPLACE_NETWORK_ENABLED);
+  const visibleTab = networkEnabled ? activeTab : 'store';
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: C.fontBody }}>
@@ -340,96 +350,145 @@ export function HomeScreen({
         </div>
       </div>
 
-      {/* ── Daily metrics ── */}
-      <div style={{ padding: '16px 16px 0' }}>
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(255,184,77,0.09) 0%, rgba(255,184,77,0.04) 100%)',
-          border: '1px solid rgba(255,184,77,0.18)', borderRadius: 20, padding: '16px',
-          display: 'flex',
-        }}>
-          {[
-            { label: 'Completadas', value: '—' },
-            { label: 'En mano',     value: '—' },
-            { label: 'Comisión',    value: '—' },
-          ].map((m, i) => (
-            <div key={i} style={{
-              flex: 1, textAlign: 'center',
-              borderRight: i < 2 ? '1px solid rgba(255,184,77,0.15)' : 'none',
-            }}>
-              <div style={{ fontFamily: C.fontDisplay, fontSize: 22, fontWeight: 700, color: C.amber, lineHeight: 1 }}>
-                {m.value}
-              </div>
-              <div style={{ fontSize: 8, color: 'rgba(255,184,77,0.55)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 6 }}>
-                {m.label}
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* ── Tabs: Mi Tienda vs Red Marketplace ── */}
+      <div style={{ padding: '12px 16px', display: 'flex', gap: 12, borderBottom: `1px solid ${C.border}` }}>
+        <button
+          onClick={() => setActiveTab('store')}
+          style={{
+            flex: 1, height: 44, borderRadius: 12, cursor: 'pointer',
+            background: visibleTab === 'store' ? C.green : 'rgba(136,214,108,0.1)',
+            border: visibleTab === 'store' ? 'none' : `1px solid ${C.border}`,
+            color: visibleTab === 'store' ? '#090909' : C.text,
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          🏪 Mi Tienda
+        </button>
+        {networkEnabled && <button
+          onClick={() => setActiveTab('marketplace')}
+          style={{
+            flex: 1, height: 44, borderRadius: 12, cursor: 'pointer',
+            background: activeTab === 'marketplace' ? C.amber : 'rgba(255,184,77,0.1)',
+            border: activeTab === 'marketplace' ? 'none' : `1px solid ${C.border}`,
+            color: activeTab === 'marketplace' ? '#090909' : C.text,
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          🌐 Red Marketplace
+        </button>}
       </div>
 
-      {/* ── Pedidos DISPONIBLES (pool para auto-asignarse) ── */}
-      {availableOrders.length > 0 && onClaimOrder && (
-        <div style={{ padding: '20px 16px 0' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div>
-              <div style={{ ...S.sectionLabel, color: C.green }}>Disponibles</div>
-              <div style={{ fontFamily: C.fontDisplay, fontSize: 26, fontWeight: 700, color: C.text, lineHeight: 1 }}>
-                {availableOrders.length}{' '}
-                <span style={{ fontSize: 13, color: C.textDim, fontFamily: C.fontBody, fontWeight: 400 }}>
-                  {availableOrders.length === 1 ? 'pedido sin repartidor' : 'pedidos sin repartidor'}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {availableOrders.map(order => (
-              <AvailableOrderCard
-                key={order.id}
-                order={order}
-                claiming={claimingId === order.id}
-                onClaim={() => onClaimOrder(order)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Orders ── */}
-      <div style={{ padding: '20px 16px 32px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div>
-            <div style={S.sectionLabel}>Ruta Activa</div>
-            <div style={{ fontFamily: C.fontDisplay, fontSize: 26, fontWeight: 700, color: C.text, lineHeight: 1 }}>
-              {orders.length}{' '}
-              <span style={{ fontSize: 13, color: C.textDim, fontFamily: C.fontBody, fontWeight: 400 }}>pedidos</span>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {orders.map(order => (
-            <OrderCard
-              key={order.id}
-              order={order}
-              onDetail={() => onSelectOrder(order)}
-              onChat={() => onChat(order)}
-              onDeliver={() => onDeliverOrder(order)}
-              onNavigate={onNavigate}
-            />
-          ))}
-
-          {orders.length === 0 && (
+      {/* ── Contenido según pestaña activa ── */}
+      {visibleTab === 'store' ? (
+        <>
+          {/* ── Daily metrics ── */}
+          <div style={{ padding: '16px 16px 0' }}>
             <div style={{
-              padding: '44px 20px', textAlign: 'center',
-              background: C.surf1, borderRadius: 24, border: `1px dashed ${C.border}`,
+              background: 'linear-gradient(135deg, rgba(255,184,77,0.09) 0%, rgba(255,184,77,0.04) 100%)',
+              border: '1px solid rgba(255,184,77,0.18)', borderRadius: 20, padding: '16px',
+              display: 'flex',
             }}>
-              <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 700 }}>
-                Esperando nuevas órdenes…
+              {[
+                { label: 'Completadas', value: '—' },
+                { label: 'En mano',     value: '—' },
+                { label: 'Comisión',    value: '—' },
+              ].map((m, i) => (
+                <div key={i} style={{
+                  flex: 1, textAlign: 'center',
+                  borderRight: i < 2 ? '1px solid rgba(255,184,77,0.15)' : 'none',
+                }}>
+                  <div style={{ fontFamily: C.fontDisplay, fontSize: 22, fontWeight: 700, color: C.amber, lineHeight: 1 }}>
+                    {m.value}
+                  </div>
+                  <div style={{ fontSize: 8, color: 'rgba(255,184,77,0.55)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 6 }}>
+                    {m.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Pedidos DISPONIBLES (pool para auto-asignarse) ── */}
+          {availableOrders.length > 0 && onClaimOrder && (
+            <div style={{ padding: '20px 16px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div>
+                  <div style={{ ...S.sectionLabel, color: C.green }}>Disponibles</div>
+                  <div style={{ fontFamily: C.fontDisplay, fontSize: 26, fontWeight: 700, color: C.text, lineHeight: 1 }}>
+                    {availableOrders.length}{' '}
+                    <span style={{ fontSize: 13, color: C.textDim, fontFamily: C.fontBody, fontWeight: 400 }}>
+                      {availableOrders.length === 1 ? 'pedido sin repartidor' : 'pedidos sin repartidor'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {availableOrders.map(order => (
+                  <AvailableOrderCard
+                    key={order.id}
+                    order={order}
+                    claiming={claimingId === order.id}
+                    onClaim={() => onClaimOrder(order)}
+                  />
+                ))}
               </div>
             </div>
           )}
+
+          {/* ── Orders ── */}
+          <div style={{ padding: '20px 16px 32px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div>
+                <div style={S.sectionLabel}>Ruta Activa</div>
+                <div style={{ fontFamily: C.fontDisplay, fontSize: 26, fontWeight: 700, color: C.text, lineHeight: 1 }}>
+                  {orders.length}{' '}
+                  <span style={{ fontSize: 13, color: C.textDim, fontFamily: C.fontBody, fontWeight: 400 }}>pedidos</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {orders.map(order => (
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  onDetail={() => onSelectOrder(order)}
+                  onChat={() => onChat(order)}
+                  onDeliver={() => onDeliverOrder(order)}
+                  onNavigate={onNavigate}
+                />
+              ))}
+
+              {orders.length === 0 && (
+                <div style={{
+                  padding: '44px 20px', textAlign: 'center',
+                  background: C.surf1, borderRadius: 24, border: `1px dashed ${C.border}`,
+                }}>
+                  <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 700 }}>
+                    Esperando nuevas órdenes…
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* ── Red Marketplace ── */
+        <div style={{ padding: '16px 16px 32px' }}>
+          {driver && (
+            <MarketplaceOffers
+              courierId={driver.id}
+              isSharedCourier={isSharedCourier}
+              onToggleShared={onToggleShared}
+              onOfferAccepted={(result) => {
+                onMarketplaceOfferAccepted?.(result);
+              }}
+            />
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

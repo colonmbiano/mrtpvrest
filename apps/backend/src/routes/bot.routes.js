@@ -30,10 +30,36 @@ async function buildBotContext(restaurantId) {
   const [menuItems, restaurant, cfg, primaryLocation] = await Promise.all([
     prisma.menuItem.findMany({
       where: { restaurantId, isAvailable: true },
-      include: { variants: true, complements: true, modifierGroups: { include: { modifiers: true } } },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        promoPrice: true,
+        isPromo: true,
+        activeDays: true,
+        variants: { select: { id: true, name: true, price: true, isAvailable: true } },
+        complements: { select: { id: true, name: true, price: true, isAvailable: true } },
+        modifierGroups: {
+          select: {
+            id: true,
+            name: true,
+            modifiers: { select: { id: true, name: true, priceAdd: true } },
+          },
+        },
+      },
     }),
     prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { name: true } }),
-    prisma.restaurantConfig.findUnique({ where: { restaurantId } }),
+    prisma.restaurantConfig.findUnique({
+      where: { restaurantId },
+      select: {
+        isOpen: true,
+        scheduleEnabled: true,
+        businessHours: true,
+        timezone: true,
+        estimatedDelivery: true,
+      },
+    }),
     prisma.location.findFirst({ where: { restaurantId, isActive: true }, orderBy: { createdAt: 'asc' }, select: { id: true } }),
   ]);
 

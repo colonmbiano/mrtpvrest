@@ -98,3 +98,10 @@ open-design
 # Supabase CLI
 supabase/.temp/
 supabase/.branches/
+
+# Playwright client QR checks
+/test-results/
+
+# Bitácora y plan de trabajo locales (no se versionan; el repo es público)
+/MARKETPLACE-TRABAJO.md
+/PLAN-CODEX.md

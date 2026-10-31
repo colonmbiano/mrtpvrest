@@ -13,6 +13,7 @@ import { buildOrderItemsPayload, comboPartsFromCartItem, comboPartsFromOrderItem
 import { useAuthStore } from "@/store/authStore";
 import { useTicketStore, type CartItem } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
+import { chargeBlockedLabel, itemsLocked as orderItemsLocked } from "@/lib/webOrders";
 import { useTpvConfig } from "@/hooks/useTpvConfig";
 import { useKitchenConfig, usePrinters, useFullTicketConfig, useReceiptIdentity, buildReceiptIdentityFields } from "@/hooks/usePrinters";
 import { useDualScreen } from "@/hooks/useDualScreen";
@@ -71,6 +72,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
   // Se incrementa cuando una ronda se guarda desde fuera (ej. "Imprimir cuenta"
   // en el layout): recargamos el historial para reflejar los nuevos productos.
   const roundsRevision = useActiveOrderStore((s) => s.roundsRevision);
+  // Pedido del marketplace: solo lectura (sin cantidades ni quitar) y, con motivo, sin cobro en caja.
+  const itemsLocked = useActiveOrderStore((s) => s.itemsLocked);
+  const chargeBlocked = useActiveOrderStore((s) => s.chargeBlocked);
 
   const [previousItems, setPreviousItems] = useState<any[]>([]);
   // Envío de la orden cargada (DELIVERY). El backend lo suma al total; la
@@ -125,6 +129,8 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             setOrderPromoDiscount(Number(data.promoDiscount || 0));
             setActiveTicketName(data.ticketName || null);
             setLoadedHistoryId(activeOrderId);
+            // La orden cargada confirma el bloqueo del marketplace (cubre recargas y otras entradas).
+            useActiveOrderStore.getState().setOrderLock({ itemsLocked: orderItemsLocked(data), chargeBlocked: chargeBlockedLabel(data) });
           }
         } catch (err) {
           console.error("Error al cargar historial de orden:", err);
@@ -1142,8 +1148,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       <div className="flex shrink-0 flex-col gap-2.5 border-b border-white/10 bg-[var(--bg)] p-3">
         <OrderTypeToggle
           active={ticket.type}
-          onChange={(type) => updateTicket({ type })}
-          allowedTypes={tpvConfig.allowedOrderTypes}
+          // Marketplace: el tipo (domicilio/recoger) lo eligió el cliente; solo se muestra el suyo.
+          onChange={(type) => { if (!itemsLocked) updateTicket({ type }); }}
+          allowedTypes={itemsLocked ? [ticket.type] : tpvConfig.allowedOrderTypes}
         />
         <div className="flex items-center justify-between">
           <h2 className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
@@ -1250,6 +1257,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       {/* LISTA DE ITEMS — área scrollable que ocupa lo que sobre entre
           header y bloque de totales/acciones (siempre fijo abajo). */}
       <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--bg)] px-3 py-2 scrollbar-hide">
+        {itemsLocked && (
+          <p role="note" className="mb-3 rounded-lg border border-[var(--brand)]/30 bg-[var(--brand-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--brand)]">
+            Pedido del marketplace: solo lectura. Sus productos los fijó la compra del cliente.
+          </p>
+        )}
         {/* Historial de rondas anteriores si existe activeOrderId */}
         {previousItems.length > 0 && (
           <div className="space-y-2 mb-4">
@@ -1280,11 +1292,12 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
                     name: m.name || m.modifier?.name,
                     priceAdd: m.modifier?.priceAdd || m.priceAdd
                   }))}
-                  onIncrease={() => changePreviousItemQty(item, 1)}
-                  onDecrease={() => changePreviousItemQty(item, -1)}
+                  readOnly={itemsLocked}
+                  onIncrease={itemsLocked ? undefined : () => changePreviousItemQty(item, 1)}
+                  onDecrease={itemsLocked ? undefined : () => changePreviousItemQty(item, -1)}
                   onUpdateNotes={(n) => updatePreviousItemNotes(item, n)}
-                  onRemove={() => removePreviousItem(item)}
-                  onRemoveModifier={(modRowId) => removePreviousItemModifier(item, modRowId)}
+                  onRemove={itemsLocked ? undefined : () => removePreviousItem(item)}
+                  onRemoveModifier={itemsLocked ? undefined : (modRowId) => removePreviousItemModifier(item, modRowId)}
                 />
               ))}
             </div>
@@ -1412,7 +1425,15 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             )}
 
             {/* BOTÓN DERECHO (acción principal) */}
-            {isLoanMode ? (
+            {chargeBlocked && isShiftOpen ? (
+              // Marketplace por aceptar o ya pagado en línea: no se cobra en caja.
+              <span
+                role="note"
+                className="flex-[2] rounded-xl border border-white/10 text-[11px] font-black tracking-[0.15em] uppercase flex items-center justify-center text-zinc-400"
+              >
+                {chargeBlocked}
+              </span>
+            ) : isLoanMode ? (
               <button
                 onClick={handleSendToKitchen}
                 disabled={processing || !hasItems}

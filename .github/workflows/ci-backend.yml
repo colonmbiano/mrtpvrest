@@ -72,3 +72,6 @@ jobs:
 
       - name: Pruebas unitarias + cobertura
         run: pnpm --filter @mrtpvrest/backend run test:coverage --ci
+
+      - name: Contratos seguros del registro Marketplace (sin BD ni correo)
+        run: node --test apps/backend/scripts/marketplace-identity.test.cjs

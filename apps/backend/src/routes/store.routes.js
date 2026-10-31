@@ -1,3 +1,4 @@
+const { resolveSaleWeight, isSoldByWeight, weightDisplayName } = require('../../../../packages/config/weight-sale');
 const { validateQuantityGroups, compactQuantityModifiers, modifierSnapshotKey } = require('../lib/quantity-modifiers');
 /**
  * store.routes.js — API Pública para la Tienda del Cliente
@@ -15,6 +16,7 @@ const { validateQuantityGroups, compactQuantityModifiers, modifierSnapshotKey } 
  */
 
 const express = require('express');
+const { createHash } = require('node:crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('@mrtpvrest/database');
@@ -31,12 +33,18 @@ const { computeDeliveryFee } = require('../lib/delivery-fee');
 const { filterLiveBanners } = require('../lib/banner-schedule');
 const { nextOrderNumber } = require('../lib/order-number');
 const { verifyTableToken } = require('../lib/table-qr');
+const { webRoundTabWhere, canTakeWebRound, heldOrderRoundId } = require('../lib/table-status');
 const { sendOrderPaidEmail } = require('../lib/order-confirmation-mailer');
+const { consumePaidOrder } = require('../services/order-inventory.service');
 const { computeOpenState } = require('../utils/storeHours');
 const { authenticate } = require('../middleware/auth.middleware');
 const { addLoyaltyPoints, genLoyaltyQr, getTier } = require('../services/loyalty.service');
 const { isMilestoneEnabled, processCustomerMilestone } = require('../services/loyalty-milestone.service');
 const { runOrderDictationSmart } = require('../services/order-dictation.service');
+const { createStoreDeliveryPin } = require('../lib/store-delivery-pin');
+// PIN de entrega de pedidos propios a domicilio (STORE_DELIVERY_PIN_MODE): el
+// comprador lo recibe al crear el pedido y en su historial; el repartidor lo pide.
+const storeDeliveryPin = createStoreDeliveryPin();
 const router = express.Router();
 
 // Throttle ligero del parseo de pedidos por IA (público). Protege la cuota de
@@ -89,8 +97,42 @@ function isAuthedStaff(req, restaurantId) {
   } catch { return false; }
 }
 
+// ¿La petición viene de un KIOSKO FÍSICO vinculado a ESTE restaurante?
+// `source: 'KIOSK'` exenta al pedido de reglas pensadas para internet (tienda
+// cerrada, saturación, mínimo de compra, confirmación de mesa), así que no basta
+// con declararlo en el body: el kiosko manda el JWT de dispositivo que obtiene
+// al vincularse (POST /api/devices/create + /api/devices/auth). Devuelve:
+//   { device }             → kiosko activo de este restaurante (y sucursal)
+//   { invalidToken: true } → JWT vencido o mal firmado: el kiosko lo renueva
+//   {}                     → sin JWT de kiosko: el pedido se trata como ONLINE
+async function resolveKioskDevice(req, restaurant, location) {
+  const h = req.headers.authorization;
+  if (!h || !h.startsWith('Bearer ')) return {};
+  let payload;
+  try {
+    payload = jwt.verify(h.split(' ')[1], process.env.JWT_SECRET);
+  } catch {
+    return { invalidToken: true };
+  }
+  if (!payload?.isDevice) return {};
+  const device = await prisma.device.findUnique({
+    where: { id: String(payload.deviceId || payload.userId || '') },
+    select: {
+      id: true, type: true, isActive: true, tenantId: true, locationId: true,
+      location: { select: { restaurantId: true, isActive: true } },
+    },
+  });
+  if (!device || !device.isActive || device.type !== 'KIOSK') return {};
+  // Device.tenantId sale de quien lo creó: exigirlo igual al del restaurante
+  // corta un Device dado de alta en otro tenant sobre una sucursal ajena.
+  if (device.tenantId !== restaurant.tenantId) return {};
+  if (device.location?.restaurantId !== restaurant.id || !device.location.isActive) return {};
+  if (location && device.locationId !== location.id) return {};
+  return { device };
+}
+
 // ── Anti-fraude: rate limit por kiosko ───────────────────────────────────
-// Cache en memoria de pedidos PENDING por terminal. Si un mismo terminal
+// Cache en memoria de pedidos PENDING por kiosko (Device). Si un mismo kiosko
 // crea muchas órdenes sin pagar en ventana corta, lo bloqueamos. Para
 // multi-instancia en Railway necesitaríamos Redis, pero 1 instancia
 // alcanza para el caso típico.
@@ -100,17 +142,17 @@ function isAuthedStaff(req, restaurantId) {
 //   KIOSK_RATE_WINDOW_MS     (default 10 min = 600000)
 const KIOSK_RATE_LIMIT = parseInt(process.env.KIOSK_RATE_LIMIT_PENDING || '8', 10);
 const KIOSK_RATE_WINDOW_MS = parseInt(process.env.KIOSK_RATE_WINDOW_MS || '600000', 10);
-const kioskPendingCache = new Map(); // terminalId → number[] (timestamps)
+const kioskPendingCache = new Map(); // deviceId → number[] (timestamps)
 
-function checkKioskRate(terminalId) {
-  if (!terminalId) return { ok: true };
+function checkKioskRate(deviceId) {
+  if (!deviceId) return { ok: true };
   const now = Date.now();
-  const list = (kioskPendingCache.get(terminalId) || []).filter((t) => now - t < KIOSK_RATE_WINDOW_MS);
+  const list = (kioskPendingCache.get(deviceId) || []).filter((t) => now - t < KIOSK_RATE_WINDOW_MS);
   if (list.length >= KIOSK_RATE_LIMIT) {
     return { ok: false, count: list.length };
   }
   list.push(now);
-  kioskPendingCache.set(terminalId, list);
+  kioskPendingCache.set(deviceId, list);
   return { ok: true, count: list.length };
 }
 
@@ -315,9 +357,14 @@ router.get('/menu', async (req, res) => {
         select: { id: true, name: true, description: true, imageUrl: true, sortOrder: true },
       }),
       prisma.menuItem.findMany({
-        where: { restaurantId: restaurant.id, isAvailable: true, ...(requestIsKiosk(req) ? { availableOnKiosk: true } : { availableOnline: true }) },
+        // Desactivar una categoría la oculta junto con sus productos (también en
+        // kiosko), igual que el catálogo del marketplace.
+        where: {
+          restaurantId: restaurant.id, isAvailable: true, category: { is: { isActive: true } },
+          ...(requestIsKiosk(req) ? { availableOnKiosk: true } : { availableOnline: true }),
+        },
         select: {
-          id: true, name: true, description: true, price: true,
+          id: true, name: true, description: true, price: true, soldByWeight: true, saleUnit: true, minWeightKg: true,
           isPromo: true, promoPrice: true, imageUrl: true,
           promoStartTime: true, promoEndTime: true,
           categoryId: true, isCombo: true,
@@ -376,9 +423,10 @@ router.get('/menu', async (req, res) => {
       items: items.filter(i => i.categoryId === cat.id),
     }));
 
-    // Items disponibles que NO quedaron en ninguna categoría activa (categoría
-    // inactiva, eliminada o sin categoría). Sin esto, los temas que solo
-    // renderizan category.items los ocultaban → "la tienda no muestra productos".
+    // Items disponibles con categoría activa que NO quedaron en ninguna categoría
+    // de esta lista (dato inconsistente, p. ej. categoría de otro restaurante).
+    // Sin esto, los temas que solo renderizan category.items los ocultaban →
+    // "la tienda no muestra productos". Los de categoría inactiva ya no llegan aquí.
     const shownIds = new Set(categoriesWithItems.flatMap(c => c.items.map(i => i.id)));
     const orphanItems = items.filter(i => !shownIds.has(i.id));
     if (orphanItems.length > 0) {
@@ -573,10 +621,132 @@ function sendDedupReplay(res, order, dedupReason) {
     pointsDiscount: 0,
     tip:         order.tip,
     estimatedMinutes: order.estimatedMinutes || 30,
+    deliveryPin: storeDeliveryPin.pinForCustomer(order),
     couponWarnings: [],
     deduped: true,
     dedupReason,
   });
+}
+
+// Aviso al DUEÑO por WhatsApp de un pedido web (o de una ronda web sumada a una
+// cuenta). Opt-in por tenant. Número normalizado con lada aquí porque el envío
+// por integración no antepone la lada. Best-effort: la orden ya existe.
+function sendOwnerOrderAlert(config, restaurantId, order, heading) {
+  const alertNumber = config?.orderAlertEnabled
+    ? toWhatsappNumber(config.orderAlertWhatsapp || config.phone, config.countryCode)
+    : '';
+  if (!alertNumber) return;
+  const typeLabel = order.orderType === 'DELIVERY'
+    ? '🛵 Domicilio'
+    : order.orderType === 'DINE_IN'
+      ? `🍽 Mesa ${order.tableNumber ?? ''}`.trim()
+      : '🥡 Para llevar';
+  const itemsTxt = (order.items || [])
+    .map((it) => `• ${it.quantity}× ${it.menuItem?.name || 'Producto'}`)
+    .join('\n');
+  const addr = order.orderType === 'DELIVERY' && order.deliveryAddress ? `\n📍 ${order.deliveryAddress}` : '';
+  const totalTxt = `$${Number(order.total || 0).toLocaleString('es-MX')}`;
+  const alertMsg =
+    `${heading}\n${typeLabel}\n\n${itemsTxt}\n\n` +
+    `*Total: ${totalTxt}*${addr}\n` +
+    `Cliente: ${order.customerName || 's/n'}${order.customerPhone ? ` · ${order.customerPhone}` : ''}`;
+  require('../services/notifications.service')
+    .sendOrderWhatsApp(restaurantId, alertNumber, alertMsg)
+    .catch((e) => console.error('[store] aviso al dueño:', e.message));
+}
+
+// Pedido de mesa por QR que se suma a la cuenta abierta de su mesa como una
+// ronda más (ver POST /orders). La ronda la escribe el mismo núcleo que las
+// rondas del TPV (orders.routes appendWebRoundToTab): va a cocina como ronda y
+// se cobra con la cuenta, nunca aparte.
+//
+// Idempotencia: la tienda no manda clientOrderId, así que el id de la ronda se
+// deriva del comensal + carrito (la firma del dedupe anti doble-submit) + la
+// ventana de tiempo, y se busca en la ventana actual y en la anterior. Un doble
+// toque no crea dos rondas; dos comensales de la misma mesa que piden lo mismo
+// a la vez (otro nombre o teléfono) sí cuentan aparte, como con las órdenes.
+async function appendToOpenTab(req, res, ctx) {
+  const { tab, itemsData, subtotal, signature, customerName, customerPhone, notes,
+    loyaltyUserId, couponWarnings, config, windowMs } = ctx;
+  const { appendWebRoundToTab } = require('./orders.routes');
+  const bucket = Math.floor(Date.now() / windowMs);
+  const roundIdFor = (b) => `qr-${createHash('sha256')
+    .update(JSON.stringify([tab.restaurantId, tab.id, customerName, customerPhone, signature, b]))
+    .digest('hex')}`;
+  const findReplay = () => prisma.orderRound.findFirst({
+    where: { id: { in: [roundIdFor(bucket), roundIdFor(bucket - 1)] }, orderId: tab.id },
+  });
+  const respond = (round, extra = {}) => res.status(201).json({
+    id:          tab.id,
+    orderNumber: tab.orderNumber,
+    status:      tab.status,
+    // Lo de ESTA ronda: el comensal no ve el total de la cuenta de la mesa.
+    total:       subtotal,
+    discount:    0,
+    pointsUsed:  0,
+    pointsDiscount: 0,
+    tip:         0,
+    estimatedMinutes: tab.estimatedMinutes || 30,
+    couponWarnings,
+    awaitingTableConfirmation: false,
+    appendedToOpenTab: true,
+    roundNumber: round.roundNumber,
+    ...extra,
+  });
+  const replay = async () => {
+    const prior = await findReplay();
+    if (!prior) return null;
+    res.setHeader('X-Dedup-Replay', 'true');
+    return respond(prior, { deduped: true });
+  };
+
+  const prior = await replay();
+  if (prior) return prior;
+
+  let result;
+  try {
+    result = await appendWebRoundToTab({
+      tab, itemsData, roundId: roundIdFor(bucket), io: req.app.get('io'), customerName,
+      appendNote: notes ? `Ronda QR (${customerName}): ${notes}` : null,
+    });
+  } catch (e) {
+    // Doble envío que se cruzó en carrera: el primero ya guardó la ronda.
+    if (e?.code === 'P2002') {
+      const replayed = await replay();
+      if (replayed) return replayed;
+    }
+    throw e;
+  }
+  const { updated, round } = result;
+
+  // Lealtad: los puntos de lo que pidió el comensal, sobre su ronda.
+  if (loyaltyUserId) {
+    addLoyaltyPoints(loyaltyUserId, {
+      id: tab.id, restaurantId: tab.restaurantId, orderNumber: tab.orderNumber, subtotal, discount: 0,
+    }).catch(() => null);
+  }
+
+  const roundItems = (updated.items || []).filter((it) => it.roundId === round.id);
+  sendOwnerOrderAlert(config, tab.restaurantId, {
+    orderType: 'DINE_IN', tableNumber: tab.tableNumber, items: roundItems,
+    total: subtotal, customerName, customerPhone,
+  }, `🔔 *Ronda web en la cuenta #${tab.orderNumber}*`);
+
+  // Hitos por cliente (gateado por env): cuenta la compra del comensal sin
+  // reasignar la cuenta de la mesa, que es de quien la abrió.
+  let milestoneReward = null;
+  if (isMilestoneEnabled(tab.restaurantId)) {
+    try {
+      const r = await processCustomerMilestone(tab.restaurantId, {
+        phone: customerPhone, name: customerName, total: subtotal,
+      });
+      milestoneReward = r?.reward || null;
+    } catch (e) {
+      console.error('[store] milestone reward error:', e.message);
+    }
+  }
+
+  return respond(round, { status: updated.status, reward: milestoneReward });
 }
 
 // ── POST /api/store/orders ───────────────────────────────────────────────────
@@ -650,7 +820,23 @@ router.post('/orders', async (req, res) => {
   // compra) y caen en el panel "Pedidos Web" del TPV como PENDING para que el
   // cajero los confirme antes de mandarlos a cocina.
   const VALID_SOURCES = ['ONLINE', 'KIOSK', 'WHATSAPP'];
-  const source = VALID_SOURCES.includes(rawSource) ? rawSource : 'ONLINE';
+  const requestedSource = VALID_SOURCES.includes(rawSource) ? rawSource : 'ONLINE';
+  // KIOSK solo vale con el JWT del kiosko vinculado (ver resolveKioskDevice).
+  // Sin él, el pedido sigue como ONLINE con las reglas de la tienda web: así un
+  // `source: 'KIOSK'` escrito a mano no salta nada y los kioscos vinculados
+  // antes de esta credencial siguen vendiendo mientras se vuelven a vincular.
+  let kioskDevice = null;
+  if (requestedSource === 'KIOSK') {
+    const kiosk = await resolveKioskDevice(req, restaurant, location);
+    if (kiosk.invalidToken) {
+      return res.status(401).json({
+        error: 'La sesión del kiosko venció. Vuelve a intentarlo.',
+        code: 'KIOSK_DEVICE_TOKEN_INVALID',
+      });
+    }
+    kioskDevice = kiosk.device || null;
+  }
+  const source = requestedSource === 'KIOSK' && !kioskDevice ? 'ONLINE' : requestedSource;
   // `let` porque el token firmado del QR puede sobreescribirlo con el número
   // real de la mesa a la que apunta (más abajo, ya con la mesa leída de la BD).
   let tableNumber = resolvedOrderType === 'DINE_IN' && rawTableNumber
@@ -758,6 +944,7 @@ router.post('/orders', async (req, res) => {
         pointsDiscount: 0,
         tip:         dupChat.tip,
         estimatedMinutes: dupChat.estimatedMinutes || 30,
+        deliveryPin: storeDeliveryPin.pinForCustomer(dupChat),
         couponWarnings: [],
         deduped: true,
         dedupReason: 'CHAT_WINDOW',
@@ -769,7 +956,7 @@ router.post('/orders', async (req, res) => {
   // Tienda cerrada: bloquear pedidos online (kioskos operan presencialmente y
   // no dependen de este flag). Considera override manual Y horario automático.
   // 423 Locked = recurso temporalmente no disponible.
-  if (rawSource !== 'KIOSK' && !isStaff && config) {
+  if (source !== 'KIOSK' && !isStaff && config) {
     const storeState = computeOpenState(config);
     if (!storeState.isOpen) {
       return res.status(423).json({
@@ -802,20 +989,16 @@ router.post('/orders', async (req, res) => {
     return res.status(400).json({ error: 'El nombre del cliente es requerido.' });
   }
 
-  // Anti-fraude para kioskos: si el terminalId envía más de N órdenes en
-  // ventana corta sin pagar, bloqueamos. Identificamos el terminal por
-  // header (kiosko lo manda al hacer setup).
+  // Anti-fraude para kioskos: si un mismo kiosko envía más de N órdenes en
+  // ventana corta sin pagar, bloqueamos. La llave es el Device autenticado,
+  // no el id de la terminal de cobro (opcional y lo escribe cualquiera).
   if (source === 'KIOSK') {
-    const terminalId = req.headers['x-kiosk-terminal-id'] || req.body?.terminalId || null;
-    if (!terminalId) {
-      return res.status(400).json({ error: 'terminalId requerido para pedidos de kiosko', code: 'KIOSK_TERMINAL_REQUIRED' });
-    }
-    const rate = checkKioskRate(terminalId);
+    const rate = checkKioskRate(kioskDevice.id);
     if (!rate.ok) {
       return res.status(429).json({
         error: 'Demasiadas órdenes desde este kiosko. Intenta de nuevo en unos minutos.',
         code: 'KIOSK_RATE_LIMIT',
-        terminalId,
+        deviceId: kioskDevice.id,
         currentCount: rate.count,
         limit: KIOSK_RATE_LIMIT,
       });
@@ -829,8 +1012,9 @@ router.post('/orders', async (req, res) => {
   // por resolveStore; `bodyLocationId` llega crudo del cliente, así que hay que
   // validarla aquí antes de usarla: sin esto, el id de sucursal de otro tenant
   // se colaría al pedido (y ahora también al UPDATE de estado de la mesa). Si
-  // no es válida la ignoramos y caemos a la sucursal principal de abajo.
-  let resolvedLocationId = location?.id || null;
+  // no es válida la ignoramos y caemos a la sucursal principal de abajo. Un
+  // kiosko autenticado sin sucursal en la petición pide en la suya.
+  let resolvedLocationId = location?.id || kioskDevice?.locationId || null;
   if (!resolvedLocationId && bodyLocationId) {
     const fromBody = await prisma.location.findFirst({
       where: { id: String(bodyLocationId), restaurantId: restaurant.id, isActive: true },
@@ -880,7 +1064,7 @@ router.post('/orders', async (req, res) => {
     const promoCfg = await loadPromoWindowConfig(prisma, restaurant.id);
     // Verificar y calcular items desde la BD (nunca confiar en precios del cliente)
     const itemsData = await Promise.all(
-      items.map(async ({ menuItemId, variantId, quantity = 1, notes: itemNotes, modifierIds, comboSelections }) => {
+      items.map(async ({ menuItemId, variantId, quantity = 1, weightKg: requestedWeightKg, notes: itemNotes, modifierIds, comboSelections }) => {
         if (!menuItemId) throw new Error('menuItemId requerido en cada item.');
 
         // findFirst (no findUnique): findUnique ignora silenciosamente los
@@ -972,8 +1156,12 @@ router.post('/orders', async (req, res) => {
         const combo = resolveComboSelection(menuItem, { comboSelections });
         const unitPrice = basePrice + modifiersAdd + complementsAdd + combo.priceDelta;
 
-        const qty = Math.max(1, parseInt(quantity) || 1);
-        const displayName = variantName ? `${menuItem.name} (${variantName})` : menuItem.name;
+        const portions = Math.max(1, parseInt(quantity) || 1);
+        const portionWeight = resolveSaleWeight(menuItem, requestedWeightKg, portions);
+        const weightKg = portionWeight == null ? null : requestedWeightKg == null ? portionWeight : resolveSaleWeight(menuItem, portionWeight * portions);
+        const qty = weightKg == null ? portions : 1;
+        const baseDisplayName = variantName ? `${menuItem.name} (${variantName})` : menuItem.name;
+        const displayName = weightKg != null && isSoldByWeight(menuItem) ? weightDisplayName(baseDisplayName, weightKg) : baseDisplayName;
 
         // Complementos al texto de notas (no hay tabla relacional para ellos).
         const complementNote = selectedComplements.length > 0
@@ -1000,7 +1188,8 @@ router.post('/orders', async (req, res) => {
           name: displayName,
           price: unitPrice,
           quantity: qty,
-          subtotal: unitPrice * qty,
+          weightKg,
+          subtotal: Math.round(unitPrice * (weightKg ?? qty) * 100) / 100,
           notes: finalNotes,
           // Modificadores como relación anidada — se persisten en OrderItemModifier
           ...(selectedModifiers.length > 0 && {
@@ -1035,7 +1224,7 @@ router.post('/orders', async (req, res) => {
     // preparar y mandar un pedido fuera del local, no para impedir que el
     // comensal ya sentado pida una cerveza desde el QR de su mesa.
     if (
-      rawSource !== 'KIOSK' &&
+      source !== 'KIOSK' &&
       !isStaff &&
       resolvedOrderType !== 'DINE_IN' &&
       config?.minOrderAmount > 0 &&
@@ -1063,7 +1252,7 @@ router.post('/orders', async (req, res) => {
     const buildStoreItemSig = (its, modsOf) => its
       .map((it) => {
         const mods = (modsOf(it) || []).filter(Boolean).sort().join('+');
-        return `${it.menuItemId}:${it.quantity}:${Number(it.price).toFixed(2)}:${mods}`;
+        return `${it.menuItemId}:${it.quantity}:${Number(it.price).toFixed(2)}${it.weightKg == null ? "" : `:kg=${Number(it.weightKg).toFixed(3)}`}:${mods}`;
       })
       .sort()
       .join('|');
@@ -1100,8 +1289,10 @@ router.post('/orders', async (req, res) => {
         pointsDiscount: 0,
         tip:         dup.tip,
         estimatedMinutes: dup.estimatedMinutes || 30,
+        deliveryPin: storeDeliveryPin.pinForCustomer(dup),
         couponWarnings: [],
         deduped: true,
+        awaitingTableConfirmation: dup.awaitingTableConfirmation === true,
       });
     }
 
@@ -1243,6 +1434,9 @@ router.post('/orders', async (req, res) => {
     // (evita mesas inexistentes desde el QR/kiosko). Sin mapa configurado no
     // bloqueamos: el negocio sin planímetro sigue usando el número plano.
     let resolvedTableId = null;
+    // Estado de la mesa del QR firmado (AVAILABLE/OCCUPIED/DIRTY): decide si el
+    // pedido entra directo a cocina o queda por confirmar (ver más abajo).
+    let signedTableStatus = null;
 
     // QR firmado (esquema nuevo): el token trae el tableId real, así que no hay
     // que adivinar por nombre — renombrar la mesa no reasigna el papel pegado y
@@ -1261,7 +1455,7 @@ router.post('/orders', async (req, res) => {
       }
       const table = await prisma.table.findFirst({
         where: { id: claim.tableId, isActive: true, location: { restaurantId: restaurant.id } },
-        select: { id: true, name: true, locationId: true },
+        select: { id: true, name: true, locationId: true, status: true },
       });
       if (!table) {
         return res.status(400).json({
@@ -1271,6 +1465,7 @@ router.post('/orders', async (req, res) => {
       }
       resolvedTableId = table.id;
       resolvedLocationId = table.locationId;
+      signedTableStatus = table.status;
       // Número para el ticket: el del nombre ACTUAL de la mesa (si la
       // renombraron, el ticket dice el nuevo), con el firmado como respaldo.
       const current = (String(table.name).match(/\d+/) || [])[0];
@@ -1295,6 +1490,55 @@ router.post('/orders', async (req, res) => {
         }
         // Empate (mismo número en dos mesas): no enlazamos tableId pero tampoco
         // bloqueamos — el número es válido; la desambiguación queda en el TPV.
+      }
+    }
+
+    // Pedido de mesa desde internet (comensal, no personal ni kiosko físico):
+    // el QR es fijo y se puede fotografiar, y el número de mesa se adivina, así
+    // que el pedido puede venir de fuera del local. Solo entra directo a cocina
+    // con el QR firmado de una mesa que el personal ya tiene abierta (OCCUPIED).
+    // Si la mesa está libre o el pedido no trae QR firmado, queda POR CONFIRMAR:
+    // no va a cocina ni ocupa la mesa hasta que la caja lo acepta (PUT
+    // /api/orders/:id/status) o lo rechaza.
+    const remoteDineIn = resolvedOrderType === 'DINE_IN' && !isStaff && source !== 'KIOSK';
+    const awaitingTableConfirmation = remoteDineIn && signedTableStatus !== 'OCCUPIED';
+
+    // Igual que el bot de WhatsApp: sin turno de caja abierto en la sucursal,
+    // nadie atendería ni cobraría ese pedido de mesa.
+    if (remoteDineIn && resolvedLocationId) {
+      const openShift = await prisma.cashShift.findFirst({
+        where: { locationId: resolvedLocationId, isOpen: true },
+        select: { id: true },
+      });
+      if (!openShift) {
+        return res.status(409).json({
+          error: 'La caja todavía no abre. Pide tu orden al personal.',
+          code: 'NO_ACTIVE_SHIFT',
+        });
+      }
+    }
+
+    // Mesa con la cuenta abierta (QR firmado a una mesa OCCUPIED): el pedido se
+    // suma a esa cuenta como una ronda más, igual que si el mesero la capturara
+    // en el TPV, en vez de abrir otra cuenta en la misma mesa que alguien
+    // tendría que unir o cobrar aparte. Cupón, puntos, recompensa o propina
+    // viven en la orden y no en sus líneas: esos pedidos siguen creando su
+    // propia orden, igual que antes. Un pedido por confirmar no entra aquí: se
+    // suma (o no) cuando la caja lo acepta (orders.routes PUT /:id/status).
+    if (remoteDineIn && !awaitingTableConfirmation && resolvedTableId
+        && !coupon && pointsUsed === 0 && !reward && tip === 0) {
+      const tab = await prisma.order.findFirst({
+        where: webRoundTabWhere(resolvedTableId, resolvedLocationId),
+        orderBy: { createdAt: 'desc' },
+      });
+      if (tab && canTakeWebRound(tab)) {
+        return appendToOpenTab(req, res, {
+          tab, itemsData, subtotal, signature: newSig,
+          customerName: customerName.trim(),
+          customerPhone: customerPhone?.trim() || null,
+          notes: typeof notes === 'string' ? notes.trim() : '',
+          loyaltyUserId, couponWarnings, config, windowMs: DEDUP_WINDOW_MS,
+        });
       }
     }
 
@@ -1372,6 +1616,7 @@ router.post('/orders', async (req, res) => {
           tableNumber,
           // Enlace a la mesa real del mapa (si se resolvió) → el TPV la ubica.
           tableId:         resolvedTableId,
+          awaitingTableConfirmation,
           paymentMethod,
           paymentStatus:   'PENDING',
           subtotal,
@@ -1404,8 +1649,9 @@ router.post('/orders', async (req, res) => {
       // igual que una cuenta abierta desde caja — si no, el mapa de piso la
       // muestra libre y el mesero abre una segunda cuenta encima. Va DENTRO de
       // la tx: si la orden no llega a crearse, la mesa no queda ocupada por
-      // error. Se libera en releaseTableAfterPayment al cobrar.
-      if (resolvedTableId) {
+      // error. Se libera en releaseTableAfterPayment al cobrar. Un pedido por
+      // confirmar NO la ocupa: la ocupa la caja al aceptarlo.
+      if (resolvedTableId && !awaitingTableConfirmation) {
         await tx.table.update({
           where: { id: resolvedTableId },
           data: { status: 'OCCUPIED' },
@@ -1443,7 +1689,18 @@ router.post('/orders', async (req, res) => {
     // ruido en restaurantes que no usan KDS, el cliente KDS filtra por
     // restaurantId.
     const io = req.app.get('io');
-    if (io) {
+    if (io && awaitingTableConfirmation) {
+      // Por confirmar: solo la caja se entera, con su propio evento. Sin
+      // order:new, nadie imprime la comanda (la tablet imprime los pedidos web
+      // al recibir order:new) y cocina no lo ve; al aceptarlo, la ruta de estado
+      // emite order:new y entonces sigue el camino normal.
+      const room = resolvedLocationId
+        ? `restaurant:${restaurant.id}:location:${resolvedLocationId}:admins`
+        : `restaurant:${restaurant.id}`;
+      io.to(room).emit('order:table-pending', {
+        id: order.id, orderNumber: order.orderNumber, tableNumber: order.tableNumber, total: order.total,
+      });
+    } else if (io) {
       // Cocina/KDS: SIEMPRE al canal general del restaurante como respaldo de
       // impresora (si la impresora LAN falla, la orden sigue visible en la
       // pantalla KDS y nadie pierde el pedido). El KDS refresca con fetchOrders
@@ -1476,30 +1733,7 @@ router.post('/orders', async (req, res) => {
     }
 
     // Aviso al DUEÑO por WhatsApp del nuevo pedido web (además del push al TPV).
-    // Opt-in por tenant. Número normalizado con lada aquí porque el envío por
-    // integración no antepone la lada. Best-effort: la orden ya existe.
-    const alertNumber = config?.orderAlertEnabled
-      ? toWhatsappNumber(config.orderAlertWhatsapp || config.phone, config.countryCode)
-      : '';
-    if (alertNumber) {
-      const typeLabel = order.orderType === 'DELIVERY'
-        ? '🛵 Domicilio'
-        : order.orderType === 'DINE_IN'
-          ? `🍽 Mesa ${order.tableNumber ?? ''}`.trim()
-          : '🥡 Para llevar';
-      const itemsTxt = (order.items || [])
-        .map((it) => `• ${it.quantity}× ${it.menuItem?.name || 'Producto'}`)
-        .join('\n');
-      const addr = order.orderType === 'DELIVERY' && order.deliveryAddress ? `\n📍 ${order.deliveryAddress}` : '';
-      const totalTxt = `$${Number(order.total || 0).toLocaleString('es-MX')}`;
-      const alertMsg =
-        `🔔 *Nuevo pedido web #${order.orderNumber}*\n${typeLabel}\n\n${itemsTxt}\n\n` +
-        `*Total: ${totalTxt}*${addr}\n` +
-        `Cliente: ${order.customerName || 's/n'}${order.customerPhone ? ` · ${order.customerPhone}` : ''}`;
-      require('../services/notifications.service')
-        .sendOrderWhatsApp(restaurant.id, alertNumber, alertMsg)
-        .catch((e) => console.error('[store] aviso al dueño:', e.message));
-    }
+    sendOwnerOrderAlert(config, restaurant.id, order, `🔔 *Nuevo pedido web #${order.orderNumber}*`);
 
     // CRM de WhatsApp: registrar/actualizar el contacto (pestaña Clientes del
     // panel + remarketing). Solo pedidos del bot y solo si trae teléfono real
@@ -1544,8 +1778,12 @@ router.post('/orders', async (req, res) => {
       pointsDiscount,
       tip:         order.tip,
       estimatedMinutes: order.estimatedMinutes || 30,
+      deliveryPin: storeDeliveryPin.pinForCustomer(order),
       couponWarnings,
       reward: milestoneReward,
+      // Pedido de mesa por confirmar: la tienda le avisa al comensal que la caja
+      // confirma su mesa antes de mandarlo a cocina.
+      awaitingTableConfirmation: order.awaitingTableConfirmation === true,
     });
   } catch (e) {
     // Replay exacto que se CRUZÓ en carrera con su primer intento (timeout del
@@ -1571,13 +1809,13 @@ router.get('/orders/:id', async (req, res) => {
     const order = await prisma.order.findUnique({
       where: { id: req.params.id },
       select: {
-        id: true, orderNumber: true, status: true, orderType: true,
+        id: true, orderNumber: true, status: true, orderType: true, awaitingTableConfirmation: true,
         subtotal: true, deliveryFee: true, total: true,
         estimatedMinutes: true, createdAt: true, paidAt: true,
         paymentMethod: true, paymentStatus: true,
         customerName: true, deliveryAddress: true, notes: true,
         items: {
-          select: { name: true, quantity: true, price: true, subtotal: true, notes: true }
+          select: { name: true, quantity: true, weightKg: true, price: true, subtotal: true, notes: true }
         },
       },
     });
@@ -1766,10 +2004,29 @@ router.get('/orders/by-number/:orderNumber', async (req, res) => {
         status: true,
         estimatedMinutes: true,
         paymentStatus: true,
+        awaitingTableConfirmation: true,
         createdAt: true,
       },
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+    // Pedido de mesa por confirmar que, al aceptarlo, se sumó a la cuenta de la
+    // mesa (queda CANCELLED con sus líneas en una ronda de la cuenta): el
+    // comensal sigue el estado de esa cuenta, no un "rechazado".
+    if (order.status === 'CANCELLED') {
+      const round = await prisma.orderRound.findUnique({
+        where: { id: heldOrderRoundId(order.id) },
+        select: { roundNumber: true, order: { select: { orderNumber: true, status: true, paymentStatus: true } } },
+      });
+      if (round?.order) {
+        return res.json({
+          ...order,
+          status: round.order.status,
+          paymentStatus: round.order.paymentStatus,
+          awaitingTableConfirmation: false,
+          mergedInto: { orderNumber: round.order.orderNumber, roundNumber: round.roundNumber },
+        });
+      }
+    }
     res.json(order);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1784,6 +2041,9 @@ router.get('/orders/by-number/:orderNumber', async (req, res) => {
 async function applyStorePaymentResult(orderId, { status, rawStatus, providerId }, io) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return;
+  // Un pedido de mesa por confirmar que ya se pagó en línea cuenta como
+  // confirmado: no hay riesgo de pedido falso y rechazarlo exigiría reembolso.
+  const confirmsTable = status === 'PAID' && order.awaitingTableConfirmation === true;
   await prisma.order.update({
     where: { id: orderId },
     data: {
@@ -1792,8 +2052,22 @@ async function applyStorePaymentResult(orderId, { status, rawStatus, providerId 
       paymentStatus:         status,
       status:                status === 'PAID' ? 'CONFIRMED' : order.status,
       paidAt:                status === 'PAID' ? new Date() : undefined,
+      ...(confirmsTable ? { awaitingTableConfirmation: false } : {}),
     },
   });
+  // Pagado en línea: el inventario se consume con el cobro, como en caja. Va en
+  // su propia transacción: los webhooks responden 200 aunque fallen, así que un
+  // error de inventario no debe deshacer el pago. Un reintento no vuelve a
+  // descontar las líneas ya consumidas.
+  if (status === 'PAID') {
+    await prisma.$transaction(
+      (tx) => consumePaidOrder(tx, orderId, order.restaurantId, { confirmedExternalPayment: true }),
+      { timeout: 30000 },
+    ).catch((e) => console.error('[store] inventario al pagar en línea:', orderId, e.message));
+  }
+  if (confirmsTable && order.tableId) {
+    await prisma.table.update({ where: { id: order.tableId }, data: { status: 'OCCUPIED' } }).catch(() => {});
+  }
   if (io && status === 'PAID') {
     // Payload enriquecido para que el push nativo del TPV muestre folio y monto.
     const paidPayload = {
@@ -1834,7 +2108,7 @@ router.post('/payment/create', async (req, res) => {
   try {
     const order = await prisma.order.findFirst({
       where: { id: orderId, restaurantId: restaurant.id },
-      include: { items: { select: { menuItemId: true, name: true, quantity: true, price: true } } },
+      include: { items: { select: { menuItemId: true, name: true, quantity: true, price: true, weightKg: true, subtotal: true } } },
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
     if (order.paymentStatus === 'PAID') return res.status(400).json({ error: 'El pedido ya está pagado.' });
@@ -1844,8 +2118,8 @@ router.post('/payment/create', async (req, res) => {
 
     // Construimos los items para la pasarela. Incluimos envío/propina como
     // conceptos extra para que el total cobrado coincida con el de la orden.
-    const items = order.items.map(oi => ({ id: oi.menuItemId, title: oi.name, quantity: oi.quantity, unitPrice: oi.price }));
-    const extras = order.total - order.items.reduce((s, i) => s + i.price * i.quantity, 0) + (order.discount || 0);
+    const items = order.items.map(oi => ({ id: oi.menuItemId, title: oi.name, quantity: oi.quantity, unitPrice: oi.weightKg != null ? Number(oi.subtotal) : oi.price }));
+    const extras = order.total - order.items.reduce((s, i) => s + (i.weightKg != null ? Number(i.subtotal) : i.price * i.quantity), 0) + (order.discount || 0);
     if ((order.deliveryFee || 0) > 0) items.push({ id: 'envio', title: 'Envío', quantity: 1, unitPrice: order.deliveryFee });
     if ((order.tip || 0) > 0) items.push({ id: 'propina', title: 'Propina', quantity: 1, unitPrice: order.tip });
     if ((order.discount || 0) > 0) items.push({ id: 'descuento', title: 'Descuento', quantity: 1, unitPrice: -order.discount });
@@ -2063,6 +2337,8 @@ router.get('/customer/orders', authenticate, requireCustomer, async (req, res) =
       select: {
         id: true, orderNumber: true, status: true, orderType: true, total: true,
         paymentStatus: true, pointsEarned: true, createdAt: true,
+        // source: distingue pedidos del marketplace (su PIN vive en otro flujo).
+        source: true,
         // Datos de entrega/contacto → el "Volver a pedir" los reusa como
         // dirección/nombre guardados (cross-device, no solo el localStorage del
         // dispositivo). Solo DELIVERY tiene dirección.
@@ -2075,13 +2351,26 @@ router.get('/customer/orders', authenticate, requireCustomer, async (req, res) =
         // vuelve a matchear por nombre contra el menú actual.
         items: {
           select: {
-            menuItemId: true, name: true, price: true, quantity: true, notes: true,
+            menuItemId: true, name: true, price: true, quantity: true, weightKg: true, subtotal: true, notes: true,
             modifiers: { select: { modifierId: true, name: true } },
           },
         },
+        // Incidencias de ruta que reportó el repartidor (auditoría inmutable).
+        // Al cliente solo le llegan tipo, hora y llamadas: nunca el texto libre
+        // del repartidor (reason/notes), la foto ni ids de repartidor o actor.
+        deliveryIncidents: {
+          select: { id: true, type: true, occurredAt: true, callAttempts: true },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+          take: 20,
+        },
       },
     });
-    res.json(orders);
+    res.json(orders.map(({ deliveryIncidents, source, ...order }) => ({
+      ...order,
+      incidents: deliveryIncidents ?? [],
+      // Código que el cliente dicta al repartidor; null si no aplica o el pedido terminó.
+      deliveryPin: storeDeliveryPin.pinForCustomer({ ...order, source }),
+    })));
   } catch (e) { res.status(500).json({ error: 'Error al obtener tus pedidos.' }); }
 });
 

@@ -2,7 +2,7 @@
 import React, { useRef, useEffect } from "react";
 import {
   X, Bell, ShoppingBag, Monitor, ChefHat,
-  Truck, CreditCard, RefreshCw, Trash2,
+  Truck, CreditCard, RefreshCw, Trash2, Armchair,
 } from "lucide-react";
 import { useNotifStore, type Notification, type NotifType } from "@/hooks/useNotifications";
 
@@ -29,6 +29,7 @@ const TYPE_CONFIG: Record<
   order_delivered: { icon: Truck,       color: "#10b981", bg: "rgba(16,185,129,0.12)" },
   order_paid:      { icon: CreditCard,  color: "#10b981", bg: "rgba(16,185,129,0.12)" },
   order_updated:   { icon: RefreshCw,   color: "#8a8f98", bg: "rgba(138,143,152,0.12)" },
+  table_pending:   { icon: Armchair,    color: "#f59e0b", bg: "rgba(245,158,11,0.12)" },
   waiter_call:     { icon: Bell,        color: "#f43f5e", bg: "rgba(244,63,94,0.12)" },
 };
 

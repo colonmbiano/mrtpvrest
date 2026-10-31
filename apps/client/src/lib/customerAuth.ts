@@ -4,6 +4,7 @@
 // guarda por tienda en localStorage. Sin cuentas multi-marca: cada tienda tiene
 // su propio espacio de clientes.
 import { getApiUrl } from './config';
+import type { CustomerOrderIncident } from './orderIncidents';
 
 const API = getApiUrl();
 
@@ -69,6 +70,8 @@ export type LoyaltyInfo = {
 };
 
 export type CustomerOrderItem = {
+  weightKg?: number | string | null;
+  subtotal?: number;
   menuItemId: string; name: string; price: number; quantity: number;
   notes: string | null;
   modifiers: { modifierId: string | null; name: string }[];
@@ -81,6 +84,12 @@ export type CustomerOrder = {
   customerName: string | null; customerPhone: string | null;
   deliveryAddress: string | null; deliveryLat: number | null; deliveryLng: number | null;
   items: CustomerOrderItem[];
+  // Incidencias de ruta persistidas (solo tipo, hora y llamadas). Opcional por
+  // compatibilidad con backends anteriores que no las envían.
+  incidents?: CustomerOrderIncident[];
+  // Código de entrega que el cliente dicta al repartidor. Lo genera el servidor
+  // (STORE_DELIVERY_PIN_MODE); null/ausente si no aplica o el pedido terminó.
+  deliveryPin?: string | null;
 };
 
 export const fetchMyOrders = (slug: string) => get('customer/orders', slug) as Promise<CustomerOrder[]>;

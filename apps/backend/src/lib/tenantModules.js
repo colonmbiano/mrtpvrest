@@ -41,6 +41,9 @@ const MODULE_CATALOG = [
   { key: 'employee_management', kind: 'key', requiresPlan: true, legacyFlag: null, aliases: [], planFlag: null },
   { key: 'payroll',             kind: 'key', requiresPlan: true, legacyFlag: null, aliases: [], planFlag: null },
   { key: 'whatsapp_bot',        kind: 'key', requiresPlan: true, legacyFlag: null, aliases: ['chatbot'], planFlag: null },
+  // Canal opcional: aparecer en el directorio del marketplace (además requiere
+  // aprobación de la plataforma, ver lib/marketplace-merchant-membership.js).
+  { key: 'marketplace',         kind: 'key', requiresPlan: true, legacyFlag: null, aliases: [], planFlag: null },
 ]
 
 const CANONICAL_KEYS = MODULE_CATALOG.map((m) => m.key)

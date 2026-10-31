@@ -11,6 +11,7 @@ import {
 } from "@/components/ds";
 import OrderCard from "./_components/OrderCard";
 import OrdersKanban from "./_components/OrdersKanban";
+import OrderEvidenceModal from "./_components/OrderEvidenceModal";
 import { STATUSES, type Driver, type Order, type StatusKey } from "./_components/orders";
 
 export default function PedidosPage() {
@@ -25,6 +26,7 @@ export default function PedidosPage() {
   const [search, setSearch] = useState("");
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [cobrarOrder, setCobrarOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -241,6 +243,7 @@ export default function PedidosPage() {
           onCobrar={setCobrarOrder}
           onPrint={printTicket}
           onOpenConversation={openConversation}
+          onViewEvidence={setSelectedOrder}
         />
       ) : filtered.length === 0 ? (
         <EmptyState
@@ -261,10 +264,17 @@ export default function PedidosPage() {
               onCobrar={setCobrarOrder}
               onPrint={printTicket}
               onOpenConversation={openConversation}
+              onViewEvidence={setSelectedOrder}
             />
           ))}
         </div>
       )}
+
+      <OrderEvidenceModal
+        open={Boolean(selectedOrder)}
+        order={selectedOrder}
+        onClose={() => setSelectedOrder(null)}
+      />
 
       <CobrarModal
         order={cobrarOrder}

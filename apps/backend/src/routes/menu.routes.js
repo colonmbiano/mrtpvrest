@@ -1,3 +1,4 @@
+const { normalizeMinimumWeight } = require('../../../../packages/config/weight-sale');
 const express  = require('express')
 const prisma   = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
@@ -308,7 +309,7 @@ router.get('/items/:id', async (req, res) => {
 
 router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
-    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, promoPrice, activeDays, promoStartTime, promoEndTime, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isPackagingProduct, isCombo, soldByWeight, saleUnit, unit } = req.body
+    const { categoryId, name, description, imageUrl, imageFit, price, preparationTime, isPopular, isPromo, promoPrice, activeDays, promoStartTime, promoEndTime, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isPackagingProduct, isCombo, soldByWeight, saleUnit, unit, minWeightKg } = req.body
     if (!categoryId || !name || price === undefined) return res.status(400).json({ error: 'Faltan campos requeridos' })
     // Unidad de venta (comportamiento) normalizada; soldByWeight deriva de ella.
     const sUnit = normalizeSaleUnit(saleUnit, soldByWeight)
@@ -346,6 +347,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
         variantMaxSelection: Math.max(0, parseInt(variantMaxSelection, 10) || 0),
         saleUnit: sUnit,
         soldByWeight: sUnit === 'WEIGHT',
+        minWeightKg: sUnit === 'WEIGHT' ? normalizeMinimumWeight(minWeightKg) : null,
         unit: measureUnit,
         restaurantId: req.user?.restaurantId || req.restaurantId
       },
@@ -355,6 +357,7 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
     }
     res.status(201).json(item)
   } catch (e) {
+    if (e.code === 'INVALID_WEIGHT') return res.status(400).json({ error: e.message })
     if (e instanceof PromoPriceValidationError) return res.status(400).json({ error: e.message })
     res.status(500).json({ error: 'Error al crear platillo' })
   }
@@ -363,10 +366,10 @@ router.post('/items', authenticate, requireTenantAccess, requireAdmin, async (re
 router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId
-    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, promoPrice, activeDays, promoStartTime, promoEndTime, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isPackagingProduct, isCombo, soldByWeight, saleUnit, unit } = req.body
+    const { name, description, price, isAvailable, isPopular, isFavorite, imageUrl, imageFit, categoryId, isPromo, promoPrice, activeDays, promoStartTime, promoEndTime, variantTemplateIds, variantMultiSelect, variantMinSelection, variantMaxSelection, availableOnline, availableOnKiosk, isPackagingProduct, isCombo, soldByWeight, saleUnit, unit, minWeightKg } = req.body
     const existingItem = await prisma.menuItem.findFirst({
       where: { id: req.params.id, restaurantId },
-      select: { price: true, isPromo: true, promoPrice: true },
+      select: { price: true, isPromo: true, promoPrice: true, saleUnit: true, soldByWeight: true },
     })
     if (!existingItem) return res.status(404).json({ error: 'Platillo no encontrado' })
 
@@ -412,6 +415,15 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
         ...(variantMultiSelect !== undefined && { variantMultiSelect: !!variantMultiSelect }),
         ...(variantMinSelection !== undefined && { variantMinSelection: Math.max(0, parseInt(variantMinSelection, 10) || 0) }),
         ...(variantMaxSelection !== undefined && { variantMaxSelection: Math.max(0, parseInt(variantMaxSelection, 10) || 0) }),
+        ...((() => {
+          const effectiveSaleUnit = (saleUnit !== undefined || soldByWeight !== undefined)
+            ? normalizeSaleUnit(saleUnit, soldByWeight)
+            : normalizeSaleUnit(existingItem.saleUnit, existingItem.soldByWeight)
+          if (effectiveSaleUnit !== 'WEIGHT') {
+            return (saleUnit !== undefined || soldByWeight !== undefined || minWeightKg !== undefined) ? { minWeightKg: null } : {}
+          }
+          return minWeightKg !== undefined ? { minWeightKg: normalizeMinimumWeight(minWeightKg) } : {}
+        })()),
         // saleUnit (o soldByWeight legacy) → mantener ambos sincronizados.
         ...((saleUnit !== undefined || soldByWeight !== undefined) && (() => {
           const sUnit = normalizeSaleUnit(saleUnit, soldByWeight)
@@ -429,6 +441,7 @@ router.put('/items/:id', authenticate, requireTenantAccess, requireAdmin, async 
     }
     res.json(item)
   } catch (e) {
+    if (e.code === 'INVALID_WEIGHT') return res.status(400).json({ error: e.message })
     if (e instanceof PromoPriceValidationError) return res.status(400).json({ error: e.message })
     res.status(500).json({ error: 'Error al actualizar platillo' })
   }

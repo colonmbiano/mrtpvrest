@@ -2,12 +2,16 @@
 import nextPwa from 'next-pwa';
 
 const isDev = process.env.NODE_ENV === 'development';
+// Copia aislada del marketplace: sin service worker, para que no cachee páginas
+// ni respuestas de API en el perfil de navegador de pruebas.
+const isMarketplaceIsolated = process.env.NEXT_PUBLIC_MARKETPLACE_ISOLATED === 'true';
+const isMarketplacePreviewDemo = process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_GIT_COMMIT_REF === 'feature/marketplace-hibrido';
 
 const withPWA = nextPwa({
   dest: 'public',
   register: true,
   skipWaiting: true,
-  disable: isDev,
+  disable: isDev || isMarketplaceIsolated || isMarketplacePreviewDemo,
   // Excluir manifests dinámicos del precache (cada tenant tiene el suyo).
   buildExcludes: [/middleware-manifest\.json$/, /\/[^/]+\/manifest\.webmanifest$/],
   fallbacks: {

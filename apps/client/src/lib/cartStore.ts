@@ -1,9 +1,11 @@
 import { create } from 'zustand';
+import { bindCartToStore } from './cartScope';
 
 export type CartLine = {
   id: string;               // clave única de la línea (compuesta si hay variante/modificadores)
   menuItemId: string;       // id real del producto para enviar al backend
   name: string;             // nombre a mostrar (incluye variante/modificadores)
+  weightKg?: number;       // kg per configured portion; price is the portion total
   price: number;            // precio unitario YA con variante + modificadores
   quantity: number;
   variantId?: string | null;
@@ -15,6 +17,7 @@ export type CartLine = {
 export type AddInput = {
   id: string;
   name: string;
+  weightKg?: number;       // kg per configured portion; price is the portion total
   price: number;
   menuItemId?: string;
   variantId?: string | null;
@@ -25,7 +28,11 @@ export type AddInput = {
 };
 
 type CartState = {
+  // Tienda a la que pertenece el carrito. Lo fija la página de la tienda (bindStore).
+  storeSlug: string | null;
   lines: CartLine[];
+  // Vincula el carrito a una tienda. Si era de OTRA tienda, descarta sus líneas.
+  bindStore: (slug: string) => void;
   add: (item: AddInput) => void;
   remove: (id: string) => void;
   setNote: (id: string, note: string) => void;
@@ -35,7 +42,14 @@ type CartState = {
 };
 
 export const useCart = create<CartState>((set, get) => ({
+  storeSlug: null,
   lines: [],
+  bindStore: slug =>
+    set(state => {
+      const decision = bindCartToStore(state.storeSlug, slug);
+      if (state.storeSlug === decision.storeSlug) return state;
+      return decision.clearLines ? { storeSlug: decision.storeSlug, lines: [] } : { storeSlug: decision.storeSlug };
+    }),
   add: item =>
     set(state => {
       const existing = state.lines.find(l => l.id === item.id);
@@ -52,6 +66,7 @@ export const useCart = create<CartState>((set, get) => ({
         menuItemId: item.menuItemId ?? item.id,
         name: item.name,
         price: item.price,
+        weightKg: item.weightKg,
         quantity: qty,
         variantId: item.variantId ?? null,
         modifierIds: item.modifierIds ?? [],

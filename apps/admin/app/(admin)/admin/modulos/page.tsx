@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import {
   Monitor, Bike, ShoppingCart, Star, Tv, BarChart3, Wrench,
-  Receipt, Wallet, Utensils, Coins, Users,
+  Receipt, Wallet, Utensils, Coins, Users, Store,
   type LucideIcon,
 } from "lucide-react";
 import api from "@/lib/api";
+import MarketplaceDirectoryCard from "./MarketplaceDirectoryCard";
 import {
   PageShell, PageHeader, Card, SectionLabel, SettingRow, Toggle, Pill,
   LoadingState, useToast,
@@ -38,6 +39,7 @@ const MODULE_META: Record<string, { label: string; description: string; icon: Lu
   CASH_SHIFT: { label: "Turnos de caja",    description: "Apertura y corte de turno de caja.",                    icon: Coins },
   EMPLOYEE_MANAGEMENT: { label: "Empleados", description: "Gestión de empleados, roles y PINs.",                  icon: Users },
   FINANCE:  { label: "Finanzas",            description: "Gastos, compras y cortes de caja.",                     icon: Wallet },
+  MARKETPLACE: { label: "Marketplace",      description: "Vende también en el marketplace; tus pedidos llegan al mismo TPV.", icon: Store },
 };
 
 export default function ModulosPage() {
@@ -79,6 +81,8 @@ export default function ModulosPage() {
       setToggling(null);
     }
   }
+
+  const marketplaceModule = modules.find((mod) => mod.key === "MARKETPLACE");
 
   return (
     <PageShell>
@@ -137,6 +141,10 @@ export default function ModulosPage() {
             );
           })}
         </Card>
+      )}
+
+      {!loading && marketplaceModule && (
+        <MarketplaceDirectoryCard marketplaceActive={marketplaceModule.enabled || marketplaceModule.toggledOn} />
       )}
     </PageShell>
   );

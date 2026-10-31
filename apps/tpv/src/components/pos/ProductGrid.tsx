@@ -77,8 +77,8 @@ export function ProductTile({
     },
     neutral: {
       card: "bg-surf-1 text-tx-pri border-bd active:bg-surf-2",
-      accent: "bg-emerald-500",
-      button: "bg-emerald-500 text-black",
+      accent: "bg-iris-500",
+      button: "bg-iris-500 text-iris-fg",
     },
   }[tone];
   const price = Number(product.promoPrice || product.price || 0);

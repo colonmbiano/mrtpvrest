@@ -14,10 +14,13 @@ import {
   type Product,
 } from "@/store/ticketStore";
 import { useUIStore } from "@/store/useUIStore";
+import { useActiveOrderStore } from "@/store/activeOrderStore";
+import { toast } from "sonner";
 import { CATALOG_REFRESH_EVENT, fuzzyFilter, sameCategory, getCategoryIdOrName } from "@/lib/catalog-helpers";
 import { CategoryGrid } from "@/components/pos/CategoryGrid";
 import { CategoryBar, DrilldownHeader } from "@/components/pos/CategoryBar";
 import { ProductGrid, ProductSkeleton, EmptyState } from "@/components/pos/ProductGrid";
+import { isSoldByWeight, weightDisplayName } from "../../../../../../packages/config/weight-sale";
 import { WeightEntryModal } from "@/components/pos/WeightEntryModal";
 import { QuickModifierPanel, type ConfiguratorInitial } from "@/components/pos/QuickModifierPanel";
 
@@ -292,7 +295,13 @@ export default function CatalogPage() {
 
   const handleProductClick = (product: Product) => {
     if (product.isAvailable === false) return;
+    // Pedido del marketplace abierto: sus productos no se editan (el backend también lo rechaza).
+    if (useActiveOrderStore.getState().itemsLocked) {
+      toast.warning("Este pedido del marketplace no admite productos nuevos: los fijó la compra del cliente.");
+      return;
+    }
     hapticLight();
+    if (isSoldByWeight(product)) { setConfigProduct(product); return; }
     if (product.soldByWeight) {
       setWeightProduct(product);
       return;
@@ -308,7 +317,7 @@ export default function CatalogPage() {
   // (usando su nombre base, sin el sufijo de variante); en alta es el
   // producto elegido del catálogo.
   const panelProduct: Product | null = editingItem
-    ? { ...editingItem, name: editingItem.baseName ?? editingItem.name }
+    ? { ...editingItem, name: editingItem.baseName ?? editingItem.name, ...(isSoldByWeight(editingItem) ? { price: editingItem.originalPrice ?? editingItem.price } : {}) }
     : configProduct;
 
   const panelInitial: ConfiguratorInitial | null = editingItem
@@ -316,6 +325,7 @@ export default function CatalogPage() {
         variantId: editingItem.variantId ?? null,
         selectedModifierIds: (editingItem.modifiers ?? []).map((modifier) => modifier.id),
         quantity: editingItem.quantity,
+        weightKg: editingItem.weightKg,
         notes: editingItem.notes ?? "",
       }
     : null;
@@ -339,6 +349,7 @@ export default function CatalogPage() {
     modifiers: ModifierSelection[];
     unitPrice: number;
     quantity: number;
+    weightKg?: number;
     notes?: string;
   }) => {
     const source = panelProduct;
@@ -352,13 +363,14 @@ export default function CatalogPage() {
       ...source,
       menuItemId: source.id,
       quantity: qty,
-      subtotal: payload.unitPrice * qty,
+      weightKg: payload.weightKg ?? null,
+      subtotal: payload.unitPrice * (payload.weightKg ?? qty),
       price: payload.unitPrice,
       originalPrice: fallbackBasePrice,
       baseName,
       variantId: payload.variant?.id ?? null,
       variantName: payload.variant?.name ?? null,
-      name: payload.variant ? `${baseName} (${payload.variant.name})` : baseName,
+      name: payload.weightKg != null ? weightDisplayName(baseName, payload.weightKg) : payload.variant ? `${baseName} (${payload.variant.name})` : baseName,
       modifiers: payload.modifiers,
       notes: payload.notes,
     });
@@ -521,5 +533,6 @@ export default function CatalogPage() {
 
 // Captura de peso (kg) para productos vendidos por báscula. El `price` del
 // producto es por kg; muestra el total en vivo (price × kg). Chips rápidos
-// para los pesos más comunes + entrada libre decimal.
+// para los pesos más comunes + entrada libre decimal.
+
 

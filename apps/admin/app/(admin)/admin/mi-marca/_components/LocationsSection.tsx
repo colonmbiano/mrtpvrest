@@ -10,7 +10,7 @@ import {
   Modal, Field, Input, Toggle, Skeleton, useConfirm, useToast, type Tone,
 } from "@/components/ds";
 
-type Location = { id: string; name: string; slug: string; address?: string; phone?: string; autoPromoEnabled?: boolean; autoPromoThreshold?: number; autoPromoDiscount?: number; hasDelivery?: boolean; hasTakeaway?: boolean; hasTableMap?: boolean; hasOpenTabs?: boolean; };
+type Location = { id: string; name: string; slug: string; address?: string; phone?: string; latitude?: number | null; longitude?: number | null; autoPromoEnabled?: boolean; autoPromoThreshold?: number; autoPromoDiscount?: number; hasDelivery?: boolean; hasTakeaway?: boolean; hasTableMap?: boolean; hasOpenTabs?: boolean; };
 
 function slugify(text: string) {
   return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
@@ -29,7 +29,7 @@ const ORDER_TYPE_OPTIONS: { key: "hasDelivery" | "hasTakeaway" | "hasTableMap" |
   { key: "hasOpenTabs", label: "Cuentas abiertas (bar / tab)", icon: Receipt },
 ];
 
-const EMPTY_FORM = { name: "", address: "", phone: "", autoPromoEnabled: false, autoPromoThreshold: 10, autoPromoDiscount: 15, hasDelivery: true, hasTakeaway: true, hasTableMap: true, hasOpenTabs: false };
+const EMPTY_FORM = { name: "", address: "", phone: "", latitude: "", longitude: "", autoPromoEnabled: false, autoPromoThreshold: 10, autoPromoDiscount: 15, hasDelivery: true, hasTakeaway: true, hasTableMap: true, hasOpenTabs: false };
 
 export default function LocationsSection() {
   const [locations, setLocations] = useState<Location[]>([]);
@@ -53,17 +53,25 @@ export default function LocationsSection() {
   useEffect(() => { fetchLocations(); }, []);
 
   const openCreate = () => { setEditing(null); setForm(EMPTY_FORM); setError(""); setShowModal(true); };
-  const openEdit = (loc: Location) => { setEditing(loc); setForm({ name: loc.name, address: loc.address || "", phone: loc.phone || "", autoPromoEnabled: loc.autoPromoEnabled || false, autoPromoThreshold: loc.autoPromoThreshold || 10, autoPromoDiscount: loc.autoPromoDiscount || 15, hasDelivery: loc.hasDelivery ?? true, hasTakeaway: loc.hasTakeaway ?? true, hasTableMap: loc.hasTableMap ?? true, hasOpenTabs: loc.hasOpenTabs ?? false }); setError(""); setShowModal(true); };
+  const openEdit = (loc: Location) => { setEditing(loc); setForm({ name: loc.name, address: loc.address || "", phone: loc.phone || "", latitude: loc.latitude == null ? "" : String(loc.latitude), longitude: loc.longitude == null ? "" : String(loc.longitude), autoPromoEnabled: loc.autoPromoEnabled || false, autoPromoThreshold: loc.autoPromoThreshold || 10, autoPromoDiscount: loc.autoPromoDiscount || 15, hasDelivery: loc.hasDelivery ?? true, hasTakeaway: loc.hasTakeaway ?? true, hasTableMap: loc.hasTableMap ?? true, hasOpenTabs: loc.hasOpenTabs ?? false }); setError(""); setShowModal(true); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) { setError("El nombre es requerido"); return; }
+    const latitude = form.latitude.trim() === "" ? null : Number(form.latitude);
+    const longitude = form.longitude.trim() === "" ? null : Number(form.longitude);
+    if ((latitude === null) !== (longitude === null)
+      || (latitude !== null && (!Number.isFinite(latitude) || Math.abs(latitude) > 90))
+      || (longitude !== null && (!Number.isFinite(longitude) || Math.abs(longitude) > 180))) {
+      setError("Captura ambas coordenadas válidas o deja ambas vacías."); return;
+    }
+    const payload = { ...form, latitude, longitude };
     setSaving(true); setError("");
     try {
       if (editing) {
-        await api.put(`/api/admin/locations/${editing.id}`, form);
+        await api.put(`/api/admin/locations/${editing.id}`, payload);
       } else {
-        await api.post("/api/admin/locations", { ...form, slug: slugify(form.name) });
+        await api.post("/api/admin/locations", { ...payload, slug: slugify(form.name) });
       }
       setShowModal(false);
       fetchLocations();
@@ -169,6 +177,15 @@ export default function LocationsSection() {
           <Field label="Teléfono">
             <Input type="text" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="Ej. 55 1234 5678" />
           </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Latitud (opcional)">
+              <Input aria-label="Latitud de la sucursal" type="number" step="any" min={-90} max={90} value={form.latitude} onChange={e => setForm({ ...form, latitude: e.target.value })} placeholder="Ej. 19.4326" />
+            </Field>
+            <Field label="Longitud (opcional)">
+              <Input aria-label="Longitud de la sucursal" type="number" step="any" min={-180} max={180} value={form.longitude} onChange={e => setForm({ ...form, longitude: e.target.value })} placeholder="Ej. -99.1332" />
+            </Field>
+          </div>
+          <p className="pb-3 text-xs text-tx-mut">Punto de recogida para repartidores. Puedes dejar ambas coordenadas vacías.</p>
 
           <div className="flex items-start gap-3 rounded-ds-lg p-4" style={{ background: "var(--accent-soft)" }}>
             <Sparkles size={18} className="mt-0.5 shrink-0 text-primary" />

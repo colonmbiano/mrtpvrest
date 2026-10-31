@@ -1,7 +1,7 @@
 'use client';
 
 // "Mis pedidos": historial del cliente logueado + "Volver a pedir" en 1 toque.
-// Reconstruye el carrito contra el menú vigente (lib/reorder) y prefilла los
+// Reconstruye el carrito contra el menú vigente (lib/reorder) y prefilla los
 // datos de contacto/entrega en el perfil local que ya lee el checkout, para que
 // la recompra sea de 2 toques (revisar → pagar) al estilo OlaClick.
 import { useEffect, useState } from 'react';
@@ -10,6 +10,7 @@ import { useCart } from '../lib/cartStore';
 import { reorderIntoCart } from '../lib/reorder';
 import type { StoreProduct } from './ProductModal';
 import { useMoney } from './StoreLocaleContext';
+import OrderTrackingModal from './OrderTrackingModal';
 
 const STATUS: Record<string, { t: string; c: string }> = {
   PENDING: { t: 'Recibido', c: '#f59e0b' },
@@ -49,6 +50,8 @@ export default function MyOrdersModal({ open, onClose, slug, primary, products, 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [trackingOpen, setTrackingOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<CustomerOrder | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -123,6 +126,8 @@ export default function MyOrdersModal({ open, onClose, slug, primary, products, 
             const summary = (o.items || [])
               .map((i) => `${i.quantity}× ${i.name}`)
               .join(', ');
+            const isActiveOrder = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'ON_THE_WAY'].includes(o.status);
+            const showPin = o.orderType === 'DELIVERY' && ['ON_THE_WAY', 'READY'].includes(o.status);
             return (
               <div key={o.id} className="rounded-2xl border-2 p-4" style={{ borderColor: '#eef0f2' }}>
                 <div className="flex items-center justify-between gap-2">
@@ -131,15 +136,34 @@ export default function MyOrdersModal({ open, onClose, slug, primary, products, 
                 </div>
                 <p className="text-[11px] text-gray-400 mt-1">{fmtDate(o.createdAt)}</p>
                 <p className="text-sm text-gray-600 mt-2 line-clamp-2">{summary}</p>
-                <div className="flex items-center justify-between mt-3">
-                  <span className="font-bold">{fmt(o.total)}</span>
-                  <button
-                    onClick={() => handleReorder(o)}
-                    className="px-4 py-2.5 rounded-xl font-bold uppercase tracking-widest text-white text-[12px] active:scale-95 transition-all"
-                    style={{ background: primary }}
-                  >
-                    ↻ Volver a pedir
-                  </button>
+                {showPin && (
+                  <div className="mt-3 p-3 rounded-lg text-center" style={{ background: `${primary}15` }}>
+                    <p className="text-[10px] uppercase font-semibold text-gray-500 mb-1">PIN de entrega</p>
+                    <p className="text-lg font-black tracking-widest" style={{ fontFamily: 'DM Mono, monospace', color: primary }}>
+                      ••••
+                    </p>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mt-3">
+                  <span className="font-bold text-sm flex-1">{fmt(o.total)}</span>
+                  <div className="flex gap-2">
+                    {isActiveOrder && (
+                      <button
+                        onClick={() => { setSelectedOrder(o); setTrackingOpen(true); }}
+                        className="px-3 py-2.5 rounded-xl font-bold uppercase tracking-widest text-[12px] active:scale-95 transition-all"
+                        style={{ background: `${primary}20`, color: primary }}
+                      >
+                        📍 Ver rastreo
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleReorder(o)}
+                      className="px-4 py-2.5 rounded-xl font-bold uppercase tracking-widest text-white text-[12px] active:scale-95 transition-all"
+                      style={{ background: primary }}
+                    >
+                      ↻ Volver a pedir
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -163,6 +187,15 @@ export default function MyOrdersModal({ open, onClose, slug, primary, products, 
           </div>
         )}
       </div>
+
+      {selectedOrder && (
+        <OrderTrackingModal
+          open={trackingOpen}
+          onClose={() => { setTrackingOpen(false); setSelectedOrder(null); }}
+          order={selectedOrder}
+          primary={primary}
+        />
+      )}
     </div>
   );
 }

@@ -149,3 +149,34 @@ describe('POST /api/store/orders — dedupe anti doble-submit', () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 });
+
+
+describe('Master Burguer\'s boneless por peso', () => {
+  const id = 'cmpp2pipe00c81qpl3me2i2v2';
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.restaurant.findUnique.mockResolvedValue({ id: 'r1', isActive: true });
+    prisma.restaurantConfig.findUnique.mockResolvedValue(null);
+    prisma.location.findFirst.mockResolvedValue({ id: 'loc1' });
+    prisma.cashShift.findFirst.mockResolvedValue({ id: 'shift1' });
+    prisma.menuItem.findFirst.mockResolvedValue({ ...MENU_ITEM, id, name: '1 KG de Boneless', price: 320, saleUnit: 'WEIGHT', minWeightKg: 1 });
+    prisma.order.findMany.mockResolvedValue([]);
+    nextOrderNumber.mockResolvedValue(1042);
+  });
+  test.each([[1, 1, 320], [1.5, 1, 480], [2, 1, 640], [1.5, 2, 960], [1.563, 1, 500.16]])(
+    '%s kg, %s porciones persiste el peso y cobra $%s desde catálogo', async (weightKg, quantity, total) => {
+      const create = jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...data, id: 'new', items: [] }));
+      prisma.$transaction.mockImplementation(fn => fn({ order: { create } }));
+      const res = await request(buildApp()).post('/api/store/orders').set('x-restaurant-id', 'r1')
+        .send({ ...BASE_PAYLOAD, items: [{ menuItemId: id, weightKg, quantity, price: 1, subtotal: 1 }] });
+      expect(res.status).toBe(201);
+      expect(create.mock.calls[0][0].data.items.create[0]).toMatchObject({ price: 320, quantity: 1, weightKg: weightKg * quantity, subtotal: total });
+    });
+  test.each([0, -1, 0.999, 0.9999, 'no', 10000000])('rechaza peso inválido %s antes de escribir', async weightKg => {
+    const res = await request(buildApp()).post('/api/store/orders').set('x-restaurant-id', 'r1')
+      .send({ ...BASE_PAYLOAD, items: [{ menuItemId: id, weightKg, quantity: 1 }] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('mínimo');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});

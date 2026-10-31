@@ -1,14 +1,79 @@
 'use client';
-// handoff/screens/DesempenoScreen.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { C, S } from '@/lib/tokens';
+import { PayoutRequestModal } from '../PayoutRequestModal';
 
-interface HistoryOrder { id: string; orderNumber: string; total: number; updatedAt: string | Date; }
-interface DesempenoScreenProps { history: HistoryOrder[]; onBack: () => void; }
+interface HistoryOrder {
+  id: string;
+  orderNumber: string;
+  total: number;
+  tariff: number;
+  tip: number;
+  cash: number;
+  paymentMethod: 'CASH' | 'CARD' | 'TRANSFER';
+  status: 'DELIVERED' | 'CANCELLED' | 'PENDING';
+  updatedAt: string | Date;
+}
 
-export function DesempenoScreen({ history, onBack }: DesempenoScreenProps) {
-  const today = history.filter(h => new Date(h.updatedAt).toDateString() === new Date().toDateString());
-  const todayTotal = today.reduce((s, h) => s + (h.total || 0), 0);
+interface PayoutRequest {
+  id: string;
+  amount: number;
+  bankAccount: string;
+  accountType: 'CLABE' | 'DEBIT';
+  status: 'PENDING' | 'APPROVED' | 'TRANSFERRED';
+  createdAt: string | Date;
+}
+
+interface DesempenoScreenProps {
+  history: HistoryOrder[];
+  payoutHistory?: PayoutRequest[];
+  onBack: () => void;
+  offline?: boolean;
+  onPayoutRequest?: (data: { amount: number; bankAccount: string; accountType: 'CLABE' | 'DEBIT' }) => Promise<void>;
+  driverId?: string;
+}
+
+const CACHE_KEY = 'delivery:balance:history';
+
+export function DesempenoScreen({
+  history,
+  payoutHistory = [],
+  onBack,
+  offline = false,
+  onPayoutRequest,
+  driverId,
+}: DesempenoScreenProps) {
+  const [cachedHistory, setCachedHistory] = useState<HistoryOrder[]>(history);
+  const [isOffline, setIsOffline] = useState(offline);
+  const [payoutModalOpen, setPayoutModalOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(history));
+    } catch {}
+  }, [history]);
+
+  useEffect(() => {
+    if (history.length === 0 && typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          setCachedHistory(JSON.parse(cached));
+          setIsOffline(true);
+        }
+      } catch {}
+    }
+  }, [history]);
+
+  const displayHistory = history.length > 0 ? history : cachedHistory;
+  const today = displayHistory.filter(h => new Date(h.updatedAt).toDateString() === new Date().toDateString());
+  const delivered = today.filter(h => h.status === 'DELIVERED');
+
+  const todayTariff = delivered.reduce((s, h) => s + (h.tariff || 0), 0);
+  const todayTips = delivered.reduce((s, h) => s + (h.tip || 0), 0);
+  const todayEarnings = todayTariff + todayTips;
+  const todayAvailable = delivered.filter(h => h.paymentMethod !== 'CASH').reduce((s, h) => s + (h.total || 0), 0);
+  const todayCash = delivered.filter(h => h.paymentMethod === 'CASH').reduce((s, h) => s + (h.cash || 0), 0);
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: C.fontBody }}>
@@ -19,11 +84,14 @@ export function DesempenoScreen({ history, onBack }: DesempenoScreenProps) {
             <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
           </svg>
         </button>
-        <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: C.text }}>Mi Desempeño</div>
+        <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: C.text }}>
+          Mi Desempeño
+          {isOffline && <span style={{ marginLeft: 8, fontSize: 10, color: C.textMuted }}>📡 Sin conexión</span>}
+        </div>
       </div>
 
       <div style={{ padding: '16px', paddingBottom: 40 }}>
-        {/* Hero */}
+        {/* Entregas Hoy */}
         <div style={{
           background: 'rgba(255,184,77,0.05)', border: '1px solid rgba(255,184,77,0.18)',
           borderRadius: 24, padding: '32px 20px', textAlign: 'center', marginBottom: 16,
@@ -37,70 +105,179 @@ export function DesempenoScreen({ history, onBack }: DesempenoScreenProps) {
             Entregas Hoy
           </div>
           <div style={{ fontFamily: C.fontDisplay, fontSize: 84, fontWeight: 700, color: C.text, lineHeight: 1, letterSpacing: '-0.03em' }}>
-            {today.length}
-          </div>
-          <div style={{ fontFamily: C.fontDisplay, fontSize: 22, fontWeight: 700, color: C.green, marginTop: 12 }}>
-            ${todayTotal.toFixed(2)}
-            <span style={{ fontSize: 11, color: C.textMuted, fontFamily: C.fontBody, fontWeight: 400 }}> recaudados</span>
+            {delivered.length}
           </div>
         </div>
 
-        {/* Stats */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-          {[
-            { label: 'Tiempo medio', value: '—' },
-            { label: 'Km recorridos', value: '—' },
-            { label: 'Calificación',  value: '—' },
-          ].map((s, i) => (
-            <div key={i} style={{
-              flex: 1, background: C.surf1, border: `1px solid ${C.border}`,
-              borderRadius: 16, padding: '14px 8px', textAlign: 'center',
-            }}>
-              <div style={{ fontFamily: C.fontDisplay, fontSize: 15, fontWeight: 700, color: C.text, lineHeight: 1 }}>{s.value}</div>
-              <div style={{ fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 6 }}>{s.label}</div>
+        {/* Tarjetas de Balance */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+          {/* Saldo Ganado */}
+          <div style={{
+            background: C.greenSoft, border: `1px solid ${C.green}40`,
+            borderRadius: 16, padding: '16px 20px',
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+              Saldo Ganado
             </div>
-          ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <div style={{ fontFamily: C.fontDisplay, fontSize: 28, fontWeight: 700, color: C.green }}>
+                ${todayEarnings.toFixed(2)}
+              </div>
+              <div style={{ fontSize: 9, color: C.textMuted }}>
+                Tarifas ${todayTariff.toFixed(2)} + Propinas ${todayTips.toFixed(2)}
+              </div>
+            </div>
+          </div>
+
+          {/* Saldo Disponible */}
+          <div style={{
+            background: 'rgba(59,130,246,0.05)', border: `1px solid rgba(59,130,246,0.25)`,
+            borderRadius: 16, padding: '16px 20px',
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+              Saldo Disponible
+            </div>
+            <div style={{ fontFamily: C.fontDisplay, fontSize: 28, fontWeight: 700, color: '#3b82f6' }}>
+              ${todayAvailable.toFixed(2)}
+            </div>
+            <div style={{ fontSize: 9, color: C.textMuted, marginTop: 4 }}>Pagos con tarjeta y transferencias</div>
+            {todayAvailable > 0 && onPayoutRequest && (
+              <button onClick={() => setPayoutModalOpen(true)} style={{
+                width: '100%', marginTop: 12, height: 38, borderRadius: 10, border: '1px solid rgba(59,130,246,0.3)',
+                background: 'rgba(59,130,246,0.12)', fontSize: 10, fontWeight: 700, color: '#3b82f6',
+                letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: C.fontBody, cursor: 'pointer',
+              }}>Solicitar retiro</button>
+            )}
+          </div>
+
+          {/* Efectivo Pendiente */}
+          <div style={{
+            background: 'rgba(239,68,68,0.05)', border: `1px solid rgba(239,68,68,0.25)`,
+            borderRadius: 16, padding: '16px 20px',
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+              Efectivo Pendiente de Caja
+            </div>
+            <div style={{ fontFamily: C.fontDisplay, fontSize: 28, fontWeight: 700, color: '#ef4444' }}>
+              ${todayCash.toFixed(2)}
+            </div>
+            <div style={{ fontSize: 9, color: C.textMuted, marginTop: 4 }}>Debe liquidarse en caja</div>
+          </div>
         </div>
 
-        {/* History */}
+        {/* Historial Detallado */}
         <div style={S.sectionLabel}>Historial de hoy</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {today.map(h => (
+          {delivered.map(h => (
             <div key={h.id} style={{
               background: C.surf1, border: `1px solid ${C.border}`,
               borderRadius: 16, padding: '14px 16px',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              display: 'flex', flexDirection: 'column', gap: 8,
             }}>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <div style={{
-                  width: 38, height: 38, borderRadius: 12, background: C.greenSoft,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.green,
-                }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
-                    strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                </div>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>#{h.orderNumber}</div>
-                  <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
-                    {new Date(h.updatedAt).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <div style={{
+                    width: 38, height: 38, borderRadius: 12, background: C.greenSoft,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.green,
+                  }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+                      strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>#{h.orderNumber}</div>
+                    <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
+                      {new Date(h.updatedAt).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })}
+                    </div>
                   </div>
                 </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontFamily: C.fontDisplay, fontSize: 16, fontWeight: 700, color: C.text }}>
+                    ${h.total?.toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: 9, color: C.green, fontWeight: 600, marginTop: 2, textTransform: 'uppercase' }}>Entregado</div>
+                </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontFamily: C.fontDisplay, fontSize: 16, fontWeight: 700, color: C.text }}>${h.total?.toFixed(2)}</div>
-                <div style={{ fontSize: 9, color: C.green, fontWeight: 600, marginTop: 2, textTransform: 'uppercase' }}>Entregado</div>
+              <div style={{ display: 'flex', gap: 12, fontSize: 9, color: C.textMuted, borderTop: `1px solid ${C.border}40`, paddingTop: 8 }}>
+                <span>Tarifa: <strong style={{ color: C.text }}>${h.tariff?.toFixed(2)}</strong></span>
+                <span>Propina: <strong style={{ color: C.green }}>${h.tip?.toFixed(2)}</strong></span>
+                <span>Método: <strong style={{ color: C.text }}>{h.paymentMethod === 'CASH' ? '💵 Efectivo' : h.paymentMethod === 'CARD' ? '💳 Tarjeta' : '🏦 Transfer'}</strong></span>
               </div>
             </div>
           ))}
-          {today.length === 0 && (
+          {delivered.length === 0 && (
             <div style={{ padding: '32px', textAlign: 'center', fontSize: 10, color: C.textMuted, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-              No hay entregas registradas hoy
+              No hay entregas entregadas hoy
             </div>
           )}
         </div>
+
+        {/* Historial de Retiros */}
+        {payoutHistory && payoutHistory.length > 0 && (
+          <>
+            <div style={S.sectionLabel}>Historial de retiros</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {payoutHistory.map(payout => {
+                const statusColor = payout.status === 'PENDING' ? C.amber : payout.status === 'APPROVED' ? C.iris : C.green;
+                const statusLabel = payout.status === 'PENDING' ? 'Pendiente' : payout.status === 'APPROVED' ? 'Aprobado' : 'Transferido';
+                return (
+                  <div key={payout.id} style={{
+                    background: C.surf1, border: `1px solid ${C.border}`,
+                    borderRadius: 16, padding: '14px 16px',
+                    display: 'flex', flexDirection: 'column', gap: 8,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        <div style={{
+                          width: 38, height: 38, borderRadius: 12, background: `${statusColor}20`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', color: statusColor,
+                          fontSize: 16,
+                        }}>
+                          {payout.status === 'PENDING' ? '⏳' : payout.status === 'APPROVED' ? '✓' : '💰'}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+                            ${payout.amount.toFixed(2)}
+                          </div>
+                          <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
+                            {new Date(payout.createdAt).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: statusColor, textTransform: 'uppercase' }}>
+                          {statusLabel}
+                        </div>
+                        <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
+                          {payout.accountType === 'CLABE' ? 'CLABE' : 'Débito'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
+
+      {/* Modal de solicitud de retiro */}
+      {driverId && (
+        <PayoutRequestModal
+          isOpen={payoutModalOpen}
+          driverId={driverId}
+          availableBalance={todayAvailable}
+          pendingCashInHand={todayCash}
+          onClose={() => setPayoutModalOpen(false)}
+          onSubmit={async (data) => {
+            if (onPayoutRequest) {
+              await onPayoutRequest(data);
+              setPayoutModalOpen(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

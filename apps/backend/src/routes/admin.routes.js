@@ -2,6 +2,7 @@ const express = require('express')
 const prisma  = require('@mrtpvrest/database').prisma
 const { authenticate, requireAdmin, requireTenantAccess } = require('../middleware/auth.middleware')
 const { resolveTrialDays } = require('../lib/promo')
+const { locationCoordinates } = require('../lib/location-coordinates')
 const router  = express.Router()
 
 // Tenant de sistema — se excluye del listado visible de marcas.
@@ -295,6 +296,8 @@ router.put('/whatsapp-assistant', authenticate, requireTenantAccess, requireAdmi
       ...(prev.statusUrl ? { statusUrl: prev.statusUrl } : {}),
       ...(prev.phoneNumber ? { phoneNumber: prev.phoneNumber } : {}),
       ...(prev.botTokenHash ? { botTokenHash: prev.botTokenHash } : {}),
+      ...(prev.runMode ? { runMode: prev.runMode } : {}),
+      ...(prev.localEnabled !== undefined ? { localEnabled: prev.localEnabled } : {}),
     });
     const enabled = body.enabled !== false; // default true
 
@@ -330,22 +333,36 @@ router.get('/whatsapp-assistant/metrics', authenticate, requireTenantAccess, req
     const row = await prisma.integrationConfig.findUnique({
       where: { restaurantId_type: { restaurantId, type: WA_ASSISTANT_TYPE } },
     });
-    status.provisioned = !!assistantStatusUrl(row);
-    const statusUrl = assistantStatusUrl(row);
-    if (statusUrl) {
-      status.url = statusUrl.replace(/\/+$/, '');
-      try {
-        const axios = require('axios');
-        const r = await axios.get(status.url, { timeout: 4000 });
-        status.reachable = true;
-        status.ready = r.data?.ready ?? null;
-        status.hasQr = r.data?.hasQr ?? null;
-        // qrUrl del worker es una ruta ('/qr'): resolverla contra el origin del
-        // status URL (robusto aunque el status URL traiga path como '/healthz').
-        try { status.qrUrl = r.data?.qrUrl ? new URL(r.data.qrUrl, status.url).href : null; }
-        catch { status.qrUrl = null; }
-      } catch (e) {
-        status.error = e?.code || e?.message || 'no alcanzable';
+    const cfg = rawAssistantConfig(row);
+    if (cfg.runMode === 'local') {
+      const isFresh = Boolean(row?.lastSync && (Date.now() - new Date(row.lastSync).getTime() < 60000));
+      status.provisioned = true;
+      status.reachable = isFresh;
+      status.ready = isFresh;
+      status.hasQr = false;
+      status.local = true;
+      status.url = 'http://localhost:3005';
+      if (!isFresh) {
+        status.error = 'PC local desconectada o en espera';
+      }
+    } else {
+      status.provisioned = !!assistantStatusUrl(row);
+      const statusUrl = assistantStatusUrl(row);
+      if (statusUrl) {
+        status.url = statusUrl.replace(/\/+$/, '');
+        try {
+          const axios = require('axios');
+          const r = await axios.get(status.url, { timeout: 4000 });
+          status.reachable = true;
+          status.ready = r.data?.ready ?? null;
+          status.hasQr = r.data?.hasQr ?? null;
+          // qrUrl del worker es una ruta ('/qr'): resolverla contra el origin del
+          // status URL (robusto aunque el status URL traiga path como '/healthz').
+          try { status.qrUrl = r.data?.qrUrl ? new URL(r.data.qrUrl, status.url).href : null; }
+          catch { status.qrUrl = null; }
+        } catch (e) {
+          status.error = e?.code || e?.message || 'no alcanzable';
+        }
       }
     }
     res.set('Cache-Control', 'no-store');
@@ -480,10 +497,13 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
   try {
     const { name, slug, address, phone, autoPromoEnabled, autoPromoThreshold, autoPromoDiscount, hasDelivery, hasTakeaway, hasTableMap, hasOpenTabs } = req.body;
     const restaurantId = req.restaurantId || req.user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const coordinates = locationCoordinates(req.body);
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
       include: { _count: { select: { locations: true } } }
     });
+    if (!restaurant) return res.status(404).json({ error: 'Restaurante no encontrado' });
     if (restaurant._count.locations >= restaurant.maxLocations) {
       return res.status(403).json({ error: `Límite de sucursales alcanzado (${restaurant.maxLocations}).` });
     }
@@ -495,6 +515,7 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
         slug: slug.toLowerCase(),
         address,
         phone,
+        ...coordinates,
         ...(autoPromoEnabled !== undefined && { autoPromoEnabled }),
         ...(autoPromoThreshold !== undefined && { autoPromoThreshold }),
         ...(autoPromoDiscount !== undefined && { autoPromoDiscount }),
@@ -506,7 +527,7 @@ router.post('/locations', authenticate, requireTenantAccess, requireAdmin, async
       },
     });
     res.json(location);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.statusCode || 500).json({ error: e.message, ...(e.code === 'INVALID_LOCATION_COORDINATES' && { errorCode: e.code }) }); }
 });
 
 router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
@@ -517,6 +538,7 @@ router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, as
     if (!location || location.restaurantId !== restaurantId)
       return res.status(404).json({ error: 'Sucursal no encontrada' });
     const data = {
+      ...locationCoordinates(req.body),
       ...(name && { name }),
       ...(address !== undefined && { address }),
       ...(phone !== undefined && { phone }),
@@ -538,7 +560,7 @@ router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, as
           data: { isCentralWarehouse: false },
         });
       }
-      return tx.location.update({ where: { id: req.params.id }, data });
+      return tx.location.update({ where: { id: req.params.id, restaurantId }, data });
     });
 
     // Si cambió el descuento, re-aplicar el nuevo % a las promos vigentes para
@@ -559,7 +581,7 @@ router.put('/locations/:id', authenticate, requireTenantAccess, requireAdmin, as
     }
 
     res.json(updated);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.statusCode || 500).json({ error: e.message, ...(e.code === 'INVALID_LOCATION_COORDINATES' && { errorCode: e.code }) }); }
 });
 
 router.delete('/locations/:id', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {

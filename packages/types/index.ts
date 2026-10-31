@@ -224,3 +224,27 @@ export interface PaginatedResponse<T> {
     pages: number;
   };
 }
+
+// ── Driver Payouts ──────────────────────────────────────────────────────────
+
+export type PayoutStatus = "PENDING" | "APPROVED" | "TRANSFERRED" | "REJECTED";
+export type AccountType = "CLABE" | "DEBIT";
+
+export interface DriverPayoutRequest {
+  id: string;
+  driverId: string;
+  amount: number;
+  bankAccount: string;
+  accountType: AccountType;
+  status: PayoutStatus;
+  rejectionReason?: string;
+  transferredAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatePayoutRequestInput {
+  amount: number;
+  bankAccount: string;
+  accountType: AccountType;
+}

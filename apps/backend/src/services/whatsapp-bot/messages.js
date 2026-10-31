@@ -3,6 +3,8 @@
 // Todo el "copy" vive aquí para mantener el motor (engine.js) enfocado en la
 // lógica de la conversación y para poder ajustar el tono sin tocar el flujo.
 
+const { customerPinText } = require('../../lib/store-delivery-pin');
+
 function money(n) {
   const value = Number(n) || 0;
   return '$' + value.toLocaleString('es-MX', {
@@ -149,17 +151,19 @@ module.exports = {
 
   invalidConfirm: 'Responde *SÍ* para confirmar tu pedido o *NO* para cancelar.',
 
-  orderCreated: ({ orderNumber, total, orderType, estimatedMinutes }) => {
+  orderCreated: ({ orderNumber, total, orderType, estimatedMinutes, deliveryPin }) => {
     const eta =
       orderType === 'DELIVERY'
         ? `🕒 Tiempo estimado de entrega: *${estimatedMinutes} min*.`
         : `🕒 Estará listo para recoger en aprox. *${estimatedMinutes} min*.`;
+    const pinText = orderType === 'DELIVERY' ? customerPinText(deliveryPin) : '';
     return [
       '🎉 ¡Pedido recibido!',
       '',
       `📦 *Folio:* ${orderNumber}`,
       `💰 *Total:* ${money(total)}`,
       eta,
+      ...(pinText ? ['', pinText] : []),
       '',
       'Te avisaremos cuando cambie el estado de tu pedido. ¡Gracias por tu compra! 🙌',
     ].join('\n');

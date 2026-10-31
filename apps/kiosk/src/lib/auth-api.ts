@@ -1,6 +1,6 @@
 import axios from "axios";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.mrtpvrest.com";
+// Misma resolución que el cliente principal (incluye la copia aislada).
+import { API_URL } from "./api";
 
 export function makeAuthApi(token: string) {
   return axios.create({

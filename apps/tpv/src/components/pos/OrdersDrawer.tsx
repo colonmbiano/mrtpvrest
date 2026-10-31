@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import OrderPackagingPanel from "./OrderPackagingPanel";
 import { hapticMedium } from "@/lib/haptics";
+import { PAY_FILTERS, matchesPayFilter } from "@/lib/paid-order-filters";
 
 export interface DrawerOrder {
   id: string;
@@ -45,6 +46,10 @@ export interface DrawerOrder {
   takenBy?: string;
   /** Solo modo "Cobradas": método de pago crudo para el chip del tile. */
   paymentMethod?: string | null;
+  /** Marketplace: motivo por el que no se cobra en caja ("Por aceptar", "Pagado en línea"…). */
+  chargeBlocked?: string | null;
+  /** Marketplace: sus productos no se editan; "Editar" pasa a "Ver". */
+  itemsLocked?: boolean;
 }
 
 export interface DriverOption {
@@ -139,23 +144,6 @@ const payMethodLabel = (m?: string | null): string =>
 
 const FILTERS = ["Todos", "Mesa", "Llevar", "Domicilio"] as const;
 type FilterKey = (typeof FILTERS)[number];
-
-// Filtro por método de pago — solo en modo "Cobradas". Cada chip agrupa los
-// métodos equivalentes (efectivo contra-entrega cuenta como efectivo, SPEI/OXXO
-// como transferencia, etc.). `methods: null` = sin filtrar (Todos).
-const PAY_FILTERS: { key: string; label: string; methods: string[] | null }[] = [
-  { key: "Todos", label: "Todos", methods: null },
-  { key: "CASH", label: "Efectivo", methods: ["CASH", "CASH_ON_DELIVERY"] },
-  { key: "TRANSFER", label: "Transfer.", methods: ["TRANSFER", "SPEI", "OXXO"] },
-  { key: "CARD", label: "Tarjeta", methods: ["CARD", "CARD_PRESENT"] },
-  { key: "OTHER", label: "Otros", methods: ["ONLINE", "MIXED", "COURTESY", "OTHER"] },
-];
-
-const matchesPayFilter = (order: DrawerOrder, payKey: string): boolean => {
-  const group = PAY_FILTERS.find((p) => p.key === payKey);
-  if (!group || group.methods === null) return true;
-  return group.methods.includes((order.paymentMethod || "").toUpperCase());
-};
 
 // Orden del listado. `time` es string de display (no timestamp), así que
 // no ordenamos por tiempo; orden por monto y nombre son confiables.
@@ -996,7 +984,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                         )}
                         <button
                           type="button"
-                          aria-label={`Editar ticket de ${order.customerName}`}
+                          aria-label={`${order.itemsLocked ? "Ver" : "Editar"} ticket de ${order.customerName}`}
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1005,7 +993,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                           }}
                           className="flex-1 h-9 rounded-lg bg-white/5 border border-white/10 text-white/75 text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 active:text-white transition-transform"
                         >
-                          <Pencil size={15} strokeWidth={2.5} /> Editar
+                          <Pencil size={15} strokeWidth={2.5} /> {order.itemsLocked ? "Ver" : "Editar"}
                         </button>
                         <button
                           type="button"
@@ -1020,7 +1008,15 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                         >
                           <Receipt size={15} strokeWidth={2.5} /> Imprimir
                         </button>
-                        {!hideMoney && (
+                        {!hideMoney && (order.chargeBlocked ? (
+                          // Marketplace por aceptar o ya pagado en línea: no se cobra en caja.
+                          <span
+                            role="note"
+                            className="flex-[1.3] h-9 rounded-lg border border-white/10 text-white/50 text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5"
+                          >
+                            {order.chargeBlocked}
+                          </span>
+                        ) : (
                           <button
                             type="button"
                             aria-label={`Cobrar ticket de ${order.customerName}`}
@@ -1034,7 +1030,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                           >
                             <Zap size={15} strokeWidth={2.8} /> Cobrar
                           </button>
-                        )}
+                        ))}
                       </div>
                     )
                     )}

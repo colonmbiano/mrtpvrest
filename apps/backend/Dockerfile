@@ -26,4 +26,6 @@ EXPOSE 3000
 # Aplica migraciones pendientes antes de arrancar. `prisma migrate deploy` es
 # idempotente: solo corre las que aún no están en _prisma_migrations. Si falla,
 # el deploy falla ruidosamente y el server no levanta con schema inconsistente.
-CMD ["sh", "-c", "pnpm --filter @mrtpvrest/database exec prisma migrate deploy && node apps/backend/src/index.js"]
+# Copia aislada del marketplace (MARKETPLACE_ISOLATED=true): arranque y migración
+# van separados; migrar es un paso manual y revisado (MARKETPLACE-STAGING.md).
+CMD ["sh", "-c", "if [ \"$MARKETPLACE_ISOLATED\" = \"true\" ]; then echo 'MARKETPLACE_ISOLATED=true: se omite prisma migrate deploy'; else pnpm --filter @mrtpvrest/database exec prisma migrate deploy || exit 1; fi && node apps/backend/src/index.js"]

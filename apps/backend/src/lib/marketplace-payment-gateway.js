@@ -1,0 +1,87 @@
+'use strict';
+
+const { cents } = require('./marketplace-order-money');
+
+class MarketplaceGatewayError extends Error {
+  constructor(code = 'PAYMENT_UNAVAILABLE') {
+    super('Pasarela marketplace no disponible'); this.code = code; this.statusCode = 503;
+  }
+}
+
+/** Merchant OAuth credentials and commercial terms come exclusively from server configuration.
+ * request is a fetch-compatible seam; importing this module never performs network I/O.
+ */
+async function createMarketplacePaymentGateway({ restaurantId, prismaClient, request = globalThis.fetch, env = process.env }) {
+  const integration = await prismaClient.integrationConfig.findFirst({
+    where: { restaurantId, type: 'MERCADOPAGO', enabled: true },
+    select: { restaurantId: true, config: true, mode: true },
+  });
+  if (!integration || integration.restaurantId !== restaurantId || !['sandbox', 'production'].includes(integration.mode)) throw new MarketplaceGatewayError('PAYMENT_NOT_CONFIGURED');
+  let config;
+  try { config = JSON.parse(integration.config); } catch { throw new MarketplaceGatewayError('PAYMENT_NOT_CONFIGURED'); }
+  if (!config || typeof config.accessToken !== 'string' || !config.accessToken
+    || !/^\d+$/.test(String(config.collectorId || ''))) throw new MarketplaceGatewayError('PAYMENT_NOT_CONFIGURED');
+
+  async function call(endpoint, options = {}) {
+    if (env.MARKETPLACE_ISOLATED === 'true' || env.MARKETPLACE_PAYMENT_NETWORK_ENABLED !== 'true') {
+      throw new MarketplaceGatewayError('PAYMENT_NETWORK_DISABLED');
+    }
+    try {
+      const response = await request(`https://api.mercadopago.com${endpoint}`, { ...options,
+        headers: { Authorization: `Bearer ${config.accessToken}`, 'Content-Type': 'application/json', ...options.headers },
+        signal: AbortSignal.timeout(10000), redirect: 'error' });
+      if (!response.ok) throw new MarketplaceGatewayError();
+      return await response.json();
+    } catch { throw new MarketplaceGatewayError(); }
+  }
+  return {
+    collectorId: String(config.collectorId),
+    commissionRate: config.marketplaceCommissionRate ?? 0.05,
+    commissionFixed: config.marketplaceCommissionFixed ?? 0,
+    // notificationUrl (opcional) lo arma el servidor, p. ej. el webhook v1 con el comercio
+    // en la URL; si no viene se usa la del comercio. Nunca proviene del comprador.
+    async createPreference({ orderId, items, marketplaceFee, idempotencyKey, notificationUrl }) {
+      const notifyTo = notificationUrl || config.marketplaceNotificationUrl;
+      const result = await call('/checkout/preferences', { method: 'POST',
+        headers: { 'X-Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ external_reference: orderId, items, marketplace_fee: marketplaceFee,
+          ...(notifyTo ? { notification_url: notifyTo } : {}) }) });
+      const initPoint = integration.mode === 'sandbox' ? result.sandbox_init_point : result.init_point;
+      let url;
+      try { url = new URL(initPoint); } catch { throw new MarketplaceGatewayError(); }
+      if (!result.id || url.protocol !== 'https:' || !/^([a-z0-9-]+\.)*mercadopago\.(com|com\.mx|com\.ar|cl|com\.co|com\.br|com\.pe|com\.uy)$/.test(url.hostname)
+        || url.username || url.password) throw new MarketplaceGatewayError();
+      return { id: String(result.id), initPoint: url.href };
+    },
+    async getPayment(paymentId) {
+      const result = await call(`/v1/payments/${encodeURIComponent(paymentId)}`);
+      try {
+        const fee = (result.fee_details || []).filter(row => row.type === 'application_fee')
+          .reduce((sum, row) => sum + cents(row.amount), 0);
+        return { id: String(result.id), status: result.status, orderId: result.external_reference,
+          collectorId: String(result.collector_id), amountCents: cents(result.transaction_amount),
+          currency: result.currency_id, marketplaceFeeCents: fee };
+      } catch { throw new MarketplaceGatewayError('INVALID_PAYMENT_RESPONSE'); }
+    },
+    // La identidad del pago y el importe vienen de la reserva persistente del
+    // servidor. El mismo Idempotency-Key se reutiliza tras una respuesta perdida.
+    async refundPayment({ paymentId, amountCents, idempotencyKey }) {
+      if (!/^\d+$/.test(String(paymentId)) || !Number.isSafeInteger(amountCents) || amountCents <= 0
+        || amountCents > 100000000 || typeof idempotencyKey !== 'string' || !idempotencyKey) {
+        throw new MarketplaceGatewayError('INVALID_REFUND_REQUEST');
+      }
+      const result = await call(`/v1/payments/${encodeURIComponent(paymentId)}/refunds`, {
+        method: 'POST', headers: { 'X-Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ amount: amountCents / 100 }),
+      });
+      try {
+        if (!result.id || String(result.payment_id) !== String(paymentId) || cents(result.amount) !== amountCents) {
+          throw new Error('refund');
+        }
+        return { id: String(result.id), paymentId: String(result.payment_id), amountCents: cents(result.amount), status: result.status };
+      } catch { throw new MarketplaceGatewayError('INVALID_REFUND_RESPONSE'); }
+    },
+  };
+}
+
+module.exports = { createMarketplacePaymentGateway, MarketplaceGatewayError };
