@@ -1,3 +1,4 @@
+const { isSoldByWeight, resolveSaleWeight, weightDisplayName } = require('../../../../packages/config/weight-sale');
 const { validateQuantityGroups, compactQuantityModifiers, modifierSnapshotKey } = require('../lib/quantity-modifiers');
 require('dotenv').config();
 const { createHash } = require('node:crypto');
@@ -443,11 +444,8 @@ function extractIds(value, key) {
 // mandó un peso > 0; en cualquier otro caso null (producto por pieza). El
 // servidor es quien decide: un weightKg en el payload de un producto normal
 // se ignora, igual que el precio nunca se confía del cliente.
-function resolveWeightKg(menuItem, rawWeightKg) {
-  if (!menuItem || menuItem.soldByWeight !== true) return null;
-  const w = Number(rawWeightKg);
-  if (!Number.isFinite(w) || w <= 0) return null;
-  return Math.round(w * 1000) / 1000;
+function resolveWeightKg(menuItem, rawWeightKg, quantity) {
+  return resolveSaleWeight(menuItem, rawWeightKg, quantity);
 }
 
 function appendComplementNotes(notes, complements) {
@@ -999,7 +997,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       // multiplicador del subtotal es el peso; el precio sigue saliendo del
       // servidor (anti-manipulación). Productos por pieza: weightKg=null y
       // multiplicador = quantity, como siempre.
-      const weightKg = resolveWeightKg(menuItem, item.weightKg);
+      const weightKg = resolveWeightKg(menuItem, item.weightKg, item.quantity);
       const lineQty = weightKg != null ? 1 : item.quantity;
       const lineMultiplier = weightKg != null ? weightKg : item.quantity;
       const seatRaw = Number(item.seatNumber);
@@ -1014,7 +1012,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       return {
         ...(item.clientItemId ? { id: item.clientItemId } : {}),
         menuItemId: item.menuItemId,
-        name: variantSelection.name,
+        name: weightKg != null && isSoldByWeight(menuItem) ? weightDisplayName(variantSelection.name, weightKg) : variantSelection.name,
         price: unitPrice,
         quantity: lineQty,
         weightKg,
@@ -1050,7 +1048,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     // (precio real de DB) y se acotan dentro de computeOrderTotals.
     const activeBulkPromos = await loadActiveBulkPromos(prisma, restaurantId);
     const { promoDiscount: bulkPromoDiscount } = computeBulkPromoDiscount(
-      resolvedItems.map((it) => ({ price: it.price, quantity: it.quantity, categoryId: it._categoryId })),
+      resolvedItems.map((it) => ({ price: it.price, quantity: it.quantity, weightKg: it.weightKg, categoryId: it._categoryId })),
       activeBulkPromos,
     );
 
@@ -1347,7 +1345,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     }
 
     res.json(order);
-  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || (e.code === 'INVALID_WEIGHT' ? 400 : 500)).json({ error: e.message }); }
 });
 
 // ── Rondas: núcleo compartido ──────────────────────────────────────────
@@ -1386,7 +1384,7 @@ async function insertRoundInTx(tx, { order, roundId, itemsData = [], moveItemsFr
   // Re-evaluar la promo NxM sobre la cuenta completa (la categoría de cada
   // línea sale del menuItem, no se guarda en OrderItem).
   const { promoDiscount: bulkPromoDiscount } = computeBulkPromoDiscount(
-    all.map((it) => ({ price: Number(it.price), quantity: it.quantity, categoryId: it.menuItem?.categoryId })),
+    all.map((it) => ({ price: Number(it.price), quantity: it.quantity, weightKg: it.weightKg, categoryId: it.menuItem?.categoryId })),
     activeBulkPromos,
   );
   // Mismo helper que el create: subtotal/total siempre desde las líneas en DB.
@@ -1652,7 +1650,7 @@ async function addRoundHandler(req, res) {
 
       const price = variantSelection.basePrice + unitExtra + combo.priceDelta;
       // Venta por peso (ver create-order): peso × precio/kg, quantity=1.
-      const weightKg = resolveWeightKg(menuItem, item.weightKg);
+      const weightKg = resolveWeightKg(menuItem, item.weightKg, item.quantity);
       const qty = weightKg != null ? 1 : Math.max(1, parseInt(item.quantity, 10) || 1);
       const lineMultiplier = weightKg != null ? weightKg : qty;
       const seatRaw = Number(item.seatNumber);
@@ -1664,7 +1662,7 @@ async function addRoundHandler(req, res) {
       return {
         ...(item.clientItemId ? { id: item.clientItemId } : {}),
         menuItemId: item.menuItemId,
-        name: variantSelection.name,
+        name: weightKg != null && isSoldByWeight(menuItem) ? weightDisplayName(variantSelection.name, weightKg) : variantSelection.name,
         price,
         quantity: qty,
         weightKg,
@@ -1725,7 +1723,7 @@ async function addRoundHandler(req, res) {
         if (replay) return res.json(replay);
       } catch (_) { /* Keep a transient response so the outbox retries. */ }
     }
-    res.status(500).json({ error: e.message });
+    res.status(e.code === 'INVALID_WEIGHT' ? 400 : 500).json({ error: e.message });
   }
 }
 
@@ -1808,6 +1806,11 @@ router.put('/items/:itemId', authenticate, requireTenantAccess, requireRole('ADM
     let newWeightKg = isWeightLine ? Number(orderItem.weightKg) : null;
     if (isWeightLine) {
       if (weightKg !== undefined) {
+        {
+          const product = await prisma.menuItem.findFirst({ where: { id: orderItem.menuItemId, restaurantId } });
+          try { resolveSaleWeight({ ...product, soldByWeight: true }, weightKg); }
+          catch (error) { return res.status(400).json({ error: error.message }); }
+        }
         const w = Number(weightKg);
         if (Number.isFinite(w) && w > 0) newWeightKg = Math.round(w * 1000) / 1000;
       }
@@ -1823,7 +1826,7 @@ router.put('/items/:itemId', authenticate, requireTenantAccess, requireRole('ADM
     const updatedOrder = await prisma.$transaction(async (tx) => {
       await tx.orderItem.update({
         where: { id: req.params.itemId },
-        data: { quantity: newQty, weightKg: newWeightKg, subtotal: newSubtotal, notes: newNotes },
+        data: { quantity: newQty, weightKg: newWeightKg, subtotal: newSubtotal, notes: newNotes, ...(isWeightLine ? { name: weightDisplayName(orderItem.name, newWeightKg) } : {}) },
       });
 
       const remaining = await tx.orderItem.findMany({
@@ -1853,7 +1856,7 @@ router.put('/items/:itemId', authenticate, requireTenantAccess, requireRole('ADM
     }
 
     res.json(updatedOrder);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.code === 'INVALID_WEIGHT' ? 400 : 500).json({ error: e.message }); }
 });
 
 // ── DELETE /items/:itemId — Eliminar item de orden abierta

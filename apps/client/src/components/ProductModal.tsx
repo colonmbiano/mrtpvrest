@@ -1,10 +1,12 @@
 'use client';
 import QuantityOptions from './QuantityOptions';
+import WeightSalePicker, { type WeightInput } from './WeightSalePicker';
+import { isSoldByWeight, parseWeightInput, minimumWeight, weightDisplayName } from '../../../../packages/config/weight-sale';
 
 import { useMemo, useState } from 'react';
 import { Check, Minus, Plus, X } from 'lucide-react';
 import { useCart } from '../lib/cartStore';
-import { cldImage } from '@/lib/cloudinary';
+import { cldImage } from '../lib/cloudinary';
 import { useMoney } from './StoreLocaleContext';
 
 type Variant = { id: string; name: string; price: number };
@@ -18,6 +20,7 @@ type ComboOption = { id: string; priceDelta: number; optionMenuItemId: string; o
 type ComboComponent = { id: string; name: string; minSelect: number; maxSelect: number; isRequired: boolean; options: ComboOption[] };
 export type StoreProduct = {
   id: string; name: string; description?: string; price: number;
+  soldByWeight?: boolean; saleUnit?: string; minWeightKg?: number | string | null;
   isPromo?: boolean; promoPrice?: number; imageUrl?: string | null; imageFit?: string | null;
   variants?: Variant[]; modifierGroups?: ModifierGroup[]; complements?: Complement[];
   isCombo?: boolean; comboComponents?: ComboComponent[];
@@ -37,6 +40,15 @@ const beverageSteps = [
 
 function normalizedGroupName(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+}
+
+// Modificador de "sabor libre": su nombre empieza con "otro" (p. ej. "Otro",
+// "Otro sabor"). Al elegirlo, el modal abre un campo de texto para que el
+// cliente escriba el sabor; ese texto viaja en la nota del item (y termina en
+// la comanda). El cobro, si lo hubiera, lo define el priceAdd del modificador
+// en el cat\u00e1logo \u2014 nunca el storefront, porque el backend recalcula el precio.
+function isOtroModifier(name?: string) {
+  return !!name && normalizedGroupName(name).startsWith('otro');
 }
 
 export function normalizeBeverageGroups(groups: ModifierGroup[]) {
@@ -69,7 +81,7 @@ type ProductModalProps = {
 
 // ¿El producto necesita personalización (abrir modal) o se puede agregar directo?
 export function needsModal(p: StoreProduct) {
-  return (p.variants && p.variants.length > 0)
+  return isSoldByWeight(p) || (p.variants && p.variants.length > 0)
     || (p.modifierGroups && p.modifierGroups.length > 0)
     || (p.complements && p.complements.length > 0)
     || (!!p.isCombo && !!p.comboComponents && p.comboComponents.length > 0);
@@ -98,6 +110,8 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
   const [comboSel, setComboSel] = useState<Record<string, string[]>>({}); // componentId -> optionIds
   const [qty, setQty] = useState(1);
   const [note, setNote] = useState('');
+  // groupId -> sabor escrito a mano cuando el cliente elige la opción "Otro".
+  const [customText, setCustomText] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
 
   const basePrice = variantId ? (variants.find(v => v.id === variantId)?.price ?? basePromo) : basePromo;
@@ -117,7 +131,10 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
     return ids.reduce((s, id) => s + (allComboOptions.find(o => o.id === id)?.priceDelta || 0), 0);
   }, [comboSel, allComboOptions]);
 
-  const unitPrice = basePrice + modifiersAdd + complementsAdd + comboAdd;
+  const byWeight = isSoldByWeight(product);
+  const [weightInput, setWeightInput] = useState<WeightInput>({ value: String(Math.max(1, minimumWeight(product))), unit: 'kg' });
+  const weightKg = byWeight ? parseWeightInput(weightInput.value, weightInput.unit, basePrice, minimumWeight(product)) : null;
+  const unitPrice = (basePrice + modifiersAdd + complementsAdd + comboAdd) * (byWeight ? weightKg ?? 0 : 1);
 
   const toggleMod = (g: ModifierGroup, modId: string) => {
     setError('');
@@ -155,6 +172,7 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
   };
 
   const handleAdd = () => {
+    if (byWeight && weightKg == null) { setError("Ingresa una cantidad que cumpla el mínimo de este producto."); return; }
     // Validaciones de grupos requeridos / mínimos
     for (const g of groups) {
       const cur = selected[g.id] || [];
@@ -173,14 +191,33 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
       const cur = comboSel[c.id] || [];
       if (c.isRequired && cur.length < (c.minSelect || 1)) { setError(`Elige una opción en "${c.name}".`); return; }
     }
+    // "Otro" (sabor libre): si se eligió, exige que el cliente escriba el sabor.
+    // Se arma una nota por grupo ("<grupo>: <texto>") que viaja en la nota del
+    // item y aparece en la comanda.
+    const customFlavorNotes: string[] = [];
+    for (const g of groups) {
+      const chosenOtro = (selected[g.id] || []).some(id => isOtroModifier(g.modifiers.find(m => m.id === id)?.name));
+      if (!chosenOtro) continue;
+      const txt = (customText[g.id] || '').trim();
+      if (!txt) { setError(`Escribe el sabor en "${g.name}".`); return; }
+      customFlavorNotes.push(`${g.name}: ${txt}`);
+    }
     const modifierIds = Object.values(selected).flat();
     // Complementos prefijados para que el backend los distinga de modificadores.
     const complementPayloadIds = selectedComplements.map(id => `${COMPLEMENT_PREFIX}${id}`);
     const payloadIds = [...modifierIds, ...complementPayloadIds];
     const variantName = variantId ? variants.find(v => v.id === variantId)?.name : null;
     const modNames = [...new Set(modifierIds)].map(id => {
-      const name = allMods.find(m => m.id === id)?.name;
+      const m = allMods.find(mm => mm.id === id);
+      if (!m) return null;
       const count = modifierIds.filter(mid => mid === id).length;
+      // "Otro" → mostrar el sabor que escribió el cliente en vez de la palabra "Otro".
+      let name: string | undefined = m.name;
+      if (isOtroModifier(m.name)) {
+        const grp = groups.find(gg => gg.modifiers.some(mm => mm.id === id));
+        const txt = grp ? (customText[grp.id] || '').trim() : '';
+        name = txt || m.name;
+      }
       return count > 1 ? `${count} ${name}` : name;
     }).filter(Boolean);
     const complementNames = selectedComplements.map(id => complements.find(c => c.id === id)?.name).filter(Boolean);
@@ -189,14 +226,17 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
       .map(s => allComboOptions.find(o => o.id === s.optionId)?.optionMenuItem?.name)
       .filter(Boolean) as string[];
     const extraNames = [...comboNames, ...modNames, ...complementNames];
-    const displayName = [product.name, variantName ? `(${variantName})` : '', extraNames.length ? `· ${extraNames.join(', ')}` : '']
+    const displayName = [byWeight ? weightDisplayName(product.name, weightKg!) : product.name, variantName ? `(${variantName})` : '', extraNames.length ? `· ${extraNames.join(', ')}` : '']
       .filter(Boolean).join(' ');
     const trimmedNote = note.trim();
+    // El sabor "Otro" se antepone a la nota libre del cliente (ambos van a la
+    // comanda vía OrderItem.notes).
+    const fullNote = [...customFlavorNotes, trimmedNote].filter(Boolean).join(' | ');
     // La nota y la selección del combo entran en la clave de dedup: dos líneas
     // "iguales" con combos/notas distintos NO deben fusionarse.
     const comboSig = comboSelections.map(s => `${s.componentId}:${s.optionId}`).sort().join(',');
-    const key = `${product.id}|${variantId || ''}|${[...payloadIds].sort().join(',')}|${comboSig}|${trimmedNote}`;
-    add({ id: key, menuItemId: product.id, name: displayName, price: unitPrice, variantId, modifierIds: payloadIds, comboSelections: comboSelections.length ? comboSelections : undefined, note: trimmedNote || undefined, quantity: qty });
+    const key = `${product.id}|${variantId || ''}|${[...payloadIds].sort().join(',')}|${comboSig}|${fullNote}${byWeight ? `|kg:${weightKg}` : ''}`;
+    add({ id: key, menuItemId: product.id, name: displayName, price: unitPrice, weightKg: weightKg ?? undefined, variantId, modifierIds: payloadIds, comboSelections: comboSelections.length ? comboSelections : undefined, note: fullNote || undefined, quantity: qty });
     onClose();
   };
 
@@ -245,6 +285,8 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
               <button onClick={onClose} aria-label="Cerrar" className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center" style={{ background: chip }}><X className="h-5 w-5" /></button>
             )}
           </div>
+
+          {byWeight && <WeightSalePicker input={weightInput} minKg={minimumWeight(product)} pricePerKg={basePrice} onChange={setWeightInput} />}
 
           {/* Variantes */}
           {variants.length > 0 && (
@@ -408,6 +450,21 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
                     </select>
                   </div>
                 )}
+
+                {/* Sabor libre: solo cuando se eligió la opción "Otro" del grupo. */}
+                {(selected[g.id] || []).some(id => isOtroModifier(g.modifiers.find(m => m.id === id)?.name)) && (
+                  <div className="mt-3">
+                    <input
+                      type="text"
+                      value={customText[g.id] || ''}
+                      onChange={e => { setError(''); setCustomText(prev => ({ ...prev, [g.id]: e.target.value })); }}
+                      maxLength={60}
+                      placeholder="Escribe el sabor…"
+                      className="w-full px-4 py-3 rounded-2xl border-2 text-sm font-medium outline-none transition-all"
+                      style={{ borderColor: accent, background: dark ? '#FFFFFF08' : '#fff', color: textColor }}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -468,7 +525,7 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
               <span className="w-6 text-center font-bold">{qty}</span>
               <button onClick={() => setQty(q => q + 1)} className="w-9 h-9 font-bold text-lg" aria-label="Agregar una unidad"><Plus className="mx-auto h-4 w-4" /></button>
             </div>
-            <button onClick={handleAdd}
+            <button onClick={handleAdd} disabled={byWeight && weightKg == null}
               className="flex-1 py-4 rounded-2xl font-bold uppercase tracking-widest text-white flex items-center justify-center gap-2 active:scale-95 transition-all"
               style={{ background: accent }}>
               {beverage ? 'Agregar a mi pedido' : 'Agregar'} · {fmt(unitPrice * qty)}

@@ -12,6 +12,7 @@
     "agent": "node scripts/agent-collab.js",
     "tpv:adb:happy-path": "powershell -ExecutionPolicy Bypass -File ./scripts/tpv-adb-happy-path.ps1",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "test:client": "playwright test --config=tests/client/playwright.config.ts",
     "test:e2e": "playwright test --config=tests/e2e/playwright.config.ts",
     "test:e2e:report": "playwright show-report tests/e2e/results/html-report",
     "test:e2e:ui": "playwright test --ui --config=tests/e2e/playwright.config.ts"

@@ -5,6 +5,7 @@ export type CartLine = {
   id: string;               // clave única de la línea (compuesta si hay variante/modificadores)
   menuItemId: string;       // id real del producto para enviar al backend
   name: string;             // nombre a mostrar (incluye variante/modificadores)
+  weightKg?: number;       // kg per configured portion; price is the portion total
   price: number;            // precio unitario YA con variante + modificadores
   quantity: number;
   variantId?: string | null;
@@ -16,6 +17,7 @@ export type CartLine = {
 export type AddInput = {
   id: string;
   name: string;
+  weightKg?: number;       // kg per configured portion; price is the portion total
   price: number;
   menuItemId?: string;
   variantId?: string | null;
@@ -64,6 +66,7 @@ export const useCart = create<CartState>((set, get) => ({
         menuItemId: item.menuItemId ?? item.id,
         name: item.name,
         price: item.price,
+        weightKg: item.weightKg,
         quantity: qty,
         variantId: item.variantId ?? null,
         modifierIds: item.modifierIds ?? [],

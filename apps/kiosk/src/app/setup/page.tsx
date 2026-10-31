@@ -22,11 +22,13 @@ export default function SetupPage() {
     restaurantName: string;
     locationName: string;
     terminalId: string | null;
+    hasDevice: boolean;
   }>(null);
 
   const [step, setStep] = useState<"login" | "pick" | "terminal" | "saving">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [adminToken, setAdminToken] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -42,6 +44,7 @@ export default function SetupPage() {
         restaurantName: localStorage.getItem("kiosk-restaurant-name") || "",
         locationName:   localStorage.getItem("kiosk-location-name")   || "",
         terminalId:     localStorage.getItem("kiosk-terminal-id"),
+        hasDevice:      Boolean(localStorage.getItem("kiosk-device-token")),
       });
       setTerminalId(localStorage.getItem("kiosk-terminal-id") || "");
     }
@@ -54,6 +57,7 @@ export default function SetupPage() {
     try {
       const { data } = await axios.post(`${API_URL}/api/auth/login`, { email, password });
       const accessToken = data.accessToken;
+      setAdminToken(accessToken);
       const authed = makeAuthApi(accessToken);
       const me = await authed.get("/api/tenant/me");
       const rs: Restaurant[] = me.data.restaurants || [];
@@ -97,8 +101,30 @@ export default function SetupPage() {
   async function finishSetup() {
     if (!picked) return;
     setStep("saving");
+    setError("");
     const { restaurant, location } = picked;
 
+    // Alta del kiosko como Device: el backend solo acepta `source: "KIOSK"`
+    // con su JWT (lib/api.ts lo manda y lo renueva con el deviceToken).
+    let device: { deviceId: string; deviceToken: string; accessToken: string };
+    try {
+      const authed = makeAuthApi(adminToken);
+      const { data: dev } = await authed.post(
+        "/api/devices/create",
+        { locationId: location.id, deviceType: "KIOSK", restaurantId: restaurant.id },
+        { headers: { "x-restaurant-id": restaurant.id, "x-location-id": location.id } },
+      );
+      const { data: auth } = await axios.post(`${API_URL}/api/devices/auth`, { deviceToken: dev.deviceToken });
+      device = { deviceId: dev.deviceId, deviceToken: dev.deviceToken, accessToken: auth.accessToken };
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err.message || "No se pudo registrar el kiosko");
+      setStep("terminal");
+      return;
+    }
+
+    localStorage.setItem("kiosk-device-id",       device.deviceId);
+    localStorage.setItem("kiosk-device-token",    device.deviceToken);
+    localStorage.setItem("kiosk-device-jwt",      device.accessToken);
     localStorage.setItem("kiosk-restaurant-id",   restaurant.id);
     localStorage.setItem("kiosk-restaurant-name", restaurant.name);
     localStorage.setItem("kiosk-location-id",     location.id);
@@ -131,7 +157,8 @@ export default function SetupPage() {
 
   function unlink() {
     if (!confirm("¿Desvincular este kiosko? Tendrás que iniciar sesión otra vez.")) return;
-    ["kiosk-restaurant-id","kiosk-restaurant-name","kiosk-location-id","kiosk-location-name","kiosk-terminal-id","mb-accent","kiosk-style"]
+    ["kiosk-restaurant-id","kiosk-restaurant-name","kiosk-location-id","kiosk-location-name","kiosk-terminal-id","mb-accent","kiosk-style",
+     "kiosk-device-id","kiosk-device-token","kiosk-device-jwt"]
       .forEach(k => localStorage.removeItem(k));
     setAlreadyLinked(null);
     setStep("login");
@@ -152,6 +179,14 @@ export default function SetupPage() {
           <p style={{ color: "var(--muted)", marginTop: 8 }}>
             <b>{alreadyLinked.restaurantName}</b> — {alreadyLinked.locationName}
           </p>
+
+          {!alreadyLinked.hasDevice && (
+            <div style={{ marginTop: 16, padding: 16, border: "1px solid #f59e0b", borderRadius: "var(--radius-md)", fontSize: 14 }}>
+              Este kiosko se vinculó sin credencial de dispositivo: sus pedidos entran como pedidos en línea
+              (horario de la tienda, pedido mínimo y confirmación de mesa). Vuelve a vincularlo con un administrador.
+              <PrimaryButton onClick={() => { setAlreadyLinked(null); setStep("login"); }}>Volver a vincular</PrimaryButton>
+            </div>
+          )}
 
           <Label>Terminal de pagos</Label>
           <Input
@@ -242,6 +277,7 @@ export default function SetupPage() {
               placeholder="Ej. 192.168.1.45 o TERM-001"
               autoFocus
             />
+            {error && <div style={{ color: "#ef4444", fontSize: 14, marginTop: 8 }}>{error}</div>}
             <PrimaryButton onClick={finishSetup}>
               {terminalId.trim() ? "Guardar y vincular" : "Vincular sin terminal"}
             </PrimaryButton>

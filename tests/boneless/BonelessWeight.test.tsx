@@ -1,0 +1,41 @@
+import React from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { QuickModifierPanel } from '../../apps/tpv/src/components/pos/QuickModifierPanel';
+import ProductModal from '../../apps/client/src/components/ProductModal';
+import { useCart } from '../../apps/client/src/lib/cartStore';
+import { BONELESS_KILO_ID } from '../../packages/config/weight-sale';
+import type { Product } from '@/store/ticketStore';
+jest.mock('../../apps/client/src/components/StoreLocaleContext', () => ({ useMoney: () => (v: number) => `$${v.toFixed(2)}` }));
+const product = { id: BONELESS_KILO_ID, saleUnit: 'WEIGHT', minWeightKg: 1, name: '1 KG de Boneless', category: 'Boneless', price: 320, modifierGroups: [], variants: [] };
+beforeEach(() => useCart.getState().clear());
+test('TPV: mínimo, captura en pesos, sabores y peso viajan juntos', () => {
+  const onConfirm = jest.fn();
+  render(<QuickModifierPanel product={{ ...product, modifierGroups: [{ id: 'sauce', name: 'Sabores', groupType: 'ADD', required: false, multiSelect: true, minSelection: 0, maxSelection: 2, freeModifiersLimit: 0, modifiers: [{ id: 'bbq', name: 'BBQ', priceAdd: 0, groupId: 'sauce' }] }] } as Product} onBack={jest.fn()} onConfirm={onConfirm} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Pesos' }));
+  fireEvent.change(screen.getByLabelText('Importe del producto ($)'), { target: { value: '319' } });
+  expect(screen.getByRole('button', { name: 'Agregar' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Importe del producto ($)'), { target: { value: '480' } });
+  fireEvent.click(screen.getByRole('button', { name: /BBQ/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Agregar' }));
+  expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ quantity: 1, weightKg: 1.5, unitPrice: 320, modifiers: [expect.objectContaining({ id: 'bbq' })] }));
+});
+test('cliente: gramos, mínimo y total de la porción en carrito', () => {
+  render(<ProductModal product={product} onClose={jest.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Gramos' }));
+  fireEvent.change(screen.getByLabelText('Peso (g)'), { target: { value: '999' } });
+  expect(screen.getByRole('button', { name: /Agregar ·/ })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Peso (g)'), { target: { value: '1500' } });
+  fireEvent.click(screen.getByRole('button', { name: /Agregar ·/ }));
+  expect(useCart.getState().lines[0]).toMatchObject({ quantity: 1, weightKg: 1.5, price: 480 });
+  expect(useCart.getState().total()).toBe(480);
+});
+test('cliente: botones en pesos convierten a gramos y repetir conserva la porción', () => {
+  render(<ProductModal product={product} onClose={jest.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Pesos' }));
+  fireEvent.click(screen.getByRole('button', { name: '$640.00' }));
+  fireEvent.click(screen.getByRole('button', { name: /Agregar ·/ }));
+  const line = useCart.getState().lines[0]!;
+  useCart.getState().add({ ...line, quantity: 1 });
+  expect(useCart.getState().lines[0]).toMatchObject({ quantity: 2, weightKg: 2, price: 640 });
+  expect(useCart.getState().total()).toBe(1280);
+});

@@ -157,9 +157,9 @@ export default function OrderTrackingModal({ open, onClose, order, primary }: Pr
             {(order.items || []).map((item: CustomerOrderItem, idx: number) => (
               <div key={idx} className="flex items-center justify-between text-sm">
                 <span className="text-gray-600">
-                  {item.quantity}× {item.name}
+                  {item.weightKg != null ? `${Number(item.weightKg)} kg` : `${item.quantity}×`} {item.name}
                 </span>
-                <span className="font-medium text-gray-900">${(item.price * item.quantity).toFixed(2)}</span>
+                <span className="font-medium text-gray-900">${(item.subtotal ?? item.price * (item.weightKg != null ? Number(item.weightKg) : item.quantity)).toFixed(2)}</span>
               </div>
             ))}
             <div className="pt-2 mt-2 border-t border-gray-200 flex items-center justify-between font-bold">

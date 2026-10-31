@@ -70,6 +70,8 @@ export type LoyaltyInfo = {
 };
 
 export type CustomerOrderItem = {
+  weightKg?: number | string | null;
+  subtotal?: number;
   menuItemId: string; name: string; price: number; quantity: number;
   notes: string | null;
   modifiers: { modifierId: string | null; name: string }[];

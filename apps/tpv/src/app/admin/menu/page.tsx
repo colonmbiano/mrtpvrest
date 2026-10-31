@@ -1,5 +1,6 @@
 "use client";
 
+import MinimumWeightInput from "@/components/admin/MinimumWeightInput";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { getApiUrl } from "@/lib/config";
@@ -59,6 +60,7 @@ type VariantTemplate = {
 };
 
 type MenuItem = {
+  saleUnit?: string; soldByWeight?: boolean; minWeightKg?: number | string | null;
   id: string;
   name: string;
   description?: string | null;
@@ -82,6 +84,7 @@ type MenuItem = {
 };
 
 type ProductForm = {
+  saleUnit: string; minWeightKg: string | null;
   name: string;
   description: string;
   price: string;
@@ -104,6 +107,7 @@ type Section = "products" | "categories" | "variants";
 type EditorTab = "basic" | "variants" | "extras" | "modifiers";
 
 const emptyForm: ProductForm = {
+  saleUnit: "PIECE", minWeightKg: null,
   name: "",
   description: "",
   price: "",
@@ -232,6 +236,8 @@ export default function MenuEditorPage() {
     setImageFile(null);
     if (item) {
       setForm({
+        saleUnit: item.saleUnit || (item.soldByWeight ? "WEIGHT" : "PIECE"),
+        minWeightKg: item.minWeightKg == null ? null : String(item.minWeightKg),
         name: item.name || "",
         description: item.description || "",
         price: String(item.price ?? ""),
@@ -276,6 +282,7 @@ export default function MenuEditorPage() {
       const imageUrl = imageFile ? await uploadMenuImage(imageFile) : form.imageUrl.trim();
       const payload = {
         ...form,
+        minWeightKg: form.saleUnit === "WEIGHT" ? form.minWeightKg : null,
         name: form.name.trim(),
         description: form.description.trim(),
         imageUrl,
@@ -733,7 +740,7 @@ export default function MenuEditorPage() {
                     <Field label="Nombre" className="sm:col-span-2">
                       <input autoFocus value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} className="input-admin text-lg font-semibold" required />
                     </Field>
-                    <Field label="Precio base">
+                    <Field label={form.saleUnit === "WEIGHT" ? "Precio por kg" : "Precio base"}>
                       <input type="number" step="0.01" value={form.price} onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))} className="input-admin font-mono text-lg font-black" required />
                     </Field>
                     <Field label="Categoria">
@@ -742,6 +749,10 @@ export default function MenuEditorPage() {
                         {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                       </select>
                     </Field>
+                    <div className="sm:col-span-2 space-y-3">
+                      <Switch label="Venta a granel (kg, gramos o pesos)" checked={form.saleUnit === "WEIGHT"} onChange={v => setForm(prev => ({ ...prev, saleUnit: v ? "WEIGHT" : "PIECE" }))} />
+                      {form.saleUnit === "WEIGHT" && <MinimumWeightInput value={form.minWeightKg} pricePerKg={Number(form.isPromo ? form.promoPrice : form.price)} onChange={value => setForm(prev => ({ ...prev, minWeightKg: value }))} />}
+                    </div>
                     <Field label="Descripcion" className="sm:col-span-2">
                       <textarea value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} rows={3} className="input-admin resize-none" />
                     </Field>
