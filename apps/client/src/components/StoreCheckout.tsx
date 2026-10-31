@@ -425,6 +425,7 @@ export default function StoreCheckout({
             comboSelections: l.comboSelections || undefined,
             notes: l.note || undefined,
             quantity: l.quantity,
+            weightKg: l.weightKg,
           })),
         }),
       });

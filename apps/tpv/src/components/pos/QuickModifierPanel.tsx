@@ -1,11 +1,13 @@
 import QuantityOptions from "@/components/pos/QuantityOptions";
+import WeightSalePicker, { type WeightInput } from "./WeightSalePicker";
+import { isSoldByWeight, parseWeightInput, minimumWeight } from "../../../../../packages/config/weight-sale";
 import React, { useState, useMemo } from "react";
 import { Plus, Minus, ChevronLeft, X, Check, Delete } from "lucide-react";
 import { type Product, type ModifierGroup, type ModifierSelection, type MenuItemVariant, type Modifier } from "@/store/ticketStore";
 import { computeUnitExtra, buildOptionGroups, getValidationError, flattenSelections } from "@/lib/modifiers";
 import { formatModifierGroupName } from "@/lib/formatDisplayName";
 
-export type ConfiguratorInitial = { variantId?: string | null; selectedModifierIds?: string[]; quantity?: number; notes?: string; };
+export type ConfiguratorInitial = { variantId?: string | null; selectedModifierIds?: string[]; quantity?: number; weightKg?: number | null; notes?: string; };
 
 export function QuickModifierPanel({
   product,
@@ -23,6 +25,7 @@ export function QuickModifierPanel({
     modifiers: ModifierSelection[];
     unitPrice: number;
     quantity: number;
+    weightKg?: number;
     notes?: string;
   }) => void;
 }) {
@@ -39,7 +42,7 @@ export function QuickModifierPanel({
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
     initial?.variantId ?? variants[0]?.id ?? null,
   );
-  const [quantity, setQuantity] = useState(initial?.quantity ?? 1);
+  const [quantity, setQuantity] = useState(initial?.quantity ?? Math.max(1, minimumWeight(product)));
   // Teclado numérico de cantidad (estilo Loyverse): teclear el número
   // directo en vez de tocar +/− N veces. qtyEntry "" = mostrando el valor
   // del stepper; el primer dígito reemplaza. Entero 1-99.
@@ -89,8 +92,11 @@ export function QuickModifierPanel({
   );
   const basePrice = Number(selectedVariant?.price ?? product.promoPrice ?? product.price ?? 0);
   const unitPrice = basePrice + computeUnitExtra(groups, selections);
-  const totalPrice = unitPrice * quantity;
-  const validationError = getValidationError(groups, selections, variants.length, selectedVariant, variantMultiSelect);
+  const byWeight = isSoldByWeight(product);
+  const [weightInput, setWeightInput] = useState<WeightInput>({ value: String(initial?.weightKg ?? initial?.quantity ?? Math.max(1, minimumWeight(product))), unit: 'kg' });
+  const weightKg = byWeight ? parseWeightInput(weightInput.value, weightInput.unit, basePrice, minimumWeight(product)) : null;
+  const totalPrice = unitPrice * (byWeight ? weightKg ?? 0 : quantity);
+  const validationError = (byWeight && weightKg == null ? "Ingresa una cantidad que cumpla el mínimo de este producto." : null) || getValidationError(groups, selections, variants.length, selectedVariant, variantMultiSelect);
 
   const toggle = (group: ModifierGroup, modifier: Modifier) => {
     setSelections((prev) => {
@@ -114,7 +120,8 @@ export function QuickModifierPanel({
       variant: selectedVariant,
       modifiers,
       unitPrice,
-      quantity,
+      quantity: byWeight ? 1 : quantity,
+      weightKg: weightKg ?? undefined,
       notes: notes.trim() || undefined,
     });
   };
@@ -224,7 +231,7 @@ export function QuickModifierPanel({
           );
         })}
 
-        <OptionSection title="Cantidad" helper="Toca el número para teclear">
+        {byWeight ? <WeightSalePicker input={weightInput} minKg={minimumWeight(product)} pricePerKg={basePrice} onChange={setWeightInput} /> : <OptionSection title="Cantidad" helper="Toca el número para teclear">
           <div className="inline-flex items-center gap-2 rounded-lg border-2 border-bd bg-surf-2 p-2">
             <button
               type="button"
@@ -286,7 +293,7 @@ export function QuickModifierPanel({
               </button>
             </div>
           )}
-        </OptionSection>
+        </OptionSection>}
 
         <OptionSection title="Nota para cocina" helper="Opcional">
           <textarea
@@ -305,7 +312,7 @@ export function QuickModifierPanel({
         <div className="flex items-center gap-4">
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-semibold uppercase text-tx-mut">Total configurado</p>
-            <p className="text-[15px] font-bold text-tx-sec">${unitPrice.toFixed(2)} por unidad</p>
+            <p className="text-[15px] font-bold text-tx-sec">${unitPrice.toFixed(2)} {byWeight ? "por kg (con extras)" : "por unidad"}</p>
           </div>
           <span className="text-[28px] font-black tabular-nums text-tx-pri">${totalPrice.toFixed(2)}</span>
           <button

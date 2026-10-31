@@ -1,3 +1,4 @@
+const { resolveSaleWeight, isSoldByWeight, weightDisplayName } = require('../../../../packages/config/weight-sale');
 const { validateQuantityGroups, compactQuantityModifiers, modifierSnapshotKey } = require('../lib/quantity-modifiers');
 /**
  * store.routes.js — API Pública para la Tienda del Cliente
@@ -362,7 +363,7 @@ router.get('/menu', async (req, res) => {
           ...(requestIsKiosk(req) ? { availableOnKiosk: true } : { availableOnline: true }),
         },
         select: {
-          id: true, name: true, description: true, price: true,
+          id: true, name: true, description: true, price: true, soldByWeight: true, saleUnit: true, minWeightKg: true,
           isPromo: true, promoPrice: true, imageUrl: true,
           promoStartTime: true, promoEndTime: true,
           categoryId: true, isCombo: true,
@@ -1062,7 +1063,7 @@ router.post('/orders', async (req, res) => {
     const promoCfg = await loadPromoWindowConfig(prisma, restaurant.id);
     // Verificar y calcular items desde la BD (nunca confiar en precios del cliente)
     const itemsData = await Promise.all(
-      items.map(async ({ menuItemId, variantId, quantity = 1, notes: itemNotes, modifierIds, comboSelections }) => {
+      items.map(async ({ menuItemId, variantId, quantity = 1, weightKg: requestedWeightKg, notes: itemNotes, modifierIds, comboSelections }) => {
         if (!menuItemId) throw new Error('menuItemId requerido en cada item.');
 
         // findFirst (no findUnique): findUnique ignora silenciosamente los
@@ -1154,8 +1155,12 @@ router.post('/orders', async (req, res) => {
         const combo = resolveComboSelection(menuItem, { comboSelections });
         const unitPrice = basePrice + modifiersAdd + complementsAdd + combo.priceDelta;
 
-        const qty = Math.max(1, parseInt(quantity) || 1);
-        const displayName = variantName ? `${menuItem.name} (${variantName})` : menuItem.name;
+        const portions = Math.max(1, parseInt(quantity) || 1);
+        const portionWeight = resolveSaleWeight(menuItem, requestedWeightKg, portions);
+        const weightKg = portionWeight == null ? null : requestedWeightKg == null ? portionWeight : resolveSaleWeight(menuItem, portionWeight * portions);
+        const qty = weightKg == null ? portions : 1;
+        const baseDisplayName = variantName ? `${menuItem.name} (${variantName})` : menuItem.name;
+        const displayName = weightKg != null && isSoldByWeight(menuItem) ? weightDisplayName(baseDisplayName, weightKg) : baseDisplayName;
 
         // Complementos al texto de notas (no hay tabla relacional para ellos).
         const complementNote = selectedComplements.length > 0
@@ -1182,7 +1187,8 @@ router.post('/orders', async (req, res) => {
           name: displayName,
           price: unitPrice,
           quantity: qty,
-          subtotal: unitPrice * qty,
+          weightKg,
+          subtotal: Math.round(unitPrice * (weightKg ?? qty) * 100) / 100,
           notes: finalNotes,
           // Modificadores como relación anidada — se persisten en OrderItemModifier
           ...(selectedModifiers.length > 0 && {
@@ -1245,7 +1251,7 @@ router.post('/orders', async (req, res) => {
     const buildStoreItemSig = (its, modsOf) => its
       .map((it) => {
         const mods = (modsOf(it) || []).filter(Boolean).sort().join('+');
-        return `${it.menuItemId}:${it.quantity}:${Number(it.price).toFixed(2)}:${mods}`;
+        return `${it.menuItemId}:${it.quantity}:${Number(it.price).toFixed(2)}${it.weightKg == null ? "" : `:kg=${Number(it.weightKg).toFixed(3)}`}:${mods}`;
       })
       .sort()
       .join('|');
@@ -1808,7 +1814,7 @@ router.get('/orders/:id', async (req, res) => {
         paymentMethod: true, paymentStatus: true,
         customerName: true, deliveryAddress: true, notes: true,
         items: {
-          select: { name: true, quantity: true, price: true, subtotal: true, notes: true }
+          select: { name: true, quantity: true, weightKg: true, price: true, subtotal: true, notes: true }
         },
       },
     });
@@ -2091,7 +2097,7 @@ router.post('/payment/create', async (req, res) => {
   try {
     const order = await prisma.order.findFirst({
       where: { id: orderId, restaurantId: restaurant.id },
-      include: { items: { select: { menuItemId: true, name: true, quantity: true, price: true } } },
+      include: { items: { select: { menuItemId: true, name: true, quantity: true, price: true, weightKg: true, subtotal: true } } },
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
     if (order.paymentStatus === 'PAID') return res.status(400).json({ error: 'El pedido ya está pagado.' });
@@ -2101,8 +2107,8 @@ router.post('/payment/create', async (req, res) => {
 
     // Construimos los items para la pasarela. Incluimos envío/propina como
     // conceptos extra para que el total cobrado coincida con el de la orden.
-    const items = order.items.map(oi => ({ id: oi.menuItemId, title: oi.name, quantity: oi.quantity, unitPrice: oi.price }));
-    const extras = order.total - order.items.reduce((s, i) => s + i.price * i.quantity, 0) + (order.discount || 0);
+    const items = order.items.map(oi => ({ id: oi.menuItemId, title: oi.name, quantity: oi.quantity, unitPrice: oi.weightKg != null ? Number(oi.subtotal) : oi.price }));
+    const extras = order.total - order.items.reduce((s, i) => s + (i.weightKg != null ? Number(i.subtotal) : i.price * i.quantity), 0) + (order.discount || 0);
     if ((order.deliveryFee || 0) > 0) items.push({ id: 'envio', title: 'Envío', quantity: 1, unitPrice: order.deliveryFee });
     if ((order.tip || 0) > 0) items.push({ id: 'propina', title: 'Propina', quantity: 1, unitPrice: order.tip });
     if ((order.discount || 0) > 0) items.push({ id: 'descuento', title: 'Descuento', quantity: 1, unitPrice: -order.discount });
@@ -2334,7 +2340,7 @@ router.get('/customer/orders', authenticate, requireCustomer, async (req, res) =
         // vuelve a matchear por nombre contra el menú actual.
         items: {
           select: {
-            menuItemId: true, name: true, price: true, quantity: true, notes: true,
+            menuItemId: true, name: true, price: true, quantity: true, weightKg: true, subtotal: true, notes: true,
             modifiers: { select: { modifierId: true, name: true } },
           },
         },

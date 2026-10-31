@@ -1,10 +1,12 @@
 'use client';
 import QuantityOptions from './QuantityOptions';
+import WeightSalePicker, { type WeightInput } from './WeightSalePicker';
+import { isSoldByWeight, parseWeightInput, minimumWeight, weightDisplayName } from '../../../../packages/config/weight-sale';
 
 import { useMemo, useState } from 'react';
 import { Check, Minus, Plus, X } from 'lucide-react';
 import { useCart } from '../lib/cartStore';
-import { cldImage } from '@/lib/cloudinary';
+import { cldImage } from '../lib/cloudinary';
 import { useMoney } from './StoreLocaleContext';
 
 type Variant = { id: string; name: string; price: number };
@@ -18,6 +20,7 @@ type ComboOption = { id: string; priceDelta: number; optionMenuItemId: string; o
 type ComboComponent = { id: string; name: string; minSelect: number; maxSelect: number; isRequired: boolean; options: ComboOption[] };
 export type StoreProduct = {
   id: string; name: string; description?: string; price: number;
+  soldByWeight?: boolean; saleUnit?: string; minWeightKg?: number | string | null;
   isPromo?: boolean; promoPrice?: number; imageUrl?: string | null; imageFit?: string | null;
   variants?: Variant[]; modifierGroups?: ModifierGroup[]; complements?: Complement[];
   isCombo?: boolean; comboComponents?: ComboComponent[];
@@ -69,7 +72,7 @@ type ProductModalProps = {
 
 // ¿El producto necesita personalización (abrir modal) o se puede agregar directo?
 export function needsModal(p: StoreProduct) {
-  return (p.variants && p.variants.length > 0)
+  return isSoldByWeight(p) || (p.variants && p.variants.length > 0)
     || (p.modifierGroups && p.modifierGroups.length > 0)
     || (p.complements && p.complements.length > 0)
     || (!!p.isCombo && !!p.comboComponents && p.comboComponents.length > 0);
@@ -117,7 +120,10 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
     return ids.reduce((s, id) => s + (allComboOptions.find(o => o.id === id)?.priceDelta || 0), 0);
   }, [comboSel, allComboOptions]);
 
-  const unitPrice = basePrice + modifiersAdd + complementsAdd + comboAdd;
+  const byWeight = isSoldByWeight(product);
+  const [weightInput, setWeightInput] = useState<WeightInput>({ value: String(Math.max(1, minimumWeight(product))), unit: 'kg' });
+  const weightKg = byWeight ? parseWeightInput(weightInput.value, weightInput.unit, basePrice, minimumWeight(product)) : null;
+  const unitPrice = (basePrice + modifiersAdd + complementsAdd + comboAdd) * (byWeight ? weightKg ?? 0 : 1);
 
   const toggleMod = (g: ModifierGroup, modId: string) => {
     setError('');
@@ -155,6 +161,7 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
   };
 
   const handleAdd = () => {
+    if (byWeight && weightKg == null) { setError("Ingresa una cantidad que cumpla el mínimo de este producto."); return; }
     // Validaciones de grupos requeridos / mínimos
     for (const g of groups) {
       const cur = selected[g.id] || [];
@@ -189,14 +196,14 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
       .map(s => allComboOptions.find(o => o.id === s.optionId)?.optionMenuItem?.name)
       .filter(Boolean) as string[];
     const extraNames = [...comboNames, ...modNames, ...complementNames];
-    const displayName = [product.name, variantName ? `(${variantName})` : '', extraNames.length ? `· ${extraNames.join(', ')}` : '']
+    const displayName = [byWeight ? weightDisplayName(product.name, weightKg!) : product.name, variantName ? `(${variantName})` : '', extraNames.length ? `· ${extraNames.join(', ')}` : '']
       .filter(Boolean).join(' ');
     const trimmedNote = note.trim();
     // La nota y la selección del combo entran en la clave de dedup: dos líneas
     // "iguales" con combos/notas distintos NO deben fusionarse.
     const comboSig = comboSelections.map(s => `${s.componentId}:${s.optionId}`).sort().join(',');
-    const key = `${product.id}|${variantId || ''}|${[...payloadIds].sort().join(',')}|${comboSig}|${trimmedNote}`;
-    add({ id: key, menuItemId: product.id, name: displayName, price: unitPrice, variantId, modifierIds: payloadIds, comboSelections: comboSelections.length ? comboSelections : undefined, note: trimmedNote || undefined, quantity: qty });
+    const key = `${product.id}|${variantId || ''}|${[...payloadIds].sort().join(',')}|${comboSig}|${trimmedNote}${byWeight ? `|kg:${weightKg}` : ''}`;
+    add({ id: key, menuItemId: product.id, name: displayName, price: unitPrice, weightKg: weightKg ?? undefined, variantId, modifierIds: payloadIds, comboSelections: comboSelections.length ? comboSelections : undefined, note: trimmedNote || undefined, quantity: qty });
     onClose();
   };
 
@@ -245,6 +252,8 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
               <button onClick={onClose} aria-label="Cerrar" className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center" style={{ background: chip }}><X className="h-5 w-5" /></button>
             )}
           </div>
+
+          {byWeight && <WeightSalePicker input={weightInput} minKg={minimumWeight(product)} pricePerKg={basePrice} onChange={setWeightInput} />}
 
           {/* Variantes */}
           {variants.length > 0 && (
@@ -468,7 +477,7 @@ export default function ProductModal({ product, accent = '#ff5c35', variant = 'l
               <span className="w-6 text-center font-bold">{qty}</span>
               <button onClick={() => setQty(q => q + 1)} className="w-9 h-9 font-bold text-lg" aria-label="Agregar una unidad"><Plus className="mx-auto h-4 w-4" /></button>
             </div>
-            <button onClick={handleAdd}
+            <button onClick={handleAdd} disabled={byWeight && weightKg == null}
               className="flex-1 py-4 rounded-2xl font-bold uppercase tracking-widest text-white flex items-center justify-center gap-2 active:scale-95 transition-all"
               style={{ background: accent }}>
               {beverage ? 'Agregar a mi pedido' : 'Agregar'} · {fmt(unitPrice * qty)}

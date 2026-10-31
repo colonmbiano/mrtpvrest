@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import MinimumWeightInput from "@/components/admin/MinimumWeightInput";
 import { Check, ImagePlus, Plus, X } from "lucide-react";
 import { Button, Input, Modal, Select, Toggle } from "@/components/ds";
 import ModifierGroupsEditor from "@/components/admin/ModifierGroupsEditor";
@@ -183,7 +184,7 @@ export function ItemFormModal({
           <div className="grid grid-cols-3 gap-2">
             {([
               { v: "PIECE", label: "Por pieza", hint: "Cantidad entera" },
-              { v: "WEIGHT", label: "Por kilo", hint: "Báscula (kg)" },
+              { v: "WEIGHT", label: "A granel", hint: "Kilos, gramos o pesos" },
               { v: "ORDER", label: "Por orden", hint: "Ración/combo" },
             ] as const).map(opt => {
               const active = form.saleUnit === opt.v;
@@ -191,7 +192,11 @@ export function ItemFormModal({
                 <button
                   key={opt.v}
                   type="button"
-                  onClick={() => setForm(p => ({ ...p, saleUnit: opt.v }))}
+                  onClick={() => setForm((p: any) => {
+                    const defaultUnits: Record<string, string> = { PIECE: "pz", WEIGHT: "kg", ORDER: "orden" };
+                    const isAutoUnit = !p.unit || p.unit === defaultUnits[p.saleUnit];
+                    return { ...p, saleUnit: opt.v, ...(isAutoUnit ? { unit: defaultUnits[opt.v] } : {}) };
+                  })}
                   className="flex flex-col items-start gap-0.5 rounded-ds-md px-3 py-2.5 text-left transition-all"
                   style={{
                     background: active ? "var(--accent-soft)" : "var(--surf-2)",
@@ -205,6 +210,8 @@ export function ItemFormModal({
             })}
           </div>
         </div>
+
+        {form.saleUnit === "WEIGHT" && <MinimumWeightInput value={form.minWeightKg} pricePerKg={Number(form.isPromo && Number(form.promoPrice) > 0 ? form.promoPrice : form.price)} onChange={value => setForm((p: any) => ({ ...p, minWeightKg: value }))} />}
 
         {/* Unidad de medida (etiqueta) */}
         <div>

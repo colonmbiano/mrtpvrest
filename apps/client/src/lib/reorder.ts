@@ -1,3 +1,4 @@
+import { isSoldByWeight, parseWeightInput, minimumWeight, weightDisplayName } from '../../../../packages/config/weight-sale';
 // "Volver a pedir": reconstruye el carrito a partir de un pedido pasado,
 // matcheando cada línea contra el MENÚ VIGENTE (precios/disponibilidad actuales).
 // El precio final SIEMPRE lo recalcula el backend al recrear la orden — aquí solo
@@ -59,23 +60,27 @@ function buildLine(item: CustomerOrderItem, product: StoreProduct): AddInput | n
 
   const modifierIds = keptMods.map((m) => m.id);
   const modifiersAdd = keptMods.reduce((s, m) => s + (m.priceAdd || 0), 0);
-  const unitPrice = basePrice + modifiersAdd;
+  const weightKg = isSoldByWeight(product) && item.weightKg != null
+    ? parseWeightInput(item.weightKg, 'kg', basePrice, minimumWeight(product)) : null;
+  if (isSoldByWeight(product) && item.weightKg != null && weightKg == null) return null;
+  const unitPrice = (basePrice + modifiersAdd) * (weightKg ?? 1);
 
   const variantName = variant?.name || null;
   const modNames = keptMods.map((m) => m.name);
-  const displayName = [product.name, variantName ? `(${variantName})` : '', modNames.length ? `· ${modNames.join(', ')}` : '']
+  const displayName = [weightKg != null ? weightDisplayName(product.name, weightKg) : product.name, variantName ? `(${variantName})` : '', modNames.length ? `· ${modNames.join(', ')}` : '']
     .filter(Boolean)
     .join(' ');
 
   // Misma llave de línea que ProductModal (sin combo ni nota) → el carrito
   // fusiona cantidades si el cliente vuelve a agregar el mismo combo de opciones.
-  const key = `${product.id}|${variant?.id || ''}|${[...modifierIds].sort().join(',')}||`;
+  const key = `${product.id}|${variant?.id || ''}|${[...modifierIds].sort().join(',')}||${weightKg != null ? `|kg:${weightKg}` : ''}`;
 
   return {
     id: key,
     menuItemId: product.id,
     name: displayName,
     price: unitPrice,
+    weightKg: weightKg ?? undefined,
     variantId: variant?.id || null,
     modifierIds,
     quantity: Math.max(1, item.quantity || 1),
