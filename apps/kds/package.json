@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@capacitor/app": "^8.1.0",
-    "@capacitor/core": "^8.4.1",
+    "@capacitor/core": "~8.4.3",
     "axios": "~1.20.0",
     "lucide-react": "^0.577.0",
     "next": "16.4.3",
@@ -26,8 +26,8 @@
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
-    "@capacitor/android": "^8.4.1",
-    "@capacitor/cli": "^8.4.1",
+    "@capacitor/android": "~8.4.3",
+    "@capacitor/cli": "~8.4.3",
     "@mrtpvrest/config": "workspace:*",
     "@types/jest": "^29.5.14",
     "@types/node": "^20",

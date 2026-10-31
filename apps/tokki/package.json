@@ -15,8 +15,8 @@
   },
   "dependencies": {
     "@capacitor-community/keep-awake": "^8.0.0",
-    "@capacitor/android": "^8.4.1",
-    "@capacitor/core": "^8.4.1",
+    "@capacitor/android": "~8.4.3",
+    "@capacitor/core": "~8.4.3",
     "axios": "~1.20.0",
     "capacitor-secure-storage-plugin": "0.13.0",
     "capacitor-tcp-socket": "^7.1.1",
@@ -30,7 +30,7 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.4.1",
+    "@capacitor/cli": "~8.4.3",
     "@mrtpvrest/config": "workspace:*",
     "@types/jest": "^29.5.14",
     "@types/node": "^20",
