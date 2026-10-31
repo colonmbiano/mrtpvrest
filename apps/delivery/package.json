@@ -17,7 +17,7 @@
     "postinstall": "node scripts/patch-android-plugins.js"
   },
   "dependencies": {
-    "@capacitor/core": "^8.4.1",
+    "@capacitor/core": "~8.4.3",
     "@capgo/capacitor-updater": "^8.49.7",
     "axios": "~1.20.0",
     "framer-motion": "^12.40.0",
@@ -31,8 +31,8 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
-    "@capacitor/android": "^8.4.1",
-    "@capacitor/cli": "^8.4.1",
+    "@capacitor/android": "~8.4.3",
+    "@capacitor/cli": "~8.4.3",
     "@mrtpvrest/config": "workspace:*",
     "archiver": "^7.0.1",
     "@types/node": "^20",
