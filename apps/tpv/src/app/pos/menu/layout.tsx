@@ -53,6 +53,7 @@ import WebOrdersPanel from "@/components/pos/WebOrdersPanel";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
 import MergeTableModal from "@/components/pos/MergeTableModal";
+import MoveTableModal from "@/components/pos/MoveTableModal";
 import AdminPinGuardModal from "@/components/AdminPinGuardModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import ChangeOrderTypeModal from "@/components/pos/ChangeOrderTypeModal";
@@ -996,6 +997,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   };
 
   const handleMoveActiveOrder = async () => {
+    if (!(await flushPendingRound())) return;
     const order = await getActiveOrderForAction();
     if (order) setMoveOrder(order);
   };
@@ -1667,7 +1669,24 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
         />
       )}
 
-      {moveOrder && (
+      {moveOrder?.table && moveOrder.orderType === "DINE_IN" ? (
+        <MoveTableModal
+          source={{
+            id: moveOrder.id,
+            orderNumber: moveOrder.orderNumber || String(moveOrder.id).slice(-6).toUpperCase(),
+            table: moveOrder.table,
+          }}
+          onClose={() => setMoveOrder(null)}
+          onSuccess={() => {
+            setMoveOrder(null);
+            useActiveOrderStore.getState().clear();
+            const ticketState = useTicketStore.getState();
+            ticketState.closeTicket(ticketState.activeIndex);
+            fetchOpenOrders();
+            router.replace("/pos/order-type");
+          }}
+        />
+      ) : moveOrder && (
         <MergeTableModal
           isOpen={!!moveOrder}
           onClose={() => setMoveOrder(null)}

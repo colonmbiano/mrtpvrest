@@ -10,7 +10,7 @@ import { getLocalOrder, getLocalOrders, rememberServerOrder } from "@/lib/order-
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { useWaiterRealtime } from "@/hooks/useWaiterRealtime";
 import SplitOrderModal, { type SplitSelection } from "@/components/pos/SplitOrderModal";
-import MergeTableModal from "@/components/pos/MergeTableModal";
+import MoveTableModal from "@/components/pos/MoveTableModal";
 
 interface OrderItem {
   id: string;
@@ -497,25 +497,19 @@ export default function WaiterTableDetailPage({ params }: { params: { id: string
         />
       )}
 
-      {/* MODAL · Cambiar mesa / fusionar cuenta */}
+      {/* MODAL · Cambiar la cuenta a una mesa libre */}
       {order && table && showMove && (
-        <MergeTableModal
-          isOpen={showMove}
+        <MoveTableModal
           onClose={() => setShowMove(false)}
           source={{
             id: order.id,
             orderNumber: order.orderNumber || String(order.id).slice(-6).toUpperCase(),
-            total: Number(order.total ?? 0),
-            customerName: order.customerName ?? null,
             table: { id: table.id, name: table.name },
-            itemsCount: order.items.length,
           }}
-          onSuccess={() => {
+          onSuccess={(destinationId) => {
             setShowMove(false);
             clearActiveOrder();
-            // La cuenta se movió a otra mesa: esta queda libre. Volvemos al
-            // salón para que el mesero vea el nuevo estado real.
-            router.push("/meseros");
+            router.replace(`/meseros/detalle/?id=${destinationId}`);
           }}
         />
       )}
