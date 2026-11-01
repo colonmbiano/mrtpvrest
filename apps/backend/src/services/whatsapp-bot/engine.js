@@ -53,6 +53,7 @@ function freshData(phone, lastOrderId = null) {
     upsellOffered: false,
     pendingUpsell: null,
     lastOrderId,
+    confirmedQuote: null,
   };
 }
 
@@ -292,11 +293,20 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
       else if (onlinePayment && (command === '3' || /linea|tarjeta|online|card/.test(command))) method = 'ONLINE';
       if (!method) return result(m.invalidPayment(onlinePayment), STATES.PAYMENT);
       data.paymentMethod = method;
-      return result(buildConfirm(data, config), STATES.CONFIRM);
+      try {
+        const quote = await deps.quoteOrder(data);
+        data.cart = quote.cart;
+        data.confirmedQuote = quote;
+        return result(buildConfirm(data, config), STATES.CONFIRM);
+      } catch (err) {
+        const failure = checkoutFailure(err, data, result);
+        if (failure) return failure;
+        throw err;
+      }
     }
 
     case STATES.CONFIRM: {
-      const yes = command === 'si' || command === 'sí' || command === '1' || /confirm/.test(command);
+      const yes = ['si', '1', 'confirmar', 'confirmo'].includes(command);
       const no = command === 'no' || command === '2' || command === 'cancelar';
       if (no) {
         return result(m.cancelled, STATES.GREETING, freshData(data.phone, data.lastOrderId));
@@ -329,15 +339,8 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
         }
         return result(replies, STATES.GREETING, fresh);
       } catch (err) {
-        if (err.code === 'MIN_ORDER') {
-          return result([err.message, m.cartEmpty].join('\n'), STATES.CATEGORY);
-        }
-        if (err.code === 'OUT_OF_RANGE') {
-          return result([m.outOfRange(''), m.askAddress], STATES.ADDRESS);
-        }
-        if (err.code === 'NO_VALID_ITEMS' || err.code === 'CART_EMPTY') {
-          return result('😔 Los productos de tu carrito ya no están disponibles. Empecemos de nuevo.', STATES.GREETING, freshData(data.phone, data.lastOrderId));
-        }
+        const failure = checkoutFailure(err, data, result);
+        if (failure) return failure;
         throw err;
       }
     }
@@ -345,6 +348,27 @@ async function handleInbound({ restaurant, config, locations = [], session, mess
     default:
       return result(m.welcome(restaurant.name), STATES.ORDER_TYPE);
   }
+}
+
+// Fallos de cotización no crean pedidos ni eliminan líneas silenciosamente.
+function checkoutFailure(err, data, result) {
+  if (err.code === 'QUOTE_CHANGED' && err.quote) {
+    data.cart = err.quote.cart;
+    data.confirmedQuote = err.quote;
+    return result([err.message, buildConfirm(data)], STATES.CONFIRM);
+  }
+  if (['ITEM_UNAVAILABLE', 'INVALID_CART', 'MIN_ORDER'].includes(err.code)) {
+    data.confirmedQuote = null;
+    return result([err.message, `${m.cartSummary(data.cart)}\n\nEscribe *quitar N* para eliminar una línea, *menú* para agregar o *cancelar*.`], STATES.CART);
+  }
+  if (err.code === 'OUT_OF_RANGE') {
+    data.confirmedQuote = null;
+    return result([m.outOfRange(''), m.askAddress], STATES.ADDRESS);
+  }
+  if (err.code === 'NO_VALID_ITEMS' || err.code === 'CART_EMPTY') {
+    return result(m.cartEmpty, STATES.GREETING, freshData(data.phone, data.lastOrderId));
+  }
+  return null;
 }
 
 // ── Sub-rutinas ──────────────────────────────────────────────────────────────
@@ -404,7 +428,7 @@ function buildConfirm(data, config) {
     const dest = (data.deliveryLat != null && data.deliveryLng != null)
       ? { lat: data.deliveryLat, lng: data.deliveryLng }
       : null;
-    deliveryFee = computeDeliveryFee(config, subtotal, dest).fee;
+    deliveryFee = data.confirmedQuote?.deliveryFee ?? computeDeliveryFee(config, subtotal, dest).fee;
   }
   const paymentLabel =
     data.paymentMethod === 'TRANSFER'

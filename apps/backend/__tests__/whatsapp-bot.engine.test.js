@@ -38,6 +38,10 @@ function makeDeps(overrides = {}) {
   const createCheckout = jest.fn(async () => 'https://pago.example/checkout/abc');
   return {
     loadMenu: overrides.loadMenu || (async () => FAKE_MENU),
+    quoteOrder: overrides.quoteOrder || (async (data) => ({
+      cart: data.cart,
+      deliveryFee: data.orderType === 'DELIVERY' ? 25 : 0,
+    })),
     createOrder: overrides.createOrder || createOrder,
     createCheckout: overrides.createCheckout || createCheckout,
     _createOrder: createOrder,

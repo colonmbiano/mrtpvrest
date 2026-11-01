@@ -20,7 +20,7 @@ function cartLine(item) {
 
 function cartSummary(cart) {
   if (!cart || cart.length === 0) return '🛒 Tu carrito está vacío.';
-  const lines = cart.map(cartLine).join('\n');
+  const lines = cart.map((item, i) => `${i + 1}. ${cartLine(item)}`).join('\n');
   const subtotal = cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
   return `🛒 *Tu carrito:*\n${lines}\n\n*Subtotal: ${money(subtotal)}*`;
 }
@@ -145,11 +145,11 @@ module.exports = {
       `👤 *Nombre:* ${customerName}`,
       `💳 *Pago:* ${paymentLabel}`,
       '',
-      'Responde *SÍ* para enviar tu pedido o *NO* para cancelar.',
+      'Escribe *CONFIRMAR* para enviar tu pedido o *NO* para cancelar.',
     ].join('\n');
   },
 
-  invalidConfirm: 'Responde *SÍ* para confirmar tu pedido o *NO* para cancelar.',
+  invalidConfirm: 'Escribe *CONFIRMAR* para enviar tu pedido o *NO* para cancelar.',
 
   orderCreated: ({ orderNumber, total, orderType, estimatedMinutes, deliveryPin }) => {
     const eta =

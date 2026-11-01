@@ -9,6 +9,7 @@ const { computeDeliveryFee } = require('../../lib/delivery-fee');
 const { resolveProviderForRestaurant } = require('../../lib/payment-providers');
 const { nextOrderNumber } = require('../../lib/order-number');
 const { effectivePrice } = require('./catalog');
+const { itemPromoActive } = require('../../lib/promo-window');
 const { upsertContact } = require('./contacts');
 const { createStoreDeliveryPin } = require('../../lib/store-delivery-pin');
 
@@ -22,17 +23,9 @@ class BotOrderError extends Error {
   }
 }
 
-/**
- * Crea el pedido en la BD y notifica a cocina/admin por Socket.io.
- * @param {object} args
- * @param {import('@prisma/client').PrismaClient} args.prisma
- * @param {object} args.io - instancia Socket.io (puede ser null)
- * @param {object} args.restaurant - { id }
- * @param {object} args.config - RestaurantConfig
- * @param {object} args.data - contexto de la sesión (cart, orderType, ...)
- * @returns {Promise<{ order, estimatedMinutes, deliveryPin }>} deliveryPin es null si no aplica.
- */
-async function createBotOrder({ prisma, io, restaurant, config, data }) {
+// Cotización sin efectos secundarios. Se obtiene antes del resumen y se vuelve
+// a calcular justo antes de crear el pedido, incluidas las ventanas de promos.
+async function quoteBotOrder({ prisma, restaurant, config, data }) {
   const cart = Array.isArray(data.cart) ? data.cart : [];
   if (cart.length === 0) throw new BotOrderError('CART_EMPTY', 'El carrito está vacío.');
 
@@ -40,29 +33,41 @@ async function createBotOrder({ prisma, io, restaurant, config, data }) {
 
   // Revalidación de cada línea contra la BD (precio + disponibilidad).
   const itemsData = [];
+  const quotedCart = [];
   for (const line of cart) {
     const menuItem = await prisma.menuItem.findFirst({
       where: { id: line.menuItemId, restaurantId: restaurant.id, isAvailable: true },
       include: { variants: { where: { isAvailable: true } } },
     });
-    if (!menuItem) continue; // producto retirado del menú → se omite
+    if (!menuItem || (menuItem.isPromo && !itemPromoActive(menuItem, config))) {
+      throw new BotOrderError('ITEM_UNAVAILABLE', `El producto ${line.name || 'seleccionado'} ya no está disponible. Revisa tu carrito antes de continuar.`);
+    }
 
     let unitPrice = effectivePrice(menuItem);
     let displayName = menuItem.name;
+    if (!line.variantId && menuItem.variants.length > 0) {
+      throw new BotOrderError('ITEM_UNAVAILABLE', `Elige una variante disponible de ${menuItem.name} desde el menú.`);
+    }
     if (line.variantId) {
       const variant = menuItem.variants.find((v) => v.id === line.variantId);
-      if (!variant) continue; // variante retirada → se omite
+      if (!variant) throw new BotOrderError('ITEM_UNAVAILABLE', `La variante ${line.name || 'seleccionada'} ya no está disponible. Revisa tu carrito antes de continuar.`);
       unitPrice = variant.price;
       displayName = `${menuItem.name} (${variant.name})`;
     }
 
-    const quantity = Math.max(1, Math.min(50, parseInt(line.quantity, 10) || 1));
+    const quantity = Number(line.quantity);
+    unitPrice = Number(unitPrice);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99 || !Number.isFinite(unitPrice) || unitPrice < 0) {
+      throw new BotOrderError('INVALID_CART', 'Hay una cantidad o precio inválido. Revisa tu carrito antes de continuar.');
+    }
+    unitPrice = Math.round(unitPrice * 100) / 100;
+    quotedCart.push({ menuItemId: menuItem.id, variantId: line.variantId || null, name: displayName, unitPrice, quantity });
     itemsData.push({
       menuItemId: menuItem.id,
       name: displayName,
       price: unitPrice,
       quantity,
-      subtotal: unitPrice * quantity,
+      subtotal: Math.round(unitPrice * quantity * 100) / 100,
     });
   }
 
@@ -93,6 +98,32 @@ async function createBotOrder({ prisma, io, restaurant, config, data }) {
   }
 
   const total = Math.round((subtotal + deliveryFee) * 100) / 100;
+
+  return { cart: quotedCart, itemsData, orderType, subtotal, deliveryFee, deliveryDistanceKm, total };
+}
+
+// Comparar solo los campos que determinan lo que el cliente acepta. Los precios
+// salen de la BD en ambos pasos, nunca de la salida del modelo o del cliente.
+function quoteSignature(quote) {
+  if (!quote || !Array.isArray(quote.cart)) return null;
+  return JSON.stringify({
+    cart: quote.cart.map(({ menuItemId, variantId, name, unitPrice, quantity }) =>
+      ({ menuItemId, variantId: variantId || null, name, unitPrice, quantity })),
+    orderType: quote.orderType,
+    subtotal: quote.subtotal,
+    deliveryFee: quote.deliveryFee,
+    total: quote.total,
+  });
+}
+
+async function createBotOrder({ prisma, io, restaurant, config, data }) {
+  const quote = await quoteBotOrder({ prisma, restaurant, config, data });
+  if (quoteSignature(data.confirmedQuote) !== quoteSignature(quote)) {
+    const err = new BotOrderError('QUOTE_CHANGED', 'Actualizamos el resumen de tu pedido. Revisa productos, cantidades y total y confirma de nuevo.');
+    err.quote = quote;
+    throw err;
+  }
+  const { itemsData, orderType, subtotal, deliveryFee, deliveryDistanceKm, total } = quote;
 
   // Mapeo del método de pago elegido al enum del modelo.
   const paymentMethod =
@@ -206,4 +237,4 @@ async function createCheckoutLink({ prisma, restaurant, order }) {
   return result.checkoutUrl || null;
 }
 
-module.exports = { createBotOrder, createCheckoutLink, hasOnlinePayment, BotOrderError };
+module.exports = { createBotOrder, quoteBotOrder, createCheckoutLink, hasOnlinePayment, BotOrderError };

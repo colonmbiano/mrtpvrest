@@ -151,6 +151,7 @@ async function processMessage({ restaurant, integration, message, io }) {
       if (!menuCache) menuCache = await catalog.loadMenu(prisma, restaurant.id);
       return menuCache;
     },
+    quoteOrder: (data) => orderSvc.quoteBotOrder({ prisma, restaurant, config, data }),
     createOrder: (data) => orderSvc.createBotOrder({ prisma, io, restaurant, config, data }),
     createCheckout: (order) => orderSvc.createCheckoutLink({ prisma, restaurant, order }),
     playGame: (trigger) => promoGames.playGame({ restaurantId: restaurant.id, phone, trigger }),
