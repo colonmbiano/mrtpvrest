@@ -1,8 +1,9 @@
 'use strict';
 
-// Marketplace identity service. Feature is disabled in production by default.
-// No Tenant/User/Customer/Employee records are created here. No tokens are
-// returned through public JSON. Callers send session tokens only as HttpOnly cookies.
+// Marketplace identity service. Off by default; in production only buyer accounts.
+// No Tenant/User/Customer/Employee records are created here. Session tokens are
+// never returned through public JSON: callers send them only as HttpOnly cookies.
+// The router's /token endpoint issues short-lived buyer JWTs, never the session.
 const crypto = require('node:crypto');
 const bcrypt = require('bcryptjs');
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -28,7 +29,8 @@ const publicAccount = a => ({
   profiles: (a.applications || []).map(p => ({ role: p.role, status: p.status })),
 });
 
-function validateSignup(input) {
+// `allowedRoles`: en producción solo BUYER (ver marketplace-identity-mount).
+function validateSignup(input, allowedRoles = ROLES) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new IdentityError('INVALID_SIGNUP');
   const role = input.role;
   const fullName = trimmed(input.fullName, 120);
@@ -36,7 +38,7 @@ function validateSignup(input) {
   const normalizedPhone = phone(input.phone);
   const city = trimmed(input.city, 120);
   const password = input.password;
-  if (!ROLES.has(role) || fullName.length < 2 || fullName.length > 120
+  if (!ROLES.has(role) || !allowedRoles.has(role) || fullName.length < 2 || fullName.length > 120
       || normalizedEmail.length > 254 || !EMAIL.test(normalizedEmail)
       || !/^(?:\+52)?[0-9]{10}$/.test(normalizedPhone)
       || city.length < 2 || city.length > 120
@@ -59,8 +61,9 @@ function validateSignup(input) {
   return { fullName, email: normalizedEmail, phone: normalizedPhone, city, password, application };
 }
 
-function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now = () => new Date() }) {
+function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now = () => new Date(), roles = null }) {
   if (!prisma || typeof sendEmail !== 'function') throw new Error('Marketplace identity dependencies required');
+  const allowedRoles = roles ? new Set(roles) : ROLES;
   if (typeof publicOrigin !== 'string' || !/^https:\/\//.test(publicOrigin)) throw new Error('Marketplace identity requires HTTPS origin');
   const origin = new URL(publicOrigin);
   if (origin.origin !== publicOrigin || origin.username || origin.password || origin.pathname !== '/'
@@ -83,7 +86,7 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
   }
 
   async function register(input) {
-    const data = validateSignup(input);
+    const data = validateSignup(input, allowedRoles);
     // Unverified duplicates are deliberately indistinguishable from new signups.
     if (await prisma.marketplaceAccount.findUnique({ where: { email: data.email }, select: { id: true } })) {
       return { accepted: true };
@@ -242,7 +245,7 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
 
   function validateApplication(input) {
     const role = input?.role;
-    if (role !== 'MERCHANT' && role !== 'COURIER') throw new IdentityError('INVALID_APPLICATION');
+    if ((role !== 'MERCHANT' && role !== 'COURIER') || !allowedRoles.has(role)) throw new IdentityError('INVALID_APPLICATION');
     if (role === 'MERCHANT') {
       const businessName = trimmed(input.businessName, 120);
       if (businessName.length < 2 || businessName.length > 120 ||

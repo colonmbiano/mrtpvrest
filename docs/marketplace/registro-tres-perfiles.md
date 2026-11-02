@@ -116,3 +116,57 @@ No cambiar la bandera hasta aprovisionar esa base e integrar las vistas y correo
 `.github/workflows/ci-backend.yml` incluye `node --test apps/backend/scripts/marketplace-identity.test.cjs`.
 La suite prueba validación de roles, correos, hashes, verificación, sesiones, logout, reset, solicitudes, aprobación y seguridad de rutas con Express/supertest y almacenamiento simulado.
 El CI backend genera Prisma y ejecuta Jest aparte; **no son pruebas de una migración ni un flujo HTTP contra PostgreSQL real**.
+
+---
+
+## Producción: cuenta del comprador (app del cliente)
+
+Primer paso de la app del cliente (PWA y luego Android). La misma identidad global (`marketplace_accounts`, ya migrada) puede montarse en producción **solo para compradores**. Sigue apagada por defecto.
+
+### Activación
+
+```dotenv
+MARKETPLACE_IDENTITY_ENABLED=true
+MARKETPLACE_IDENTITY_MODE=production
+# Origen exacto de la tienda donde vive el marketplace: https, sin ruta, bajo mrtpvrest.com.
+MARKETPLACE_IDENTITY_ORIGIN=https://<marketplace>.mrtpvrest.com
+# Correo de verificación y recuperación, y CAPTCHA del registro.
+RESEND_API_KEY=...
+TURNSTILE_SECRET_KEY=...
+# Clave propia del token de comprador: 32+ bytes, distinta de JWT_SECRET y JWT_REFRESH_SECRET.
+MARKETPLACE_BUYER_JWT_SECRET=...
+```
+
+Si falta alguna variable, o no es válida, la ruta **no se monta** y el backend sigue arrancando. El log de error dice `[marketplace-identity] no montada en modo production` con los nombres de las variables, nunca sus valores. El modo staging conserva sus barreras y detiene el arranque si está mal configurado (`lib/marketplace-identity-mount.js`).
+
+En producción:
+- `/register` solo acepta `role: 'BUYER'`.
+- `/applications` (negocio o repartidor) no existe.
+- El resto de las rutas son las de la tabla de arriba.
+
+### Emisor del token de comprador
+
+| Método | Ruta | Contrato |
+| --- | --- | --- |
+| POST | `/token` | Con la sesión por cookie y el `Origin` exacto. Requiere el perfil BUYER aprobado (se aprueba al verificar el correo). Devuelve `{ token, tokenType: 'Bearer', expiresIn: 900 }`, sin caché. |
+
+- El token es un JWT HS256 con `MARKETPLACE_BUYER_JWT_SECRET`, emisor `mrtpvrest-marketplace`, destinatario `mrtpvrest-marketplace-buyer` y `{ accountId, role: 'BUYER' }`. Dura 15 minutos.
+- Es el token que ya aceptan las APIs v1 de direcciones, cotización, orden y seguimiento (`lib/marketplace-buyer-identity.js`). La tienda no lo acepta.
+- La sesión nunca sale en JSON: solo viaja en la cookie `__Host-mrtpv_market` (HttpOnly, Secure, SameSite=Strict). Sin clave dedicada, `/token` responde 503 y nunca firma con `JWT_SECRET`.
+- Límite: 60 tokens por IP cada 15 minutos.
+
+### Contrato para la tienda (PR 2)
+
+- La tienda (`*.mrtpvrest.com`) llama directo a `api.mrtpvrest.com` con `credentials: 'include'`. Son del mismo sitio, así que la cookie Strict viaja, y CORS ya admite `*.mrtpvrest.com` con credenciales. No hace falta proxy.
+- Pide `/token` al entrar y unos minutos antes de que venza, y lo manda como `Authorization: Bearer` a `/api/marketplace/v1/*`.
+- Los correos enlazan a `/registro/verificar#token=…` y `/registro/restablecer#token=…`. Esas pantallas tienen que existir antes de encender la bandera.
+- Los limitadores viven en memoria de cada proceso del backend. Con más de una réplica, cada una cuenta por su lado.
+
+### Evidencia
+
+`apps/backend/scripts/marketplace-identity.test.cjs` (`node --test`, en el CI del backend) cubre:
+- Las reglas de montaje: apagada, staging, producción completa e incompleta, origen ajeno o con ruta, y clave corta o igual a la de la tienda.
+- Que producción no acepta negocio ni repartidor.
+- Que `/token` exige sesión viva y `Origin` exacto, que el verificador v1 acepta su token y la tienda no, que no sirve como cookie, que se corta al cerrar sesión, que exige perfil de comprador y que sin clave responde 503.
+
+Con almacenamiento simulado; sin PostgreSQL, correo ni navegador reales.

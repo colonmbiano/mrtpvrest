@@ -155,10 +155,10 @@ Requiere C6, la prueba real en sandbox de Mercado Pago:
 
 - `MARKETPLACE_NETWORK_ENABLED` y `NEXT_PUBLIC_MARKETPLACE_NETWORK_ENABLED` conectan el despacho persistente.
 - `MARKETPLACE_FINANCE_ENABLED` conecta liquidaciones y reembolsos. Falta el publicador del outbox.
-- `MARKETPLACE_IDENTITY_ENABLED` hoy exige `MARKETPLACE_IDENTITY_MODE=staging` y un origen HTTPS: el código no la permite en producción.
+- `MARKETPLACE_IDENTITY_ENABLED` con `MARKETPLACE_IDENTITY_MODE=staging` sigue exigiendo su base aislada. Con `MARKETPLACE_IDENTITY_MODE=production` monta la cuenta global **solo para compradores**. Detalles y variables en [registro-tres-perfiles.md](registro-tres-perfiles.md#producción-cuenta-del-comprador-app-del-cliente). No encenderla hasta que la tienda tenga las pantallas de registro, verificación y acceso.
 
 Antes de esta fase:
-- Cerrar los hallazgos del [informe G8](auditoria-seguridad-codex-2026-10-26.md): dependencias y el emisor de tokens del marketplace. El contador del PIN propio ya es compartido (`delivery_pin_attempts`) y la separación JWT por contexto ya existe (`lib/marketplace-jwt.js`), pero sigue aceptando la sesión de la tienda hasta que haya emisor.
+- Cerrar los hallazgos del [informe G8](auditoria-seguridad-codex-2026-10-26.md). Las dependencias se atendieron en #172. El emisor del token de comprador ya existe: `POST /api/marketplace/identity/token`. El contador del PIN propio ya es compartido (`delivery_pin_attempts`) y la separación JWT por contexto ya existe (`lib/marketplace-jwt.js`). Retirar la sesión de la tienda (`MARKETPLACE_ACCEPT_STORE_JWT=false`) queda para cuando los compradores usen la cuenta global.
 - Decidir qué comercios y con qué política.
 - Probar en staging con navegador.
 
