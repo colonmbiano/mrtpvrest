@@ -162,6 +162,31 @@ En producción:
 - Los correos enlazan a `/registro/verificar#token=…` y `/registro/restablecer#token=…`. Esas pantallas tienen que existir antes de encender la bandera.
 - Los limitadores viven en memoria de cada proceso del backend. Con más de una réplica, cada una cuenta por su lado.
 
+### Tienda: cuenta y direcciones (PR 2)
+
+Variables de la tienda (`apps/client`, requieren rebuild en Vercel):
+
+```dotenv
+NEXT_PUBLIC_MARKETPLACE_CATALOG=true
+NEXT_PUBLIC_MARKETPLACE_ACCOUNTS=true
+NEXT_PUBLIC_API_URL=https://api.mrtpvrest.com
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=...   # par público de TURNSTILE_SECRET_KEY
+```
+
+| Ruta | Qué hace |
+| --- | --- |
+| `/registro?tipo=cliente` | Registro real del cliente, con contraseña y captcha. Negocio y repartidor siguen siendo la demostración. |
+| `/registro/verificar#token=…` | Verifica el correo y borra el token de la barra de direcciones. |
+| `/registro/restablecer#token=…` | Contraseña nueva; cierra todas las sesiones. |
+| `/cuenta/entrar` | Entrar, recuperar contraseña (`?olvide=1`) y reenviar verificación (`?reenviar=1`). `?next=` solo acepta rutas internas. |
+| `/cuenta` | Datos del cliente, sus direcciones (quitar) y cerrar sesión. Sin sesión lleva a entrar. |
+
+- Con sesión abierta, la cotización, la orden y la libreta v1 viajan con `Authorization: Bearer` y quedan en la cuenta. Sin sesión siguen como invitado de ese navegador (`lib/marketplaceAccount.ts`, `getBuyerToken`).
+- El token se guarda solo en memoria, nunca en `localStorage`. Se renueva un minuto antes de vencer.
+- Las direcciones se agregan al pedir a domicilio, donde está el mapa para marcar el punto.
+- **Dominio:** el `middleware` de la tienda reescribe cualquier subdominio que no sea de sistema a `/<subdominio>`. Hoy solo pasan tal cual `mrtpvrest.com`, `www` y los demás hosts de sistema. Antes de encender, el marketplace tiene que vivir en uno de ellos, o el `middleware` tiene que conocer su host. `MARKETPLACE_IDENTITY_ORIGIN` debe ser ese origen exacto.
+- **Pruebas:** `tests/client/account.spec.ts` corre contra `tests/client/mock-account.mjs` (`pnpm test:client` ejecuta las dos configuraciones). Cubre registro y validación, verificación (válida, inválida y ya usada), entrada, Mi cuenta con la libreta vía Bearer, quitar una dirección, salida, recuperación de contraseña y `?next` interno. Corre en móvil y en escritorio.
+
 ### Evidencia
 
 `apps/backend/scripts/marketplace-identity.test.cjs` (`node --test`, en el CI del backend) cubre:

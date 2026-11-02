@@ -95,7 +95,9 @@ const securityHeaders = [
       // *.tile.openstreetmap.org: tiles del mapa selector de ubicación (MapLocationPicker)
       "img-src 'self' https://res.cloudinary.com https://*.cloudinary.com https://*.tile.openstreetmap.org data: blob:",
       // cdnjs.cloudflare.com: librería Leaflet del selector de ubicación
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.vercel.app https://cdnjs.cloudflare.com",
+      // challenges.cloudflare.com: captcha Turnstile del registro de la cuenta de cliente
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.vercel.app https://cdnjs.cloudflare.com https://challenges.cloudflare.com",
+      "frame-src https://challenges.cloudflare.com",
       "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
       "font-src 'self' https://fonts.gstatic.com data:",
       "connect-src 'self' https://*.mrtpvrest.com https://*.railway.app https://res.cloudinary.com",

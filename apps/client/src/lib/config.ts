@@ -42,6 +42,13 @@ export function isMarketplaceCatalogEnabled(): boolean {
   return isMarketplaceIsolated() || isMarketplacePreviewDemo() || process.env.NEXT_PUBLIC_MARKETPLACE_CATALOG === "true";
 }
 
+// Cuenta global del comprador (app del cliente). Pide el backend con
+// MARKETPLACE_IDENTITY_MODE=production y MARKETPLACE_IDENTITY_ORIGIN igual al origen
+// de esta tienda. Las páginas de cuenta además exigen el catálogo encendido.
+export function isMarketplaceAccountsEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_MARKETPLACE_ACCOUNTS === "true";
+}
+
 // Normaliza a origen exacto (sin path, query ni credenciales) o null.
 export function parseOrigin(raw: string | undefined, { loopbackOnly }: { loopbackOnly: boolean }): string | null {
   if (!raw) return null;
