@@ -768,30 +768,38 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         }
       }
       const tipAmount = tip?.amount ?? 0;
+      // Datos del cliente plegados en el propio cobro: antes iban en un
+      // PUT /details aparte ANTES del pago (un salto de red extra en el camino
+      // crítico, peor en cuentas grandes). Ahora viajan en el body de
+      // PUT /payment y el backend los persiste en la misma actualización que
+      // cierra la orden. (El cargo a cuenta de empleado no cierra por /payment:
+      // ahí los datos se guardan aparte, ver más abajo.)
+      const detailsPayload: Record<string, string | null> = {
+        customerName: ticket.name?.trim() ? ticket.name.trim() : null,
+        customerPhone: ticket.phone?.trim() ? ticket.phone.trim() : null,
+        ...(ticket.type === "DELIVERY"
+          ? { deliveryAddress: ticket.address?.trim() ? ticket.address.trim() : null }
+          : {}),
+      };
       // Cobro mixto: cuando llegan renglones por método, el cobro manda
       // `{ payments, tip }` y la orden queda MIXED; el servidor re-valida el
       // cuadre. Sin renglones, sigue el método único de siempre.
       const isMixed = method === "MIXED" && Array.isArray(payments) && payments.length > 0;
       const payBody: Record<string, unknown> = isMixed
-        ? { payments, tip: tipAmount }
-        : { paymentMethod: method };
+        ? { payments, tip: tipAmount, ...detailsPayload }
+        : { paymentMethod: method, ...detailsPayload };
       const itemsPayload = buildItemsPayload();
       const printItems = buildTicketItems();
 
       let order: any = null;
       let queued = false;
       if (activeOrderId) {
-        // Persistir detalles antes de rondas/pago mantiene el orden del outbox
-        // incluso si la conexión cae a mitad del cobro.
-        const detailsRes = await persistOrderDetails(activeOrderId);
-        if (!detailsRes.ok) { toast.error(detailsRes.error || 'No se pudo guardar la cuenta'); return; }
-        queued = detailsRes.queued;
-        const hydratePromise =
-          itemsPayload.length === 0 &&
-          (typeof navigator === "undefined" || navigator.onLine)
-            ? loadOrder(activeOrderId)
-                .catch(() => null)
-            : null;
+        // Los datos del cliente ya NO se persisten con un PUT /details aparte
+        // antes del cobro: viajan en el body de PUT /payment (detailsPayload).
+        // Y se eliminó la recarga completa (GET /:id) que se hacía solo para
+        // armar el recibo — escalaba con el tamaño de la cuenta. Los totales
+        // del recibo salen de la respuesta de /payment (ya traen promos) y los
+        // items, del estado local (previousItems + printItems).
 
         // 1. Ronda nueva (si hay) — debe aplicarse antes del descuento/pago.
         if (itemsPayload.length > 0) {
@@ -825,12 +833,6 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           }
           queued = queued || discountRes.queued;
           if (discountRes.data) order = { ...order, ...discountRes.data };
-        }
-
-        // Esperar lo que corrió en paralelo (ya sin costo de latencia extra).
-        if (hydratePromise) {
-          const h = await hydratePromise;
-          if (h) order = order ? { ...h, ...order } : h;
         }
       } else {
         // 2. Si no hay activeOrderId, creamos la orden completa normalmente
@@ -923,6 +925,10 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
       const payableOrderId = activeOrderId || order?.id;
 
       if (isEmployeeAccount) {
+        // El cobro a cuenta cierra por /charge-to-employee, no por /payment, así
+        // que los datos del cliente editados sobre una cuenta ya abierta no
+        // viajan en el cobro: se persisten aquí aparte (best-effort).
+        if (activeOrderId) await persistOrderDetails(activeOrderId).catch(() => {});
         // El cargo a cuenta no se encola: necesita la orden ya creada en el
         // servidor para aplicar el descuento y generar el EmployeeCharge.
         if (!payableOrderId || queued) {

@@ -1000,9 +1000,14 @@ async function insertRoundInTx(tx, { order, roundId, itemsData = [], moveItemsFr
     data: { ...data, orderId: order.id, roundId: newRound.id },
   })));
 
+  // Una sola lectura de TODOS los items de la cuenta, con lo que el recibo y la
+  // comanda necesitan (menuItem.name/categoryId + modifiers). Sirve a la vez
+  // para recalcular la promo NxM/totales y para la respuesta/socket. Antes se
+  // leían dos veces (este findMany + el include del order.update): pesado en
+  // cuentas grandes.
   const all = await tx.orderItem.findMany({
     where: { orderId: order.id },
-    include: { menuItem: { select: { categoryId: true } } },
+    include: { menuItem: { select: { name: true, categoryId: true } }, modifiers: true },
   });
   // Re-evaluar la promo NxM sobre la cuenta completa (la categoría de cada
   // línea sale del menuItem, no se guarda en OrderItem).
@@ -1017,6 +1022,8 @@ async function insertRoundInTx(tx, { order, roundId, itemsData = [], moveItemsFr
     promoDiscount: bulkPromoDiscount,
   });
 
+  // El update solo toca escalares de la orden; los items ya los tenemos en
+  // `all`, así que NO los re-incluimos (evita la segunda lectura completa).
   const finalOrder = await tx.order.update({
     where: { id: order.id },
     data: {
@@ -1025,12 +1032,12 @@ async function insertRoundInTx(tx, { order, roundId, itemsData = [], moveItemsFr
     },
     include: {
       user: { select: { name: true, phone: true } },
-      items: { include: { menuItem: { select: { name: true, categoryId: true } }, modifiers: true } },
       rounds: { orderBy: { roundNumber: 'asc' } },
       address: true,
       table: true,
     },
   });
+  finalOrder.items = all;
 
   return { updated: finalOrder, round: newRound };
 }
@@ -1974,6 +1981,31 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
     const { paymentMethod, payments, tip, keepStatus, expectedTotal } = req.body;
     const now = new Date();
 
+    // Datos del cliente plegados en el cobro: el TPV ya no manda un PUT /details
+    // aparte antes de pagar, los nombres/teléfono/dirección (editables sobre una
+    // cuenta abierta) viajan en este body y se persisten en la MISMA
+    // actualización que cierra la orden. Mismo saneo que /details: undefined no
+    // toca el campo, null/"" lo limpian. Campos nombrados (no `data: req.body`).
+    const normDetail = (val, max) => {
+      if (val === undefined) return undefined;
+      if (val === null) return null;
+      if (typeof val !== 'string') return undefined;
+      return val.trim().slice(0, max) || null;
+    };
+    const detailData = {};
+    {
+      const v = normDetail(req.body.customerName, 120);
+      if (v !== undefined) detailData.customerName = v;
+    }
+    {
+      const v = normDetail(req.body.customerPhone, 30);
+      if (v !== undefined) detailData.customerPhone = v;
+    }
+    {
+      const v = normDetail(req.body.deliveryAddress, 250);
+      if (v !== undefined) detailData.deliveryAddress = v;
+    }
+
     // COBRO MIXTO (split-tender): si vienen renglones `payments[]`, se valida
     // server-side que su suma cuadre con el total REAL de la orden (re-leído de
     // BD, + propina) — el monto del cliente nunca decide cuánto debe la orden.
@@ -2048,6 +2080,8 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
           // cajón vs. el método único, que la deja informativa en notas).
           ...(tenderResult && Number(tip) > 0 ? { tip: Number(tip) } : {}),
           ...(cobroShiftId ? { shiftId: cobroShiftId } : {}),
+          // Datos del cliente editados sobre la cuenta (ver detailData arriba).
+          ...detailData,
         },
       });
       await consumePaidOrder(tx, paid.id, restaurantId);
