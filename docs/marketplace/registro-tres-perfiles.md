@@ -185,7 +185,7 @@ NEXT_PUBLIC_TURNSTILE_SITE_KEY=...   # par público de TURNSTILE_SECRET_KEY
 - El token se guarda solo en memoria, nunca en `localStorage`. Se renueva un minuto antes de vencer.
 - Las direcciones se agregan al pedir a domicilio, donde está el mapa para marcar el punto.
 - **Dominio:** el `middleware` de la tienda reescribe cualquier subdominio que no sea de sistema a `/<subdominio>`. Hoy solo pasan tal cual `mrtpvrest.com`, `www` y los demás hosts de sistema. Antes de encender, el marketplace tiene que vivir en uno de ellos, o el `middleware` tiene que conocer su host. `MARKETPLACE_IDENTITY_ORIGIN` debe ser ese origen exacto.
-- **Pruebas:** `tests/client/account.spec.ts` corre contra `tests/client/mock-account.mjs` (`pnpm test:client` ejecuta las dos configuraciones). Cubre registro y validación, verificación (válida, inválida y ya usada), entrada, Mi cuenta con la libreta vía Bearer, quitar una dirección, salida, recuperación de contraseña y `?next` interno. Corre en móvil y en escritorio.
+- **Pruebas:** `tests/client/account.spec.ts` corre contra `tests/client/mock-account.mjs` (`pnpm test:client` ejecuta las dos configuraciones). Cubre registro y validación, verificación (válida, inválida y ya usada), entrada, Mi cuenta con la libreta vía Bearer, quitar una dirección, salida, recuperación de contraseña y `?next` interno. Desde el PR 5 cubre también los avisos, con un service worker de mentira: activar, apagar, dar de baja al salir, permiso bloqueado y sin service worker. Corre en móvil y en escritorio.
 
 ### Mis pedidos y seguimiento (PR 3)
 
@@ -212,6 +212,23 @@ En la tienda, `/cuenta/pedidos` (enlazada desde Mi cuenta) lista los pedidos y d
   - Con las cuentas encendidas, la barra del marketplace de cada tienda tiene «Guardar» o «Favorita». Sin sesión, lleva a entrar y vuelve a la tienda.
   - Mi cuenta muestra «Mis tiendas favoritas», con enlace a cada una y la opción de quitarla.
 - **Volver a pedir:** sale en Mis pedidos para los pedidos entregados o cancelados. Abre la tienda con el enlace de carrito que ya existía (`?cart=`, solo ids y cantidades). El precio y la disponibilidad salen del menú vigente, y lo que ya no existe queda fuera.
+
+### Avisos push del pedido (PR 5)
+
+| Método | Ruta | Contrato |
+| --- | --- | --- |
+| PUT | `/api/marketplace/v1/push` | Suscribe este navegador a los avisos de la cuenta (Bearer). Cuerpo `{ subscription }`, el `toJSON()` de `PushSubscription`. El endpoint tiene que ser https, sin usuario ni contraseña y de hasta 1000 caracteres, y las llaves base64url. Si otro dueño tenía ese endpoint, pasa a esta cuenta. |
+| DELETE | `/api/marketplace/v1/push` | Da de baja `{ endpoint }`, solo si es de esta cuenta (204). |
+
+- **Datos:** usa la tabla `push_subscriptions` que ya existía, con `userId = buyer:<accountId>`. No hace falta migración. El `/api/notifications/subscribe` de la tienda no pide sesión, así que no sirve para la cuenta y no se toca.
+- **Cuándo avisa:** `notifyOrderStatus`, en cada cambio de estado de un pedido con `source = MARKETPLACE`, busca la cuenta en su cotización. Los invitados (`guest:`) no reciben avisos. El aviso lleva el número y el estado, nunca códigos ni dirección, y abre `/cuenta/pedidos`. Si el aviso falla, el cambio de estado sigue igual.
+- **Requisitos:** `VAPID_PUBLIC_KEY` y `VAPID_PRIVATE_KEY` en el backend; sin ellas no se manda nada. `VAPID_EMAIL` es el contacto del remitente. También `MARKETPLACE_V1_ORDERS_ENABLED`; sin ella, 503 `PUSH_UNAVAILABLE`.
+- **En la tienda:**
+  - `worker/index.js` es el worker propio que next-pwa compila a `public/worker-<id>.js` y carga desde `sw.js`. Muestra el aviso y, al tocarlo, abre su enlace, solo del mismo origen.
+  - Mi cuenta tiene «Avisos de tus pedidos» para activarlos o apagarlos en este dispositivo.
+  - Cerrar sesión da de baja este navegador.
+  - Sin service worker (desarrollo, copia aislada o vista previa) explica que los avisos son de la app publicada.
+  - En iPhone solo funcionan con el sitio agregado a la pantalla de inicio.
 
 ### Evidencia
 

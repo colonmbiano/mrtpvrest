@@ -243,6 +243,88 @@ test('favoritas: guardar desde la tienda, verla en Mi cuenta y quitarla', async 
   await expect(favorites.getByText('Aún no tienes favoritas.', { exact: false })).toBeVisible();
 });
 
+// En `next dev` no hay service worker: las pruebas de avisos ponen uno de mentira
+// (registro, PushManager y permiso de notificaciones) antes de que cargue la página.
+async function fakePush(page: Page, permission: NotificationPermission = 'default') {
+  await page.addInitScript((initial) => {
+    let state = initial;
+    let current: PushSubscription | null = null;
+    const calls: unknown[] = [];
+    (window as unknown as { __pushCalls: unknown[] }).__pushCalls = calls;
+    Object.defineProperty(Notification, 'permission', { configurable: true, get: () => state });
+    Notification.requestPermission = (async () => { if (state === 'default') state = 'granted'; return state; }) as typeof Notification.requestPermission;
+    const pushManager = {
+      getSubscription: async () => current,
+      subscribe: async (options: PushSubscriptionOptionsInit) => {
+        const key = new Uint8Array(options.applicationServerKey as ArrayBuffer);
+        calls.push({ userVisibleOnly: options.userVisibleOnly, keyLength: key.byteLength, firstByte: key[0] });
+        const endpoint = `https://push.example.com/sub-${Math.random().toString(36).slice(2)}`;
+        current = {
+          endpoint,
+          toJSON: () => ({ endpoint, expirationTime: null, keys: { p256dh: 'B'.repeat(87), auth: 'a'.repeat(22) } }),
+          unsubscribe: async () => { current = null; return true; },
+        } as unknown as PushSubscription;
+        return current;
+      },
+    };
+    navigator.serviceWorker.getRegistration = (async () => ({ pushManager }) as unknown as ServiceWorkerRegistration) as typeof navigator.serviceWorker.getRegistration;
+  }, permission);
+}
+
+async function pushEndpoints(page: Page, email: string): Promise<string[]> {
+  return (await page.request.get(`${API}/__test/push?email=${encodeURIComponent(email)}`)).json();
+}
+
+test('avisos: sin service worker explica que son de la app publicada', async ({ page }, info) => {
+  const email = newEmail(info.project.name);
+  await signUp(page, email);
+  await verify(page, email);
+  await logIn(page, email);
+  const alerts = page.getByRole('region', { name: 'Avisos de tus pedidos' });
+  await expect(alerts).toContainText('Los avisos funcionan en la app publicada o instalada.');
+  await expect(alerts.getByRole('button')).toHaveCount(0);
+});
+
+test('avisos: activar suscribe este navegador a la cuenta; apagar y salir lo dan de baja', async ({ page }, info) => {
+  await fakePush(page);
+  const email = newEmail(info.project.name);
+  await signUp(page, email);
+  await verify(page, email);
+  await logIn(page, email);
+  const alerts = page.getByRole('region', { name: 'Avisos de tus pedidos' });
+
+  await alerts.getByRole('button', { name: 'Activar avisos' }).click();
+  await expect(alerts.getByRole('button', { name: 'Apagar avisos' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(alerts).toContainText('Te avisamos en este dispositivo');
+  // Avisos visibles y la llave VAPID del servidor en bytes (65, sin comprimir).
+  expect(await page.evaluate(() => (window as unknown as { __pushCalls: unknown[] }).__pushCalls)).toEqual([{ userVisibleOnly: true, keyLength: 65, firstByte: 4 }]);
+  const [endpoint] = await pushEndpoints(page, email);
+  expect(endpoint).toMatch(/^https:\/\/push\.example\.com\/sub-/);
+
+  await alerts.getByRole('button', { name: 'Apagar avisos' }).click();
+  await expect(alerts.getByRole('button', { name: 'Activar avisos' })).toHaveAttribute('aria-pressed', 'false');
+  expect(await pushEndpoints(page, email)).toEqual([]);
+
+  // Cerrar sesión también da de baja este navegador.
+  await alerts.getByRole('button', { name: 'Activar avisos' }).click();
+  await expect(alerts.getByRole('button', { name: 'Apagar avisos' })).toBeVisible();
+  expect(await pushEndpoints(page, email)).toHaveLength(1);
+  await page.getByRole('button', { name: 'Cerrar sesión' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  expect(await pushEndpoints(page, email)).toEqual([]);
+});
+
+test('avisos: con las notificaciones bloqueadas explica cómo permitirlas', async ({ page }, info) => {
+  await fakePush(page, 'denied');
+  const email = newEmail(info.project.name);
+  await signUp(page, email);
+  await verify(page, email);
+  await logIn(page, email);
+  const alerts = page.getByRole('region', { name: 'Avisos de tus pedidos' });
+  await expect(alerts).toContainText('Bloqueaste las notificaciones de este sitio.');
+  await expect(alerts.getByRole('button')).toHaveCount(0);
+});
+
 test('volver a pedir abre la tienda con los mismos productos en el carrito', async ({ page }, info) => {
   const email = newEmail(info.project.name);
   await signUp(page, email);
