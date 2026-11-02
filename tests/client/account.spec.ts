@@ -159,3 +159,55 @@ test('la portada lleva a Mi cuenta y ?next solo acepta rutas internas', async ({
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
   await expect(page).toHaveURL(/127\.0\.0\.1:4327\/cuenta$/);
 });
+
+test('Mis pedidos: lista de todas las tiendas, ver anteriores y seguir con su código', async ({ page }, info) => {
+  const email = newEmail(info.project.name);
+  await signUp(page, email);
+  await verify(page, email);
+  await logIn(page, email);
+  await expect(page).toHaveURL(/\/cuenta$/);
+
+  await page.getByRole('link', { name: 'Mis pedidos' }).click();
+  await expect(page).toHaveURL(/\/cuenta\/pedidos$/);
+  const tacos = page.getByRole('listitem').filter({ hasText: 'Tacos Don Pepe' });
+  await expect(tacos).toContainText('Pedido #1041');
+  await expect(tacos).toContainText('3× Tacos al pastor, 1× Agua de horchata');
+  await expect(tacos).toContainText('Listo para recoger');
+  await expect(tacos).toContainText('Recoger en tienda');
+  await expect(page.getByRole('listitem').filter({ hasText: 'Pizzería Colorines' })).toContainText('En camino');
+  // Página de 2: el entregado llega con "ver anteriores".
+  await expect(page.getByText('Café del Lago')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Ver pedidos anteriores' }).click();
+  const cafe = page.getByRole('listitem').filter({ hasText: 'Café del Lago' });
+  await expect(cafe).toContainText('Entregado');
+  await expect(cafe.getByRole('button', { name: /Seguir pedido/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Ver pedidos anteriores' })).toHaveCount(0);
+
+  // Recoger: estado y código de recogida (pedido con la cuenta, sin token de rastreo).
+  await tacos.getByRole('button', { name: /Seguir pedido/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Seguimiento del pedido' });
+  await expect(dialog.getByRole('heading', { name: 'Listo para recoger' })).toBeVisible();
+  await expect(dialog.getByLabel('Código de recogida 1 2 3 4 5 6')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cerrar' }).click();
+  await expect(dialog).toHaveCount(0);
+
+  // A domicilio: código de entrega y aviso de ubicación vieja.
+  await page.getByRole('listitem').filter({ hasText: 'Pizzería Colorines' }).getByRole('button', { name: /Seguir pedido/ }).click();
+  await expect(dialog.getByRole('heading', { name: 'En camino' })).toBeVisible();
+  await expect(dialog.getByLabel('Código de entrega 6 5 4 3 2 1')).toBeVisible();
+  await expect(dialog.getByText('La ubicación del repartidor no está actualizada.')).toBeVisible();
+});
+
+test('Mis pedidos sin sesión pide entrar y vuelve a la lista', async ({ page }, info) => {
+  await page.goto('/cuenta/pedidos');
+  await expect(page).toHaveURL(/\/cuenta\/entrar\?next=%2Fcuenta%2Fpedidos|\/cuenta\/entrar\?next=\/cuenta\/pedidos/);
+  const email = newEmail(info.project.name);
+  await signUp(page, email);
+  await verify(page, email);
+  await page.goto('/cuenta/entrar?next=/cuenta/pedidos');
+  await page.getByLabel('Correo electrónico').fill(email);
+  await page.getByLabel('Contraseña').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await expect(page).toHaveURL(/\/cuenta\/pedidos$/);
+  await expect(page.getByText('Tacos Don Pepe')).toBeVisible();
+});

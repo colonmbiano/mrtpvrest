@@ -28,6 +28,9 @@ function matchesHash(actual, expected) {
 /** Read-only ports. They must return snapshots, not live mutable entity objects.
  * taskStore.findByOrderId({orderId, trackingTokenHash, at}) returns:
  *   {orderId,restaurantId,trackingTokenHash,trackingExpiresAt,order,task?}.
+ * taskStore.findByOrderIdForAccount({orderId, accountId, at}) (optional) returns the
+ *   same record plus the owning buyer's accountId (the account whose quote became
+ *   this order), for "Mis pedidos". Without it account tracking answers 503.
  *   order is the real Marketplace Order (id,restaurantId,locationId,source,status).
  *   task includes currentAssignmentId/currentAssignment and confirmed pickedUpAt.
  * locationStore.findById({locationId,restaurantId}) returns the actual Location
@@ -44,11 +47,16 @@ function createMarketplaceTrackingService({ locationStore, presenceStore, taskSt
     check(value instanceof Date && Number.isFinite(value.getTime()), 'INVALID_CLOCK', 'Reloj no disponible', 503);
     return new Date(value);
   }
-  function authorize(record, orderId, tokenHash, date) {
+  // credential: { tokenHash } (token de rastreo de la orden) o { accountId } (cuenta
+  // del comprador dueña de la orden). La vigencia del rastreo aplica a los dos.
+  function authorize(record, orderId, credential, date) {
     const order = record?.order;
+    const owner = credential.tokenHash
+      ? matchesHash(credential.tokenHash, record?.trackingTokenHash)
+      : text(credential.accountId) && record?.accountId === credential.accountId;
     check(record?.orderId === orderId && order?.id === orderId && order.source === 'MARKETPLACE'
       && text(order.restaurantId) && record.restaurantId === order.restaurantId && text(order.locationId) && text(order.status)
-      && matchesHash(tokenHash, record.trackingTokenHash) && timestamp(record.trackingExpiresAt) > date.getTime(),
+      && owner && timestamp(record.trackingExpiresAt) > date.getTime(),
     'ORDER_NOT_FOUND', 'Orden no encontrada', 404);
     return record;
   }
@@ -86,17 +94,27 @@ function createMarketplaceTrackingService({ locationStore, presenceStore, taskSt
     if (presence.expiresAt !== undefined && !(timestamp(presence.expiresAt) > date.getTime())) return null;
     return { lat: presence.lat, lng: presence.lng };
   }
-  async function getOrderTracking({ orderId, trackingToken } = {}) {
-    check(typeof trackingToken === 'string' && TOKEN_PATTERN.test(trackingToken), 'INVALID_TRACKING_TOKEN', 'Token de rastreo requerido o invalido', 401);
+  // accountId: cuenta del comprador ya verificada por el router (Bearer), para seguir
+  // sus pedidos sin el token de rastreo. Solo cuando no llega token; nunca un invitado.
+  async function getOrderTracking({ orderId, trackingToken, accountId } = {}) {
+    const byAccount = trackingToken === undefined && accountId !== undefined;
+    if (byAccount) {
+      check(text(accountId) && !accountId.startsWith('guest:'), 'INVALID_TRACKING_TOKEN', 'Token de rastreo requerido o invalido', 401);
+    } else {
+      check(typeof trackingToken === 'string' && TOKEN_PATTERN.test(trackingToken), 'INVALID_TRACKING_TOKEN', 'Token de rastreo requerido o invalido', 401);
+    }
     check(text(orderId), 'ORDER_NOT_FOUND', 'Orden no encontrada', 404);
     check(typeof taskStore?.findByOrderId === 'function' && typeof locationStore?.findById === 'function'
-      && typeof presenceStore?.findForAssignment === 'function', 'TRACKING_UNAVAILABLE', 'Rastreo no disponible', 503);
-    const tokenHash = digest(trackingToken);
+      && typeof presenceStore?.findForAssignment === 'function'
+      && (!byAccount || typeof taskStore.findByOrderIdForAccount === 'function'), 'TRACKING_UNAVAILABLE', 'Rastreo no disponible', 503);
+    const credential = byAccount ? { accountId } : { tokenHash: digest(trackingToken) };
     const read = async date => {
-      const record = await taskStore.findByOrderId({ orderId, trackingTokenHash: tokenHash, at: date });
+      const record = byAccount
+        ? await taskStore.findByOrderIdForAccount({ orderId, accountId, at: date })
+        : await taskStore.findByOrderId({ orderId, trackingTokenHash: credential.tokenHash, at: date });
       // Copy even if a faulty adapter returns references to live state. A mutation
       // across an await must be detected by the second read, not alter our baseline.
-      return authorize(record ? structuredClone(record) : null, orderId, tokenHash, at());
+      return authorize(record ? structuredClone(record) : null, orderId, credential, at());
     };
     const before = await read(at());
     const location = await locationStore.findById({ locationId: before.order.locationId, restaurantId: before.order.restaurantId });
@@ -108,7 +126,7 @@ function createMarketplaceTrackingService({ locationStore, presenceStore, taskSt
       locationId: assignment.locationId }) : null;
     const presence = loadedPresence ? structuredClone(loadedPresence) : null;
     const after = await read(at());
-    const date = at(); authorize(after, orderId, tokenHash, date);
+    const date = at(); authorize(after, orderId, credential, date);
     const current = assignmentFor(after, date);
     const unchanged = assignment && current && Object.keys(assignment).every(key => assignment[key] === current[key]);
     const position = unchanged ? freshPosition(presence, current, date) : null;

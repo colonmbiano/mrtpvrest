@@ -187,6 +187,18 @@ NEXT_PUBLIC_TURNSTILE_SITE_KEY=...   # par público de TURNSTILE_SECRET_KEY
 - **Dominio:** el `middleware` de la tienda reescribe cualquier subdominio que no sea de sistema a `/<subdominio>`. Hoy solo pasan tal cual `mrtpvrest.com`, `www` y los demás hosts de sistema. Antes de encender, el marketplace tiene que vivir en uno de ellos, o el `middleware` tiene que conocer su host. `MARKETPLACE_IDENTITY_ORIGIN` debe ser ese origen exacto.
 - **Pruebas:** `tests/client/account.spec.ts` corre contra `tests/client/mock-account.mjs` (`pnpm test:client` ejecuta las dos configuraciones). Cubre registro y validación, verificación (válida, inválida y ya usada), entrada, Mi cuenta con la libreta vía Bearer, quitar una dirección, salida, recuperación de contraseña y `?next` interno. Corre en móvil y en escritorio.
 
+### Mis pedidos y seguimiento (PR 3)
+
+Todo exige el token de comprador (`Authorization: Bearer`). Un id de invitado (`X-Buyer-Id`) no da historial ni sigue pedidos: vive en un navegador y no prueba nada más. Los pedidos de la cuenta son los que se crearon con su token desde el PR 2.
+
+| Método | Ruta | Contrato |
+| --- | --- | --- |
+| GET | `/api/marketplace/v1/orders?limit=&before=` | Pedidos de la cuenta en todas las tiendas, del más reciente al más viejo. Salen de las cotizaciones de la cuenta que ya son orden. Página de hasta 50; `before` es la fecha de `nextBefore`. Devuelve tienda, número, estado, total, fecha, cómo se entrega y productos, **nunca** PIN, dirección, teléfono ni token de rastreo. |
+| GET | `/api/marketplace/v1/orders/:id/codes` | Códigos de recoger y entregar de un pedido **activo** de la cuenta: los mismos que devolvió la orden, derivados de la clave y comprobados contra sus hashes. Entregado o cancelado responde 409 `ORDER_CLOSED`; otra cuenta, 404. |
+| GET | `/api/marketplace/v1/orders/:id/tracking` | Además del token de rastreo de la orden, acepta el Bearer de la cuenta dueña (la de su cotización). Mismas comprobaciones de orden, tienda, sucursal y vigencia (14 días); con token de rastreo se ignora la cuenta. |
+
+En la tienda, `/cuenta/pedidos` (enlazada desde Mi cuenta) lista los pedidos y deja seguir los activos con el modal de siempre: estado, mapa del repartidor y código, pedido al abrirlo y guardado solo en memoria.
+
 ### Evidencia
 
 `apps/backend/scripts/marketplace-identity.test.cjs` (`node --test`, en el CI del backend) cubre:

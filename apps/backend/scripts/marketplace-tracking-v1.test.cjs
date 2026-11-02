@@ -301,7 +301,7 @@ test('the service is read-only and does not change tracking records or presence'
 test('HTTP route returns no-store, token-specific Vary, a safe view and 200', async () => {
   const f = fixture(); const res = await http(f)();
   assert.equal(res.statusCode, 200); assert.equal(res.headers['cache-control'], 'no-store');
-  assert.equal(res.headers.vary, 'X-Marketplace-Order-Token'); assert.equal(res.body.isStale, false);
+  assert.equal(res.headers.vary, 'X-Marketplace-Order-Token, Authorization'); assert.equal(res.body.isStale, false);
   assert.deepEqual(res.body.origin, { lat: 20.1234, lng: -100.4321 });
 });
 
@@ -343,4 +343,76 @@ test('v1 tracking mounts before the legacy marketplace without starting the appl
   const source = fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8');
   const mount = source.indexOf("app.use('/api/marketplace/v1', require('./routes/marketplace-tracking-v1.routes')())");
   assert.ok(mount > 0); assert.ok(mount < source.indexOf("app.use('/api/marketplace',"));
+});
+
+// ── Mis pedidos: la cuenta dueña de la orden sigue su pedido sin el token de rastreo ──
+
+function withAccountStore(f, owners = { 'order-1': 'account-1' }) {
+  f.ports.taskStore.findByOrderIdForAccount = async args => {
+    f.calls.push({ method: 'task.findByOrderIdForAccount', args });
+    if (f.hooks.task) await f.hooks.task(args);
+    // Deliberately return the record for any account: the service must check the owner itself.
+    const record = f.records.get(args.orderId);
+    return record ? structuredClone({ ...record, accountId: owners[args.orderId] ?? null }) : null;
+  };
+  return f;
+}
+
+test('the owning buyer account tracks its order without the tracking token', async () => {
+  const f = withAccountStore(fixture());
+  assert.deepEqual(await f.service.getOrderTracking({ orderId: 'order-1', accountId: 'account-1' }),
+    { orderId: 'order-1', status: 'ON_THE_WAY', taskStatus: 'PICKED_UP', origin: { lat: 20.1234, lng: -100.4321 },
+      courierLocation: { lat: 20.12, lng: -100.43 }, isStale: false });
+  assert.deepEqual(f.calls.find(call => call.method === 'task.findByOrderIdForAccount').args.accountId, 'account-1');
+  assert.equal(f.calls.some(call => call.method === 'task.findByOrderId'), false, 'no token lookup in account mode');
+});
+
+test('another account, a guest id, an expired order or a missing port never track by account', async () => {
+  const other = withAccountStore(fixture());
+  await assert.rejects(other.service.getOrderTracking({ orderId: 'order-1', accountId: 'account-2' }), errorIs('ORDER_NOT_FOUND', 404));
+  assert.equal(other.calls.some(call => call.method.startsWith('location') || call.method.startsWith('presence')), false);
+  const unowned = withAccountStore(fixture(), {});
+  await assert.rejects(unowned.service.getOrderTracking({ orderId: 'order-1', accountId: 'account-1' }), errorIs('ORDER_NOT_FOUND', 404));
+  const guest = withAccountStore(fixture(), { 'order-1': 'guest:abc' });
+  await assert.rejects(guest.service.getOrderTracking({ orderId: 'order-1', accountId: 'guest:abc' }), errorIs('INVALID_TRACKING_TOKEN', 401));
+  for (const accountId of ['', ' x', 'a'.repeat(129), 42]) {
+    await assert.rejects(withAccountStore(fixture()).service.getOrderTracking({ orderId: 'order-1', accountId }), errorIs('INVALID_TRACKING_TOKEN', 401));
+  }
+  const expired = withAccountStore(fixture()); expired.record.trackingExpiresAt = ago(1);
+  await assert.rejects(expired.service.getOrderTracking({ orderId: 'order-1', accountId: 'account-1' }), errorIs('ORDER_NOT_FOUND', 404));
+  await assert.rejects(fixture().service.getOrderTracking({ orderId: 'order-1', accountId: 'account-1' }), errorIs('TRACKING_UNAVAILABLE', 503));
+  // Ownership is checked again on the second read: a change of owner mid-request hides the order.
+  const swapped = withAccountStore(fixture());
+  swapped.hooks.presence = async () => { swapped.ports.taskStore.findByOrderIdForAccount = async () => ({ ...structuredClone(swapped.record), accountId: 'account-2' }); };
+  await assert.rejects(swapped.service.getOrderTracking({ orderId: 'order-1', accountId: 'account-1' }), errorIs('ORDER_NOT_FOUND', 404));
+});
+
+test('with a tracking token the account is ignored and the token rules apply', async () => {
+  const f = withAccountStore(fixture());
+  await assert.rejects(f.service.getOrderTracking({ orderId: 'order-1', trackingToken: 'b'.repeat(64), accountId: 'account-1' }),
+    errorIs('ORDER_NOT_FOUND', 404));
+  assert.equal(f.calls.some(call => call.method === 'task.findByOrderIdForAccount'), false);
+});
+
+test('router: a Bearer buyer tracks by account; a guest header alone is no authority', async () => {
+  const f = withAccountStore(fixture());
+  const seen = [];
+  const resolveAccount = async req => { seen.push(req.headers.authorization); return req.headers.authorization === 'Bearer buyer' ? 'account-1' : 'account-9'; };
+  const call = http(f, { resolveAccount });
+  const owned = await call({ headers: { authorization: 'Bearer buyer' } });
+  assert.equal(owned.statusCode, 200); assert.equal(owned.body.status, 'ON_THE_WAY');
+  assert.match(owned.headers.vary, /Authorization/);
+  assert.equal((await call({ headers: { authorization: 'Bearer someone-else' } })).statusCode, 404);
+  // Sin Authorization ni token: el id de invitado no autoriza nada.
+  const guest = await call({ headers: { 'x-buyer-id': 'guest-browser-id' } });
+  assert.equal(guest.statusCode, 401); assert.equal(guest.body.errorCode, 'INVALID_TRACKING_TOKEN');
+  // Con token de rastreo no se consulta la cuenta.
+  seen.length = 0;
+  assert.equal((await call({ headers: { 'x-marketplace-order-token': TOKEN, authorization: 'Bearer buyer' } })).statusCode, 200);
+  assert.deepEqual(seen, []);
+  // Un Bearer inválido responde como identidad inválida, sin leer la orden.
+  const { BuyerIdentityError } = require('../src/lib/marketplace-buyer-identity');
+  const bad = http(f, { resolveAccount: async () => { throw new BuyerIdentityError('INVALID_BUYER_IDENTITY', 'Token de comprador invalido'); } });
+  const rejected = await bad({ headers: { authorization: 'Bearer bad' } });
+  assert.equal(rejected.statusCode, 401); assert.equal(rejected.body.errorCode, 'INVALID_BUYER_IDENTITY');
 });

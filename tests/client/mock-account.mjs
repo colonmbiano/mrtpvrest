@@ -61,9 +61,22 @@ const server = createServer(async (req, res) => {
     const email = String(b.email || '').trim().toLowerCase();
     if (b.role !== 'BUYER' || !email.includes('@') || String(b.password || '').length < 12) return send(res, 400, { error: 'INVALID_SIGNUP', code: 'INVALID_SIGNUP' });
     if (!accounts.has(email)) {
-      accounts.set(email, { id: 'acc-' + (accounts.size + 1), name: b.fullName, email, password: b.password, verified: false,
+      const accountId = 'acc-' + (accounts.size + 1);
+      accounts.set(email, { id: accountId, name: b.fullName, email, password: b.password, verified: false,
         addresses: [{ id: 'addr-1', address: 'Av. Juárez 100, Centro', lat: 19.19, lng: -100.13 },
-          { id: 'addr-2', address: 'Calle Pino 22, La Peña', lat: 19.2, lng: -100.12 }] });
+          { id: 'addr-2', address: 'Calle Pino 22, La Peña', lat: 19.2, lng: -100.12 }],
+        // Mis pedidos: uno por recoger, uno en camino y uno entregado (del más reciente al más viejo).
+        orders: [
+          { orderId: `${accountId}-o1`, orderNumber: '1041', status: 'READY', total: '185.00', currency: 'MXN', fulfillment: 'PICKUP',
+            placedAt: '2026-11-02T18:30:00.000Z', merchant: { name: 'Tacos Don Pepe', slug: 'tacos-don-pepe' },
+            items: [{ menuItemId: 'm1', name: 'Tacos al pastor', quantity: 3 }, { menuItemId: 'm2', name: 'Agua de horchata', quantity: 1 }] },
+          { orderId: `${accountId}-o2`, orderNumber: '877', status: 'ON_THE_WAY', total: '240.50', currency: 'MXN', fulfillment: 'DELIVERY',
+            placedAt: '2026-11-01T20:05:00.000Z', merchant: { name: 'Pizzería Colorines', slug: 'pizzeria-colorines' },
+            items: [{ menuItemId: 'm3', name: 'Pizza hawaiana', quantity: 1 }] },
+          { orderId: `${accountId}-o3`, orderNumber: '12', status: 'DELIVERED', total: '99.00', currency: 'MXN', fulfillment: 'DELIVERY',
+            placedAt: '2026-10-28T14:00:00.000Z', merchant: { name: 'Café del Lago', slug: 'cafe-del-lago' },
+            items: [{ menuItemId: 'm4', name: 'Capuchino', quantity: 2 }] },
+        ] });
       const token = hex(); links.set(token, { email, purpose: 'verify' }); outbox.push({ email, purpose: 'verify', token });
     }
     return send(res, 202, { message: 'ok' });
@@ -124,6 +137,30 @@ const server = createServer(async (req, res) => {
       account.addresses = account.addresses.filter(a => `/api/marketplace/v1/addresses/${a.id}` !== path);
       res.writeHead(204); res.end(); return;
     }
+  }
+
+  // Mis pedidos (solo Bearer). Páginas de 2 para probar "ver anteriores".
+  if (path === '/api/marketplace/v1/orders' && req.method === 'GET') {
+    const account = bearerOf(req);
+    if (!account) return send(res, 401, { error: 'Inicia sesion para ver tus pedidos', errorCode: 'INVALID_BUYER_IDENTITY' });
+    const before = url.searchParams.get('before');
+    const older = account.orders.filter(o => !before || o.placedAt < before);
+    const page = older.slice(0, 2);
+    return send(res, 200, { orders: page, nextBefore: older.length > 2 ? page.at(-1).placedAt : null });
+  }
+  const orderPath = /^\/api\/marketplace\/v1\/orders\/([^/]+)\/(codes|tracking)$/.exec(path);
+  if (orderPath && req.method === 'GET') {
+    const account = bearerOf(req);
+    const order = account?.orders.find(o => o.orderId === orderPath[1]);
+    if (!account) return send(res, 401, { error: 'Token de comprador invalido', errorCode: 'INVALID_BUYER_IDENTITY' });
+    if (!order) return send(res, 404, { error: 'Orden no encontrada', errorCode: 'ORDER_NOT_FOUND' });
+    if (orderPath[2] === 'codes') {
+      if (order.status === 'DELIVERED' || order.status === 'CANCELLED') return send(res, 409, { error: 'La orden ya termino', errorCode: 'ORDER_CLOSED' });
+      return send(res, 200, { orderId: order.orderId, pickupPin: '123456', deliveryPin: '654321' });
+    }
+    // Sin GPS en las pruebas: en camino sale como ubicación no actualizada.
+    return send(res, 200, { orderId: order.orderId, status: order.status, taskStatus: null, origin: null, courierLocation: null,
+      isStale: order.status === 'ON_THE_WAY' });
   }
 
   // Catálogo vacío para la portada.

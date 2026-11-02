@@ -6,11 +6,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LogOut, MapPin, UserRound } from 'lucide-react';
+import { ChevronRight, LogOut, MapPin, ShoppingBag, UserRound } from 'lucide-react';
 import { getMarketplaceApiUrl } from '@/lib/config';
 import { fetchCurrentAccount, getBuyerToken, logout, type MarketplaceAccount } from '@/lib/marketplaceAccount';
 import { deleteAddress, listAddresses, type V1Address } from '@/lib/marketplaceV1Checkout';
-import { AccountShell, Notice, secondaryButton, textLink } from './AccountUi';
+import { AccountShell, Notice, outline, secondaryButton, textLink } from './AccountUi';
 
 type Addresses = { state: 'loading' } | { state: 'ready'; list: V1Address[] } | { state: 'error'; message: string };
 
@@ -69,6 +69,11 @@ export default function AccountHome() {
         <p className="break-all text-sm text-[#617567]">{account.email}</p>
       </div>
     </section>
+
+    <Link href="/cuenta/pedidos" className={'mt-6 flex items-center justify-between gap-3 rounded-2xl border border-[#e4ebe5] px-4 py-3.5 hover:bg-[#f5f9f5] ' + outline}>
+      <span className="flex items-center gap-2 text-base font-extrabold text-[#23362b]"><ShoppingBag className="h-5 w-5 text-[#e65b27]" aria-hidden="true" /> Mis pedidos</span>
+      <ChevronRight className="h-5 w-5 text-[#7e9182]" aria-hidden="true" />
+    </Link>
 
     <section aria-labelledby="account-addresses" className="mt-7">
       <h2 id="account-addresses" className="flex items-center gap-2 text-base font-extrabold"><MapPin className="h-5 w-5 text-[#e65b27]" aria-hidden="true" /> Mis direcciones</h2>

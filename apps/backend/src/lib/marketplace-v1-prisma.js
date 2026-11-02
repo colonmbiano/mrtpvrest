@@ -278,22 +278,31 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
   };
 
   // Seguimiento (lib/marketplace-tracking-v1.js): la orden se busca por su token
-  // (hash) y el servicio vuelve a validar orden, tienda, sucursal y vigencia.
+  // (hash) o por la cuenta dueña, y el servicio vuelve a validar orden, tienda,
+  // sucursal, dueño y vigencia.
+  async function pipelineRecord(where) {
+    const row = await prisma.marketplaceOrderPipeline.findFirst({
+      where: { ...where, order: { is: { source: 'MARKETPLACE' } } },
+      select: { orderId: true, restaurantId: true, trackingTokenHash: true, trackingExpiresAt: true, dispatch: true,
+        order: { select: { id: true, restaurantId: true, locationId: true, source: true, status: true,
+          orderType: true, deliveryDriverId: true } } } });
+    if (!row) return null;
+    const { dispatch, ...record } = row;
+    // Las órdenes v1 nacen con una tarea MANUAL que la red nunca toma: la entrega la
+    // tienda, así que su GPS sale del repartidor propio. Otras políticas son de la red.
+    const manual = !dispatch?.task || dispatch.task.deliveryPolicy === 'MANUAL';
+    const task = (manual ? await storeCourierTask(record.order) : null) ?? dispatch?.task;
+    return task ? { ...record, task } : record;
+  }
   const tracking = {
     taskStore: {
-      async findByOrderId({ orderId, trackingTokenHash }) {
-        const row = await prisma.marketplaceOrderPipeline.findFirst({
-          where: { orderId, trackingTokenHash, order: { is: { source: 'MARKETPLACE' } } },
-          select: { orderId: true, restaurantId: true, trackingTokenHash: true, trackingExpiresAt: true, dispatch: true,
-            order: { select: { id: true, restaurantId: true, locationId: true, source: true, status: true,
-              orderType: true, deliveryDriverId: true } } } });
-        if (!row) return null;
-        const { dispatch, ...record } = row;
-        // Las órdenes v1 nacen con una tarea MANUAL que la red nunca toma: la entrega la
-        // tienda, así que su GPS sale del repartidor propio. Otras políticas son de la red.
-        const manual = !dispatch?.task || dispatch.task.deliveryPolicy === 'MANUAL';
-        const task = (manual ? await storeCourierTask(record.order) : null) ?? dispatch?.task;
-        return task ? { ...record, task } : record;
+      findByOrderId: ({ orderId, trackingTokenHash }) => pipelineRecord({ orderId, trackingTokenHash }),
+      // Dueña: la cuenta cuya cotización consumió esta orden (orderId es único en la cotización).
+      async findByOrderIdForAccount({ orderId, accountId }) {
+        const quote = await prisma.marketplaceQuote.findFirst({ where: { orderId, accountId }, select: { accountId: true } });
+        if (!quote) return null;
+        const record = await pipelineRecord({ orderId });
+        return record ? { ...record, accountId: quote.accountId } : null;
       },
     },
     // Coordenadas de la sucursal (opcionales): sin ellas el origen sale vacío, sin inventarlo.
@@ -315,7 +324,38 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
     },
   };
 
-  return { catalog, addresses, addressBook, quoteStore, merchants, merchantsRepo, tracking };
+  // Mis pedidos: las cotizaciones de la cuenta que ya son orden, de cualquier tienda,
+  // de la más reciente a la más vieja. `before` (fecha de consumo) pagina hacia atrás.
+  // Proyección explícita: nunca PIN, dirección, teléfono ni token de rastreo.
+  const buyerOrders = {
+    async listForAccount({ accountId, limit = 20, before = null }) {
+      const quotes = await prisma.marketplaceQuote.findMany({
+        where: { accountId, orderId: { not: null }, ...(before ? { consumedAt: { lt: before } } : {}) },
+        orderBy: [{ consumedAt: 'desc' }, { id: 'desc' }], take: limit + 1,
+        select: { orderId: true, consumedAt: true, fulfillment: true, currency: true, itemsSnapshot: true,
+          merchant: { select: { name: true, slug: true } } } });
+      const page = quotes.slice(0, limit);
+      const rows = page.length ? await prisma.order.findMany({
+        where: { id: { in: page.map(q => q.orderId) }, source: 'MARKETPLACE' },
+        select: { id: true, orderNumber: true, status: true, paymentStatus: true, total: true, createdAt: true } }) : [];
+      const byId = new Map(rows.map(row => [row.id, row]));
+      const orders = page.filter(q => byId.has(q.orderId)).map(q => {
+        const order = byId.get(q.orderId);
+        return {
+          orderId: order.id, orderNumber: order.orderNumber == null ? null : String(order.orderNumber),
+          status: order.status, paymentStatus: order.paymentStatus, total: Number(order.total).toFixed(2),
+          currency: q.currency, fulfillment: q.fulfillment, placedAt: new Date(q.consumedAt || order.createdAt).toISOString(),
+          merchant: { name: q.merchant?.name ?? '', slug: q.merchant?.slug ?? null },
+          items: (Array.isArray(q.itemsSnapshot) ? q.itemsSnapshot : [])
+            .map(line => ({ menuItemId: line.menuItemId, name: line.name, quantity: line.quantity })),
+        };
+      });
+      const last = page.at(-1);
+      return { orders, nextBefore: quotes.length > limit && last?.consumedAt ? new Date(last.consumedAt).toISOString() : null };
+    },
+  };
+
+  return { catalog, addresses, addressBook, quoteStore, merchants, merchantsRepo, tracking, buyerOrders };
 }
 
 function createMarketplaceV1Services({ prisma, env = process.env, now = () => new Date(), getGateway, logger } = {}) {
@@ -333,7 +373,7 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
   const networkPresence = env.MARKETPLACE_NETWORK_ENABLED === 'true'
     ? () => (network ||= require('./marketplace-network-prisma').createNetworkPersistence({ prisma, now })).presenceStore
     : null;
-  const { addressBook, merchantsRepo, ...adapters } = createMarketplaceV1Adapters({ prisma, commissionBps: config.commissionBps,
+  const { addressBook, merchantsRepo, buyerOrders, ...adapters } = createMarketplaceV1Adapters({ prisma, commissionBps: config.commissionBps,
     deliveryEnabled: config.delivery, acceptsOnline: payments ? id => payments.acceptsOnline(id) : null, networkPresence, now });
   // La clave de los PIN sale del mismo env que la bandera; sin ella la orden responde 503.
   const activePinKeyId = env.MARKETPLACE_PIN_KEY_ID || 'v1';
@@ -342,6 +382,8 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
   return {
     quoteService: createQuoteService({ ...adapters, now }),
     orderService: {
+      // Mis pedidos: códigos de una orden activa para su cuenta (GET /orders/:id/codes).
+      codesForAccount: args => orchestrator.codesForAccount(args),
       // args.io (opcional): socket del servidor para el aviso a la caja; el orquestador lo ignora.
       async createOrder(args) {
         if (args?.body?.paymentMethod === 'ONLINE') {
@@ -370,6 +412,8 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
     trackingService: createMarketplaceTrackingService({ ...adapters.tracking, now }),
     // Libreta de direcciones del comprador (routes/marketplace-addresses-v1.routes.js).
     addressBook,
+    // Mis pedidos del comprador (GET /api/marketplace/v1/orders).
+    buyerOrders,
     // Directorio y catálogo públicos v1 (routes/marketplace-merchants-v1.routes.js).
     merchantsRepo,
   };
