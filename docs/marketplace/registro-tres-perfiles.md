@@ -199,6 +199,20 @@ Todo exige el token de comprador (`Authorization: Bearer`). Un id de invitado (`
 
 En la tienda, `/cuenta/pedidos` (enlazada desde Mi cuenta) lista los pedidos y deja seguir los activos con el modal de siempre: estado, mapa del repartidor y código, pedido al abrirlo y guardado solo en memoria.
 
+### Favoritas y volver a pedir (PR 4)
+
+| Método | Ruta | Contrato |
+| --- | --- | --- |
+| GET | `/api/marketplace/v1/favorites` | Tiendas favoritas de la cuenta (Bearer): slug, nombre, logo, si está abierta y desde cuándo. Solo las que siguen publicadas en el marketplace, con el mismo criterio del directorio. |
+| PUT | `/api/marketplace/v1/favorites/:slug` | Guarda una tienda publicada. Es idempotente: 201 la primera vez y 200 después. Una tienda no publicada responde 404; con 100 favoritas, 409 `FAVORITES_LIMIT`. |
+| DELETE | `/api/marketplace/v1/favorites/:slug` | La quita, aunque ya no esté publicada (204). |
+
+- **Datos:** la tabla `marketplace_favorites` (migración `20261102000000_marketplace_favorites`) guarda `accountId` y `merchantId`, con la llave foránea a `restaurants` en cascada. Es del comprador, no del comercio: no lleva `restaurantId` ni entra al tenant-guard.
+- **En la tienda:**
+  - Con las cuentas encendidas, la barra del marketplace de cada tienda tiene «Guardar» o «Favorita». Sin sesión, lleva a entrar y vuelve a la tienda.
+  - Mi cuenta muestra «Mis tiendas favoritas», con enlace a cada una y la opción de quitarla.
+- **Volver a pedir:** sale en Mis pedidos para los pedidos entregados o cancelados. Abre la tienda con el enlace de carrito que ya existía (`?cart=`, solo ids y cantidades). El precio y la disponibilidad salen del menú vigente, y lo que ya no existe queda fuera.
+
 ### Evidencia
 
 `apps/backend/scripts/marketplace-identity.test.cjs` (`node --test`, en el CI del backend) cubre:

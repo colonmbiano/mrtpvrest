@@ -2,12 +2,16 @@
 
 // Mis pedidos: los pedidos de la cuenta en todas las tiendas del marketplace, del más
 // reciente al más viejo. Un pedido activo se sigue en vivo y muestra su código para
-// recoger o recibir (se pide al abrirlo y solo vive en memoria).
+// recoger o recibir (se pide al abrirlo y solo vive en memoria). "Volver a pedir"
+// abre la tienda con el carrito del enlace compartible (?cart=), que se re-precia
+// contra el menú vigente y deja fuera lo que ya no existe.
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Bike, ChevronRight, ShoppingBag, Store } from 'lucide-react';
+import { Bike, ChevronRight, RotateCcw, ShoppingBag, Store } from 'lucide-react';
 import { getMarketplaceApiUrl } from '@/lib/config';
+import { cartShareUrl } from '@/lib/cartLink';
+import type { CartLine } from '@/lib/cartStore';
 import { fetchCurrentAccount } from '@/lib/marketplaceAccount';
 import {
   fetchOrderCodes, FINAL_ORDER_STATUSES, listMyOrders, ORDER_STATUS_LABEL, type BuyerOrder,
@@ -34,6 +38,14 @@ function summary(order: BuyerOrder): string {
 }
 
 type Tracked = { order: BuyerOrder; pickupPin: string | null; deliveryPin: string | null };
+
+// Enlace a la tienda con los mismos productos y cantidades. Solo ids: el precio y la
+// disponibilidad salen del menú vigente al abrirla.
+function reorderUrl(order: BuyerOrder): string | null {
+  if (!order.merchant.slug || order.items.length === 0) return null;
+  const lines: CartLine[] = order.items.map(it => ({ id: it.menuItemId, menuItemId: it.menuItemId, name: it.name, price: 0, quantity: it.quantity }));
+  return cartShareUrl(order.merchant.slug, lines);
+}
 
 export default function MyOrders() {
   const router = useRouter();
@@ -108,10 +120,16 @@ export default function MyOrders() {
             <span className={'rounded-full px-2.5 py-1 text-xs font-bold ' + (active ? 'bg-[#fff1e6] text-[#b2431a]' : 'bg-[#eef3ef] text-[#4b5f52]')}>
               {ORDER_STATUS_LABEL[order.status] ?? 'En proceso'}
             </span>
-            {active && <button type="button" onClick={() => follow(order)} disabled={opening === order.orderId}
-              className={secondaryButton + ' gap-1'}>
-              <Bike className="h-4 w-4" aria-hidden="true" /> {opening === order.orderId ? 'Abriendo…' : 'Seguir pedido'} <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </button>}
+            <span className="flex flex-wrap gap-2">
+              {active && <button type="button" onClick={() => follow(order)} disabled={opening === order.orderId}
+                className={secondaryButton + ' gap-1'}>
+                <Bike className="h-4 w-4" aria-hidden="true" /> {opening === order.orderId ? 'Abriendo…' : 'Seguir pedido'} <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </button>}
+              {/* Documento completo: la tienda arma el carrito al cargar (CartDeepLinkLoader). */}
+              {!active && reorderUrl(order) && <a href={reorderUrl(order)!} className={secondaryButton + ' gap-1'}>
+                <RotateCcw className="h-4 w-4" aria-hidden="true" /> Volver a pedir
+              </a>}
+            </span>
           </div>
         </li>;
       })}

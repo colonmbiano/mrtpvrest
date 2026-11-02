@@ -1,18 +1,20 @@
 'use client';
 
-// "Mi cuenta": datos del comprador y su libreta de direcciones (API v1, con el
-// token de comprador). Las direcciones se agregan al pedir a domicilio: ahí está
-// el mapa para marcar el punto de entrega.
+// "Mi cuenta": datos del comprador, sus tiendas favoritas y su libreta de
+// direcciones (API v1, con el token de comprador). Las direcciones se agregan al
+// pedir a domicilio, donde está el mapa; las favoritas, desde cada tienda.
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, LogOut, MapPin, ShoppingBag, UserRound } from 'lucide-react';
+import { ChevronRight, Heart, LogOut, MapPin, ShoppingBag, UserRound } from 'lucide-react';
 import { getMarketplaceApiUrl } from '@/lib/config';
 import { fetchCurrentAccount, getBuyerToken, logout, type MarketplaceAccount } from '@/lib/marketplaceAccount';
+import { listFavorites, setFavorite, type FavoriteStore } from '@/lib/marketplaceFavorites';
 import { deleteAddress, listAddresses, type V1Address } from '@/lib/marketplaceV1Checkout';
 import { AccountShell, Notice, outline, secondaryButton, textLink } from './AccountUi';
 
 type Addresses = { state: 'loading' } | { state: 'ready'; list: V1Address[] } | { state: 'error'; message: string };
+type Favorites = { state: 'loading' } | { state: 'ready'; list: FavoriteStore[] } | { state: 'error'; message: string };
 
 export default function AccountHome() {
   const router = useRouter();
@@ -22,6 +24,8 @@ export default function AccountHome() {
   const [addresses, setAddresses] = useState<Addresses>({ state: 'loading' });
   const [removing, setRemoving] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState('');
+  const [favorites, setFavorites] = useState<Favorites>({ state: 'loading' });
+  const [unfavoriting, setUnfavoriting] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -31,10 +35,23 @@ export default function AccountHome() {
     if ('ok' in current) { setLoadError(current.message); return; }
     setAccount(current);
     // Sin token de comprador la libreta sería la del invitado de este navegador.
-    if (!await getBuyerToken()) { setAddresses({ state: 'error', message: 'No pudimos abrir tus direcciones. Recarga la página.' }); return; }
-    const result = await listAddresses(apiUrl);
+    if (!await getBuyerToken()) {
+      const message = 'No pudimos abrir tus datos. Recarga la página.';
+      setAddresses({ state: 'error', message }); setFavorites({ state: 'error', message });
+      return;
+    }
+    const [result, favs] = await Promise.all([listAddresses(apiUrl), listFavorites({ apiUrl })]);
     setAddresses(Array.isArray(result) ? { state: 'ready', list: result } : { state: 'error', message: result.message });
+    setFavorites(Array.isArray(favs) ? { state: 'ready', list: favs } : { state: 'error', message: favs.message });
   }, [apiUrl, router]);
+
+  const unfavorite = async (slug: string) => {
+    setUnfavoriting(slug);
+    const result = await setFavorite(slug, false, { apiUrl });
+    setUnfavoriting(null);
+    if (result === true) setFavorites(old => old.state === 'ready' ? { state: 'ready', list: old.list.filter(f => f.slug !== slug) } : old);
+    else setFavorites({ state: 'error', message: result.message });
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -74,6 +91,27 @@ export default function AccountHome() {
       <span className="flex items-center gap-2 text-base font-extrabold text-[#23362b]"><ShoppingBag className="h-5 w-5 text-[#e65b27]" aria-hidden="true" /> Mis pedidos</span>
       <ChevronRight className="h-5 w-5 text-[#7e9182]" aria-hidden="true" />
     </Link>
+
+    <section aria-labelledby="account-favorites" className="mt-7">
+      <h2 id="account-favorites" className="flex items-center gap-2 text-base font-extrabold"><Heart className="h-5 w-5 text-[#e65b27]" aria-hidden="true" /> Mis tiendas favoritas</h2>
+      {favorites.state === 'loading' && <p role="status" className="mt-3 text-sm text-[#617567]">Cargando favoritas…</p>}
+      {favorites.state === 'error' && <div className="mt-3"><Notice tone="error">{favorites.message}</Notice></div>}
+      {favorites.state === 'ready' && favorites.list.length === 0 && <p className="mt-3 text-sm leading-relaxed text-[#617567]">
+        Aún no tienes favoritas. Toca «Guardar» en cualquier tienda para tenerla a la mano.
+      </p>}
+      {favorites.state === 'ready' && favorites.list.length > 0 && <ul className="mt-3 space-y-2">
+        {favorites.list.map(f => <li key={f.slug} className="flex items-center gap-2 rounded-2xl border border-[#e4ebe5] px-4 py-3">
+          <Link href={`/${encodeURIComponent(f.slug)}`} className={'min-w-0 flex-1 truncate text-sm font-bold text-[#23362b] hover:text-[#e65b27] ' + outline}>
+            {f.name}
+          </Link>
+          <span className={'shrink-0 text-xs font-semibold ' + (f.open ? 'text-[#18804c]' : 'text-[#7e9182]')}>{f.open ? 'Abierta' : 'Cerrada'}</span>
+          <button type="button" onClick={() => unfavorite(f.slug)} disabled={unfavoriting === f.slug} aria-label={`Quitar ${f.name} de favoritas`}
+            className="shrink-0 rounded-xl px-3 py-2 text-xs font-bold text-[#7e9182] hover:bg-[#f0f5f1] hover:text-[#304438] disabled:opacity-50">
+            {unfavoriting === f.slug ? 'Quitando…' : 'Quitar'}
+          </button>
+        </li>)}
+      </ul>}
+    </section>
 
     <section aria-labelledby="account-addresses" className="mt-7">
       <h2 id="account-addresses" className="flex items-center gap-2 text-base font-extrabold"><MapPin className="h-5 w-5 text-[#e65b27]" aria-hidden="true" /> Mis direcciones</h2>

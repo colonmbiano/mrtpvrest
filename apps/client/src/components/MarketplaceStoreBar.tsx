@@ -8,6 +8,8 @@ import Link from 'next/link';
 import { ArrowLeft, Bike, Clock, ShoppingBag } from 'lucide-react';
 import { etaWindow, formatPrice } from '@/lib/marketplace';
 import type { StoreInfo } from '@/lib/store-data';
+import { isMarketplaceAccountsEnabled } from '@/lib/config';
+import FavoriteStoreButton from '@/components/account/FavoriteStoreButton';
 
 const FOCUS = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a3412]';
 
@@ -51,6 +53,8 @@ export default function MarketplaceStoreBar({ store }: { store: StoreInfo }) {
           <ArrowLeft aria-hidden="true" className="h-4 w-4" />
           Volver al catálogo
         </Link>
+        {/* Con cuentas de cliente: guardar la tienda en favoritas. */}
+        {isMarketplaceAccountsEnabled() && <FavoriteStoreButton slug={store.slug} name={store.name} />}
         {chips.length > 0 && (
           <ul aria-label={`Entrega de ${store.name}`} className="flex min-w-0 gap-2 overflow-x-auto [scrollbar-width:none]">
             {chips}

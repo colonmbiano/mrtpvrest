@@ -211,3 +211,55 @@ test('Mis pedidos sin sesión pide entrar y vuelve a la lista', async ({ page },
   await expect(page).toHaveURL(/\/cuenta\/pedidos$/);
   await expect(page.getByText('Tacos Don Pepe')).toBeVisible();
 });
+
+test('favoritas: guardar desde la tienda, verla en Mi cuenta y quitarla', async ({ page }, info) => {
+  // Sin sesión, guardar lleva a entrar y vuelve a la tienda.
+  await page.goto('/tacos-don-pepe');
+  await page.getByRole('button', { name: 'Guardar Tacos Don Pepe en favoritas' }).click();
+  await expect(page).toHaveURL(/\/cuenta\/entrar\?next=%2Ftacos-don-pepe/);
+
+  const email = newEmail(info.project.name);
+  await signUp(page, email);
+  await verify(page, email);
+  await page.goto('/cuenta/entrar?next=/tacos-don-pepe');
+  await page.getByLabel('Correo electrónico').fill(email);
+  await page.getByLabel('Contraseña').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await expect(page).toHaveURL(/\/tacos-don-pepe$/);
+
+  const save = page.getByRole('button', { name: 'Guardar Tacos Don Pepe en favoritas' });
+  await expect(save).toHaveAttribute('aria-pressed', 'false');
+  await save.click();
+  const saved = page.getByRole('button', { name: 'Quitar Tacos Don Pepe de favoritas' });
+  await expect(saved).toHaveAttribute('aria-pressed', 'true');
+  // Al volver a la tienda sigue marcada (viene del servidor, no del navegador).
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Quitar Tacos Don Pepe de favoritas' })).toBeVisible();
+
+  await page.goto('/cuenta');
+  const favorites = page.getByRole('region', { name: 'Mis tiendas favoritas' });
+  await expect(favorites.getByRole('link', { name: 'Tacos Don Pepe' })).toHaveAttribute('href', '/tacos-don-pepe');
+  await favorites.getByRole('button', { name: 'Quitar Tacos Don Pepe de favoritas' }).click();
+  await expect(favorites.getByText('Aún no tienes favoritas.', { exact: false })).toBeVisible();
+});
+
+test('volver a pedir abre la tienda con los mismos productos en el carrito', async ({ page }, info) => {
+  const email = newEmail(info.project.name);
+  await signUp(page, email);
+  await verify(page, email);
+  await logIn(page, email);
+  await page.goto('/cuenta/pedidos');
+  await page.getByRole('button', { name: 'Ver pedidos anteriores' }).click();
+  const cafe = page.getByRole('listitem').filter({ hasText: 'Café del Lago' });
+  // Solo los pedidos terminados se repiten; los activos se siguen.
+  await expect(page.getByRole('listitem').filter({ hasText: 'Tacos Don Pepe' }).getByRole('link', { name: 'Volver a pedir' })).toHaveCount(0);
+  const again = cafe.getByRole('link', { name: 'Volver a pedir' });
+  const href = await again.getAttribute('href');
+  const url = new URL(href!);
+  expect(url.pathname).toBe('/cafe-del-lago');
+  // El enlace solo lleva ids y cantidades: el precio sale del menú vigente.
+  const cart = JSON.parse(Buffer.from(url.searchParams.get('cart')!.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+  expect(cart).toEqual([{ m: 'm4', q: 2 }]);
+  await again.click();
+  await expect(page).toHaveURL(/\/cafe-del-lago$/);
+});
