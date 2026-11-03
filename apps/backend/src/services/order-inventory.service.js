@@ -77,7 +77,13 @@ async function expandSubRecipeToIngredients(prisma, subRecipeId, qtyRequested, r
 // lista plana de ingredientes a consumir POR UNIDAD. Compartido por
 // discountInventory para el header del platillo O para cada componente de un
 // combo — misma lógica.
-async function resolveRecipeFlatItems(prisma, menuItemId, nameForMatch, restaurantId, notesForMatch) {
+async function resolveRecipeFlatItems(prisma, menuItemId, nameForMatch, restaurantId, notesForMatch, cache) {
+  // Memoización opcional: dentro de una misma orden, varias líneas del mismo
+  // producto/variante no re-resuelven la receta contra la BD. `cache` es un Map
+  // por consumo; los callers que no lo pasan se comportan igual que antes.
+  const cacheKey = cache ? `${menuItemId}|${nameForMatch || ''}|${notesForMatch || ''}` : null;
+  if (cache && cache.has(cacheKey)) return cache.get(cacheKey);
+
   const recipes = await prisma.recipe.findMany({
     where: { menuItemId, restaurantId, isActive: true },
     select: { id: true, variantId: true, variant: { select: { name: true } } },
@@ -123,7 +129,9 @@ async function resolveRecipeFlatItems(prisma, menuItemId, nameForMatch, restaura
       }
     }
   }
-  return { flatItems, recipeIdSnap };
+  const result = { flatItems, recipeIdSnap };
+  if (cache) cache.set(cacheKey, result);
+  return result;
 }
 
 async function resolveOrderLineItems(prisma, oi, restaurantId) {
@@ -170,6 +178,11 @@ async function applyInventory(prisma, orderItems, orderId, restaurantId, locatio
   try {
     const cfg = await prisma.restaurantConfig.findUnique({ where: { restaurantId }, select: { blockOnInsufficientStock: true } });
     const lines = options.lines || await resolveInventoryLines(prisma, orderItems, restaurantId);
+    // Acumuladores: los StockMovement se insertan en bloque (createMany) tras el
+    // loop en vez de uno por uno, y balanceAfter se lleva en memoria (saldo en
+    // vivo) para no re-leer el stock por ingrediente dentro de la transacción.
+    const movements = [];
+    const runningStock = new Map(); // ingredientId → saldo en vivo
     for (const { item: oi, flatItems, recipeIdSnap, isPackagingProduct } of lines) {
 
       // DINE_IN consumes food, including sauces, but no disposable supplies.
@@ -213,7 +226,7 @@ async function applyInventory(prisma, orderItems, orderId, restaurantId, locatio
         const unitCost = Number(ingredient.cost || 0);
         cmvUnitario += qtyPerUnit * unitCost; // CMV por 1 unidad del MenuItem
 
-        // 1. Decremento de stock + lectura del nuevo balance.
+        // 1. Decremento de stock atómico/condicional (igual que antes).
         const changed = await prisma.ingredient.updateMany({
           where: { id: ingredient.id, restaurantId,
             ...(cfg?.blockOnInsufficientStock && !options.confirmedExternalPayment && needed > 0 ? { stock: { gte: needed } } : {}),
@@ -221,26 +234,24 @@ async function applyInventory(prisma, orderItems, orderId, restaurantId, locatio
           data: { stock: { decrement: needed } },
         });
         if (!changed.count) throw Object.assign(new Error(`Sin stock suficiente de ${ingredient.name}`), { status: 409 });
-        const updated = await prisma.ingredient.findFirst({
-          where: { id: ingredient.id, restaurantId },
-          select: { id: true, stock: true, baseUnit: true, locationId: true },
-        });
 
-        // 2. StockMovement.
-        const ingLocationId = updated.locationId || locationId;
-        await prisma.stockMovement.create({
-          data: {
-            ingredientId: ingredient.id,
-            locationId: ingLocationId,
-            delta: -needed,
-            unit: updated.baseUnit,
-            reason: 'SALE',
-            refType: 'order',
-            refId: orderId,
-            balanceAfter: Number(updated.stock),
-            unitCostAtMove: unitCost,
-            notes: `Venta orderItem ${oi.id}`,
-          },
+        // 2. StockMovement — balanceAfter desde el saldo en vivo en memoria (el
+        // decremento ya es atómico arriba; balanceAfter es cache/auditoría). Se
+        // acumula y se inserta en bloque tras el loop.
+        if (!runningStock.has(ingredient.id)) runningStock.set(ingredient.id, Number(ingredient.stock || 0));
+        const newStock = runningStock.get(ingredient.id) - needed;
+        runningStock.set(ingredient.id, newStock);
+        movements.push({
+          ingredientId: ingredient.id,
+          locationId: ingredient.locationId || locationId,
+          delta: -needed,
+          unit: ingredient.baseUnit,
+          reason: 'SALE',
+          refType: 'order',
+          refId: orderId,
+          balanceAfter: newStock,
+          unitCostAtMove: unitCost,
+          notes: `Venta orderItem ${oi.id}`,
         });
 
       }
@@ -256,6 +267,10 @@ async function applyInventory(prisma, orderItems, orderId, restaurantId, locatio
         });
       }
     }
+
+    // Inserción en bloque de todos los movimientos de la orden (antes: un insert
+    // por ingrediente-ítem secuencial dentro de la transacción).
+    if (movements.length) await prisma.stockMovement.createMany({ data: movements });
   } catch (e) {
     throw e;
   }
@@ -391,11 +406,54 @@ async function restoreInventoryForCancelledOrder(prisma, orderId, restaurantId) 
 
 // A single transaction owns payment, stock movements and item cost snapshots.
 async function resolveInventoryLines(tx, items, restaurantId) {
-  const extras = new Set((await tx.menuItem.findMany({ where: { restaurantId,
-    id: { in: items.map(i => i.menuItemId) }, isPackagingProduct: true }, select: { id: true } })).map(i => i.id));
+  // Lecturas EN BLOQUE para toda la orden (antes resolveOrderLineItems hacía una
+  // ronda de queries POR ÍTEM: bajo BD cross-región eso alargaba la $transacción
+  // del cobro hasta reventar su timeout de 30s). Combos y modificadores de línea
+  // en un findMany con `in`; recetas memoizadas por línea repetida. La forma del
+  // resultado es idéntica a la de resolveOrderLineItems.
+  const itemIds = items.map(i => i.id);
+  const [extrasRows, allComboSels, allOiModifiers] = await Promise.all([
+    tx.menuItem.findMany({ where: { restaurantId,
+      id: { in: items.map(i => i.menuItemId) }, isPackagingProduct: true }, select: { id: true } }),
+    tx.comboSelection.findMany({ where: { orderItemId: { in: itemIds } },
+      select: { orderItemId: true, optionMenuItemId: true } }),
+    tx.orderItemModifier.findMany({ where: { orderItemId: { in: itemIds } },
+      select: { orderItemId: true, name: true, modifierId: true } }),
+  ]);
+  const extras = new Set(extrasRows.map(i => i.id));
+  const combosByItem = new Map();
+  for (const cs of allComboSels) {
+    if (!combosByItem.has(cs.orderItemId)) combosByItem.set(cs.orderItemId, []);
+    combosByItem.get(cs.orderItemId).push(cs);
+  }
+  const modsByItem = new Map();
+  for (const om of allOiModifiers) {
+    if (!modsByItem.has(om.orderItemId)) modsByItem.set(om.orderItemId, []);
+    modsByItem.get(om.orderItemId).push(om);
+  }
+
+  const recipeCache = new Map();
   const lines = [];
-  for (const item of items) lines.push({ item, isPackagingProduct: extras.has(item.menuItemId),
-    ...await resolveOrderLineItems(tx, item, restaurantId) });
+  for (const oi of items) {
+    const comboSels = combosByItem.get(oi.id) || [];
+    const flatItems = [];
+    let recipeIdSnap = null;
+    if (comboSels.length > 0) {
+      for (const cs of comboSels) {
+        const r = await resolveRecipeFlatItems(tx, cs.optionMenuItemId, '', restaurantId, undefined, recipeCache);
+        flatItems.push(...r.flatItems);
+        if (r.recipeIdSnap && !recipeIdSnap) recipeIdSnap = r.recipeIdSnap;
+      }
+    } else {
+      const r = await resolveRecipeFlatItems(tx, oi.menuItemId, oi.name, restaurantId, oi.notes, recipeCache);
+      flatItems.push(...r.flatItems);
+      recipeIdSnap = r.recipeIdSnap;
+    }
+    flatItems.push(...await resolveModifierIngredients(
+      tx, restaurantId, oi.menuItemId, modsByItem.get(oi.id) || [], expandSubRecipeToIngredients,
+    ));
+    lines.push({ item: oi, isPackagingProduct: extras.has(oi.menuItemId), flatItems, recipeIdSnap });
+  }
   return lines;
 }
 
