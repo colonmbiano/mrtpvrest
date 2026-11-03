@@ -420,10 +420,13 @@ export async function syncOfflineQueue(opts?: { force?: boolean }) {
     .sort((a, b) => a.timestamp - b.timestamp);
   if (unsyncedTransactions.length === 0) return;
 
-  // Una operación rechazada puede ser predecesora de las siguientes. Pausar
-  // todo el replay es conservador, pero evita cobrar/cerrar una orden cuya
-  // ronda anterior no aterrizó. El drawer permite revisarla y descartarla.
-  if (store.getFailedTransactions().length > 0) return;
+  // Antes: una sola tx rechazada (4xx definitivo) pausaba TODO el replay, así
+  // que una venta imposible de sincronizar congelaba a todas las demás (caja
+  // con N ventas "pendientes" que nunca entraban al corte). Ya no: las tx
+  // rechazadas se saltan (quedan en el drawer para revisar/descartar) y las
+  // ventas INDEPENDIENTES siguen drenando. La causalidad por-cuenta la mantiene
+  // el guard de serverId de cada ronda/pago (no se envía un hijo sin su padre)
+  // y el cierre de turno espera a cualquier tx más vieja sin resolver (abajo).
 
   // Una sesión PIN local es válida para vender, pero no para atribuir replays
   // al servidor. Sin JWT dejamos la cola intacta hasta reautenticación.
@@ -482,10 +485,12 @@ export async function syncOfflineQueue(opts?: { force?: boolean }) {
         // FIFO ya encola el cierre al final; esto cubre un predecesor que falló.
         if (transaction.type === 'shift-close') {
           // Lectura VIVA del store: la lista capturada arriba no refleja los
-          // markSynced de este mismo pase (guarda referencias viejas).
-          const hasOlderPending = store
-            .getUnsyncedTransactions()
-            .some((t) => t.id !== transaction.id && t.timestamp < transaction.timestamp);
+          // markSynced de este mismo pase (guarda referencias viejas). Cuenta
+          // también las RECHAZADAS (failed): una venta más vieja sin resolver —
+          // aunque esté congelada — debe seguir bloqueando el cierre para que el
+          // corte no salga antes de que esa venta se concilie (o se descarte).
+          const hasOlderPending = useOfflineStore.getState().queue
+            .some((t) => !t.synced && t.id !== transaction.id && t.timestamp < transaction.timestamp);
           if (hasOlderPending) continue; // reintenta el próximo tick
         }
 
@@ -502,7 +507,14 @@ export async function syncOfflineQueue(opts?: { force?: boolean }) {
           const localId = orderIdFromPath(replay.path);
           const record = localId ? findLocalOrder(useOfflineStore.getState().orders, transaction.scope ?? {}, localId) : undefined;
           if (localId?.startsWith(LOCAL_ORDER_PREFIX) && !record?.serverId) {
-            throw new Error('La cuenta local aún no tiene confirmación del servidor');
+            // Su cuenta local todavía no tiene id de servidor. En FIFO el create
+            // va antes y ya debió sincronizar en este mismo pase; si no está, la
+            // cuenta quedó huérfana (su create se descartó). En vez de frenar
+            // toda la cola, saltamos esta: las ventas independientes detrás
+            // deben seguir drenando. Si el create aterriza luego, el próximo
+            // pase ya resuelve el serverId; si quedó huérfana, el personal la
+            // revisa/descarta en el drawer.
+            continue;
           }
           const replayPath = localId && record?.serverId
             ? replay.path.replace(`/orders/${localId}/`, `/orders/${record.serverId}/`) : replay.path;
@@ -555,7 +567,10 @@ export async function syncOfflineQueue(opts?: { force?: boolean }) {
             `Tx ${transaction.id} rechazada (${failure.status}): ${failure.error}`
           );
           store.markFailed(transaction.id, failure);
-          break;
+          // No frenamos el resto: la congelamos (queda en el drawer) y seguimos
+          // con las ventas independientes. Sus propios hijos (rondas/pagos) se
+          // auto-saltan por el guard de serverId de arriba.
+          continue;
         } else {
           console.error(`Failed to sync transaction ${transaction.id}:`, err);
           if (isNetworkError(err)) markBackendUnavailable();
