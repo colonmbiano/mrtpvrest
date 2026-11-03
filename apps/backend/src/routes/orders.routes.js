@@ -1981,6 +1981,41 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
     const { paymentMethod, payments, tip, keepStatus, expectedTotal } = req.body;
     const now = new Date();
 
+    // Replay idempotente del outbox offline: si la orden ya fue cobrada y el importe
+    // coincide con lo esperado, devolver 200 OK inmediatamente sin abrir $transaction
+    // (evita timeouts en PgBouncer y desbloquea las operaciones encoladas en el TPV).
+    let existingOrder = null;
+    try {
+      existingOrder = await prisma.order.findFirst({
+        where: { id: req.params.id, restaurantId },
+        select: {
+          id: true,
+          restaurantId: true,
+          locationId: true,
+          total: true,
+          status: true,
+          paymentStatus: true,
+          paymentMethod: true,
+          paidAt: true,
+          cashCollected: true,
+          cashCollectedAt: true,
+          tip: true,
+          shiftId: true,
+        },
+      });
+    } catch (_) {}
+
+    if (existingOrder && existingOrder.paymentStatus === 'PAID') {
+      const matchesTotal = expectedTotal == null || Math.abs(Number(existingOrder.total) - Number(expectedTotal)) < 0.01;
+      if (matchesTotal) {
+        return res.json(existingOrder);
+      }
+      return res.status(409).json({
+        code: 'OFFLINE_TOTAL_CHANGED',
+        error: 'La cuenta cambió de importe, ya fue cobrada o no está disponible. Revisa el cobro local antes de conciliar.',
+      });
+    }
+
     // Datos del cliente plegados en el cobro: el TPV ya no manda un PUT /details
     // aparte antes de pagar, los nombres/teléfono/dirección (editables sobre una
     // cuenta abierta) viajan en este body y se persisten en la MISMA

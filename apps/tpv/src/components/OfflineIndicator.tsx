@@ -249,6 +249,23 @@ function PendingDrawer({
                       <div className="text-[11px] text-white/40 truncate font-mono">{path}</div>
                     )}
                   </div>
+                  <button
+                    onClick={() => {
+                      if (!discardTransaction(tx.id)) {
+                        if (window.confirm("Esta operación está vinculada a una cuenta local. ¿Deseas descartarla para desbloquear la cola?")) {
+                          discardTransaction(tx.id, true);
+                          toast.success("Operación descartada");
+                        }
+                      } else {
+                        toast.success("Operación descartada");
+                      }
+                    }}
+                    className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold text-white/40 hover:text-[var(--danger)] hover:bg-white/5 active:scale-95"
+                    aria-label={`Descartar ${typeLabel[tx.type] || tx.type}`}
+                  >
+                    <Trash2 size={12} strokeWidth={2} />
+                    Descartar
+                  </button>
                 </li>
               );
             })}
@@ -290,7 +307,14 @@ function PendingDrawer({
                     </div>
                     <button
                       onClick={() => {
-                        if (!discardTransaction(tx.id)) toast.error('Esta operación pertenece a una cuenta local. Conserva el registro y solicita conciliación; descartarla podría perder productos o cobros.');
+                        if (!discardTransaction(tx.id)) {
+                          if (window.confirm("Esta operación pertenece a una cuenta local. ¿Deseas descartarla forzosamente?")) {
+                            discardTransaction(tx.id, true);
+                            toast.success("Operación descartada");
+                          }
+                        } else {
+                          toast.success("Operación descartada");
+                        }
                       }}
                       className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold text-[var(--danger)] bg-[var(--danger-soft)] border border-[var(--danger)]/40 active:scale-95"
                       aria-label={`Descartar ${typeLabel[tx.type] || tx.type}`}

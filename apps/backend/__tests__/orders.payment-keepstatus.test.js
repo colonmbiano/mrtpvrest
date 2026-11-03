@@ -87,6 +87,38 @@ describe('PUT /:id/payment · keepStatus', () => {
     expect(res.body.code).toBe('OFFLINE_TOTAL_CHANGED');
   });
 
+  test('replay outbox offline devuelve 200 OK inmediatamente si la orden ya está pagada y coincide el importe', async () => {
+    prisma.order.findFirst.mockResolvedValueOnce({
+      id: 'o1',
+      restaurantId: 'r1',
+      locationId: 'loc1',
+      total: 30,
+      paymentStatus: 'PAID',
+      status: 'DELIVERED',
+    });
+    const res = await request(makeApp()).put('/api/orders/o1/payment')
+      .send({ paymentMethod: 'CASH', expectedTotal: 30 });
+    expect(res.status).toBe(200);
+    expect(res.body.paymentStatus).toBe('PAID');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  test('replay outbox offline devuelve 409 si la orden ya está pagada pero difiere el importe', async () => {
+    prisma.order.findFirst.mockResolvedValueOnce({
+      id: 'o1',
+      restaurantId: 'r1',
+      locationId: 'loc1',
+      total: 50,
+      paymentStatus: 'PAID',
+      status: 'DELIVERED',
+    });
+    const res = await request(makeApp()).put('/api/orders/o1/payment')
+      .send({ paymentMethod: 'CASH', expectedTotal: 30 });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('OFFLINE_TOTAL_CHANGED');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   test('rechaza importes esperados negativos', async () => {
     const res = await request(makeApp()).put('/api/orders/o1/payment')
       .send({ paymentMethod: 'CASH', expectedTotal: -1 });
