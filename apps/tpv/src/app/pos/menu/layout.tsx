@@ -1353,30 +1353,34 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
       driverId: string,
     ) => {
       let assigned = 0;
-      try {
-        for (const order of ordersToAssign) {
+      const errors: string[] = [];
+      for (const order of ordersToAssign) {
+        try {
           await api.put("/api/delivery/assign", { orderId: order.id, driverId });
           assigned += 1;
+        } catch (err: any) {
+          const detail =
+            err?.response?.data?.error || err?.message || "fallo desconocido";
+          errors.push(detail);
         }
-        const driverName =
-          deliveryDrivers.find((d) => d.id === driverId)?.name || "repartidor";
+      }
+      const driverName =
+        deliveryDrivers.find((d) => d.id === driverId)?.name || "repartidor";
+      if (assigned > 0) {
         toast.success(
           `${assigned} pedido${assigned === 1 ? "" : "s"} enviado${
             assigned === 1 ? "" : "s"
           } a ${driverName}`,
         );
-      } catch (err: any) {
-        const detail =
-          err?.response?.data?.error || err?.message || "fallo desconocido";
+      }
+      if (errors.length > 0) {
         toast.error(
           assigned > 0
-            ? `${assigned} asignado${assigned === 1 ? "" : "s"}; no se pudo terminar: ${detail}`
-            : `No se pudo asignar repartidor: ${detail}`,
+            ? `${errors.length} pedido${errors.length === 1 ? "" : "s"} no se pudieron asignar (${errors[0]})`
+            : `No se pudo asignar repartidor: ${errors[0]}`,
         );
-        throw err;
-      } finally {
-        await fetchOpenOrders();
       }
+      await fetchOpenOrders();
     },
     [deliveryDrivers, fetchOpenOrders],
   );

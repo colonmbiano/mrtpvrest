@@ -463,7 +463,7 @@ router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_RO
       where: { id: orderId, status: { notIn: NOT_DISPATCHABLE }, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
       data: {
         deliveryDriverId: driverId,
-        status: 'ON_THE_WAY',
+        status: preview.status === 'DELIVERED' ? 'DELIVERED' : 'ON_THE_WAY',
         ...(pendingFee && feeInput ? {
           deliveryFee: feeInput,
           total: { increment: feeInput },
@@ -490,8 +490,10 @@ router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_RO
     }).catch(() => {});
 
     // Avisar al cliente que su pedido va en camino (push + WhatsApp). Best-effort.
-    notifyOrderStatus(order, 'ON_THE_WAY').catch((err) =>
-      console.error('[delivery] notifyOrderStatus:', err.message));
+    if (preview.status !== 'DELIVERED') {
+      notifyOrderStatus(order, 'ON_THE_WAY').catch((err) =>
+        console.error('[delivery] notifyOrderStatus:', err.message));
+    }
 
     res.json(order);
   } catch (e) {
