@@ -185,7 +185,7 @@ NEXT_PUBLIC_TURNSTILE_SITE_KEY=...   # par público de TURNSTILE_SECRET_KEY
 - El token se guarda solo en memoria, nunca en `localStorage`. Se renueva un minuto antes de vencer.
 - Las direcciones se agregan al pedir a domicilio, donde está el mapa para marcar el punto.
 - **Dominio:** el `middleware` de la tienda reescribe cualquier subdominio que no sea de sistema a `/<subdominio>`. Hoy solo pasan tal cual `mrtpvrest.com`, `www` y los demás hosts de sistema. Antes de encender, el marketplace tiene que vivir en uno de ellos, o el `middleware` tiene que conocer su host. `MARKETPLACE_IDENTITY_ORIGIN` debe ser ese origen exacto.
-- **Pruebas:** `tests/client/account.spec.ts` corre contra `tests/client/mock-account.mjs` (`pnpm test:client` ejecuta las dos configuraciones). Cubre registro y validación, verificación (válida, inválida y ya usada), entrada, Mi cuenta con la libreta vía Bearer, quitar una dirección, salida, recuperación de contraseña y `?next` interno. Desde el PR 5 cubre también los avisos, con un service worker de mentira: activar, apagar, dar de baja al salir, permiso bloqueado y sin service worker. Corre en móvil y en escritorio.
+- **Pruebas:** `tests/client/account.spec.ts` corre contra `tests/client/mock-account.mjs` (`pnpm test:client` ejecuta las dos configuraciones). Cubre registro y validación, verificación (válida, inválida y ya usada), entrada, Mi cuenta con la libreta vía Bearer, quitar una dirección, salida, recuperación de contraseña y `?next` interno. Desde el PR 5 cubre también los avisos, con un service worker de mentira: activar, apagar, dar de baja al salir, permiso bloqueado y sin service worker. Desde el PR 6 cubre la app instalable (ver abajo). Corre en móvil y en escritorio.
 
 ### Mis pedidos y seguimiento (PR 3)
 
@@ -229,6 +229,39 @@ En la tienda, `/cuenta/pedidos` (enlazada desde Mi cuenta) lista los pedidos y d
   - Cerrar sesión da de baja este navegador.
   - Sin service worker (desarrollo, copia aislada o vista previa) explica que los avisos son de la app publicada.
   - En iPhone solo funcionan con el sitio agregado a la pantalla de inicio.
+
+### App instalable del marketplace (PR 6)
+
+- **Service worker:** hasta este PR, `/sw.js` nunca se registraba en producción, y sin él no había modo sin conexión ni avisos del PR 5. Había dos fallas:
+  - next-pwa 5.6 solo inyecta su registro en el entry del Pages Router (`main.js`), que el App Router no carga. Ahora lo registra `components/ServiceWorkerRegister.tsx`, montado en la portada, `/cuenta/*` y `/registro/*`. Con scope `/` cubre todo el origen. `next.config.mjs` pasa `register: false` y expone `NEXT_PUBLIC_PWA_ENABLED`, que es `false` en desarrollo, en la copia aislada y en la vista previa, donde no hay `/sw.js`.
+  - La página de respaldo `/_offline` vivía en `app/_offline`. Una carpeta con `_` es privada en el App Router y no genera ruta, así que `/_offline` respondía 404, la precarga fallaba y el service worker se desinstalaba. Ahora vive en `app/%5Foffline`. Sus chunks llevan un `%` literal en el nombre, y `manifestTransforms` lo escapa para que la URL de la precarga apunte al archivo correcto.
+- **Avisos:** `marketplacePush` espera hasta 15 s a que el worker esté activo, porque suscribirse lo pide; en la primera visita todavía está instalando. Sin `/sw.js` responde enseguida.
+- **Manifiesto:** `/marketplace.webmanifest` (`app/marketplace.webmanifest/route.ts`, estático):
+  - Abre en `/`, en modo `standalone`, con íconos `any` y `maskable`.
+  - Con las cuentas encendidas tiene atajos a Mis pedidos y Mi cuenta.
+  - Sin catálogo responde 404.
+  - Solo lo enlazan la portada, `/cuenta/*` y `/registro/*` (`lib/marketplaceApp.ts`, junto con el ícono de Apple). No es `app/manifest.ts` porque Next lo enlazaría también en las páginas de cada tienda.
+- **Íconos:**
+  - `public/icons/*.svg` se convierten a PNG con `node scripts/generate-icons.mjs` (con el `sharp` de Next). Ver `public/icons/README.md`.
+  - También se generan los de respaldo de las tiendas (`icon-192.png`, `icon-512.png`, `apple-touch-icon.png`), que `lib/tenant.ts` ya pedía y no existían.
+  - El `.gitignore` de la raíz ignora `*.png`; se agregó la excepción `apps/client/public/icons/*.png`.
+- **Instalar:**
+  - En la portada, «Instalar app» aparece en la cabecera cuando el navegador lanza `beforeinstallprompt` (Chrome, Edge, Samsung Internet).
+  - En Mi cuenta, «Instala la app» ofrece el mismo botón. En iPhone y iPad explica Compartir → «Agregar a inicio».
+  - Ya instalada no aparece.
+- **Sin conexión:** `/_offline` dice que las páginas ya abiertas siguen disponibles y ofrece «Reintentar».
+- **Subdominios de tienda:** el `middleware` reescribe a `/<slug>` también `/sw.js`, `/icons/*` y `/marketplace.webmanifest`, así que en un subdominio que no es de sistema no hay service worker. Ya pasaba antes de este PR. El marketplace tiene que vivir en un host de sistema (ver **Dominio** arriba).
+- **Pruebas:**
+  - `tests/client/account.spec.ts` (las que empiezan con «app:») cubre:
+    - el manifiesto, sus íconos (tipo y tamaño reales del PNG) y que las tiendas no lo enlazan;
+    - que `/_offline` existe;
+    - el botón de instalar, con un `beforeinstallprompt` simulado;
+    - las instrucciones en iPhone, y que instalada no insiste.
+  - Con `next build` y `next start` locales contra la API simulada, en Chromium:
+    - el worker se activa y la precarga incluye `/_offline` y los íconos;
+    - sin red, una página nunca abierta muestra `/_offline` y la portada ya abierta sale de la caché;
+    - Mi cuenta encuentra el worker.
+  - Lo que no se probó: la suscripción push real, porque el Chromium sin ventana bloquea las notificaciones.
 
 ### Evidencia
 
