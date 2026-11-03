@@ -494,7 +494,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         // de la cola offline (la comanda ya salio a cocina, no hay vuelta
         // atras). En cualquier otro caso devolvemos 409 con la cuenta
         // existente para que el TPV pregunte en vez de encimar.
-        if (req.body.appendToOpenTab === true) {
+        if (req.body.appendToOpenTab === true || req.body.clientOrderId || req.headers['idempotency-key']) {
           if (table.status !== 'OCCUPIED') {
             await prisma.table.update({
               where: { id: tableId },
@@ -1194,11 +1194,27 @@ async function addRoundHandler(req, res) {
     };
     const replay = await replayRound();
     if (replay) return res.json(replay);
-    if (['DELIVERED', 'CANCELLED'].includes(existing.status)) {
-      return res.status(400).json({ error: 'No se pueden agregar ítems a una orden cerrada' });
-    }
-    if (existing.paymentStatus === 'PAID') {
-      return res.status(400).json({ error: 'La orden ya fue pagada' });
+    if (['DELIVERED', 'CANCELLED'].includes(existing.status) || existing.paymentStatus === 'PAID') {
+      if (existing.status === 'CANCELLED') {
+        return res.status(400).json({ error: 'No se pueden agregar ítems a una orden cancelada' });
+      }
+      // Replay idempotente: la orden ya fue entregada o pagada en el servidor.
+      // Si la petición trae clientOrderId o Idempotency-Key (cola offline), retornamos
+      // 200 OK con la orden finalizada para no quebrar la sincronización del TPV.
+      if (clientOrderId || req.headers['idempotency-key']) {
+        const fullOrder = await prisma.order.findUnique({
+          where: { id },
+          include: {
+            items: { include: { menuItem: true, modifiers: true, comboSelections: true } },
+            rounds: { orderBy: { roundNumber: 'asc' } },
+            table: true,
+          },
+        });
+        return res.json(fullOrder || existing);
+      }
+      return res.status(400).json({
+        error: existing.paymentStatus === 'PAID' ? 'La orden ya fue pagada' : 'No se pueden agregar ítems a una orden cerrada',
+      });
     }
 
     // Re-leer precios desde DB (misma lógica de defensa que POST /tpv).
@@ -2006,14 +2022,7 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
     } catch (_) {}
 
     if (existingOrder && existingOrder.paymentStatus === 'PAID') {
-      const matchesTotal = expectedTotal == null || Math.abs(Number(existingOrder.total) - Number(expectedTotal)) < 0.01;
-      if (matchesTotal) {
-        return res.json(existingOrder);
-      }
-      return res.status(409).json({
-        code: 'OFFLINE_TOTAL_CHANGED',
-        error: 'La cuenta cambió de importe, ya fue cobrada o no está disponible. Revisa el cobro local antes de conciliar.',
-      });
+      return res.json(existingOrder);
     }
 
     // Datos del cliente plegados en el cobro: el TPV ya no manda un PUT /details
@@ -2623,7 +2632,22 @@ async function updateOrderDetailsHandler(req, res) {
 
     const existing = await prisma.order.findFirst({ where: { id: req.params.id, restaurantId } });
     if (!existing) return res.status(404).json({ error: 'Orden no encontrada' });
-    if (['DELIVERED', 'CANCELLED'].includes(existing.status)) {
+    if (existing.status === 'CANCELLED') {
+      return res.status(400).json({ error: 'La orden está cancelada' });
+    }
+    if (existing.status === 'DELIVERED' || existing.paymentStatus === 'PAID') {
+      if (req.headers['idempotency-key'] || req.body?.clientOrderId) {
+        try {
+          const updated = await prisma.order.update({
+            where: { id: req.params.id },
+            data,
+            include: ORDER_DETAIL_INCLUDE,
+          });
+          return res.json(updated);
+        } catch (_) {
+          return res.json(existing);
+        }
+      }
       return res.status(400).json({ error: 'No se pueden editar datos de una orden cerrada' });
     }
 

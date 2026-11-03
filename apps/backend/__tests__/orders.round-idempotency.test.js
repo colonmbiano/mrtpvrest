@@ -56,10 +56,17 @@ test.each([{ restaurantId: 'other' }, { locationId: 'other' }])('rejects out-of-
   expect(prisma.orderRound.findUnique).not.toHaveBeenCalled();
 });
 
-test('a different command cannot append to a paid order', async () => {
+test('a different command without clientOrderId cannot append to a paid order', async () => {
+  prisma.orderRound.findUnique.mockResolvedValueOnce(null);
+  const response = await request(app).post('/api/orders/o1/items').send({ items: [{ menuItemId: 'm1', quantity: 1 }] });
+  expect(response.status).toBe(400);
+  expect(prisma.$transaction).not.toHaveBeenCalled();
+});
+
+test('an offline replay command on a paid order acknowledges without new writes', async () => {
   prisma.orderRound.findUnique.mockResolvedValueOnce(null);
   const response = await request(app).post('/api/orders/o1/items').send(payload);
-  expect(response.status).toBe(400);
+  expect(response.status).toBe(200);
   expect(prisma.$transaction).not.toHaveBeenCalled();
 });
 

@@ -103,7 +103,7 @@ describe('PUT /:id/payment · keepStatus', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  test('replay outbox offline devuelve 409 si la orden ya está pagada pero difiere el importe', async () => {
+  test('replay outbox offline devuelve 200 si la orden ya está pagada (evita congelar cola)', async () => {
     prisma.order.findFirst.mockResolvedValueOnce({
       id: 'o1',
       restaurantId: 'r1',
@@ -114,8 +114,8 @@ describe('PUT /:id/payment · keepStatus', () => {
     });
     const res = await request(makeApp()).put('/api/orders/o1/payment')
       .send({ paymentMethod: 'CASH', expectedTotal: 30 });
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe('OFFLINE_TOTAL_CHANGED');
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe('o1');
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
