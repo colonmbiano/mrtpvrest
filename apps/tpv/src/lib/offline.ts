@@ -489,7 +489,7 @@ export async function syncOfflineQueue(opts?: { force?: boolean }) {
           // también las RECHAZADAS (failed): una venta más vieja sin resolver —
           // aunque esté congelada — debe seguir bloqueando el cierre para que el
           // corte no salga antes de que esa venta se concilie (o se descarte).
-          const hasOlderPending = store.queue
+          const hasOlderPending = useOfflineStore.getState().queue
             .some((t) => !t.synced && t.id !== transaction.id && t.timestamp < transaction.timestamp);
           if (hasOlderPending) continue; // reintenta el próximo tick
         }
