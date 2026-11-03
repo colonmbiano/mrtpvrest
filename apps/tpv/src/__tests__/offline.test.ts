@@ -861,4 +861,24 @@ describe("syncOfflineQueue — replay rechazado con 4xx definitivo", () => {
 
     expect(useOfflineStore.getState().queue).toHaveLength(0);
   });
+
+  // Regresión: una venta rechazada (4xx definitivo) NO debe congelar al resto.
+  // Antes, un solo rechazo pausaba todo el replay y la caja acumulaba ventas
+  // "pendientes" que nunca entraban al corte.
+  it("una tx rechazada no congela las ventas independientes detrás", async () => {
+    enqueue("order", "/api/orders/OID/items", "bad-1", 1000);
+    enqueue("order", "/api/orders/tpv", "good-1", 2000);
+    mockApi.post.mockImplementation((path: string) =>
+      path === "/api/orders/OID/items"
+        ? Promise.reject({ response: { status: 409, data: { error: "Conflicto" } } })
+        : Promise.resolve({ data: { id: "server-good", total: 20 } }),
+    );
+
+    await syncOfflineQueue();
+
+    const posted = mockApi.post.mock.calls.map((c) => c[0]);
+    expect(posted).toContain("/api/orders/tpv"); // la independiente SÍ se envió
+    expect(useOfflineStore.getState().getFailedTransactions().map((t) => t.id)).toEqual(["bad-1"]);
+    expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(0);
+  });
 });
