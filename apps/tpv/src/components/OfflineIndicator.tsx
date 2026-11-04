@@ -33,6 +33,15 @@ export default function OfflineIndicator() {
   const queue = useOfflineStore((s) => s.queue);
   const syncInProgress = useOfflineStore((s) => s.syncInProgress);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // El cajero puede ocultar el chip cuando le tapa el menú. Se guarda por equipo
+  // (localStorage) para que siga oculto entre renders. Lo URGENTE lo ignora.
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem("tpv-offline-chip-collapsed") === "1"; } catch { return false; }
+  });
+  const setCollapsedPersist = (v: boolean) => {
+    setCollapsed(v);
+    try { localStorage.setItem("tpv-offline-chip-collapsed", v ? "1" : "0"); } catch { /* conveniencia por equipo */ }
+  };
   const unsynced = queue.filter((tx) => !tx.synced && !tx.failed);
   const failed = queue.filter((tx) => !tx.synced && tx.failed);
   const unsyncedCount = unsynced.length;
@@ -40,6 +49,12 @@ export default function OfflineIndicator() {
   const serverUnavailable =
     isOnline && backendAvailability === "unavailable";
   const needsOnlineAuth = isAuthenticated && !token;
+
+  // URGENTE = algo que el cajero NO debe perderse: sin conexión, servidor caído,
+  // falta PIN para sincronizar, o hay operaciones rechazadas. Esto se muestra
+  // completo aunque el chip esté colapsado; lo benigno (pendientes/sincronizando)
+  // sí respeta el colapso para no tapar el menú.
+  const isUrgent = !isOnline || serverUnavailable || needsOnlineAuth || failedCount > 0;
 
   if (
     isOnline &&
@@ -53,7 +68,7 @@ export default function OfflineIndicator() {
   }
 
   const base =
-    "fixed top-3 right-3 z-[60] flex items-center gap-2 px-3.5 py-2 rounded-full border backdrop-blur-md shadow-lg text-[10px] font-black uppercase tracking-[0.2em] active:scale-95 transition-transform";
+    "flex items-center gap-2 px-3.5 py-2 rounded-full border backdrop-blur-md shadow-lg text-[10px] font-black uppercase tracking-[0.2em] active:scale-95 transition-transform";
 
   const chip = !isOnline || serverUnavailable ? (
     <button
@@ -130,9 +145,37 @@ export default function OfflineIndicator() {
     </button>
   );
 
+  // Colapsado y sin nada urgente → solo un punto diminuto que NO tapa el menú;
+  // al tocarlo se restaura el chip completo. Lo URGENTE ignora el colapso y se
+  // muestra completo siempre.
+  if (collapsed && !isUrgent) {
+    return (
+      <button
+        type="button"
+        onClick={() => setCollapsedPersist(false)}
+        className="fixed top-3 right-3 z-[60] w-6 h-6 rounded-full bg-[var(--brand-soft)] border border-[var(--brand)]/40 shadow flex items-center justify-center opacity-70 active:scale-95"
+        aria-label="Mostrar estado de sincronización"
+      >
+        <span className="block w-2 h-2 rounded-full bg-[var(--brand)]" />
+      </button>
+    );
+  }
+
   return (
     <>
-      {chip}
+      <div className="fixed top-3 right-3 z-[60] flex items-center gap-1.5">
+        {chip}
+        {!isUrgent && (
+          <button
+            type="button"
+            onClick={() => setCollapsedPersist(true)}
+            className="w-6 h-6 rounded-full bg-black/20 border border-white/10 backdrop-blur-md shadow flex items-center justify-center text-white/70 active:scale-95"
+            aria-label="Ocultar indicador"
+          >
+            <X size={12} strokeWidth={2.5} />
+          </button>
+        )}
+      </div>
       {drawerOpen && (
         <PendingDrawer
           unsynced={unsynced}
