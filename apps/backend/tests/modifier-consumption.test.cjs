@@ -37,7 +37,12 @@ function fixture() {
     comboSelection: { findMany: async () => [] },
     recipe: { findMany: async () => [] },
     recipeItem: { findMany: async () => [] },
-    orderItemModifier: { findMany: async () => state.selections },
+    // Like Prisma: honors `orderItemId` (single id or the batched `{ in }`) and
+    // returns it on each row, so per-line grouping in consumePaidOrder is real.
+    orderItemModifier: { findMany: async ({ where }) => state.selections.filter(s => {
+      const f = where?.orderItemId;
+      return f == null || (typeof f === 'object' ? f.in.includes(s.orderItemId) : f === s.orderItemId);
+    }) },
     menuItem: { findMany: async () => [] },
     restaurantConfig: { findUnique: async () => ({ blockOnInsufficientStock: true }) },
     ingredient: {
@@ -49,7 +54,10 @@ function fixture() {
         ing.stock -= data.stock.decrement; return { count: 1 };
       },
     },
-    stockMovement: { create: async ({ data }) => state.movements.push(data) },
+    stockMovement: {
+      create: async ({ data }) => state.movements.push(data),
+      createMany: async ({ data }) => { state.movements.push(...data); return { count: data.length }; },
+    },
     orderItem: { update: async ({ data }) => Object.assign(state.item, data) },
     order: {
       updateMany: async () => ({ count: 1 }),
@@ -69,7 +77,7 @@ test('same name uses product portions, with global fallback but no addition', as
 });
 test('quantity bundles multiply each selected recipe and each sold bundle exactly once', async () => {
   const f = fixture();
-  f.state.selections = [{ modifierId: 'q1', name: '4 Protein' }, { modifierId: 'q2', name: '6 Mix' }];
+  f.state.selections = [{ orderItemId: 'oi', modifierId: 'q1', name: '4 Protein' }, { orderItemId: 'oi', modifierId: 'q2', name: '6 Mix' }];
   const flat = (await resolveOrderLineItems(f.db, f.state.item, 'r')).flatItems;
   assert.equal(flat.filter(i => i.ingredient.id === 'meat').reduce((n, i) => n + i.qtyToConsumePerUnit, 0), 560);
   assert.equal(flat.find(i => i.ingredient.id === 'second').qtyToConsumePerUnit, 240);
