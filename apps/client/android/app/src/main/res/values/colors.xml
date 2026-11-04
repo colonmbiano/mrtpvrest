@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Los mismos colores que /marketplace.webmanifest (theme_color, background_color). -->
+<resources>
+    <color name="colorPrimary">#FF5C35</color>
+    <color name="navigationColor">#FFFFFF</color>
+    <color name="backgroundColor">#F7F9F8</color>
+    <!-- Fondo del ícono adaptable (el verde de public/icons/marketplace-icon.svg). -->
+    <color name="launcherBackground">#14743B</color>
+</resources>

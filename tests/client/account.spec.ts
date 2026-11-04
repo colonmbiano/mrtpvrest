@@ -394,6 +394,22 @@ test('app: la página sin conexión existe y ofrece reintentar', async ({ page }
   await expect(page.getByRole('heading', { name: 'Estás sin conexión' })).toBeVisible();
 });
 
+test('app: Digital Asset Links declara la app Android con sus huellas válidas', async ({ page }) => {
+  // Con esto Chrome abre la app Android a pantalla completa (Trusted Web Activity).
+  const res = await page.request.get('/.well-known/assetlinks.json');
+  expect(res.status()).toBe(200);
+  expect(res.headers()['content-type']).toContain('application/json');
+  expect(await res.json()).toEqual([{
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: {
+      namespace: 'android_app',
+      package_name: 'com.mrtpvrest.marketplace',
+      // En mayúsculas; la que no es una huella SHA-256 se descarta.
+      sha256_cert_fingerprints: ['0A:1B:2C:3D:4E:5F:60:71:82:93:A4:B5:C6:D7:E8:F9:0A:1B:2C:3D:4E:5F:60:71:82:93:A4:B5:C6:D7:E8:F9'],
+    },
+  }]);
+});
+
 // Chromium avisa que la app se puede instalar con `beforeinstallprompt`; las pruebas
 // lo disparan a mano y cuentan las veces que se abre el aviso nativo.
 async function fakeInstallPrompt(page: Page) {
