@@ -1,7 +1,7 @@
 'use client';
 
-// "Mi cuenta": datos del comprador, sus tiendas favoritas y su libreta de
-// direcciones (API v1, con el token de comprador). Las direcciones se agregan al
+// "Mi cuenta": datos del comprador, los avisos de sus pedidos, sus tiendas
+// favoritas y su libreta de direcciones (API v1, con el token de comprador). Las direcciones se agregan al
 // pedir a domicilio, donde está el mapa; las favoritas, desde cada tienda.
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -10,8 +10,11 @@ import { ChevronRight, Heart, LogOut, MapPin, ShoppingBag, UserRound } from 'luc
 import { getMarketplaceApiUrl } from '@/lib/config';
 import { fetchCurrentAccount, getBuyerToken, logout, type MarketplaceAccount } from '@/lib/marketplaceAccount';
 import { listFavorites, setFavorite, type FavoriteStore } from '@/lib/marketplaceFavorites';
+import { disablePush } from '@/lib/marketplacePush';
 import { deleteAddress, listAddresses, type V1Address } from '@/lib/marketplaceV1Checkout';
 import { AccountShell, Notice, outline, secondaryButton, textLink } from './AccountUi';
+import OrderAlerts from './OrderAlerts';
+import { InstallAppSection } from '@/components/MarketplaceInstall';
 
 type Addresses = { state: 'loading' } | { state: 'ready'; list: V1Address[] } | { state: 'error'; message: string };
 type Favorites = { state: 'loading' } | { state: 'ready'; list: FavoriteStore[] } | { state: 'error'; message: string };
@@ -65,6 +68,8 @@ export default function AccountHome() {
 
   const signOut = async () => {
     setLeaving(true);
+    // Antes de cerrar la sesión: este navegador deja de recibir los avisos de la cuenta.
+    await disablePush(apiUrl);
     await logout();
     router.replace('/');
     router.refresh();
@@ -91,6 +96,10 @@ export default function AccountHome() {
       <span className="flex items-center gap-2 text-base font-extrabold text-[#23362b]"><ShoppingBag className="h-5 w-5 text-[#e65b27]" aria-hidden="true" /> Mis pedidos</span>
       <ChevronRight className="h-5 w-5 text-[#7e9182]" aria-hidden="true" />
     </Link>
+
+    <OrderAlerts />
+
+    <InstallAppSection />
 
     <section aria-labelledby="account-favorites" className="mt-7">
       <h2 id="account-favorites" className="flex items-center gap-2 text-base font-extrabold"><Heart className="h-5 w-5 text-[#e65b27]" aria-hidden="true" /> Mis tiendas favoritas</h2>

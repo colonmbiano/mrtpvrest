@@ -26,6 +26,7 @@ const { createMarketplaceOrderOrchestrator, MarketplaceOrderOrchestratorError } 
 const { createMarketplaceV1Payments } = require('./marketplace-v1-payments');
 const { createMarketplaceTrackingService } = require('./marketplace-tracking-v1');
 const { createBuyerAddressBook } = require('./marketplace-buyer-addresses');
+const { createBuyerPushStore } = require('./marketplace-buyer-push');
 const { createMerchantOrderNotifier } = require('./marketplace-v1-notify');
 const { MAX_CENTS } = require('./marketplace-order-money');
 
@@ -449,6 +450,8 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
     buyerOrders,
     // Tiendas favoritas del comprador (routes/marketplace-favorites-v1.routes.js).
     favorites,
+    // Avisos push del comprador (routes/marketplace-push-v1.routes.js).
+    buyerPush: createBuyerPushStore({ prisma }),
     // Directorio y catálogo públicos v1 (routes/marketplace-merchants-v1.routes.js).
     merchantsRepo,
   };

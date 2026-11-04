@@ -178,6 +178,7 @@ app.use('/api/marketplace/v1/quotes', require('./routes/marketplace-quotes.route
 app.use('/api/marketplace/v1/orders', require('./routes/marketplace-orders-v1.routes')())
 app.use('/api/marketplace/v1/addresses', require('./routes/marketplace-addresses-v1.routes')())
 app.use('/api/marketplace/v1/favorites', require('./routes/marketplace-favorites-v1.routes')())
+app.use('/api/marketplace/v1/push', require('./routes/marketplace-push-v1.routes')())
 app.use('/api/marketplace/v1', require('./routes/marketplace-tracking-v1.routes')())
 app.use('/api/marketplace/v1', require('./routes/marketplace-merchants-v1.routes')())
 app.use('/api/marketplace/v1', require('./routes/marketplace-couriers-v1.routes')())

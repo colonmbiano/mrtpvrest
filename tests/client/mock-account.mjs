@@ -59,6 +59,13 @@ const server = createServer(async (req, res) => {
     return send(res, 200, outbox.filter(m => m.email === email && m.purpose === purpose).at(-1) || null);
   }
   if (path === '/__test/health') return send(res, 200, { ok: true });
+  // Solo pruebas: los navegadores suscritos a los avisos de una cuenta.
+  if (path === '/__test/push') return send(res, 200, accounts.get(url.searchParams.get('email'))?.push || []);
+
+  // Llave pública VAPID de ejemplo (la de la documentación de web-push), nunca una real.
+  if (path === '/api/notifications/vapid-public-key') {
+    return send(res, 200, { key: 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U' });
+  }
 
   if (path.startsWith(id) && req.method === 'POST' && req.headers.origin !== ORIGIN) return send(res, 403, { error: 'ORIGIN_FORBIDDEN', code: 'ORIGIN_FORBIDDEN' });
 
@@ -185,6 +192,24 @@ const server = createServer(async (req, res) => {
       return send(res, created ? 201 : 200, { slug, favorite: true });
     }
     if (req.method === 'DELETE') { account.favorites = account.favorites.filter(s => s !== slug); res.writeHead(204); res.end(); return; }
+  }
+
+  // Avisos de los pedidos de la cuenta (solo Bearer).
+  if (path === '/api/marketplace/v1/push' && (req.method === 'PUT' || req.method === 'DELETE')) {
+    const account = bearerOf(req);
+    if (!account) return send(res, 401, { error: 'Inicia sesion para activar los avisos', errorCode: 'INVALID_BUYER_IDENTITY' });
+    const b = await body(req);
+    account.push ||= [];
+    if (req.method === 'PUT') {
+      const endpoint = b.subscription?.endpoint;
+      if (typeof endpoint !== 'string' || !endpoint.startsWith('https://') || !b.subscription?.keys?.p256dh || !b.subscription?.keys?.auth) {
+        return send(res, 400, { error: 'Suscripcion invalida', errorCode: 'INVALID_SUBSCRIPTION' });
+      }
+      if (!account.push.includes(endpoint)) account.push.push(endpoint);
+      return send(res, 200, { subscribed: true });
+    }
+    account.push = account.push.filter(e => e !== b.endpoint);
+    res.writeHead(204); res.end(); return;
   }
 
   // Página de tienda mínima para las pruebas del corazón de favoritas.

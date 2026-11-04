@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Ícono de los avisos en la barra de Android: Android solo usa el canal alfa, así que
+       es la silueta blanca de la tiendita con la puerta calada. -->
+  <g transform="translate(256 260) scale(1.55)" fill="#fff">
+    <path fill-rule="evenodd" d="M-109 -18h218a16 16 0 0 1 16 16v111a16 16 0 0 1-16 16h-218a16 16 0 0 1-16-16v-111a16 16 0 0 1 16-16ZM-35 125V55a12 12 0 0 1 12-12h46a12 12 0 0 1 12 12v70Z"/>
+    <path d="M-150 -130H150V-70a30 30 0 0 1-60 0a30 30 0 0 1-60 0a30 30 0 0 1-60 0a30 30 0 0 1-60 0a30 30 0 0 1-60 0Z"/>
+  </g>
+</svg>
