@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Capa frontal del ícono adaptable: la tiendita sin fondo (el verde lo pone
+       mipmap-anydpi-v26/ic_launcher.xml), dentro del círculo seguro de 66/108. -->
+  <g transform="translate(256 258) scale(0.72)">
+    <rect x="-125" y="-18" width="250" height="143" rx="16" fill="#fff"/>
+    <path d="M-35 125V55a12 12 0 0 1 12-12h46a12 12 0 0 1 12 12v70Z" fill="#14743b"/>
+    <path d="M-150 -130H150V-70a30 30 0 0 1-60 0a30 30 0 0 1-60 0a30 30 0 0 1-60 0a30 30 0 0 1-60 0a30 30 0 0 1-60 0Z" fill="#f15a24"/>
+  </g>
+</svg>

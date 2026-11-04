@@ -11,6 +11,12 @@ const sessions = new Map(); // session -> email
 const links = new Map(); // token -> { email, purpose }
 const outbox = []; // { email, purpose, token } — solo para las pruebas
 const hex = () => randomBytes(32).toString('hex');
+// Tiendas publicadas del simulador (las de "Mis pedidos").
+const STORES = {
+  'tacos-don-pepe': { name: 'Tacos Don Pepe' },
+  'pizzeria-colorines': { name: 'Pizzería Colorines' },
+  'cafe-del-lago': { name: 'Café del Lago' },
+};
 
 function send(res, status, body, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json', ...headers });
@@ -39,7 +45,7 @@ const server = createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', ORIGIN);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key, X-Buyer-Id, X-Guest-Id');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   }
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   const url = new URL(req.url, 'http://localhost');
@@ -53,6 +59,13 @@ const server = createServer(async (req, res) => {
     return send(res, 200, outbox.filter(m => m.email === email && m.purpose === purpose).at(-1) || null);
   }
   if (path === '/__test/health') return send(res, 200, { ok: true });
+  // Solo pruebas: los navegadores suscritos a los avisos de una cuenta.
+  if (path === '/__test/push') return send(res, 200, accounts.get(url.searchParams.get('email'))?.push || []);
+
+  // Llave pública VAPID de ejemplo (la de la documentación de web-push), nunca una real.
+  if (path === '/api/notifications/vapid-public-key') {
+    return send(res, 200, { key: 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U' });
+  }
 
   if (path.startsWith(id) && req.method === 'POST' && req.headers.origin !== ORIGIN) return send(res, 403, { error: 'ORIGIN_FORBIDDEN', code: 'ORIGIN_FORBIDDEN' });
 
@@ -162,6 +175,55 @@ const server = createServer(async (req, res) => {
     return send(res, 200, { orderId: order.orderId, status: order.status, taskStatus: null, origin: null, courierLocation: null,
       isStale: order.status === 'ON_THE_WAY' });
   }
+
+  // Tiendas favoritas (solo Bearer). Solo las tiendas publicadas del simulador.
+  if (path === '/api/marketplace/v1/favorites' || path.startsWith('/api/marketplace/v1/favorites/')) {
+    const account = bearerOf(req);
+    if (!account) return send(res, 401, { error: 'Inicia sesion para guardar tiendas favoritas', errorCode: 'INVALID_BUYER_IDENTITY' });
+    account.favorites ||= [];
+    if (req.method === 'GET' && path === '/api/marketplace/v1/favorites') {
+      return send(res, 200, { merchants: account.favorites.map(slug => ({ slug, name: STORES[slug].name, logo: null, open: true, addedAt: '2026-11-02T10:00:00.000Z' })) });
+    }
+    const slug = decodeURIComponent(path.slice('/api/marketplace/v1/favorites/'.length));
+    if (req.method === 'PUT') {
+      if (!STORES[slug]) return send(res, 404, { error: 'Tienda no encontrada', errorCode: 'MERCHANT_NOT_FOUND' });
+      const created = !account.favorites.includes(slug);
+      if (created) account.favorites.unshift(slug);
+      return send(res, created ? 201 : 200, { slug, favorite: true });
+    }
+    if (req.method === 'DELETE') { account.favorites = account.favorites.filter(s => s !== slug); res.writeHead(204); res.end(); return; }
+  }
+
+  // Avisos de los pedidos de la cuenta (solo Bearer).
+  if (path === '/api/marketplace/v1/push' && (req.method === 'PUT' || req.method === 'DELETE')) {
+    const account = bearerOf(req);
+    if (!account) return send(res, 401, { error: 'Inicia sesion para activar los avisos', errorCode: 'INVALID_BUYER_IDENTITY' });
+    const b = await body(req);
+    account.push ||= [];
+    if (req.method === 'PUT') {
+      const endpoint = b.subscription?.endpoint;
+      if (typeof endpoint !== 'string' || !endpoint.startsWith('https://') || !b.subscription?.keys?.p256dh || !b.subscription?.keys?.auth) {
+        return send(res, 400, { error: 'Suscripcion invalida', errorCode: 'INVALID_SUBSCRIPTION' });
+      }
+      if (!account.push.includes(endpoint)) account.push.push(endpoint);
+      return send(res, 200, { subscribed: true });
+    }
+    account.push = account.push.filter(e => e !== b.endpoint);
+    res.writeHead(204); res.end(); return;
+  }
+
+  // Página de tienda mínima para las pruebas del corazón de favoritas.
+  const storeSlug = url.searchParams.get('r');
+  if (path === '/api/store/info' && STORES[storeSlug]) {
+    return send(res, 200, { id: 'r-' + storeSlug, slug: storeSlug, name: STORES[storeSlug].name, hasWebStore: true, isOpen: true,
+      primaryColor: '#a73520', currency: 'MXN', currencyLocale: 'es-MX' });
+  }
+  if (path === '/api/store/menu' && STORES[storeSlug]) {
+    return send(res, 200, { categories: [{ id: 'c1', name: 'Menú', items: [
+      { id: 'm1', name: 'Tacos al pastor', description: 'Con piña y cilantro.', price: 20 },
+      { id: 'm4', name: 'Capuchino', description: 'Café con leche espumada.', price: 45 }] }] });
+  }
+  if (path === '/api/store/locations') return send(res, 200, []);
 
   // Catálogo vacío para la portada.
   if (path === '/api/marketplace/stores' || path === '/api/marketplace/products') return send(res, 200, { items: [], page: 1, pageSize: 12, total: 0 });

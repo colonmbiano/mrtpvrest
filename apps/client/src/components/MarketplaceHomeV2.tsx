@@ -8,6 +8,7 @@ import {
 import ScrollToHash from '@/components/ScrollToHash';
 import { isMarketplaceAccountsEnabled } from '@/lib/config';
 import MarketplaceCartShortcut from '@/components/MarketplaceCartShortcut';
+import { InstallAppButton } from '@/components/MarketplaceInstall';
 import { productEmoji } from '@/lib/productEmoji';
 import {
   BUSINESS_TYPE_LABELS, MAX_QUERY_LENGTH, catalogHref, catalogSearchParams,
@@ -97,6 +98,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
             </div>
 
             <nav aria-label="Accesos principales" className="flex items-center gap-2 sm:gap-5">
+              {!readOnly && !isolated && <InstallAppButton className={'inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-[#d5e6da] px-3 py-2 text-sm font-bold text-[#176c42] hover:bg-[#f0faf2] disabled:opacity-60 ' + focus} />}
               <a href="#tiendas" className={'hidden items-center gap-2 text-sm font-semibold text-[#374e45] hover:text-[#e65320] lg:flex ' + focus}>
                 <Store className="h-5 w-5" aria-hidden="true" /> Tiendas
               </a>

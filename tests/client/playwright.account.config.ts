@@ -18,7 +18,9 @@ export default defineConfig({
   webServer: [
     { command: 'node tests/client/mock-account.mjs', cwd: '../..', url: 'http://127.0.0.1:4328/__test/health', reuseExistingServer: false },
     { command: 'node node_modules/next/dist/bin/next dev --port 4327 --hostname 127.0.0.1 --webpack',
-      env: { NEXT_PUBLIC_API_URL: 'http://127.0.0.1:4328', NEXT_PUBLIC_MARKETPLACE_CATALOG: 'true', NEXT_PUBLIC_MARKETPLACE_ACCOUNTS: 'true' },
+      env: { NEXT_PUBLIC_API_URL: 'http://127.0.0.1:4328', NEXT_PUBLIC_MARKETPLACE_CATALOG: 'true', NEXT_PUBLIC_MARKETPLACE_ACCOUNTS: 'true',
+        // Huellas de prueba de la app Android (/.well-known/assetlinks.json); la segunda no es válida.
+        MARKETPLACE_ANDROID_CERT_SHA256: '0a:1b:2c:3d:4e:5f:60:71:82:93:a4:b5:c6:d7:e8:f9:0a:1b:2c:3d:4e:5f:60:71:82:93:a4:b5:c6:d7:e8:f9, no-es-huella' },
       cwd: '../../apps/client', url: 'http://127.0.0.1:4327/cuenta/entrar', timeout: 180_000, reuseExistingServer: false },
   ],
 });
