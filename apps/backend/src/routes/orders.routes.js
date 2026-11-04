@@ -1997,9 +1997,9 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
     const { paymentMethod, payments, tip, keepStatus, expectedTotal } = req.body;
     const now = new Date();
 
-    // Replay idempotente del outbox offline: si la orden ya fue cobrada y el importe
-    // coincide con lo esperado, devolver 200 OK inmediatamente sin abrir $transaction
-    // (evita timeouts en PgBouncer y desbloquea las operaciones encoladas en el TPV).
+    // Replay idempotente del outbox offline: si la orden ya fue cobrada, devolver
+    // 200 OK inmediatamente sin abrir $transaction (evita timeouts en PgBouncer y
+    // desbloquea las operaciones encoladas en el TPV).
     let existingOrder = null;
     try {
       existingOrder = await prisma.order.findFirst({
@@ -2008,6 +2008,7 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
           id: true,
           restaurantId: true,
           locationId: true,
+          source: true,
           total: true,
           status: true,
           paymentStatus: true,
@@ -2020,6 +2021,13 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
         },
       });
     } catch (_) {}
+
+    // Marketplace ANTES del atajo de replay: un pedido sin aceptar o ya pagado en
+    // línea responde 409 (no 200), para que la caja no lo dé por cobrado ni le
+    // cobre otra vez al cliente. La transacción de abajo lo re-verifica contra la
+    // lectura dentro de la tx (carreras entre esta lectura y el cobro).
+    const preChargeLocked = marketplaceChargeBlock(existingOrder);
+    if (preChargeLocked) return sendBlock(res, preChargeLocked);
 
     if (existingOrder && existingOrder.paymentStatus === 'PAID') {
       return res.json(existingOrder);

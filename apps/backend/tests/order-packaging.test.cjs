@@ -50,6 +50,8 @@ function fixture(orderType = 'TAKEOUT') {
     stockMovement: {
       findMany: async ({ where }) => state.movements.filter(i => matches(i, where)).map(i => ({ ...i })),
       create: async ({ data }) => { const row = { id: `move-${state.movements.length}`, ...data }; state.movements.push(row); return row; },
+      // consumePaidOrder inserts all SALE movements of an order in one batch.
+      createMany: async ({ data }) => { for (const d of data) state.movements.push({ id: `move-${state.movements.length}`, ...d }); return { count: data.length }; },
     },
     recipe: { findMany: async ({ where }) => [{ id: where.menuItemId === 'extra' ? 'extraRecipe' : 'recipe', variantId: null }] },
     recipeItem: { findMany: async ({ where }) => (where.recipeId === 'extraRecipe' ? state.ingredients.filter(i => i.id === 'tray') : state.ingredients.slice(0, 3)).map(i => ({ ingredientId: i.id, ingredient: i, quantity: i.id === 'food' ? 100 : 1, recipeId: 'recipe' })) },

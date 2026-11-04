@@ -139,8 +139,12 @@ describe('PUT /:id/payment · cobro mixto', () => {
     expect(res.status).toBe(200);
     expect(res.body.paymentMethod).toBe('CASH');
     expect(res.body.cashCollected).toBe(true);
-    // Sin renglones: no se re-lee la orden ni se escriben payment_transactions.
-    expect(prisma.order.findFirst).not.toHaveBeenCalled();
+    // Sin renglones: solo la lectura previa del replay idempotente (¿ya pagada?);
+    // no se re-lee el total para validar renglones ni se escriben
+    // payment_transactions.
+    expect(prisma.order.findFirst).toHaveBeenCalledTimes(1);
+    expect(prisma.order.findFirst.mock.calls[0][0].select.paymentStatus).toBe(true);
+    expect(tx.paymentTransaction.deleteMany).not.toHaveBeenCalled();
     expect(tx.paymentTransaction.createMany).not.toHaveBeenCalled();
   });
 
