@@ -1,0 +1,99 @@
+import groovy.json.JsonOutput
+
+plugins {
+    id 'com.android.application'
+}
+
+// App Android del marketplace: una Trusted Web Activity que abre la PWA publicada
+// (apps/client) en Chrome a pantalla completa. No lleva copia del sitio: la sesión, el
+// modo sin conexión y los avisos del pedido son los de la web.
+//
+// La URL no está fija en el repo porque el dominio del marketplace aún no se decide.
+// Se pasa con -PmarketplaceUrl=https://…, con MARKETPLACE_URL o con marketplaceUrl en
+// local.properties. Para probar con `adb reverse` se acepta http://localhost:<puerto>.
+def localProperties = new Properties()
+def localFile = rootProject.file('local.properties')
+if (localFile.exists()) localFile.withInputStream { localProperties.load(it) }
+def marketplaceUrl = (findProperty('marketplaceUrl') ?: System.getenv('MARKETPLACE_URL')
+        ?: localProperties.getProperty('marketplaceUrl'))?.toString()?.trim()
+if (!marketplaceUrl) {
+    throw new GradleException('Falta la URL del marketplace: -PmarketplaceUrl=https://… '
+            + '(o MARKETPLACE_URL, o marketplaceUrl en local.properties).')
+}
+def marketplace = new URI(marketplaceUrl)
+def local = marketplace.scheme == 'http' && marketplace.host in ['localhost', '127.0.0.1']
+def originOnly = marketplace.host && !marketplace.userInfo && !marketplace.query && !marketplace.fragment
+        && (!marketplace.path || marketplace.path == '/')
+if (!originOnly || !(marketplace.scheme == 'https' && marketplace.port == -1 || local)) {
+    throw new GradleException("marketplaceUrl debe ser un origen https, sin puerto ni ruta: ${marketplaceUrl}")
+}
+def origin = "${marketplace.scheme}://${marketplace.host}${marketplace.port == -1 ? '' : ':' + marketplace.port}"
+// Digital Asset Links: la app declara el sitio; el sitio la declara a ella en
+// /.well-known/assetlinks.json (MARKETPLACE_ANDROID_CERT_SHA256 en la tienda).
+def assetStatements = JsonOutput.toJson([[
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target  : [namespace: 'web', site: origin],
+]])
+
+android {
+    namespace 'com.mrtpvrest.marketplace'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.mrtpvrest.marketplace'
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName '1.0.0'
+
+        resValue 'string', 'launchUrl', origin + '/'
+        resValue 'string', 'hostName', marketplace.host
+        resValue 'string', 'webManifestUrl', origin + '/marketplace.webmanifest'
+        // Dentro de un recurso de texto de Android las comillas van escapadas.
+        resValue 'string', 'assetStatements', assetStatements.replace('"', '\\"')
+        resValue 'string', 'providerAuthority', 'com.mrtpvrest.marketplace.fileprovider'
+    }
+
+    buildFeatures {
+        resValues true
+    }
+
+    // Firma de release, igual que el TPV y el repartidor: variables de entorno del CI
+    // (KEYSTORE_PATH, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) o gradle.properties
+    // locales. Sin llave el release queda sin firmar y no se puede publicar.
+    signingConfigs {
+        release {
+            def ksPath = System.getenv('KEYSTORE_PATH') ?: project.findProperty('MRTPV_KEYSTORE_PATH')
+            def ksPassword = System.getenv('KEYSTORE_PASSWORD') ?: project.findProperty('MRTPV_KEYSTORE_PASSWORD')
+            def alias = System.getenv('KEY_ALIAS') ?: project.findProperty('MRTPV_KEY_ALIAS')
+            def keyPass = System.getenv('KEY_PASSWORD') ?: project.findProperty('MRTPV_KEY_PASSWORD')
+
+            if (ksPath && file(ksPath).exists() && ksPassword && alias && keyPass) {
+                storeFile file(ksPath)
+                storePassword ksPassword
+                keyAlias alias
+                keyPassword keyPass
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+            def cfg = signingConfigs.release
+            if (cfg.storeFile != null) {
+                signingConfig cfg
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4'
+}

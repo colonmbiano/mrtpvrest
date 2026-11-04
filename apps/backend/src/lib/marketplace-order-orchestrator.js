@@ -252,7 +252,25 @@ function createMarketplaceOrderOrchestrator({ quoteStore, prismaClient, merchant
       }
     }
   }
-  return { createOrder };
+  // Mis pedidos: los códigos de recoger y entregar de una orden activa, solo para la
+  // cuenta dueña (la de la cotización que se volvió esta orden). Son los mismos que
+  // devolvió la orden: se derivan de la clave y se comprueban contra sus hashes.
+  async function codesForAccount({ accountId, orderId } = {}) {
+    check(text(accountId) && !accountId.startsWith('guest:') && text(orderId), 'ORDER_NOT_FOUND', 'Orden no encontrada', 404);
+    check(prismaClient, 'ORDERS_UNAVAILABLE', 'Ordenes no disponibles', 503);
+    const owned = await prismaClient.marketplaceQuote.findFirst({ where: { orderId, accountId }, select: { id: true } });
+    check(owned, 'ORDER_NOT_FOUND', 'Orden no encontrada', 404);
+    const row = await prismaClient.marketplaceOrderPipeline.findFirst({ where: { orderId },
+      select: { pinKeyId: true, pickupPinHash: true, deliveryPinHash: true, order: { select: { id: true, source: true, status: true } } } });
+    check(row?.order?.id === orderId && row.order.source === 'MARKETPLACE', 'ORDER_NOT_FOUND', 'Orden no encontrada', 404);
+    // Entregada o cancelada: el código ya no sirve y no se vuelve a mostrar.
+    check(!['DELIVERED', 'CANCELLED'].includes(row.order.status), 'ORDER_CLOSED', 'La orden ya termino', 409);
+    const c = credentials(orderId, accountId, row.pinKeyId);
+    check(hashPin(c.pickupPin) === row.pickupPinHash && hashPin(c.deliveryPin) === row.deliveryPinHash,
+      'PIN_KEY_UNAVAILABLE', 'Clave original de PIN no disponible', 503);
+    return { orderId, pickupPin: c.pickupPin, deliveryPin: c.deliveryPin };
+  }
+  return { createOrder, codesForAccount };
 }
 
 module.exports = { MarketplaceOrderOrchestratorError, createMarketplaceOrderOrchestrator };

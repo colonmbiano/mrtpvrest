@@ -5,6 +5,7 @@ const axios = require('axios');
 const { resolveConfig, sendText } = require('./whatsapp-bot/provider');
 const { toWhatsappNumber } = require('@mrtpvrest/config/phone');
 const { createStoreDeliveryPin, customerPinText } = require('../lib/store-delivery-pin');
+const { buyerAccountForOrder, buyerPushUser } = require('../lib/marketplace-buyer-push');
 
 // Código de entrega del pedido propio a domicilio (STORE_DELIVERY_PIN_MODE).
 const storeDeliveryPin = createStoreDeliveryPin();
@@ -216,6 +217,14 @@ async function notifyOrderStatus(order, status) {
     data: { orderId: order.id, url: `/pedido/${order.id}` }
   });
   if (order.userId) await sendPushToUser(order.userId, { title: msg.title, body: text, tag: order.id, data: { url: `/pedido/${order.id}` } });
+  // Marketplace: la cuenta del comprador dueña del pedido (app del cliente). Sin
+  // códigos en el aviso: se ven en la pantalla bloqueada; están en Mis pedidos.
+  if (PUSH_ENABLED && order.source === 'MARKETPLACE') {
+    try {
+      const accountId = await buyerAccountForOrder(prisma, order);
+      if (accountId) await sendPushToUser(buyerPushUser(accountId), { title: msg.title, body: text, tag: order.id, data: { url: '/cuenta/pedidos' } });
+    } catch (e) { console.error('Push comprador error:', e.message); }
+  }
   // WhatsApp — con la config propia del restaurante y su nombre real.
   const phone = order.customerPhone || order.user?.phone;
   if (phone) {
