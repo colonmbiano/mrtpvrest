@@ -1,0 +1,25 @@
+# Compilados
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Gradle y Android Studio
+.gradle/
+build/
+app/build/
+.idea/
+*.iml
+captures/
+.navigation/
+.cxx/
+*.hprof
+*.log
+
+# Local de cada máquina: ruta del SDK y la URL de prueba (marketplaceUrl)
+local.properties
+
+# La llave de firma nunca va al repo
+*.jks
+*.keystore

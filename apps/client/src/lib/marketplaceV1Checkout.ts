@@ -5,6 +5,15 @@
 // carrito con esas opciones no puede usar este camino.
 import type { CartLine } from './cartStore';
 import { getOrCreateGuestId, isGuestId, randomHexId } from './guestIdentity';
+import { getBuyerToken } from './marketplaceAccount';
+
+// Con sesión de cuenta, el comprador viaja como Bearer y la cotización, la orden y la
+// libreta quedan en su cuenta. Sin sesión (o con las cuentas apagadas), como invitado
+// de este navegador. `guestHeaders`: las cabeceras de invitado de cada endpoint.
+async function buyerHeaders(fetchImpl: FetchLike, guestHeaders: Record<string, string>): Promise<Record<string, string>> {
+  const token = await getBuyerToken({ fetchImpl });
+  return token ? { Authorization: `Bearer ${token}` } : guestHeaders;
+}
 
 const KEY_RE = /^[A-Za-z0-9_-]{32,128}$/;
 const PHONE_RE = /^\+?[0-9 ()-]{7,25}$/;
@@ -164,15 +173,15 @@ async function post(apiUrl: string | null, path: string, body: unknown, key: str
   if (!apiUrl) return failure('config', 'El pedido no está disponible en este entorno.');
   if (!KEY_RE.test(key)) return failure('rejected', 'Clave de solicitud inválida.');
   if (!isGuestId(guestId)) return failure('rejected', 'Identificador de sesión inválido.');
+  // La orden solo acepta X-Buyer-Id (no X-Guest-Id); ambos llevan el mismo id de
+  // invitado, así la orden consume la cotización de la misma sesión.
+  const buyer = await buyerHeaders(fetchImpl, { 'X-Guest-Id': guestId, 'X-Buyer-Id': guestId });
   let res: Response;
   try {
     res = await fetchImpl(`${apiUrl}${path}`, {
       method: 'POST',
       cache: 'no-store',
-      // La orden solo acepta X-Buyer-Id (no X-Guest-Id); ambos llevan el mismo id de
-      // invitado, así la orden consume la cotización de la misma sesión.
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'Idempotency-Key': key,
-        'X-Guest-Id': guestId, 'X-Buyer-Id': guestId },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'Idempotency-Key': key, ...buyer },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(10000),
     });
@@ -274,10 +283,11 @@ async function addressRequest(apiUrl: string | null, path: string, init: Request
   guestId: string): Promise<{ ok: true; status: number; json: unknown } | V1Failure> {
   if (!apiUrl) return failure('config', 'Las direcciones no están disponibles en este entorno.');
   if (!isGuestId(guestId)) return failure('rejected', 'Identificador de sesión inválido.');
+  const buyer = await buyerHeaders(fetchImpl, { 'X-Buyer-Id': guestId });
   let res: Response;
   try {
     res = await fetchImpl(`${apiUrl}/api/marketplace/v1/addresses${path}`, { ...init, cache: 'no-store',
-      headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}), 'X-Buyer-Id': guestId },
+      headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...buyer },
       signal: AbortSignal.timeout(8000) });
   } catch {
     return failure('unavailable', 'No pudimos conectar. Intenta de nuevo.');

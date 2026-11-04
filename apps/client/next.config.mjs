@@ -6,17 +6,27 @@ const isDev = process.env.NODE_ENV === 'development';
 // ni respuestas de API en el perfil de navegador de pruebas.
 const isMarketplaceIsolated = process.env.NEXT_PUBLIC_MARKETPLACE_ISOLATED === 'true';
 const isMarketplacePreviewDemo = process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_GIT_COMMIT_REF === 'feature/marketplace-hibrido';
+const pwaDisabled = isDev || isMarketplaceIsolated || isMarketplacePreviewDemo;
 
 const withPWA = nextPwa({
   dest: 'public',
-  register: true,
+  // next-pwa 5.6 inyecta su registro solo en el entry del Pages Router (main.js),
+  // que el App Router no carga: /sw.js lo registra ServiceWorkerRegister.
+  register: false,
   skipWaiting: true,
-  disable: isDev || isMarketplaceIsolated || isMarketplacePreviewDemo,
+  disable: pwaDisabled,
   // Excluir manifests dinámicos del precache (cada tenant tiene el suyo).
   buildExcludes: [/middleware-manifest\.json$/, /\/[^/]+\/manifest\.webmanifest$/],
   fallbacks: {
     document: '/_offline',
   },
+  // La ruta /_offline vive en la carpeta `app/%5Foffline`, y sus chunks quedan con
+  // un `%` literal en el nombre. Sin escaparlo, la URL de la precarga apunta a otro
+  // archivo (500), la instalación falla y no queda service worker.
+  manifestTransforms: [async (entries) => ({
+    manifest: entries.map((entry) => ({ ...entry, url: entry.url.replace(/%/g, '%25') })),
+    warnings: [],
+  })],
   runtimeCaching: [
     {
       urlPattern: ({ request }) => request.mode === 'navigate',
@@ -95,7 +105,9 @@ const securityHeaders = [
       // *.tile.openstreetmap.org: tiles del mapa selector de ubicación (MapLocationPicker)
       "img-src 'self' https://res.cloudinary.com https://*.cloudinary.com https://*.tile.openstreetmap.org data: blob:",
       // cdnjs.cloudflare.com: librería Leaflet del selector de ubicación
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.vercel.app https://cdnjs.cloudflare.com",
+      // challenges.cloudflare.com: captcha Turnstile del registro de la cuenta de cliente
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.vercel.app https://cdnjs.cloudflare.com https://challenges.cloudflare.com",
+      "frame-src https://challenges.cloudflare.com",
       "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
       "font-src 'self' https://fonts.gstatic.com data:",
       "connect-src 'self' https://*.mrtpvrest.com https://*.railway.app https://res.cloudinary.com",
@@ -108,6 +120,8 @@ const securityHeaders = [
 const nextConfig = {
   poweredByHeader: false,
   typescript: { ignoreBuildErrors: true },
+  // Para ServiceWorkerRegister y los avisos: hay /sw.js solo si next-pwa lo generó.
+  env: { NEXT_PUBLIC_PWA_ENABLED: String(!pwaDisabled) },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'res.cloudinary.com' },

@@ -369,6 +369,7 @@ model Restaurant {
   payrollItems        PayrollItem[]
   employeeCharges     EmployeeCharge[]
   botUsageEvents      BotUsageEvent[]
+  marketplaceFavorites MarketplaceFavorite[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -5107,6 +5108,20 @@ model MarketplaceWebhookEvent {
 // invitado "guest:<hash>"), así solo quien guardó la dirección la ve y la usa.
 // Las filas no se editan: la cotización y la orden leen la misma dirección, y
 // cambiarla entre ambas movería un envío ya cotizado. fingerprint = sha256 de
+// Tiendas favoritas del comprador del marketplace (app del cliente). Como la libreta,
+// es del comprador, no de un tenant: la tienda va en merchantId, no en restaurantId.
+model MarketplaceFavorite {
+  id         String     @id @default(uuid())
+  accountId  String     @db.VarChar(64)
+  merchantId String
+  merchant   Restaurant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  createdAt  DateTime   @default(now()) @db.Timestamptz(3)
+
+  @@unique([accountId, merchantId])
+  @@index([accountId, createdAt])
+  @@map("marketplace_favorites")
+}
+
 // [dirección, lat, lng]: guardar la misma dirección otra vez reutiliza la fila.
 // Es del comprador, no de un tenant: no lleva restaurantId.
 model MarketplaceBuyerAddress {

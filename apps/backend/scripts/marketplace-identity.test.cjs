@@ -230,3 +230,129 @@ test('HTTP routes require exact Origin and keep bearer JWT distinct from buyer c
   assert.equal((await request(app).post(path+'/logout').set('Origin',origin).set('Cookie',rawCookie)).status,200);
   assert.equal((await request(app).get(path+'/me').set('Cookie',rawCookie)).status,401);
 });
+
+// ── Cuenta del comprador en producción y emisor del token (app del cliente) ──
+
+test('mount rules: off by default, staging unchanged, production only with full config', () => {
+  const { resolveIdentityMount } = require('../src/lib/marketplace-identity-mount');
+  const secret = 'b'.repeat(40);
+  const prod = { MARKETPLACE_IDENTITY_ENABLED: 'true', MARKETPLACE_IDENTITY_MODE: 'production',
+    RESEND_API_KEY: 're_x', TURNSTILE_SECRET_KEY: 'ts_x', MARKETPLACE_IDENTITY_ORIGIN: 'https://client.mrtpvrest.com',
+    MARKETPLACE_BUYER_JWT_SECRET: secret, JWT_SECRET: 'store-secret' };
+  assert.deepEqual(resolveIdentityMount({}), { mount: false });
+  assert.deepEqual(resolveIdentityMount({ ...prod, MARKETPLACE_IDENTITY_ENABLED: 'false' }), { mount: false });
+  assert.deepEqual(resolveIdentityMount(prod), { mount: true, mode: 'production', roles: ['BUYER'] });
+  assert.equal(resolveIdentityMount({ ...prod, MARKETPLACE_IDENTITY_ORIGIN: 'https://mrtpvrest.com' }).mount, true);
+  // Sin configuración completa no se monta, y no detiene el arranque.
+  const off = resolveIdentityMount({ MARKETPLACE_IDENTITY_ENABLED: 'true', MARKETPLACE_IDENTITY_MODE: 'production' });
+  assert.equal(off.mount, false);
+  assert.deepEqual(off.missing, ['RESEND_API_KEY', 'TURNSTILE_SECRET_KEY', 'MARKETPLACE_IDENTITY_ORIGIN', 'MARKETPLACE_BUYER_JWT_SECRET']);
+  for (const origin of ['https://evil.example.com', 'http://client.mrtpvrest.com', 'https://client.mrtpvrest.com/',
+    'https://client.mrtpvrest.com/app', 'https://mrtpvrest.com.evil.io', 'https://u:p@client.mrtpvrest.com']) {
+    assert.deepEqual(resolveIdentityMount({ ...prod, MARKETPLACE_IDENTITY_ORIGIN: origin }).missing, ['MARKETPLACE_IDENTITY_ORIGIN'], origin);
+  }
+  // La clave del comprador no puede ser la de la tienda ni corta.
+  const shared = 'store-secret'.padEnd(40, 'x');
+  assert.deepEqual(resolveIdentityMount({ ...prod, MARKETPLACE_BUYER_JWT_SECRET: shared, JWT_SECRET: shared }).missing,
+    ['MARKETPLACE_BUYER_JWT_SECRET']);
+  assert.deepEqual(resolveIdentityMount({ ...prod, MARKETPLACE_BUYER_JWT_SECRET: 'corta' }).missing, ['MARKETPLACE_BUYER_JWT_SECRET']);
+  // staging conserva sus barreras y detiene el arranque si están mal.
+  assert.throws(() => resolveIdentityMount({ ...prod, MARKETPLACE_IDENTITY_MODE: 'staging', DATABASE_URL: 'postgresql://h/prod' }), /isolated staging/);
+  assert.deepEqual(resolveIdentityMount({ ...prod, MARKETPLACE_IDENTITY_MODE: 'staging', DATABASE_URL: 'postgresql://h/marketplace_staging' }),
+    { mount: true, mode: 'staging', roles: null });
+  assert.throws(() => resolveIdentityMount({ ...prod, MARKETPLACE_IDENTITY_MODE: 'prod' }), /staging or production/);
+  // Ningún resultado lleva valores de variables.
+  assert.ok(!JSON.stringify(resolveIdentityMount({ ...prod, MARKETPLACE_BUYER_JWT_SECRET: 'corta' })).includes('corta'));
+});
+
+function identityApp(x, { origin, roles = null, env } = {}) {
+  const express = require('express');
+  const { createMarketplaceIdentityRouter } = require('../src/routes/marketplace-identity.routes');
+  const { signMarketplaceToken } = require('../src/lib/marketplace-jwt');
+  const app = express();
+  app.use(express.json());
+  app.use('/api/marketplace/identity', createMarketplaceIdentityRouter({
+    prisma: x.prisma, sendEmail: async (to, subject, html) => x.emails.push({ to, subject, html }),
+    origin, roles, captchaCheck: async () => ({ ok: true }),
+    signBuyerToken: (claims, opts) => signMarketplaceToken('buyer', claims, { env, ...opts }),
+  }));
+  return app;
+}
+
+test('production router: only buyer accounts, no merchant or courier applications', async () => {
+  const request = require('supertest');
+  const x = fixture(); const origin = 'https://client.mrtpvrest.com'; const path = '/api/marketplace/identity';
+  const app = identityApp(x, { origin, roles: ['BUYER'], env: {} });
+  const rejected = await request(app).post(path + '/register').set('Origin', origin).send(merchant);
+  assert.equal(rejected.status, 400); assert.equal(rejected.body.code, 'INVALID_SIGNUP');
+  assert.equal(x.accounts.length, 0); assert.equal(x.emails.length, 0);
+  assert.equal((await request(app).post(path + '/applications').set('Origin', origin).send({ role: 'MERCHANT' })).status, 404);
+  await failCode(() => createMarketplaceIdentityService({ prisma: x.prisma, sendEmail: async () => {},
+    publicOrigin: origin, roles: ['BUYER'] }).register(courier), 'INVALID_SIGNUP');
+});
+
+test('token endpoint issues a short buyer JWT that the v1 APIs accept, only from a live session', async () => {
+  const request = require('supertest');
+  const jwt = require('jsonwebtoken');
+  const { createBuyerAccountResolver } = require('../src/lib/marketplace-buyer-identity');
+  const env = { MARKETPLACE_BUYER_JWT_SECRET: 'c'.repeat(48), JWT_SECRET: 'store-secret-for-tests' };
+  const x = fixture(); const origin = 'https://client.mrtpvrest.com'; const path = '/api/marketplace/identity';
+  const app = identityApp(x, { origin, roles: ['BUYER'], env });
+
+  assert.equal((await request(app).post(path + '/register').set('Origin', origin).send(buyer)).status, 202);
+  assert.ok(x.emails[0].html.includes(origin + '/registro/verificar#token='));
+  const raw = extractToken(x.emails[0].html);
+  assert.equal((await request(app).post(path + '/verify-email').set('Origin', origin).send({ token: raw })).status, 200);
+  assert.equal((await request(app).post(path + '/token').set('Origin', origin)).status, 401);
+  const login = await request(app).post(path + '/login').set('Origin', origin).send({ email: buyer.email, password: buyer.password });
+  const cookie = login.headers['set-cookie'][0].split(';')[0];
+  assert.match(cookie, /^__Host-mrtpv_market=[a-f0-9]{64}$/);
+
+  // Sin Origin, o desde otro sitio, no hay token aunque llegue la cookie.
+  assert.equal((await request(app).post(path + '/token').set('Cookie', cookie)).status, 403);
+  assert.equal((await request(app).post(path + '/token').set('Cookie', cookie).set('Origin', 'https://evil.example.com')).status, 403);
+
+  const issued = await request(app).post(path + '/token').set('Cookie', cookie).set('Origin', origin);
+  assert.equal(issued.status, 200);
+  assert.equal(issued.headers['cache-control'], 'no-store');
+  assert.equal(issued.body.tokenType, 'Bearer'); assert.equal(issued.body.expiresIn, 900);
+  const claims = jwt.decode(issued.body.token);
+  assert.equal(claims.iss, 'mrtpvrest-marketplace'); assert.equal(claims.aud, 'mrtpvrest-marketplace-buyer');
+  assert.equal(claims.role, 'BUYER'); assert.equal(claims.accountId, x.accounts[0].id);
+  assert.equal(claims.exp - claims.iat, 900);
+  assert.ok(!issued.body.token.includes(cookie.split('=')[1]), 'the JWT never carries the session');
+
+  // El verificador de direcciones, cotización y orden v1 lo acepta y devuelve la cuenta.
+  const resolve = createBuyerAccountResolver({ marketplaceSecret: () => env.MARKETPLACE_BUYER_JWT_SECRET,
+    jwtSecret: () => env.JWT_SECRET });
+  assert.equal(await resolve({ headers: { authorization: 'Bearer ' + issued.body.token } }), x.accounts[0].id);
+  // La tienda no lo acepta: su clave es otra.
+  assert.throws(() => jwt.verify(issued.body.token, env.JWT_SECRET));
+  // Y no sirve como cookie de sesión.
+  assert.equal((await request(app).get(path + '/me').set('Cookie', '__Host-mrtpv_market=' + issued.body.token)).status, 401);
+
+  // Al cerrar sesión ya no se emiten tokens nuevos.
+  assert.equal((await request(app).post(path + '/logout').set('Origin', origin).set('Cookie', cookie)).status, 200);
+  assert.equal((await request(app).post(path + '/token').set('Cookie', cookie).set('Origin', origin)).status, 401);
+});
+
+test('token endpoint: no buyer profile, no buyer token; a missing key fails closed', async () => {
+  const request = require('supertest');
+  const x = fixture(); const origin = 'https://marketplace-staging.example.net'; const path = '/api/marketplace/identity';
+  // staging admite negocios: una cuenta solo de negocio no es comprador.
+  const app = identityApp(x, { origin, env: { MARKETPLACE_BUYER_JWT_SECRET: 'd'.repeat(48) } });
+  assert.equal((await request(app).post(path + '/register').set('Origin', origin).send(merchant)).status, 202);
+  await request(app).post(path + '/verify-email').set('Origin', origin).send({ token: extractToken(x.emails[0].html) });
+  const login = await request(app).post(path + '/login').set('Origin', origin).send({ email: merchant.email, password: merchant.password });
+  const cookie = login.headers['set-cookie'][0].split(';')[0];
+  const denied = await request(app).post(path + '/token').set('Cookie', cookie).set('Origin', origin);
+  assert.equal(denied.status, 403); assert.equal(denied.body.code, 'BUYER_PROFILE_REQUIRED');
+
+  // Con perfil de comprador pero sin clave dedicada: 503, nunca firma con la de la tienda.
+  const profile = { id: 'pb', accountId: x.accounts[0].id, role: 'BUYER', status: 'APPROVED' };
+  x.applications.push(profile); x.accounts[0].applications.push(profile);
+  const noKey = identityApp(x, { origin, env: { JWT_SECRET: 'e'.repeat(48) } });
+  const unavailable = await request(noKey).post(path + '/token').set('Cookie', cookie).set('Origin', origin);
+  assert.equal(unavailable.status, 503); assert.equal(unavailable.body.code, 'IDENTITY_UNAVAILABLE');
+  assert.ok(!JSON.stringify(unavailable.body).includes('e'.repeat(48)));
+});

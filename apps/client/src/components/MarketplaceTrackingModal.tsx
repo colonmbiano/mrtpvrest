@@ -2,32 +2,20 @@
 
 // Seguimiento de una orden del marketplace (API v1). Consulta /orders/:id/tracking con el
 // token en cabecera y se actualiza cada 15 s. El token y el código de entrega solo viven en
-// memoria del componente; no se guardan en el navegador.
+// memoria del componente; no se guardan en el navegador. Sin token de rastreo (Mis
+// pedidos), consulta con el token de la cuenta del comprador.
 import { useEffect, useState } from 'react';
 import { fetchTracking, isCheckoutUrl, pinForFulfillment, type Fulfillment, type V1Tracking } from '../lib/marketplaceV1Checkout';
+import { fetchTrackingForAccount, FINAL_ORDER_STATUSES as FINAL_STATUSES, ORDER_STATUS_LABEL as STATUS_LABEL } from '../lib/marketplaceOrders';
 import MarketplaceTrackingMap from './MarketplaceTrackingMap';
 
 const POLL_MS = 15000;
-// Estados finales: ya no cambian, así que se deja de consultar y el código ya no sirve.
-const FINAL_STATUSES = new Set(['DELIVERED', 'CANCELLED']);
-
-// Estados reales de la orden (Order.status) tal como los devuelve el seguimiento v1.
-const STATUS_LABEL: Record<string, string> = {
-  PENDING_PAYMENT: 'Esperando el pago',
-  PENDING_MERCHANT: 'Esperando que la tienda lo acepte',
-  CONFIRMED: 'Aceptado por la tienda',
-  PREPARING: 'En preparación',
-  PACKING: 'Empacando tu pedido',
-  READY: 'Listo para recoger',
-  ON_THE_WAY: 'En camino',
-  DELIVERED: 'Entregado',
-  CANCELLED: 'Cancelado',
-};
 
 type Props = {
   orderId: string;
   orderNumber?: string;
-  trackingToken: string;
+  // Sin token: el pedido es de la cuenta con sesión (Mis pedidos).
+  trackingToken?: string;
   fulfillment?: Fulfillment | null;
   pickupPin?: string | null;
   deliveryPin?: string | null;
@@ -46,7 +34,9 @@ export default function MarketplaceTrackingModal({ orderId, orderNumber, trackin
   useEffect(() => {
     let stopped = false;
     const load = async () => {
-      const result = await fetchTracking(apiUrl, orderId, trackingToken);
+      const result = trackingToken
+        ? await fetchTracking(apiUrl, orderId, trackingToken)
+        : await fetchTrackingForAccount(orderId, { apiUrl });
       if (stopped) return;
       if ('ok' in result && result.ok === false) { setError(result.message); return; }
       setError('');
