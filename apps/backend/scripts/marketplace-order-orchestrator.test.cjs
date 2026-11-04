@@ -151,7 +151,8 @@ async function fixture(options = {}) {
 
 function http(f, options = {}) {
   let handler;
-  createRouter({ Router: () => ({ post(route, fn) { assert.equal(route, '/'); handler = fn; } }), service: f?.service,
+  // GET / y GET /:id/codes (Mis pedidos) se prueban en __tests__/marketplace-v1-buyer-orders.test.js.
+  createRouter({ Router: () => ({ get(route) { assert.ok(['/', '/:id/codes'].includes(route)); }, post(route, fn) { assert.equal(route, '/'); handler = fn; } }), service: f?.service,
     resolveAccount: () => ACCOUNT, ...options });
   return async ({ body = f?.input(), headers = { 'idempotency-key': KEY }, ...req } = {}) => {
     const res = { statusCode: 200, headers: {}, set(k, v) { this.headers[k.toLowerCase()] = v; return this; },
@@ -570,4 +571,38 @@ test('v1 orders router mounts before legacy and tenant middleware without initia
   const source = fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8');
   const mount = source.indexOf("app.use('/api/marketplace/v1/orders', require('./routes/marketplace-orders-v1.routes')())");
   assert.ok(mount > 0); assert.ok(mount < source.indexOf("app.use('/api/marketplace',"));
+});
+
+// ── Mis pedidos: la cuenta dueña vuelve a ver los códigos de un pedido activo ──
+
+function codesReader(f) {
+  return {
+    marketplaceQuote: { async findFirst({ where }) {
+      const quote = [...f.state.quotes.values()].find(q => q.orderId === where.orderId && q.accountId === where.accountId);
+      return quote ? { id: quote.id } : null;
+    } },
+    marketplaceOrderPipeline: { async findFirst({ where }) {
+      const row = f.state.pipelines.find(p => p.orderId === where.orderId);
+      return row ? structuredClone({ ...row, order: f.state.orders.find(o => o.id === row.orderId) }) : null;
+    } },
+  };
+}
+
+test('codesForAccount returns the same PINs only to the owning account of an active order', async () => {
+  const f = await fixture(); const created = await f.create({ paymentMethod: 'CASH' });
+  const service = createMarketplaceOrderOrchestrator({ ...f.ports, prismaClient: codesReader(f) });
+  assert.deepEqual(await service.codesForAccount({ accountId: ACCOUNT, orderId: created.orderId }),
+    { orderId: created.orderId, pickupPin: created.pickupPin, deliveryPin: created.deliveryPin });
+  // Otra cuenta, un invitado o una orden ajena: como si no existiera.
+  await assert.rejects(service.codesForAccount({ accountId: 'account-2', orderId: created.orderId }), checkCode('ORDER_NOT_FOUND', 404));
+  await assert.rejects(service.codesForAccount({ accountId: 'guest:abc', orderId: created.orderId }), checkCode('ORDER_NOT_FOUND', 404));
+  await assert.rejects(service.codesForAccount({ accountId: ACCOUNT, orderId: 'missing' }), checkCode('ORDER_NOT_FOUND', 404));
+  // La clave rotada sin la original no inventa códigos.
+  const lost = createMarketplaceOrderOrchestrator({ ...f.ports, prismaClient: codesReader(f), activePinKeyId: 'new', pinSecrets: { new: `${SECRET}-new` } });
+  await assert.rejects(lost.codesForAccount({ accountId: ACCOUNT, orderId: created.orderId }), checkCode('PIN_KEY_UNAVAILABLE', 503));
+  // Entregada o cancelada: el código ya no se muestra.
+  for (const status of ['DELIVERED', 'CANCELLED']) {
+    f.state.orders.find(o => o.id === created.orderId).status = status;
+    await assert.rejects(service.codesForAccount({ accountId: ACCOUNT, orderId: created.orderId }), checkCode('ORDER_CLOSED', 409));
+  }
 });

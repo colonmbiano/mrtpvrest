@@ -6,7 +6,9 @@ import {
   LayoutGrid, MapPin, Menu, Search, ShoppingBag, Store, Tag, Truck, UserRound,
 } from 'lucide-react';
 import ScrollToHash from '@/components/ScrollToHash';
+import { isMarketplaceAccountsEnabled } from '@/lib/config';
 import MarketplaceCartShortcut from '@/components/MarketplaceCartShortcut';
+import { InstallAppButton } from '@/components/MarketplaceInstall';
 import { productEmoji } from '@/lib/productEmoji';
 import {
   BUSINESS_TYPE_LABELS, MAX_QUERY_LENGTH, catalogHref, catalogSearchParams,
@@ -62,6 +64,8 @@ function patchPage(key: 'storesPage' | 'productsPage', page: number): Partial<Ca
 
 export default function MarketplaceHomeV2({ state, stores, products, isolated, previewDemo = false, livePreview = false }: Props) {
   const readOnly = previewDemo || livePreview;
+  // Con cuentas reales, el acceso lleva a Mi cuenta (sin sesión, /cuenta pide entrar).
+  const accounts = isMarketplaceAccountsEnabled() && !readOnly;
   const promotions = products.status === 'ok'
     ? products.data.items.filter((p) => p.promoPrice !== null)
     : [];
@@ -94,14 +98,16 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
             </div>
 
             <nav aria-label="Accesos principales" className="flex items-center gap-2 sm:gap-5">
+              {!readOnly && !isolated && <InstallAppButton className={'inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-[#d5e6da] px-3 py-2 text-sm font-bold text-[#176c42] hover:bg-[#f0faf2] disabled:opacity-60 ' + focus} />}
               <a href="#tiendas" className={'hidden items-center gap-2 text-sm font-semibold text-[#374e45] hover:text-[#e65320] lg:flex ' + focus}>
                 <Store className="h-5 w-5" aria-hidden="true" /> Tiendas
               </a>
               <a href="#productos" className={'hidden items-center gap-2 text-sm font-semibold text-[#374e45] hover:text-[#e65320] sm:flex ' + focus}>
                 <ShoppingBag className="h-5 w-5" aria-hidden="true" /> Productos
               </a>
-              <Link href="/registro" className={'inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#f15a24] px-3 py-2 text-sm font-extrabold text-white hover:bg-[#dd4c16] sm:px-4 ' + focus}>
-                <UserRound className="h-4 w-4" aria-hidden="true" /><span className="hidden sm:inline">Registrarme</span><span className="sm:hidden">Registro</span>
+              <Link href={accounts ? '/cuenta' : '/registro'} className={'inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#f15a24] px-3 py-2 text-sm font-extrabold text-white hover:bg-[#dd4c16] sm:px-4 ' + focus}>
+                <UserRound className="h-4 w-4" aria-hidden="true" />
+                {accounts ? <span>Mi cuenta</span> : <><span className="hidden sm:inline">Registrarme</span><span className="sm:hidden">Registro</span></>}
               </Link>
               <a href="#categorias" className={'grid h-11 w-11 place-items-center rounded-xl border border-[#edf0eb] text-[#384b43] md:hidden ' + focus} aria-label="Ver categorías">
                 <Menu className="h-6 w-6" aria-hidden="true" />
@@ -247,7 +253,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
         <Link href="/" className={'flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-bold text-[#ed5821] ' + focus}><Store className="h-5 w-5" aria-hidden="true" /> Inicio</Link>
         <a href="#categorias" className={'flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-semibold text-[#54635a] ' + focus}><LayoutGrid className="h-5 w-5" aria-hidden="true" /> Categorías</a>
         <a href="#tiendas" className={'flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-semibold text-[#54635a] ' + focus}><ShoppingBag className="h-5 w-5" aria-hidden="true" /> Tiendas</a>
-        <Link href="/registro" className={'flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-semibold text-[#54635a] ' + focus}><UserRound className="h-5 w-5" aria-hidden="true" /> Registro</Link>
+        <Link href={accounts ? '/cuenta' : '/registro'} className={'flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-semibold text-[#54635a] ' + focus}><UserRound className="h-5 w-5" aria-hidden="true" /> {accounts ? 'Mi cuenta' : 'Registro'}</Link>
       </nav>
     </div>
   );

@@ -26,6 +26,7 @@ const { createMarketplaceOrderOrchestrator, MarketplaceOrderOrchestratorError } 
 const { createMarketplaceV1Payments } = require('./marketplace-v1-payments');
 const { createMarketplaceTrackingService } = require('./marketplace-tracking-v1');
 const { createBuyerAddressBook } = require('./marketplace-buyer-addresses');
+const { createBuyerPushStore } = require('./marketplace-buyer-push');
 const { createMerchantOrderNotifier } = require('./marketplace-v1-notify');
 const { MAX_CENTS } = require('./marketplace-order-money');
 
@@ -278,22 +279,31 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
   };
 
   // Seguimiento (lib/marketplace-tracking-v1.js): la orden se busca por su token
-  // (hash) y el servicio vuelve a validar orden, tienda, sucursal y vigencia.
+  // (hash) o por la cuenta dueña, y el servicio vuelve a validar orden, tienda,
+  // sucursal, dueño y vigencia.
+  async function pipelineRecord(where) {
+    const row = await prisma.marketplaceOrderPipeline.findFirst({
+      where: { ...where, order: { is: { source: 'MARKETPLACE' } } },
+      select: { orderId: true, restaurantId: true, trackingTokenHash: true, trackingExpiresAt: true, dispatch: true,
+        order: { select: { id: true, restaurantId: true, locationId: true, source: true, status: true,
+          orderType: true, deliveryDriverId: true } } } });
+    if (!row) return null;
+    const { dispatch, ...record } = row;
+    // Las órdenes v1 nacen con una tarea MANUAL que la red nunca toma: la entrega la
+    // tienda, así que su GPS sale del repartidor propio. Otras políticas son de la red.
+    const manual = !dispatch?.task || dispatch.task.deliveryPolicy === 'MANUAL';
+    const task = (manual ? await storeCourierTask(record.order) : null) ?? dispatch?.task;
+    return task ? { ...record, task } : record;
+  }
   const tracking = {
     taskStore: {
-      async findByOrderId({ orderId, trackingTokenHash }) {
-        const row = await prisma.marketplaceOrderPipeline.findFirst({
-          where: { orderId, trackingTokenHash, order: { is: { source: 'MARKETPLACE' } } },
-          select: { orderId: true, restaurantId: true, trackingTokenHash: true, trackingExpiresAt: true, dispatch: true,
-            order: { select: { id: true, restaurantId: true, locationId: true, source: true, status: true,
-              orderType: true, deliveryDriverId: true } } } });
-        if (!row) return null;
-        const { dispatch, ...record } = row;
-        // Las órdenes v1 nacen con una tarea MANUAL que la red nunca toma: la entrega la
-        // tienda, así que su GPS sale del repartidor propio. Otras políticas son de la red.
-        const manual = !dispatch?.task || dispatch.task.deliveryPolicy === 'MANUAL';
-        const task = (manual ? await storeCourierTask(record.order) : null) ?? dispatch?.task;
-        return task ? { ...record, task } : record;
+      findByOrderId: ({ orderId, trackingTokenHash }) => pipelineRecord({ orderId, trackingTokenHash }),
+      // Dueña: la cuenta cuya cotización consumió esta orden (orderId es único en la cotización).
+      async findByOrderIdForAccount({ orderId, accountId }) {
+        const quote = await prisma.marketplaceQuote.findFirst({ where: { orderId, accountId }, select: { accountId: true } });
+        if (!quote) return null;
+        const record = await pipelineRecord({ orderId });
+        return record ? { ...record, accountId: quote.accountId } : null;
       },
     },
     // Coordenadas de la sucursal (opcionales): sin ellas el origen sale vacío, sin inventarlo.
@@ -315,7 +325,71 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
     },
   };
 
-  return { catalog, addresses, addressBook, quoteStore, merchants, merchantsRepo, tracking };
+  // Mis pedidos: las cotizaciones de la cuenta que ya son orden, de cualquier tienda,
+  // de la más reciente a la más vieja. `before` (fecha de consumo) pagina hacia atrás.
+  // Proyección explícita: nunca PIN, dirección, teléfono ni token de rastreo.
+  const buyerOrders = {
+    async listForAccount({ accountId, limit = 20, before = null }) {
+      const quotes = await prisma.marketplaceQuote.findMany({
+        where: { accountId, orderId: { not: null }, ...(before ? { consumedAt: { lt: before } } : {}) },
+        orderBy: [{ consumedAt: 'desc' }, { id: 'desc' }], take: limit + 1,
+        select: { orderId: true, consumedAt: true, fulfillment: true, currency: true, itemsSnapshot: true,
+          merchant: { select: { name: true, slug: true } } } });
+      const page = quotes.slice(0, limit);
+      const rows = page.length ? await prisma.order.findMany({
+        where: { id: { in: page.map(q => q.orderId) }, source: 'MARKETPLACE' },
+        select: { id: true, orderNumber: true, status: true, paymentStatus: true, total: true, createdAt: true } }) : [];
+      const byId = new Map(rows.map(row => [row.id, row]));
+      const orders = page.filter(q => byId.has(q.orderId)).map(q => {
+        const order = byId.get(q.orderId);
+        return {
+          orderId: order.id, orderNumber: order.orderNumber == null ? null : String(order.orderNumber),
+          status: order.status, paymentStatus: order.paymentStatus, total: Number(order.total).toFixed(2),
+          currency: q.currency, fulfillment: q.fulfillment, placedAt: new Date(q.consumedAt || order.createdAt).toISOString(),
+          merchant: { name: q.merchant?.name ?? '', slug: q.merchant?.slug ?? null },
+          items: (Array.isArray(q.itemsSnapshot) ? q.itemsSnapshot : [])
+            .map(line => ({ menuItemId: line.menuItemId, name: line.name, quantity: line.quantity })),
+        };
+      });
+      const last = page.at(-1);
+      return { orders, nextBefore: quotes.length > limit && last?.consumedAt ? new Date(last.consumedAt).toISOString() : null };
+    },
+  };
+
+  // Tiendas favoritas del comprador. Solo comercios publicados en el marketplace (el
+  // mismo criterio del directorio): uno que deja de estarlo desaparece de la lista
+  // sin borrar la fila, y vuelve si lo aprueban otra vez.
+  const FAVORITES_LIMIT = 100;
+  const favorites = {
+    async list(accountId) {
+      const rows = await prisma.marketplaceFavorite.findMany({
+        where: { accountId, merchant: { is: merchantScope({}) } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: FAVORITES_LIMIT,
+        select: { createdAt: true, merchant: { select: { slug: true, name: true, logoUrl: true, config: { select: CONFIG_SELECT } } } } });
+      const at = now();
+      return rows.map(row => ({ slug: row.merchant.slug, name: row.merchant.name, logo: row.merchant.logoUrl || null,
+        open: computeOpenState(row.merchant.config || null, at).isOpen === true, addedAt: new Date(row.createdAt).toISOString() }));
+    },
+    // Idempotente: marcar dos veces la misma tienda deja una sola fila. null = no publicada.
+    async add(accountId, slug) {
+      const merchant = await prisma.restaurant.findFirst({ where: merchantScope({ slug }), select: { id: true, slug: true } });
+      if (!merchant) return null;
+      const count = await prisma.marketplaceFavorite.count({ where: { accountId } });
+      const existing = await prisma.marketplaceFavorite.findFirst({ where: { accountId, merchantId: merchant.id }, select: { id: true } });
+      if (!existing && count >= FAVORITES_LIMIT) return { slug: merchant.slug, limitReached: true };
+      await prisma.marketplaceFavorite.upsert({
+        where: { accountId_merchantId: { accountId, merchantId: merchant.id } },
+        create: { accountId, merchantId: merchant.id }, update: {} });
+      return { slug: merchant.slug, created: !existing };
+    },
+    // Quitar no exige que siga publicada: el comprador limpia su lista cuando quiera.
+    async remove(accountId, slug) {
+      const merchant = await prisma.restaurant.findFirst({ where: { slug }, select: { id: true } });
+      if (merchant) await prisma.marketplaceFavorite.deleteMany({ where: { accountId, merchantId: merchant.id } });
+    },
+  };
+
+  return { catalog, addresses, addressBook, quoteStore, merchants, merchantsRepo, tracking, buyerOrders, favorites };
 }
 
 function createMarketplaceV1Services({ prisma, env = process.env, now = () => new Date(), getGateway, logger } = {}) {
@@ -333,7 +407,7 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
   const networkPresence = env.MARKETPLACE_NETWORK_ENABLED === 'true'
     ? () => (network ||= require('./marketplace-network-prisma').createNetworkPersistence({ prisma, now })).presenceStore
     : null;
-  const { addressBook, merchantsRepo, ...adapters } = createMarketplaceV1Adapters({ prisma, commissionBps: config.commissionBps,
+  const { addressBook, merchantsRepo, buyerOrders, favorites, ...adapters } = createMarketplaceV1Adapters({ prisma, commissionBps: config.commissionBps,
     deliveryEnabled: config.delivery, acceptsOnline: payments ? id => payments.acceptsOnline(id) : null, networkPresence, now });
   // La clave de los PIN sale del mismo env que la bandera; sin ella la orden responde 503.
   const activePinKeyId = env.MARKETPLACE_PIN_KEY_ID || 'v1';
@@ -342,6 +416,8 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
   return {
     quoteService: createQuoteService({ ...adapters, now }),
     orderService: {
+      // Mis pedidos: códigos de una orden activa para su cuenta (GET /orders/:id/codes).
+      codesForAccount: args => orchestrator.codesForAccount(args),
       // args.io (opcional): socket del servidor para el aviso a la caja; el orquestador lo ignora.
       async createOrder(args) {
         if (args?.body?.paymentMethod === 'ONLINE') {
@@ -370,6 +446,12 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
     trackingService: createMarketplaceTrackingService({ ...adapters.tracking, now }),
     // Libreta de direcciones del comprador (routes/marketplace-addresses-v1.routes.js).
     addressBook,
+    // Mis pedidos del comprador (GET /api/marketplace/v1/orders).
+    buyerOrders,
+    // Tiendas favoritas del comprador (routes/marketplace-favorites-v1.routes.js).
+    favorites,
+    // Avisos push del comprador (routes/marketplace-push-v1.routes.js).
+    buyerPush: createBuyerPushStore({ prisma }),
     // Directorio y catálogo públicos v1 (routes/marketplace-merchants-v1.routes.js).
     merchantsRepo,
   };
