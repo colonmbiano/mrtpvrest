@@ -263,6 +263,28 @@ En la tienda, `/cuenta/pedidos` (enlazada desde Mi cuenta) lista los pedidos y d
     - Mi cuenta encuentra el worker.
   - Lo que no se probó: la suscripción push real, porque el Chromium sin ventana bloquea las notificaciones.
 
+### App Android (PR 7)
+
+`apps/client/android` es una Trusted Web Activity: abre la PWA del PR 6 en Chrome a pantalla completa. No lleva una copia del sitio, así que la sesión, el modo sin conexión y los avisos son los de la web. Cómo compilarla y publicarla está en `apps/client/android/README.md`.
+
+- **Por qué TWA y no Capacitor:** el WebView de Capacitor no recibe avisos web, así que haría falta push nativo con Firebase (proyecto, `google-services.json` y una cuenta de servicio en el backend), y nada de eso existe todavía. En la TWA, Chrome delega los avisos web del PR 5 en la app (`DelegationService`) y salen con su nombre y su ícono. En Android 13 o más nuevo, la app pide el permiso.
+- **URL:** sale de `marketplaceUrl` al compilar, porque el dominio todavía no se decide. Tiene que ser un origen https, sin puerto ni ruta; para probar con `adb reverse` se acepta `http://localhost`.
+- **Digital Asset Links:**
+  - La tienda sirve `/.well-known/assetlinks.json` con el paquete `com.mrtpvrest.marketplace` y las huellas de `MARKETPLACE_ANDROID_CERT_SHA256`: la de firma de Play y la de subida, separadas por comas. Descarta las huellas mal formadas.
+  - Sin huellas, o sin catálogo, responde 404, y la app abre como pestaña de Chrome, con la barra de dirección.
+  - La app declara el sitio en `asset_statements` y recibe los enlaces `https://<dominio>` (`autoVerify`).
+- **Firma:** usa las mismas variables que el TPV y el repartidor (`KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`). Sin llave, el release queda sin firmar.
+- **Íconos:** el ícono adaptable, la pantalla de inicio y el ícono de los avisos se generan con `scripts/generate-icons.mjs`, que ahora también escribe en `android/app/src/main/res`.
+- **Fuera de este PR:** los atajos en el ícono de Android (Mis pedidos, Mi cuenta). La PWA ya los tiene en su manifiesto.
+- **Pruebas:**
+  - `account.spec.ts` comprueba que `assetlinks.json` declara el paquete y solo las huellas válidas.
+  - `./gradlew assembleDebug assembleRelease` compila; el release pasa R8 y el lint de release. En el APK, `asset_statements` es JSON válido y el filtro de enlaces usa el host configurado.
+  - En un emulador (Android 16, Chrome 145) contra `next build` y `next start` locales, con la verificación de Digital Asset Links desactivada para ese origen mediante una opción de prueba de Chrome:
+    - la app abre la tienda a pantalla completa, con la barra de estado de la marca;
+    - la página se ve como instalada (`display-mode: standalone`), la controla el service worker y su `referrer` es `android-app://com.mrtpvrest.marketplace/`;
+    - Mi cuenta ofrece «Activar avisos» y no muestra «Instala la app».
+  - **Sin verificar:** que los avisos salgan a nombre de la app. Con `http://127.0.0.1`, Chrome pidió el permiso él mismo en vez de delegarlo; la delegación necesita el dominio real en https con `assetlinks.json`. Tampoco se probó la verificación real de Digital Asset Links, que necesita ese dominio y la llave de firma.
+
 ### Evidencia
 
 `apps/backend/scripts/marketplace-identity.test.cjs` (`node --test`, en el CI del backend) cubre:
