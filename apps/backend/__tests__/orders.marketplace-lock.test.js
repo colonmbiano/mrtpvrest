@@ -106,7 +106,20 @@ describe('rutas :: cobro en caja de un pedido del marketplace', () => {
     const paid = await request(makeApp()).put('/api/orders/o1/payment').send({ paymentMethod: 'CASH' });
     expect(paid.status).toBe(409);
     expect(paid.body.code).toBe('MARKETPLACE_ALREADY_PAID');
+    // El atajo de replay (orden ya pagada → 200) no aplica al marketplace.
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.order.update).not.toHaveBeenCalled();
+  });
+
+  it('si se paga en línea entre la lectura previa y el cobro, la transacción lo frena', async () => {
+    prisma.order.findFirst
+      .mockResolvedValueOnce({ ...MARKET, status: 'READY' }) // lectura previa: aceptado, sin pagar
+      .mockResolvedValueOnce({ ...MARKET, status: 'READY', paymentStatus: 'PAID' }); // dentro de la tx
+    const res = await request(makeApp()).put('/api/orders/o1/payment').send({ paymentMethod: 'CASH' });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('MARKETPLACE_ALREADY_PAID');
     // Se revisa dentro de la transacción del cobro, antes de escribir nada.
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.order.update).not.toHaveBeenCalled();
   });
 });
