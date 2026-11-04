@@ -47,6 +47,8 @@ public/assets/
 # … y los iconos/PWA del TPV (favicon icon.png/apple-icon.png + manifest icons):
 !apps/tpv/src/app/*.png
 !apps/tpv/public/icon-*.png
+# … y los iconos de la PWA del cliente (marketplace + fallback de las tiendas):
+!apps/client/public/icons/*.png
 
 # Configuración de entorno (Seguridad)
 .env

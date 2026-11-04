@@ -1,16 +1,19 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import MarketplaceHomeV2 from "@/components/MarketplaceHomeV2";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import { getMarketplaceApiUrl, isMarketplaceCatalogEnabled, isMarketplaceIsolated, isMarketplacePreviewDemo, isMarketplaceLivePreviewEnabled } from "@/lib/config";
 import { loadCatalog, parseCatalogParams } from "@/lib/marketplace";
 import { loadPreviewCatalog } from "@/lib/marketplace-preview";
 import { loadLivePreviewCatalog } from "@/lib/marketplace-live-preview";
+import { marketplaceAppMetadata } from "@/lib/marketplaceApp";
 
 // Búsqueda y páginas salen de la URL en cada request; nada se prerenderiza.
 export const dynamic = "force-dynamic";
 
 export function generateMetadata(): Metadata {
   return {
+    ...marketplaceAppMetadata,
     title: "Marketplace | MRTPVREST",
     description: "Busca tiendas y productos y pide directo en la tienda.",
     // La copia aislada nunca debe indexarse.
@@ -42,13 +45,16 @@ export default async function RootPage({
       : await loadCatalog(getMarketplaceApiUrl(), state, queryTooLong, { storesSource });
 
   return (
-    <MarketplaceHomeV2
-      state={state}
-      stores={stores}
-      products={products}
-      isolated={isMarketplaceIsolated()}
-      previewDemo={previewDemo}
-      livePreview={livePreview}
-    />
+    <>
+      <MarketplaceHomeV2
+        state={state}
+        stores={stores}
+        products={products}
+        isolated={isMarketplaceIsolated()}
+        previewDemo={previewDemo}
+        livePreview={livePreview}
+      />
+      <ServiceWorkerRegister />
+    </>
   );
 }

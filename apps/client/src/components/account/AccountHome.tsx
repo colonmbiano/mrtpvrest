@@ -14,6 +14,7 @@ import { disablePush } from '@/lib/marketplacePush';
 import { deleteAddress, listAddresses, type V1Address } from '@/lib/marketplaceV1Checkout';
 import { AccountShell, Notice, outline, secondaryButton, textLink } from './AccountUi';
 import OrderAlerts from './OrderAlerts';
+import { InstallAppSection } from '@/components/MarketplaceInstall';
 
 type Addresses = { state: 'loading' } | { state: 'ready'; list: V1Address[] } | { state: 'error'; message: string };
 type Favorites = { state: 'loading' } | { state: 'ready'; list: FavoriteStore[] } | { state: 'error'; message: string };
@@ -97,6 +98,8 @@ export default function AccountHome() {
     </Link>
 
     <OrderAlerts />
+
+    <InstallAppSection />
 
     <section aria-labelledby="account-favorites" className="mt-7">
       <h2 id="account-favorites" className="flex items-center gap-2 text-base font-extrabold"><Heart className="h-5 w-5 text-[#e65b27]" aria-hidden="true" /> Mis tiendas favoritas</h2>

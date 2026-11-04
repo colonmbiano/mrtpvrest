@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 // Cuenta del comprador del marketplace contra la API simulada (mock-account.mjs).
 const API = 'http://127.0.0.1:4328';
@@ -344,4 +344,143 @@ test('volver a pedir abre la tienda con los mismos productos en el carrito', asy
   expect(cart).toEqual([{ m: 'm4', q: 2 }]);
   await again.click();
   await expect(page).toHaveURL(/\/cafe-del-lago$/);
+});
+
+// La app instalable del marketplace: manifiesto propio, íconos, página sin conexión
+// y la invitación a instalarla.
+function pngSize(png: Buffer) {
+  // Cabecera PNG: firma de 8 bytes y el bloque IHDR con ancho y alto.
+  return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+}
+
+test('app: el marketplace tiene su manifiesto con íconos; las tiendas no lo heredan', async ({ page }) => {
+  const res = await page.request.get('/marketplace.webmanifest');
+  expect(res.status()).toBe(200);
+  expect(res.headers()['content-type']).toContain('application/manifest+json');
+  const manifest = await res.json();
+  expect(manifest).toMatchObject({ id: '/', start_url: '/', scope: '/', display: 'standalone', lang: 'es-MX' });
+  expect(manifest.shortcuts.map((s: { url: string }) => s.url)).toEqual(['/cuenta/pedidos', '/cuenta']);
+  expect(manifest.icons.map((i: { purpose: string }) => i.purpose)).toContain('maskable');
+  const icons = [
+    ...manifest.icons.map((i: { src: string; sizes: string }) => [i.src, Number(i.sizes.split('x')[0])]),
+    ['/icons/marketplace-apple-touch-icon.png', 180],
+    // Respaldo del manifiesto de cada tienda (lib/tenant.ts).
+    ['/icons/icon-192.png', 192], ['/icons/icon-512.png', 512], ['/icons/apple-touch-icon.png', 180],
+  ] as [string, number][];
+  for (const [src, size] of icons) {
+    const png = await page.request.get(src);
+    expect(png.status(), src).toBe(200);
+    expect(png.headers()['content-type'], src).toBe('image/png');
+    expect(pngSize(await png.body()), src).toEqual({ width: size, height: size });
+  }
+
+  for (const path of ['/', '/cuenta/entrar', '/registro?tipo=cliente']) {
+    await page.goto(path);
+    await expect(page.locator('link[rel="manifest"]'), path).toHaveAttribute('href', '/marketplace.webmanifest');
+    await expect(page.locator('link[rel="apple-touch-icon"]'), path).toHaveAttribute('href', '/icons/marketplace-apple-touch-icon.png');
+  }
+  await page.goto('/tacos-don-pepe');
+  await expect(page.getByRole('heading', { name: 'Tacos Don Pepe' }).first()).toBeVisible();
+  await expect(page.locator('link[rel="manifest"][href="/marketplace.webmanifest"]')).toHaveCount(0);
+});
+
+test('app: la página sin conexión existe y ofrece reintentar', async ({ page }) => {
+  // Es la que el service worker precachea; si no existiera, no se instalaría.
+  const res = await page.goto('/_offline');
+  expect(res?.status()).toBe(200);
+  await expect(page.getByRole('heading', { name: 'Estás sin conexión' })).toBeVisible();
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
+  await page.getByRole('button', { name: 'Reintentar' }).click();
+  await expect(page.getByRole('heading', { name: 'Estás sin conexión' })).toBeVisible();
+});
+
+test('app: Digital Asset Links declara la app Android con sus huellas válidas', async ({ page }) => {
+  // Con esto Chrome abre la app Android a pantalla completa (Trusted Web Activity).
+  const res = await page.request.get('/.well-known/assetlinks.json');
+  expect(res.status()).toBe(200);
+  expect(res.headers()['content-type']).toContain('application/json');
+  expect(await res.json()).toEqual([{
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: {
+      namespace: 'android_app',
+      package_name: 'com.mrtpvrest.marketplace',
+      // En mayúsculas; la que no es una huella SHA-256 se descarta.
+      sha256_cert_fingerprints: ['0A:1B:2C:3D:4E:5F:60:71:82:93:A4:B5:C6:D7:E8:F9:0A:1B:2C:3D:4E:5F:60:71:82:93:A4:B5:C6:D7:E8:F9'],
+    },
+  }]);
+});
+
+// Chromium avisa que la app se puede instalar con `beforeinstallprompt`; las pruebas
+// lo disparan a mano y cuentan las veces que se abre el aviso nativo.
+async function fakeInstallPrompt(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __installPrompts: number; __offerInstall: () => void };
+    w.__installPrompts = 0;
+    w.__offerInstall = () => {
+      const event = Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+        platforms: ['web'],
+        prompt: async () => { w.__installPrompts++; },
+        userChoice: Promise.resolve({ outcome: 'accepted', platform: 'web' }),
+      });
+      window.dispatchEvent(event);
+    };
+  });
+}
+
+// Hasta que la página hidrata no hay quien escuche el evento: se repite hasta que aparece.
+async function offerInstall(page: Page, button: Locator) {
+  await expect(async () => {
+    await page.evaluate(() => (window as unknown as { __offerInstall: () => void }).__offerInstall());
+    await expect(button).toBeVisible({ timeout: 500 });
+  }).toPass();
+}
+
+const installPrompts = (page: Page) => page.evaluate(() => (window as unknown as { __installPrompts: number }).__installPrompts);
+
+test('app: cuando el navegador permite instalarla, la portada y Mi cuenta lo ofrecen', async ({ page }, info) => {
+  await fakeInstallPrompt(page);
+  await page.goto('/');
+  const header = page.getByRole('button', { name: 'Instalar la app' });
+  await offerInstall(page, header);
+  await header.click();
+  await expect.poll(() => installPrompts(page)).toBe(1);
+  // El aviso del navegador sirve una sola vez.
+  await expect(header).toHaveCount(0);
+
+  const email = newEmail(info.project.name);
+  await signUp(page, email);
+  await verify(page, email);
+  await logIn(page, email);
+  const install = page.getByRole('region', { name: 'Instala la app' });
+  // Sin el aviso del navegador (y fuera de iPhone) la sección no aparece.
+  await expect(page.getByRole('region', { name: 'Avisos de tus pedidos' })).toContainText('Los avisos funcionan');
+  await expect(install).toHaveCount(0);
+  await offerInstall(page, install.getByRole('button', { name: 'Instalar app' }));
+  await install.getByRole('button', { name: 'Instalar app' }).click();
+  await expect.poll(() => installPrompts(page)).toBe(1);
+  await expect(install).toHaveCount(0);
+});
+
+test('app: en iPhone, Mi cuenta explica cómo agregarla a inicio; ya instalada no insiste', async ({ page }, info) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'userAgent', {
+      configurable: true,
+      get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+    });
+  });
+  const email = newEmail(info.project.name);
+  await signUp(page, email);
+  await verify(page, email);
+  await logIn(page, email);
+  const install = page.getByRole('region', { name: 'Instala la app' });
+  await expect(install).toContainText('toca Compartir y luego «Agregar a inicio»');
+  await expect(install.getByRole('button')).toHaveCount(0);
+
+  // Abierta desde la pantalla de inicio (Safari marca navigator.standalone).
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'standalone', { configurable: true, get: () => true });
+  });
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Avisos de tus pedidos' })).toContainText('Los avisos funcionan');
+  await expect(install).toHaveCount(0);
 });

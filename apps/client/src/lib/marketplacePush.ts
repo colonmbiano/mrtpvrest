@@ -17,9 +17,11 @@ async function registration(wait = true): Promise<ServiceWorkerRegistration | nu
   if (!supported()) return null;
   try {
     const now = await navigator.serviceWorker.getRegistration();
-    if (now || !wait) return now ?? null;
-    // En la primera visita next-pwa registra el service worker al terminar de cargar.
-    return await Promise.race([navigator.serviceWorker.ready, new Promise<null>((done) => setTimeout(() => done(null), 3000))]);
+    // Recién registrado aún instala (precarga); suscribirse pide el worker activo.
+    if (!wait || (now && !now.installing && !now.waiting)) return now ?? null;
+    if (!now && process.env.NEXT_PUBLIC_PWA_ENABLED !== 'true') return null;
+    // En la primera visita ServiceWorkerRegister lo registra al terminar de cargar.
+    return await Promise.race([navigator.serviceWorker.ready, new Promise<null>((done) => setTimeout(() => done(null), 15000))]);
   } catch { return null; }
 }
 
