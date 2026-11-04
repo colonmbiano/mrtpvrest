@@ -2,12 +2,15 @@
 
 // Recibe alertas del worker del bot de WhatsApp (sesión perdida / QR requerido /
 // auth_failure) y las reenvía por CORREO al dueño. El bot lo llama vía
-// WHATSAPP_BOT_ALERT_WEBHOOK (POST con ?token=...). Público, así que va gateado
-// por BOT_ALERT_TOKEN. Envía a BOT_ALERT_EMAIL usando Resend (utils/mailer).
+// WHATSAPP_BOT_ALERT_WEBHOOK. Público, así que va gateado por BOT_ALERT_TOKEN, que
+// llega en `Authorization: Bearer` (o X-Bot-Token). `?token=` se acepta todavía porque
+// el bot desplegado lo manda así; el registro de accesos lo oculta, pero hay que
+// pasar el bot al header y quitar allowQuery. Envía a BOT_ALERT_EMAIL con Resend.
 
 const express = require('express');
 const router = express.Router();
 const { sendEmail } = require('../utils/mailer');
+const { matchesStaticToken } = require('../lib/static-token');
 
 const QR_URL = 'https://whatsapp-bot-production-adfe.up.railway.app/qr';
 
@@ -18,8 +21,7 @@ let lastSentAt = 0;
 router.post('/', async (req, res) => {
   return res.status(200).json({ ok: true, reason: 'Paused by user' });
 
-  const token = process.env.BOT_ALERT_TOKEN;
-  if (!token || req.query.token !== token) {
+  if (!matchesStaticToken(req, process.env.BOT_ALERT_TOKEN, { allowQuery: true })) {
     return res.status(403).json({ error: 'forbidden' });
   }
   const to = process.env.BOT_ALERT_EMAIL;

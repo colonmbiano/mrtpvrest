@@ -8,7 +8,7 @@ const { Server }  = require('socket.io')
 const cors        = require('cors')
 const helmet      = require('helmet')
 const compression = require('compression')
-const morgan      = require('morgan')
+const { accessLog } = require('./lib/access-log')
 const rateLimit   = require('express-rate-limit')
 const sentry      = require('./lib/sentry');
 const shiftsRoutes = require('./routes/shifts.routes');
@@ -168,7 +168,7 @@ app.set('json replacer', function (key, value) {
   }
   return value
 })
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
+app.use(accessLog())
 
 // Rutas públicas (sin tenantMiddleware)
 const marketplaceDispatchRouter = require('./routes/marketplace-dispatch.routes')()

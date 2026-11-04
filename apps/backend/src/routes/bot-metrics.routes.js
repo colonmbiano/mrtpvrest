@@ -1,17 +1,21 @@
 'use strict';
 
 // Tablero de métricas del bot de WhatsApp. GET /api/bot-metrics?token=...
-// Devuelve HTML (o JSON con &format=json). Gateado por BOT_METRICS_TOKEN.
-// Restaurante: ?r=<id> o, por defecto, el primero de LOYALTY_MILESTONE_RESTAURANT_IDS.
+// Devuelve HTML (o JSON con &format=json). Gateado por BOT_METRICS_TOKEN; se abre como
+// enlace en el navegador, así que acepta ?token= (el registro de accesos lo oculta) y
+// también el header. Restaurante: ?r=<id> o, por defecto, el primero de
+// LOYALTY_MILESTONE_RESTAURANT_IDS.
 
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('@mrtpvrest/database');
 const { computeBotMetrics, renderMetricsHtml, defaultRestaurantId } = require('../services/whatsapp-bot-metrics.service');
+const { matchesStaticToken } = require('../lib/static-token');
 
 router.get('/', async (req, res) => {
-  const token = process.env.BOT_METRICS_TOKEN;
-  if (!token || req.query.token !== token) return res.status(403).json({ error: 'forbidden' });
+  if (!matchesStaticToken(req, process.env.BOT_METRICS_TOKEN, { allowQuery: true })) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
 
   const restaurantId = req.query.r || defaultRestaurantId();
   if (!restaurantId) return res.status(400).json({ error: 'restaurantId requerido (?r=)' });
