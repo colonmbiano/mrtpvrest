@@ -74,6 +74,11 @@ test('request contexts isolate simultaneous settings; existing orders retain ser
   })));
   assert.equal(settings.ordersAllowed(), true);
   assert.equal(settings.runtimeEnv(env), env);
+  settings.context.run({ persisted: false, settings: { ...base, ordersEnabled: false } }, () => {
+    // Before the first panel save, the v1 environment gate must not disable legacy orders.
+    assert.equal(settings.ordersAllowed(), true);
+    assert.equal(settings.runtimeEnv(env), env);
+  });
 });
 test('settings endpoint rejects customers, staff, inactive users and devices', async () => {
   for (const user of [undefined, { role: 'OWNER', id: 'x', isActive: true }, { role: 'SUPER_ADMIN', id: 'x', isActive: false },

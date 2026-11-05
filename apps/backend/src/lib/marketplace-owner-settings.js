@@ -83,7 +83,10 @@ function runtimeEnv(env = process.env) {
     MARKETPLACE_V1_DELIVERY_ENABLED: String(current.settings.deliveryEnabled),
     MARKETPLACE_MAX_DELIVERY_KM: String(current.settings.maxDeliveryKm) };
 }
-function ordersAllowed() { return context.getStore()?.settings.ordersEnabled !== false; }
+function ordersAllowed() {
+  const current = context.getStore();
+  return !current?.persisted || current.settings.ordersEnabled;
+}
 function settingsMiddleware(prisma) {
   return async (_req, res, next) => {
     try {
