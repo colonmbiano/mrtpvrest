@@ -191,8 +191,14 @@ El **repartidor de tienda (Employee)** se conserva en paralelo; la app elige cam
     Turnstile, POST a `/identity/register` rol COURIER (`registerCourier`). Reusa el kit AccountUi (+ nuevo
     `SelectField`) y la validación de `marketplace-registration`. Requiere `NEXT_PUBLIC_MARKETPLACE_ACCOUNTS=true`
     (y `NEXT_PUBLIC_TURNSTILE_SITE_KEY` para el captcha). Verificado en la ventana (3003): render + validación OK.
-  - [ ] **Pendiente**: prueba end-to-end real (encender flags de identidad/red + aprobar un courier con ops),
-    y conectar el `apply` de couriers-v1 tras el registro si se quiere que el courier exista en la red al aprobarse.
+  - [x] **Reconciliación de modelos de courier.** `couriers-v1` ahora usa el mismo vocabulario de vehículo que
+    el registro/identidad (`MOTO/BICYCLE/CAR/WALK`, antes `MOTO/BICI/AUTO`) y la **placa es opcional** (se
+    completa en la verificación KYC), para que aprobar un registro pueda provisionar el `NetworkCourier` sin
+    re-capturar datos. Tests actualizados (61/61 en couriers-v1/dispatch/identity).
+  - [ ] **Puente de provisión** (siguiente): al aprobar la solicitud COURIER en SaaS, crear el `NetworkCourier`
+    (PENDING_VERIFICATION) desde la solicitud (nombre/correo/teléfono de la cuenta + vehículo de la aplicación),
+    vía la persistencia de red. Luego ops verifica (VERIFIED) y el repartidor ya despacha.
+  - [ ] **Pendiente**: prueba end-to-end real (encender flags de identidad/red + aprobar/verificar un courier).
 - **Fase 2 — Operación:** selector de modo, afiliaciones, dispatch con `courierId` de red, billetera.
 - **Fase 3 — Dinero:** payout a cuenta + conciliación con `COURIER_PAYABLE` + outbox.
 - **Fase 4 — Rollout:** quitar flag, documentar, (opcional) alta iOS.

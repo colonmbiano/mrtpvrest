@@ -85,7 +85,7 @@ async function run() {
     const ops=createMarketplaceOpsDispatchService({...createNetworkOpsPorts(p),now});
     for(let i=0;i<2;i++) {
       const actor={accountId:tag+'_c'+i,roles:['COURIER'],isActive:true};
-      const c=await service.apply(actor,{name:'Repartidor Prueba',phone:'+52555555555'+i,email:tag+i+'@example.test',vehicleType:'BICI'});
+      const c=await service.apply(actor,{name:'Repartidor Prueba',phone:'+52555555555'+i,email:tag+i+'@example.test',vehicleType:'BICYCLE'});
       const pendingCourier=await base.marketplaceNetworkCourier.findUnique({where:{id:c.courierId}});
       await createNetworkCourierPorts(p).courierStore.findById(c.courierId);
       assert.equal((await base.marketplaceNetworkCourier.findUnique({where:{id:c.courierId}})).version,pendingCourier.version);

@@ -7,7 +7,10 @@
 // (canManage). Without them the service fails closed with 503. Nothing here touches a network or database.
 const crypto = require('node:crypto');
 
-const VEHICLES = ['MOTO', 'BICI', 'AUTO'];
+// Vocabulario unificado con el registro de identidad (marketplace-identity VEHICLES
+// y el registro web del cliente). Antes era ['MOTO','BICI','AUTO'] — reconciliado
+// para que aprobar una solicitud pueda provisionar el courier sin re-capturar.
+const VEHICLES = ['MOTO', 'BICYCLE', 'CAR', 'WALK'];
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE = /^\+?\d{10,15}$/;
 const PLATE = /^[A-Z0-9]{5,8}$/;
@@ -53,10 +56,11 @@ function normalizeApplication(body) {
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   check(email.length <= 254 && EMAIL.test(email), 'INVALID_EMAIL', 'Correo invalido');
   check(VEHICLES.includes(body.vehicleType), 'INVALID_VEHICLE', 'Tipo de vehiculo invalido');
+  // La placa es OPCIONAL: se completa/valida en la verificacion KYC (ops), no al
+  // darse de alta, para que aprobar un registro pueda provisionar el courier sin
+  // pedirla de nuevo. Si se envia, debe tener formato valido.
   let licensePlate = null;
-  if (body.vehicleType === 'BICI') {
-    check(body.licensePlate === undefined || body.licensePlate === null, 'INVALID_PLATE', 'Una bicicleta no lleva placa');
-  } else {
+  if (body.licensePlate !== undefined && body.licensePlate !== null && body.licensePlate !== '') {
     const plate = typeof body.licensePlate === 'string' ? body.licensePlate.replace(/[\s-]/g, '').toUpperCase() : '';
     check(PLATE.test(plate), 'INVALID_PLATE', 'Placa invalida');
     licensePlate = plate;
