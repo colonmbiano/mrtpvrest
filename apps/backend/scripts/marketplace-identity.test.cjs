@@ -243,6 +243,15 @@ test('mount rules: off by default, staging unchanged, production only with full 
   assert.deepEqual(resolveIdentityMount({ ...prod, MARKETPLACE_IDENTITY_ENABLED: 'false' }), { mount: false });
   assert.deepEqual(resolveIdentityMount(prod), { mount: true, mode: 'production', roles: ['BUYER'] });
   assert.equal(resolveIdentityMount({ ...prod, MARKETPLACE_IDENTITY_ORIGIN: 'https://mrtpvrest.com' }).mount, true);
+  // Opt-in de roles en producción: BUYER siempre; MERCHANT/COURIER solo si se piden.
+  assert.deepEqual(resolveIdentityMount({ ...prod, MARKETPLACE_IDENTITY_EXTRA_ROLES: 'COURIER' }).roles, ['BUYER', 'COURIER']);
+  assert.deepEqual(resolveIdentityMount({ ...prod, MARKETPLACE_IDENTITY_EXTRA_ROLES: ' courier , merchant ' }).roles,
+    ['BUYER', 'MERCHANT', 'COURIER']);
+  // Orden determinista sin importar el orden de entrada ni duplicados.
+  assert.deepEqual(resolveIdentityMount({ ...prod, MARKETPLACE_IDENTITY_EXTRA_ROLES: 'COURIER,COURIER' }).roles, ['BUYER', 'COURIER']);
+  // Fail-closed: valores desconocidos o vacíos no amplían el registro.
+  assert.deepEqual(resolveIdentityMount({ ...prod, MARKETPLACE_IDENTITY_EXTRA_ROLES: 'ADMIN, buyer, ' }).roles, ['BUYER']);
+  assert.deepEqual(resolveIdentityMount({ ...prod, MARKETPLACE_IDENTITY_EXTRA_ROLES: '' }).roles, ['BUYER']);
   // Sin configuración completa no se monta, y no detiene el arranque.
   const off = resolveIdentityMount({ MARKETPLACE_IDENTITY_ENABLED: 'true', MARKETPLACE_IDENTITY_MODE: 'production' });
   assert.equal(off.mount, false);
