@@ -141,11 +141,15 @@ async function enqueueDurably(transaction: OfflineTransaction): Promise<boolean>
   } catch (error) {
     // No confirmamos una venta que solo existe en RAM. La dejamos fuera para
     // que el caller mantenga el ticket visible y pueda volver a intentar.
-    store.discardTransaction(transaction.id, true);
-    useOfflineStore.setState(s => ({ orders: Object.fromEntries(
-      Object.entries(s.orders).flatMap(([key, record]) => record.pending.includes(transaction.id)
-        ? (previousOrders[key] ? [[key, previousOrders[key]]] : []) : [[key, record]]),
-    ) }));
+    // Restaurar proyección y cola juntas: descartar primero limpiaría la
+    // referencia que identifica qué cuenta hay que deshacer.
+    useOfflineStore.setState(s => ({
+      queue: s.queue.filter(tx => tx.id !== transaction.id),
+      orders: Object.fromEntries(
+        Object.entries(s.orders).flatMap(([key, record]) => record.pending.includes(transaction.id)
+          ? (previousOrders[key] ? [[key, previousOrders[key]]] : []) : [[key, record]]),
+      ),
+    }));
     console.error('No se pudo persistir el outbox offline:', error);
     return false;
   }

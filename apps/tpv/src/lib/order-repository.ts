@@ -2,16 +2,18 @@ import api, { AUTH_TOKEN_MISSING, BACKEND_UNAVAILABLE } from '@/lib/api';
 import useOfflineStore from '@/store/useOfflineStore';
 import { getTenantIds } from '@/lib/tenant';
 import { isBackendCircuitOpen } from '@/lib/backend-availability';
-import { ACTIVE_ORDER_STATUSES, cacheServerOrder, findLocalOrder, pruneLocalOrders, sameOrderScope, type OrderScope } from '@/lib/local-order-model';
+import { ACTIVE_ORDER_STATUSES, cacheServerOrder, findLocalOrder, pruneLocalOrders, reconcileLocalOrderQueue, sameOrderScope, type OrderScope } from '@/lib/local-order-model';
 
 /** No aceptar escrituras ni lecturas operativas antes de recuperar IndexedDB. */
 export async function waitForOfflineHydration(): Promise<void> {
-  if (useOfflineStore.persist.hasHydrated()) return;
-  await new Promise<void>((resolve, reject) => {
+  if (!useOfflineStore.persist.hasHydrated()) await new Promise<void>((resolve, reject) => {
     const off = useOfflineStore.persist.onFinishHydration(() => { clearTimeout(timer); off(); resolve(); });
     const timer = setTimeout(() => { off(); reject(new Error('No se pudo recuperar el almacenamiento local')); }, 5000);
     if (useOfflineStore.persist.hasHydrated()) { clearTimeout(timer); off(); resolve(); }
   });
+  const state = useOfflineStore.getState();
+  const orders = reconcileLocalOrderQueue(state.orders, state.queue);
+  if (orders !== state.orders) useOfflineStore.setState({ orders });
 }
 
 function assertScope(scope: OrderScope) {
@@ -96,17 +98,31 @@ export async function loadOpenOrders(onCached?: (orders: any[]) => void): Promis
     useOfflineStore.setState(s => {
       let orders = s.orders;
       for (const order of data) orders = cacheServerOrder(orders, scope, order);
-      const activeIds = new Set(data.map(o => o.id));
-      // Una cuenta que desaparece de la lista remota deja de estar abierta,
-      // salvo que tenga operaciones locales todavía pendientes de confirmar.
-      for (const [key, record] of Object.entries(orders)) {
-        if (data.length < 200 && sameOrderScope(record.scope, scope) && !record.pending.length && record.serverId &&
-          ACTIVE_ORDER_STATUSES.has(record.order.status) && !activeIds.has(record.serverId)) {
-          orders = { ...orders, [key]: { ...record, order: { ...record.order, status: 'CLOSED' } } };
-        }
-      }
       return { orders: pruneLocalOrders(orders) };
     });
+    const activeIds = new Set(data.map(o => o.id));
+    // La lista está limitada a 200: faltar en ella NO demuestra que la cuenta
+    // haya cerrado. Consultar las copias locales ausentes por su id remoto
+    // recupera PAID/DELIVERED y evita ocultar una cuenta todavía abierta.
+    const staleIds = [...new Set(Object.values(useOfflineStore.getState().orders)
+      .filter(r => sameOrderScope(r.scope, scope) && !r.pending.length && r.serverId &&
+        ACTIVE_ORDER_STATUSES.has(r.order.status) && !activeIds.has(r.serverId))
+      .map(r => r.serverId!))];
+    // Acotar concurrencia para no saturar la tablet al reparar datos antiguos.
+    for (let offset = 0; offset < staleIds.length; offset += 4) {
+      await Promise.all(staleIds.slice(offset, offset + 4).map(async id => {
+        try {
+          const { data: order } = await api.get(`/api/orders/${id}`, { timeout: 8000 });
+          assertScope(scope);
+          if (order?.id === id) rememberServerOrder(order, scope);
+        } catch (error) {
+          assertScope(scope);
+          // Sin confirmación conservar la copia, nunca borrar una venta por
+          // una caída de red, un error de permisos o una respuesta incompleta.
+          if (!localFallbackAllowed(error)) throw error;
+        }
+      }));
+    }
   } catch (error) {
     assertScope(scope);
     if (!localFallbackAllowed(error)) throw error;
