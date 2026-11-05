@@ -29,6 +29,13 @@ const ACCOUNT = 'account-1';
 const checkCode = (expected, status) => error => error instanceof MarketplaceOrderOrchestratorError
   && error.code === expected && (status === undefined || error.statusCode === status);
 
+test('delivery confirmation rejects an address moved beyond five km after quoting', async () => {
+  const f = await fixture();
+  f.savedAddress.lat = 20;
+  await assert.rejects(f.create(), checkCode('DELIVERY_OUT_OF_RANGE', 409));
+  assert.equal(f.state.orders.length, 0);
+});
+
 function match(row, where = {}) {
   return Object.entries(where).every(([key, value]) => value && typeof value === 'object'
     ? 'in' in value ? value.in.includes(row[key]) : match(row[key], value) : row[key] === value);
@@ -50,7 +57,7 @@ async function fixture(options = {}) {
   const merchant = { id: 'm1', restaurantId: 'r1', locationId: 'l1', slug: 'store-one', status: 'ACTIVE', open: true,
     currency: 'MXN', commissionBps: 1000, prepMinutes: 15, deliveryPolicy: 'SHARED_ONLY',
     // Store delivery rule in pesos (RestaurantConfig + DeliveryZone), as the quote reads it.
-    delivery: { deliveryMode: 'ZONES', deliveryZones: [{ id: 'z1', fee: 30, active: true, polygon: [
+    delivery: { deliveryMode: 'ZONES', originLat: 19.42, originLng: -99.15, deliveryZones: [{ id: 'z1', fee: 30, active: true, polygon: [
       { lat: 19.40, lng: -99.17 }, { lat: 19.40, lng: -99.13 }, { lat: 19.44, lng: -99.13 }, { lat: 19.44, lng: -99.17 }] }] } };
   const savedAddress = { id: 'addr1', accountId: ACCOUNT, address: 'Direccion sintetica 123', lat: 19.42, lng: -99.15 };
   function transactionState(tx) {

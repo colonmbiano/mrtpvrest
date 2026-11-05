@@ -28,7 +28,7 @@ function world() {
     merchant: { id: 'm1', status: 'ACTIVE', open: true, currency: 'MXN', minOrderCents: 0, freeDeliveryFromCents: null,
       commissionBps: 1000, prepMinutes: 20,
       // The store's own rule, in pesos, as RestaurantConfig + DeliveryZone hold it.
-      delivery: { deliveryMode: 'ZONES', deliveryFee: 15,
+      delivery: { deliveryMode: 'ZONES', deliveryFee: 15, originLat: INSIDE.lat, originLng: INSIDE.lng,
         deliveryZones: [{ id: 'z1', name: 'Centro', fee: 30, active: true, polygon: square(19.40, -99.17, 19.44, -99.13) }] } },
     listings: [
       { merchantId: 'm1', menuItemId: 'burger', name: 'Hamburguesa', unitPriceCents: 1999, published: true, available: true },
@@ -158,13 +158,12 @@ test('a zone quote records the zone that priced it', async () => {
   assert.equal(w.store.saved.get(r.quoteId).priceSnapshot.zoneId, 'z1');
 });
 
-test('flat delivery charges the store fixed fee anywhere', async () => {
+test('flat delivery charges the fixed fee only within marketplace coverage', async () => {
   const w = world();
-  w.state.merchant.delivery = { deliveryMode: 'FLAT', deliveryFee: 25.5 };
+  w.state.merchant.delivery = { deliveryMode: 'FLAT', deliveryFee: 25.5, originLat: INSIDE.lat, originLng: INSIDE.lng };
   const inside = await quote(w);
-  const outside = await quote(w, request({ deliveryAddressId: 'addr-out' }), `${KEY}-far`);
+  await rejects(quote(w, request({ deliveryAddressId: 'addr-out' }), `${KEY}-far`), 'DELIVERY_OUT_OF_RANGE', 409);
   assert.equal(inside.deliveryFee, '25.50');
-  assert.equal(outside.deliveryFee, '25.50');
   assert.equal(inside.total, '95.52');
   assert.equal(w.store.saved.get(inside.quoteId).priceSnapshot.zoneId, null);
 });
@@ -173,16 +172,13 @@ test('flat delivery charges the store fixed fee anywhere', async () => {
 const DISTANCE_RULE = { deliveryMode: 'DISTANCE', originLat: INSIDE.lat, originLng: INSIDE.lng,
   deliveryBaseFee: 20, deliveryPerKm: 5, deliveryFreeRadiusKm: null, deliveryMaxKm: null };
 
-test('distance delivery charges base plus per-km, the same as the store', async () => {
+test('distance delivery refuses destinations beyond five km even without a store limit', async () => {
   const w = world();
   w.state.merchant.delivery = { ...DISTANCE_RULE };
-  const r = await quote(w, request({ deliveryAddressId: 'addr-out' }));
+  await rejects(quote(w, request({ deliveryAddressId: 'addr-out' })), 'DELIVERY_OUT_OF_RANGE', 409);
   const store = computeDeliveryFee(DISTANCE_RULE, 70.02, OUTSIDE);
   assert.equal(store.distanceKm, 20.02);
-  assert.equal(r.deliveryFee, store.fee.toFixed(2));
-  assert.equal(r.deliveryFee, '120.10');
-  assert.equal(w.store.saved.get(r.quoteId).priceSnapshot.distanceKm, 20.02);
-  assert.equal(w.store.saved.get(r.quoteId).priceSnapshot.courierPayoutCents, 12010);
+  assert.equal(w.store.saved.size, 0);
 });
 
 test('distance delivery: free radius, maximum distance and a missing origin', async () => {

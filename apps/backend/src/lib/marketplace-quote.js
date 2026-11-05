@@ -8,6 +8,7 @@
 const crypto = require('node:crypto');
 const { decimal, MAX_CENTS } = require('./marketplace-order-money');
 const { computeDeliveryFee } = require('./delivery-fee');
+const { marketplaceDeliveryCoverage } = require('./marketplace-delivery-coverage');
 
 const TTL_MS = 5 * 60 * 1000;
 const MAX_ITEMS = 50;
@@ -94,9 +95,8 @@ function price({ merchant, listings, request, address }) {
     const rule = merchant.delivery;
     check(rule && typeof rule === 'object', 'DELIVERY_UNAVAILABLE', 'Este comercio aun no entrega a domicilio por el marketplace; elige recoger en tienda', 409);
     check(address && Number.isFinite(address.lat) && Number.isFinite(address.lng), 'ADDRESS_NOT_FOUND', 'Direccion no encontrada', 404);
-    // Without an origin the store rule would charge the base fee for any distance.
-    check(rule.deliveryMode !== 'DISTANCE' || Number.isFinite(rule.originLat) && Number.isFinite(rule.originLng),
-      'DELIVERY_UNAVAILABLE', 'El comercio no tiene configurada su ubicacion para el envio por distancia', 409);
+    const coverage = marketplaceDeliveryCoverage(rule, address);
+    check(!coverage.error, coverage.error, 'Fuera de cobertura o ubicacion no disponible', 409);
     // Same calculation as the store (lib/delivery-fee.js). The free-delivery threshold is
     // applied afterwards, so coverage is required even when the order ships free.
     const fee = computeDeliveryFee({ ...rule, freeDeliveryFrom: null }, subtotalCents / 100, { lat: address.lat, lng: address.lng });
@@ -106,7 +106,7 @@ function price({ merchant, listings, request, address }) {
     const free = merchant.freeDeliveryFromCents != null && subtotalCents >= merchant.freeDeliveryFromCents;
     deliveryFeeCents = free ? 0 : feeCents;
     zoneId = fee.zoneId ?? null;
-    distanceKm = fee.distanceKm ?? null;
+    distanceKm = Math.round(coverage.distanceKm * 100) / 100;
     deliveryAvailability = 'AVAILABLE';
   }
   const totalCents = subtotalCents + deliveryFeeCents;

@@ -43,6 +43,20 @@ const item = (extra = {}) => ({ id: 'm1', restaurantId: 'r1', name: 'Taco', pric
   promoStartTime: null, promoEndTime: null, isAvailable: true, availableOnline: true, soldByWeight: false, isCombo: false,
   category: { isActive: true, restaurantId: 'r1' }, variants: [], modifierGroups: [], ...extra });
 
+test('coverage uses a complete branch coordinate pair, never mixed with config coordinates', async () => {
+  for (const branch of [{ latitude: 20, longitude: -100 }, { latitude: 20 }]) {
+    const prisma = fakePrisma({ restaurant: { id: 'r1', slug: 'tienda',
+      config: { ...OPEN, originLat: 19, originLng: -99 }, locations: [{ id: 'l1', ...branch }] } });
+    const adapters = createMarketplaceV1Adapters({ prisma, deliveryEnabled: true });
+    const expected = branch.longitude != null ? [20, -100] : [19, -99];
+    const quoted = await adapters.catalog.loadMerchant('r1');
+    const confirmed = await adapters.merchants.resolve('r1');
+    for (const rule of [quoted.delivery, confirmed.delivery]) {
+      assert.deepEqual([rule.originLat, rule.originLng], expected);
+    }
+  }
+});
+
 test('apagado por defecto; la comisión se lee del entorno y se valida', () => {
   assert.deepEqual(marketplaceV1Config({}), { enabled: false, commissionBps: null, onlinePayments: false, notificationUrl: null, delivery: false });
   assert.deepEqual(marketplaceV1Config({ MARKETPLACE_V1_ORDERS_ENABLED: 'true', MARKETPLACE_COMMISSION_BPS: '1500' }),
@@ -186,7 +200,9 @@ test('la orden entra a la primera sucursal activa del comercio aprobado', async 
   const prisma = fakePrisma();
   const { merchants } = createMarketplaceV1Adapters({ prisma, now: () => NOW });
   // MANUAL: la entregan los repartidores propios de la tienda, sin oferta a la red.
-  assert.deepEqual(await merchants.resolve('r1'), { id: 'r1', status: 'ACTIVE', restaurantId: 'r1', locationId: 'l1', slug: 'tienda',
+  const { delivery, ...resolved } = await merchants.resolve('r1');
+  assert.equal(delivery.deliveryMode, 'FLAT');
+  assert.deepEqual(resolved, { id: 'r1', status: 'ACTIVE', restaurantId: 'r1', locationId: 'l1', slug: 'tienda',
     deliveryPolicy: 'MANUAL' });
   const query = prisma.calls[0][1];
   assert.deepEqual(query.where, { id: 'r1', isActive: true, ...APPROVED_MERCHANT });
