@@ -33,7 +33,7 @@ const webpush = require('web-push');
 const { deriveStoreDeliveryPin, customerPinText } = require('../src/lib/store-delivery-pin');
 const messages = require('../src/services/whatsapp-bot/messages');
 const { handleInbound, STATES } = require('../src/services/whatsapp-bot/engine');
-const { createBotOrder } = require('../src/services/whatsapp-bot/order');
+const { createBotOrder, quoteBotOrder } = require('../src/services/whatsapp-bot/order');
 const { notifyOrderStatus } = require('../src/services/notifications.service');
 
 const SECRET = 'w'.repeat(40);
@@ -106,9 +106,13 @@ describe('chatbot :: confirmación del pedido', () => {
         cart: [{ menuItemId: 'mi1', variantId: null, quantity: 1 }] },
     });
 
-    const delivery = await createBotOrder(args('DELIVERY'));
+    const deliveryArgs = args('DELIVERY');
+    deliveryArgs.data.confirmedQuote = await quoteBotOrder(deliveryArgs);
+    const delivery = await createBotOrder(deliveryArgs);
     expect(delivery.deliveryPin).toBe(pinOf('ord-DELIVERY'));
-    const takeout = await createBotOrder(args('TAKEOUT'));
+    const takeoutArgs = args('TAKEOUT');
+    takeoutArgs.data.confirmedQuote = await quoteBotOrder(takeoutArgs);
+    const takeout = await createBotOrder(takeoutArgs);
     expect(takeout.deliveryPin).toBeNull();
   });
 });
