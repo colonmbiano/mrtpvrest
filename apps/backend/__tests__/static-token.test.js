@@ -1,3 +1,6 @@
+jest.mock('../src/utils/mailer', () => ({
+  sendEmail: jest.fn().mockResolvedValue({ id: 'mock-mail' }),
+}));
 'use strict';
 
 // Tokens fijos de endpoints internos (src/lib/static-token.js): llegan en el header
@@ -73,5 +76,53 @@ describe('GET /api/bot-metrics', () => {
     expect((await request(app).get('/api/bot-metrics')).status).toBe(403);
     delete process.env.BOT_METRICS_TOKEN;
     expect((await request(app).get('/api/bot-metrics?token=')).status).toBe(403);
+  });
+});
+
+describe('POST /api/bot-alert', () => {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/bot-alert', require('../src/routes/bot-alert.routes'));
+  const OLD_TOKEN = process.env.BOT_ALERT_TOKEN;
+  const OLD_EMAIL = process.env.BOT_ALERT_EMAIL;
+  beforeEach(() => {
+    process.env.BOT_ALERT_TOKEN = TOKEN;
+    process.env.BOT_ALERT_EMAIL = 'owner@example.com';
+  });
+  afterAll(() => {
+    if (OLD_TOKEN === undefined) delete process.env.BOT_ALERT_TOKEN;
+    else process.env.BOT_ALERT_TOKEN = OLD_TOKEN;
+    if (OLD_EMAIL === undefined) delete process.env.BOT_ALERT_EMAIL;
+    else process.env.BOT_ALERT_EMAIL = OLD_EMAIL;
+  });
+
+  it('acepta la alerta con Authorization: Bearer', async () => {
+    const res = await request(app)
+      .post('/api/bot-alert')
+      .set('Authorization', 'Bearer ' + TOKEN)
+      .send({ event: 'test', detail: 'detalle' });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
+
+  it('acepta la alerta con X-Bot-Token', async () => {
+    const res = await request(app)
+      .post('/api/bot-alert')
+      .set('x-bot-token', TOKEN)
+      .send({ event: 'test2' });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
+
+  it('rechaza ?token= en la URL con 403 (allowQuery desactivado)', async () => {
+    const res = await request(app)
+      .post('/api/bot-alert?token=' + TOKEN)
+      .send({ event: 'leak' });
+    expect(res.status).toBe(403);
+  });
+
+  it('rechaza si falta el token o no coincide', async () => {
+    expect((await request(app).post('/api/bot-alert').send({ event: 'sin-token' })).status).toBe(403);
+    expect((await request(app).post('/api/bot-alert').set('Authorization', 'Bearer bad').send({ event: 'malo' })).status).toBe(403);
   });
 });
