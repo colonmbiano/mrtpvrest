@@ -10,6 +10,11 @@ export function middleware(req: NextRequest) {
 
   const url = req.nextUrl.clone()
   const host = req.headers.get("host") || ""
+  // El marketplace comparte la app con las tiendas, pero conserva sus rutas
+  // raíz (/cuenta, /registro, /manifest.webmanifest y /.well-known).
+  if (host.split(":")[0].toLowerCase() === "mercaditocolorines.mrtpvrest.com") {
+    return NextResponse.next()
+  }
   const slug = host.split(".")[0]
 
   const SYSTEM = ["www", "localhost", "127", "vercel", "mrtpvrest", "master-burguers-production"]
