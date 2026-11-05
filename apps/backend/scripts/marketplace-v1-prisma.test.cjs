@@ -186,7 +186,9 @@ test('la orden entra a la primera sucursal activa del comercio aprobado', async 
   const prisma = fakePrisma();
   const { merchants } = createMarketplaceV1Adapters({ prisma, now: () => NOW });
   // MANUAL: la entregan los repartidores propios de la tienda, sin oferta a la red.
-  assert.deepEqual(await merchants.resolve('r1'), { id: 'r1', status: 'ACTIVE', restaurantId: 'r1', locationId: 'l1', slug: 'tienda',
+  const { delivery, ...resolved } = await merchants.resolve('r1');
+  assert.equal(delivery.deliveryMode, 'FLAT');
+  assert.deepEqual(resolved, { id: 'r1', status: 'ACTIVE', restaurantId: 'r1', locationId: 'l1', slug: 'tienda',
     deliveryPolicy: 'MANUAL' });
   const query = prisma.calls[0][1];
   assert.deepEqual(query.where, { id: 'r1', isActive: true, ...APPROVED_MERCHANT });

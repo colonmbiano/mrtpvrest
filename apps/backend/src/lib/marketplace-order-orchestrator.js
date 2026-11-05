@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { assertQuoteUsable, MarketplaceQuoteError } = require('./marketplace-quote');
+const { marketplaceDeliveryCoverage } = require('./marketplace-delivery-coverage');
 const { createOffer, hashPin, validateDeliveryPolicy, TASK_STATUS } = require('./marketplace-dispatch');
 const { decimal, MAX_CENTS } = require('./marketplace-order-money');
 const { nextOrderNumber } = require('./order-number');
@@ -193,6 +194,10 @@ function createMarketplaceOrderOrchestrator({ quoteStore, prismaClient, merchant
             check(address?.id === request.deliveryAddressId && address.accountId === accountId && text(address.address, 500)
               && ((address.lat == null && address.lng == null) || Number.isFinite(address.lat) && Number.isFinite(address.lng)
                 && Math.abs(address.lat) <= 90 && Math.abs(address.lng) <= 180), 'ADDRESS_NOT_FOUND', 'Direccion no encontrada', 404);
+          }
+          if (quote.fulfillment === 'DELIVERY') {
+            const coverage = marketplaceDeliveryCoverage(merchant.delivery, address);
+            check(!coverage.error, coverage.error, 'Fuera de cobertura o ubicacion no disponible', 409);
           }
           const date = at(); assertQuoteUsable(quote, date);
           const orderId = newId(); check(text(orderId), 'INVALID_ORDER_ID', 'Identificador no disponible', 503);

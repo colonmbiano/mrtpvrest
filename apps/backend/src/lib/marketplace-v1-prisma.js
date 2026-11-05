@@ -71,7 +71,8 @@ const ZONES_SELECT = { where: { active: true }, orderBy: [{ priority: 'asc' }, {
 function deliveryRule(config, location, zones) {
   if (!config || !location || location.hasDelivery === false) return null;
   const { deliveryMode, deliveryFee, originLat, originLng, deliveryBaseFee, deliveryPerKm, deliveryFreeRadiusKm, deliveryMaxKm } = config;
-  return { deliveryMode: deliveryMode || 'FLAT', deliveryFee, originLat, originLng, deliveryBaseFee, deliveryPerKm,
+  return { deliveryMode: deliveryMode || 'FLAT', deliveryFee,
+    originLat: location.latitude ?? originLat, originLng: location.longitude ?? originLng, deliveryBaseFee, deliveryPerKm,
     deliveryFreeRadiusKm, deliveryMaxKm,
     // La tarifa de zona es Decimal en la BD; computeDeliveryFee espera un número.
     deliveryZones: deliveryMode === 'ZONES' ? (zones || []).map(zone => ({ ...zone, fee: Number(zone.fee) })) : [] };
@@ -102,7 +103,7 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
       select: { id: true, slug: true,
         config: { select: deliveryEnabled ? { ...CONFIG_SELECT, ...DELIVERY_SELECT } : CONFIG_SELECT },
         ...(deliveryEnabled ? { deliveryZones: ZONES_SELECT,
-          locations: { ...FIRST_LOCATION, select: { id: true, hasDelivery: true } } } : {}) } });
+          locations: { ...FIRST_LOCATION, select: { id: true, hasDelivery: true, latitude: true, longitude: true } } } : {}) } });
     if (!row) return null;
     const config = row.config || null;
     return {
@@ -254,11 +255,12 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
     // Sucursal de la orden: la primera sucursal activa del restaurante.
     async resolve(merchantId, { tx } = {}) {
       const row = await db(tx).restaurant.findFirst({ where: merchantScope({ id: merchantId }),
-        select: { id: true, slug: true, locations: { ...FIRST_LOCATION, select: { id: true } } } });
+        select: { id: true, slug: true, config: { select: DELIVERY_SELECT },
+          locations: { ...FIRST_LOCATION, select: { id: true, hasDelivery: true, latitude: true, longitude: true } } } });
       if (!row) return null;
       // MANUAL: entrega la tienda con sus repartidores; la orden no se ofrece a la red compartida.
       return { id: row.id, status: 'ACTIVE', restaurantId: row.id, locationId: row.locations[0]?.id ?? null, slug: row.slug,
-        deliveryPolicy: 'MANUAL' };
+        deliveryPolicy: 'MANUAL', delivery: deliveryRule(row.config, row.locations[0], []) };
     },
   };
 
