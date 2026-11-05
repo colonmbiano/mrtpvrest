@@ -100,3 +100,11 @@ jobs:
 
       - name: Contratos seguros del registro Marketplace (sin BD ni correo)
         run: node --test apps/backend/scripts/marketplace-identity.test.cjs
+
+      - name: Controles del propietario Marketplace
+        run: node --test apps/backend/scripts/marketplace-owner-settings.test.cjs apps/backend/scripts/marketplace-delivery-coverage.test.cjs apps/backend/scripts/marketplace-quote.test.cjs apps/backend/scripts/marketplace-v1-prisma.test.cjs apps/backend/scripts/marketplace-order-orchestrator.test.cjs
+
+      - name: Configuración concurrente Marketplace en PostgreSQL
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/mrtpvrest_test"
+        run: node --test tests/integration/marketplace-owner-settings.test.js

@@ -11,10 +11,13 @@ function createMarketplaceQuotesRouter({ Router, service, resolveAccount, buyerO
   // Mounted at /api/marketplace/v1/quotes.
   router.post('/', async (req, res) => {
     res.set('Cache-Control', 'no-store');
+    if (!require('../lib/marketplace-owner-settings').ordersAllowed()) {
+      return res.status(503).json({ error: 'Los pedidos nuevos están pausados', errorCode: 'ORDERS_PAUSED' });
+    }
     try {
       const accountId = await accountFor(req);
       // Sin MARKETPLACE_V1_ORDERS_ENABLED el servicio no tiene adaptadores y responde 503.
-      const quotes = service || (defaultService ||= defaultMarketplaceV1Services()?.quoteService || createQuoteService());
+      const quotes = service || defaultMarketplaceV1Services()?.quoteService || createQuoteService();
       const quote = await quotes.createQuote({ accountId: accountId ?? undefined,
         idempotencyKey: req.headers?.['idempotency-key'], body: req.body });
       return res.status(201).json(quote);

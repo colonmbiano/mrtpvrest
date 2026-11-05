@@ -43,6 +43,9 @@ function createMarketplaceRouter({ Router, getAdapter, storeSlugs = process.env.
   }
   router.post('/orders', async (req, res) => {
     res.set('Cache-Control', 'no-store');
+    if (!require('../lib/marketplace-owner-settings').ordersAllowed()) {
+      return res.status(503).json({ error: 'Los pedidos nuevos están pausados', errorCode: 'ORDERS_PAUSED' });
+    }
     try {
       const key = req.headers?.['idempotency-key'];
       const fields = ['storeSlug', 'restaurantId', 'items', 'deliveryAddress', 'customer', 'paymentMethod', 'deliveryFee', 'tip'];

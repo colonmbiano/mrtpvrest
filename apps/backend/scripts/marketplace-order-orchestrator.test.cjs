@@ -577,7 +577,7 @@ test('schemas remain byte-identical with both new states and an unapplied additi
 test('v1 orders router mounts before legacy and tenant middleware without initializing index.js', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8');
   const mount = source.indexOf("app.use('/api/marketplace/v1/orders', require('./routes/marketplace-orders-v1.routes')())");
-  assert.ok(mount > 0); assert.ok(mount < source.indexOf("app.use('/api/marketplace',"));
+  assert.ok(mount > 0); assert.ok(mount < source.indexOf("app.use('/api/marketplace', require('./routes/marketplace.routes')"));
 });
 
 // ── Mis pedidos: la cuenta dueña vuelve a ver los códigos de un pedido activo ──

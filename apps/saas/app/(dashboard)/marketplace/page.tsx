@@ -1,9 +1,10 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type CSSProperties } from 'react';
 import api from '@/lib/api';
 import { AlertCircle } from 'lucide-react';
 import { DispatchAuditSection } from './DispatchAuditSection';
 import { MerchantApplicationsSection } from './MerchantApplicationsSection';
+import { MarketplaceSettingsSection } from './MarketplaceSettingsSection';
 import { loadMarketplaceOverview, type MarketplaceOverview } from '@/lib/marketplaceOverview';
 
 const BUSINESS_TYPE_LABELS: Record<string, string> = {
@@ -47,13 +48,17 @@ export default function MarketplacePage() {
   const formatDate = (iso: string) => new Date(iso).toLocaleDateString('es-MX');
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--tx)', fontFamily: 'system-ui, sans-serif', padding: '32px 24px' }}>
+    <div style={{ '--tx': 'var(--text)', '--tx-mut': 'var(--text2)', '--bd-1': 'var(--border)',
+      '--surf-1': 'var(--surface)', '--surf-2': 'var(--surface2)',
+      minHeight: '100vh', background: 'var(--bg)', color: 'var(--tx)', fontFamily: 'system-ui, sans-serif', padding: '32px 24px' } as CSSProperties}>
       <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
         {/* Header */}
         <div style={{ marginBottom: '32px' }}>
           <h1 style={{ fontSize: '32px', fontWeight: '700', margin: '0 0 8px 0' }}>Marketplace Global</h1>
           <p style={{ fontSize: '14px', color: 'var(--tx-mut)', margin: 0 }}>Métricas y auditoría de comisiones, ledger y comercios</p>
         </div>
+
+        <MarketplaceSettingsSection />
 
         {/* Error */}
         {error && (

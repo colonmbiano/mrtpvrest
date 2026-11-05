@@ -108,7 +108,7 @@ test('con la bandera de domicilio el comercio trae la regla de envío de la tien
   const prisma = fakePrisma({ restaurant });
   const { catalog } = createMarketplaceV1Adapters({ prisma, commissionBps: 1200, deliveryEnabled: true, now: () => NOW });
   const merchant = await catalog.loadMerchant('r1');
-  assert.deepEqual(merchant.delivery, { ...DELIVERY,
+  assert.deepEqual(merchant.delivery, { ...DELIVERY, marketplaceMaxKm: 5,
     deliveryZones: [{ id: 'z1', name: 'Centro', fee: 30, active: true, polygon: POLYGON }] });
   const select = prisma.calls[0][1].select;
   assert.deepEqual(select.deliveryZones.where, { active: true });
@@ -201,7 +201,7 @@ test('la orden entra a la primera sucursal activa del comercio aprobado', async 
   const { merchants } = createMarketplaceV1Adapters({ prisma, now: () => NOW });
   // MANUAL: la entregan los repartidores propios de la tienda, sin oferta a la red.
   const { delivery, ...resolved } = await merchants.resolve('r1');
-  assert.equal(delivery.deliveryMode, 'FLAT');
+  assert.equal(delivery, null);
   assert.deepEqual(resolved, { id: 'r1', status: 'ACTIVE', restaurantId: 'r1', locationId: 'l1', slug: 'tienda',
     deliveryPolicy: 'MANUAL' });
   const query = prisma.calls[0][1];

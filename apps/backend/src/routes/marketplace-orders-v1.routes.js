@@ -47,7 +47,7 @@ function createMarketplaceOrdersV1Router({ Router, service, resolveAccount, orch
       if (typeof accountId !== 'string' || accountId.startsWith('guest:')) {
         throw new BuyerIdentityError('INVALID_BUYER_IDENTITY', 'Inicia sesion para ver tus pedidos');
       }
-      const orders = service || (defaultService ||= orchestratorOptions
+      const orders = service || (orchestratorOptions
         ? createMarketplaceOrderOrchestrator(orchestratorOptions)
         : defaultMarketplaceV1Services()?.orderService || createMarketplaceOrderOrchestrator());
       return res.json(await orders.codesForAccount({ accountId, orderId: req.params.id }));
@@ -61,10 +61,13 @@ function createMarketplaceOrdersV1Router({ Router, service, resolveAccount, orch
 
   router.post('/', async (req, res) => {
     res.set('Cache-Control', 'no-store');
+    if (!require('../lib/marketplace-owner-settings').ordersAllowed()) {
+      return res.status(503).json({ error: 'Los pedidos nuevos están pausados', errorCode: 'ORDERS_PAUSED' });
+    }
     try {
       const accountId = await accountFor(req);
       // Sin MARKETPLACE_V1_ORDERS_ENABLED el orquestador no tiene adaptadores y responde 503.
-      const orders = service || (defaultService ||= orchestratorOptions
+      const orders = service || (orchestratorOptions
         ? createMarketplaceOrderOrchestrator(orchestratorOptions)
         : defaultMarketplaceV1Services()?.orderService || createMarketplaceOrderOrchestrator());
       // io: para avisar a la caja al instante cuando la orden queda por aceptar.
