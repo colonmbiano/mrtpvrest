@@ -169,6 +169,29 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
     return { token: raw, account: publicAccount(account) };
   }
 
+  // Password grant para apps nativas (APK): verifica credenciales y exige un
+  // perfil COURIER APROBADO, sin crear sesion (el token Bearer de courier es
+  // stateless; ver marketplace-courier-identity.js). La verificacion de despacho
+  // (MarketplaceNetworkCourier ACTIVE/VERIFIED) la aplican las rutas que lo usan.
+  async function authenticateCourier(input) {
+    const address = email(input?.email);
+    if (!EMAIL.test(address) || typeof input?.password !== 'string' || input.password.length > 128) {
+      throw new IdentityError('INVALID_CREDENTIALS', 401);
+    }
+    const account = await prisma.marketplaceAccount.findUnique({
+      where: { email: address }, include: { applications: { select: { role: true, status: true } } },
+    });
+    // Mismo factor de trabajo bcrypt para cuentas inexistentes (timing).
+    const fallbackHash = '$2a$12$QpZXirB5mzV9gZjERmBUd.9NxTfXMq.o2Ti7suIzauq/td0BqCM9e';
+    const valid = await bcrypt.compare(input.password, account?.passwordHash || fallbackHash);
+    if (!account || !valid || !account.emailVerifiedAt || account.disabledAt) {
+      throw new IdentityError('INVALID_CREDENTIALS', 401);
+    }
+    const courier = account.applications.some(a => a.role === 'COURIER' && a.status === 'APPROVED');
+    if (!courier) throw new IdentityError('COURIER_PROFILE_REQUIRED', 403);
+    return { accountId: account.id };
+  }
+
   async function currentSession(raw) {
     if (!validToken(raw)) throw new IdentityError('UNAUTHENTICATED', 401);
     const row = await prisma.marketplaceSession.findUnique({
@@ -288,7 +311,7 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
     return { id: applicationId, status: decision };
   }
 
-  return { register, resendVerification, verifyEmail, login, currentSession, logout,
+  return { register, resendVerification, verifyEmail, login, authenticateCourier, currentSession, logout,
     forgotPassword, resetPassword, applyAs, listApplications, reviewApplication };
 }
 

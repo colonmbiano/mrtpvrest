@@ -120,6 +120,25 @@ test('roles, passwords and constrained signup fields reject invalid inputs', () 
   }
 });
 
+test('authenticateCourier: valid creds + approved COURIER profile, else rejects (password grant APK)', async () => {
+  const x = fixture();
+  await x.service.register(courier);
+  // Simula verificación de correo + aprobación del rol por el admin.
+  x.accounts[0].emailVerifiedAt = new Date();
+  x.applications[0].status = 'APPROVED';
+  assert.deepEqual(await x.service.authenticateCourier({ email: courier.email, password: courier.password }),
+    { accountId: x.accounts[0].id });
+  // Contraseña incorrecta.
+  await failCode(() => x.service.authenticateCourier({ email: courier.email, password: 'otra-frase-larga-2026' }), 'INVALID_CREDENTIALS');
+  // Perfil de courier no aprobado.
+  x.applications[0].status = 'PENDING_REVIEW';
+  await failCode(() => x.service.authenticateCourier({ email: courier.email, password: courier.password }), 'COURIER_PROFILE_REQUIRED');
+  // Correo sin verificar.
+  x.applications[0].status = 'APPROVED';
+  x.accounts[0].emailVerifiedAt = null;
+  await failCode(() => x.service.authenticateCourier({ email: courier.email, password: courier.password }), 'INVALID_CREDENTIALS');
+});
+
 test('signup writes hash, creates pending profile and mails only one-use opaque fragment token', async () => {
   const x = fixture();
   assert.deepEqual(await x.service.register(buyer), {accepted:true});

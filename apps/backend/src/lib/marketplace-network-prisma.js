@@ -298,7 +298,12 @@ function createNetworkActorResolver({prisma, now=()=>new Date(), env=process.env
       if (req.user.isActive!==true || req.user.isDevice) throw error('UNAUTHENTICATED',401);
       return {...req.user,accountId:req.user.id,roles:req.user.roles || [req.user.role]};
     }
-    if (req.headers?.authorization) return require('./marketplace-staff-identity').createStaffActorResolver()(req);
+    if (req.headers?.authorization) {
+      // APK: Bearer de courier (clave dedicada). Si no es un token de courier, cae al token de personal.
+      const courier = await require('./marketplace-courier-identity').createCourierActorResolver({ now })(req);
+      if (courier) return courier;
+      return require('./marketplace-staff-identity').createStaffActorResolver()(req);
+    }
     const name=env.MARKETPLACE_ISOLATED==='true'?'mrtpv_market_staging':'__Host-mrtpv_market';
     const value=(req.headers?.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(name+'='))?.slice(name.length+1);
     if (!value || !/^[a-f0-9]{64}$/.test(value)) return null;

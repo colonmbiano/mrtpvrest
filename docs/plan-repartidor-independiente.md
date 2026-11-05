@@ -168,7 +168,26 @@ El **repartidor de tienda (Employee)** se conserva en paralelo; la app elige cam
   `MARKETPLACE_IDENTITY_EXTRA_ROLES=COURIER` + `MARKETPLACE_NETWORK_ENABLED=true`
   (más los secretos ya exigidos: RESEND, Turnstile, origin same-site, `MARKETPLACE_BUYER_JWT_SECRET`).
   Verificación de couriers (PENDING_VERIFICATION→VERIFIED): `POST /api/marketplace/v1/ops/couriers/:id/approve`.
-- **Fase 1 — Onboarding:** registro/login/KYC en la app + CourierApplicationsSection en SaaS.
+- **Fase 1 — Onboarding (en curso).**
+  - [x] **SaaS `CourierApplicationsSection`** — lista y aprueba/rechaza solicitudes COURIER (`/identity/admin/applications`).
+  - [x] **Sesión del APK resuelta** — el APK es Capacitor (`https://localhost`, cross-site), así que NO puede usar la
+    cookie same-site. Se agregó el contexto JWT `courier` (`MARKETPLACE_COURIER_JWT_SECRET`, aud
+    `mrtpvrest-marketplace-courier`), un **password grant** `POST /api/marketplace/identity/courier/token`
+    (exento del check de Origin; exige perfil COURIER aprobado; TTL 24 h) y el camino **Bearer de courier** en
+    el resolver de red y en el dispatch (`marketplace-courier-identity.js`), que llega al mismo guard
+    `NetworkCourier` ACTIVE/VERIFIED. Tests: `marketplace-courier-identity.test.cjs` + `authenticateCourier`.
+  - [x] **App delivery — entrada + login courier.** SetupScreen tiene "Soy repartidor independiente" →
+    `CourierAuthScreen` (login contra `/identity/courier/token`), `lib/courierSession.ts` guarda el Bearer
+    (`deliveryMode='courier'`, TTL respetado), bootstrap reabre `CourierHomeScreen` si hay sesión. El ALTA
+    se hace en la web (mrtpvrest.com/registro): el APK no puede `/register` (Origin + captcha). Verificado en
+    la ventana (3006): login envía a la API y degrada con gracia (404 = identidad apagada en prod).
+  - [x] **Fase 2 — tablero de despacho en modo courier.** `lib/api` inyecta el Bearer de courier cuando
+    `deliveryMode==='courier'` (sin headers de tienda) y limpia la sesión en 401. `CourierHomeScreen` es ahora
+    el tablero real: perfil (`/couriers/me/profile`) + gate de verificación, presencia+GPS (`updateCourierPresence`),
+    ofertas (reusa `MarketplaceOffers`, aceptar con CAS) y PIN de recolección/entrega. Verificado en la ventana
+    (3006): monta, pide perfil y degrada con gracia. tsc OK.
+  - [ ] **Pendiente**: página web de registro con rol COURIER (+ Turnstile) en apps/client/registro, y prueba
+    end-to-end real (requiere encender los flags de identidad/red y aprobar un courier con ops en un entorno).
 - **Fase 2 — Operación:** selector de modo, afiliaciones, dispatch con `courierId` de red, billetera.
 - **Fase 3 — Dinero:** payout a cuenta + conciliación con `COURIER_PAYABLE` + outbox.
 - **Fase 4 — Rollout:** quitar flag, documentar, (opcional) alta iOS.

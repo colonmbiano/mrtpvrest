@@ -24,13 +24,18 @@ import { SetupScreen }     from '@/components/delivery/screens/SetupScreen';
 import { MapScreen }       from '@/components/delivery/screens/MapScreen';
 import { DispatchScreen }  from '@/components/delivery/screens/DispatchScreen';
 import { AvisosScreen }    from '@/components/delivery/screens/AvisosScreen';
+import { CourierAuthScreen } from '@/components/delivery/screens/CourierAuthScreen';
+import { CourierHomeScreen } from '@/components/delivery/screens/CourierHomeScreen';
 import { PinVerificationModal } from '@/components/delivery/PinVerificationModal';
 import { needsStoreDeliveryPin, isDeliveryPinRejection, withDeliveryPin } from '@/lib/storeDeliveryPin';
+import { getDeliveryMode, courierSessionActive, clearCourierSession } from '@/lib/courierSession';
 
 type Screen =
   | 'setup' | 'login' | 'home' | 'detail'
   | 'chat'  | 'weekly'| 'cobrar' | 'caja'
-  | 'gasto' | 'map'   | 'dispatch' | 'avisos';
+  | 'gasto' | 'map'   | 'dispatch' | 'avisos'
+  // Repartidor independiente (red del marketplace), separado del flujo de tienda.
+  | 'courier' | 'courier-home';
 
 // ── Accept Order Modal ─────────────────────────────────────────
 const RING_R = 52;
@@ -209,6 +214,12 @@ export default function DeliveryApp() {
       if (qrLn) localStorage.setItem('locationName', qrLn);
       window.history.replaceState({}, '', window.location.pathname); // limpia la URL
       return removeNetworkListeners; // ya hay IDs → queda en 'login' (PIN)
+    }
+
+    // Repartidor independiente con sesión de red activa: vuelve a su home.
+    if (getDeliveryMode() === 'courier' && courierSessionActive()) {
+      setScreen('courier-home');
+      return removeNetworkListeners;
     }
 
     const restId = localStorage.getItem('restaurantId');
@@ -733,6 +744,20 @@ export default function DeliveryApp() {
           onLogin={handleSetupLogin}
           onSelectLocation={finishSetup}
           onQrLink={handleQrLink}
+          onIndependentCourier={() => setScreen('courier')}
+        />
+      )}
+
+      {screen === 'courier' && (
+        <CourierAuthScreen
+          onBack={() => setScreen('setup')}
+          onAuthenticated={() => setScreen('courier-home')}
+        />
+      )}
+
+      {screen === 'courier-home' && (
+        <CourierHomeScreen
+          onLogout={() => { clearCourierSession(); setScreen('setup'); }}
         />
       )}
 
