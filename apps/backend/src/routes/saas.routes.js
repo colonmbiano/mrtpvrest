@@ -78,6 +78,7 @@ router.get('/marketplace/overview', (req, res, next) => {
 });
 
 router.use(authenticate, requireSuperAdmin);
+router.use('/marketplace/settings', require('./marketplace-owner-settings.routes')({ prisma, runWithBypass }));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MARKETPLACE · solicitudes de comercios para el directorio (SUPER_ADMIN)

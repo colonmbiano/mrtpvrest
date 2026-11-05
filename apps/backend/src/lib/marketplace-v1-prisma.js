@@ -95,10 +95,14 @@ const STORE_TASK_PREFIX = 'store:';
 // acceptsOnline(restaurantId): opcional; agrega ONLINE a los métodos de pago públicos del comercio.
 // networkPresence(): opcional; devuelve el presenceStore de la red (G1) para el seguimiento.
 function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEnabled = false, acceptsOnline = null,
-  networkPresence = null, now = () => new Date() } = {}) {
+  networkPresence = null, maxDeliveryKm = 5, now = () => new Date() } = {}) {
   const merchantScope = where => ({ ...where, isActive: true, ...APPROVED_MERCHANT });
   // Sucursal de la orden: la primera sucursal activa del restaurante (ver merchants.resolve).
   const FIRST_LOCATION = { where: { isActive: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 1 };
+  const deliveryWithRadius = (config, location, zones) => {
+    const rule = deliveryRule(config, location, zones);
+    return rule ? { ...rule, marketplaceMaxKm: maxDeliveryKm } : null;
+  };
 
   async function loadMerchantRow(where) {
     const row = await prisma.restaurant.findFirst({ where: merchantScope(where),
@@ -117,7 +121,7 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
       minOrderCents: cents(config?.minOrderAmount) ?? 0,
       freeDeliveryFromCents: config?.freeDeliveryFrom == null ? null : cents(config.freeDeliveryFrom),
       // La sucursal de la orden debe ofrecer domicilio (Location.hasDelivery, como en la tienda).
-      delivery: deliveryEnabled ? deliveryRule(config, row.locations?.[0], row.deliveryZones) : null,
+      delivery: deliveryEnabled ? deliveryWithRadius(config, row.locations?.[0], row.deliveryZones) : null,
       prepMinutes: Number.isInteger(config?.estimatedDelivery) ? config.estimatedDelivery : null,
     };
   }
@@ -262,7 +266,8 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
       if (!row) return null;
       // MANUAL: entrega la tienda con sus repartidores; la orden no se ofrece a la red compartida.
       return { id: row.id, status: 'ACTIVE', restaurantId: row.id, locationId: row.locations[0]?.id ?? null, slug: row.slug,
-        deliveryPolicy: 'MANUAL', delivery: deliveryRule(row.config, row.locations[0], []) };
+        deliveryPolicy: 'MANUAL', delivery: deliveryEnabled
+          ? deliveryWithRadius(row.config, row.locations[0], []) : null };
     },
   };
 
@@ -412,7 +417,8 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
     ? () => (network ||= require('./marketplace-network-prisma').createNetworkPersistence({ prisma, now })).presenceStore
     : null;
   const { addressBook, merchantsRepo, buyerOrders, favorites, ...adapters } = createMarketplaceV1Adapters({ prisma, commissionBps: config.commissionBps,
-    deliveryEnabled: config.delivery, acceptsOnline: payments ? id => payments.acceptsOnline(id) : null, networkPresence, now });
+    deliveryEnabled: config.delivery, maxDeliveryKm: Number(env.MARKETPLACE_MAX_DELIVERY_KM) || 5,
+    acceptsOnline: payments ? id => payments.acceptsOnline(id) : null, networkPresence, now });
   // La clave de los PIN sale del mismo env que la bandera; sin ella la orden responde 503.
   const activePinKeyId = env.MARKETPLACE_PIN_KEY_ID || 'v1';
   const pinSecrets = env.MARKETPLACE_PIN_SECRET ? { [activePinKeyId]: env.MARKETPLACE_PIN_SECRET } : {};
@@ -463,14 +469,18 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
 
 // Servicios por defecto de los routers v1. La BD se carga solo si la bandera está
 // activa, así importar los routers no toca la base de datos.
-let defaults;
+const defaults = new Map();
 function defaultMarketplaceV1Services(env = process.env) {
-  if (defaults === undefined) {
-    defaults = marketplaceV1Config(env).enabled
+  env = require('./marketplace-owner-settings').runtimeEnv(env);
+  const key = JSON.stringify([env.MARKETPLACE_V1_ORDERS_ENABLED, env.MARKETPLACE_COMMISSION_BPS,
+    env.MARKETPLACE_V1_DELIVERY_ENABLED, env.MARKETPLACE_MAX_DELIVERY_KM]);
+  if (!defaults.has(key)) {
+    if (defaults.size >= 8) defaults.clear();
+    defaults.set(key, marketplaceV1Config(env).enabled
       ? createMarketplaceV1Services({ prisma: require('@mrtpvrest/database').prisma, env })
-      : null;
+      : null);
   }
-  return defaults;
+  return defaults.get(key);
 }
 
 module.exports = {

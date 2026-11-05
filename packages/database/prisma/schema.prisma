@@ -246,6 +246,10 @@ model GlobalConfig {
   maintenanceMode  Boolean @default(false)
   whatsappEnabled  Boolean @default(true)
 
+  // Operational marketplace overrides. Secrets stay in the deployment environment.
+  marketplaceSettings Json?
+  marketplaceSettingsVersion Int @default(0)
+
   updatedAt DateTime @updatedAt
 
   @@map("global_configs")

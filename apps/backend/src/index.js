@@ -171,6 +171,7 @@ app.set('json replacer', function (key, value) {
 app.use(accessLog())
 
 // Rutas públicas (sin tenantMiddleware)
+app.use('/api/marketplace', require('./lib/marketplace-owner-settings').settingsMiddleware())
 const marketplaceDispatchRouter = require('./routes/marketplace-dispatch.routes')()
 app.use('/api/marketplace/v1', marketplaceDispatchRouter)
 app.use('/api/marketplace/dispatch', marketplaceDispatchRouter)

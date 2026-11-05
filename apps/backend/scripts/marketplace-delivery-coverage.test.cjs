@@ -15,6 +15,7 @@ test('five km cap applies to every tariff without rounding before the boundary',
   }
 });
 test('a smaller store radius including zero remains authoritative', () => {
+  assert.equal(coverage({ ...origin, marketplaceMaxKm: 2, deliveryMaxKm: 10 }, north(2.01)).error, 'DELIVERY_OUT_OF_RANGE');
   assert.equal(coverage({ ...origin, deliveryMaxKm: 2 }, north(2.01)).error, 'DELIVERY_OUT_OF_RANGE');
   assert.equal(coverage({ ...origin, deliveryMaxKm: 0 }, north(0.01)).error, 'DELIVERY_OUT_OF_RANGE');
 });
