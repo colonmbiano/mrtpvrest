@@ -573,6 +573,111 @@ describe("apiOrQueue — apertura de turno offline", () => {
   });
 });
 
+describe('conciliación de tickets abiertos con la cola vacía', () => {
+  const scope = { restaurantId: 'rest-1', locationId: 'loc-1' };
+  const key = JSON.stringify([scope.restaurantId, scope.locationId, 'local-order-create-6027']);
+  const stale = { id: 'server-6027', orderNumber: '6027', status: 'CONFIRMED',
+    paymentStatus: 'PENDING', total: 250, items: [] };
+  const paid = { ...stale, status: 'DELIVERED', paymentStatus: 'PAID' };
+  function seed(pending = ['old-ack'], serverId: string | undefined = stale.id) {
+    useOfflineStore.setState({ queue: [], orders: {
+      [key]: { scope, localId: 'local-order-create-6027', serverId,
+        pending, order: { ...stale, localPending: true } },
+    } });
+  }
+  function serverList(list: any[] = []) {
+    mockApi.get.mockImplementation(async (path) => ({ data:
+      path === '/api/orders/admin?scope=active' ? list : paid }));
+  }
+
+  it('retira un ticket cobrado con referencias huérfanas y guarda el estado real', async () => {
+    seed();
+    serverList();
+    expect(await loadOpenOrders()).toEqual([]);
+    expect(mockApi.get).toHaveBeenCalledWith('/api/orders/server-6027', expect.anything());
+    expect(getLocalOrder(stale.id)).toMatchObject({ ...paid, localPending: false });
+    expect(Object.values(useOfflineStore.getState().orders)[0]!.pending).toEqual([]);
+    expect(mockApi.post).not.toHaveBeenCalled();
+    expect(mockApi.put).not.toHaveBeenCalled();
+    await flushOfflinePersistence();
+    const snapshot = await jest.requireMock('idb-keyval').get('tpv-offline-store');
+    useOfflineStore.setState({ queue: [], orders: {} });
+    jest.requireMock('idb-keyval').get.mockResolvedValueOnce(snapshot);
+    await useOfflineStore.persist.rehydrate();
+    expect(getLocalOrders()).toEqual([]);
+    expect(getLocalOrder(stale.id)?.paymentStatus).toBe('PAID');
+  });
+
+  it('repara las referencias al recuperar IndexedDB y recupera un alias remoto conocido', async () => {
+    const snapshot = JSON.stringify({ state: { queue: [{ id: 'old-ack', synced: true }],
+      orders: { [key]: { scope, localId: 'local-order-create-6027', pending: ['old-ack'],
+        order: { ...stale, localPending: true } } } } });
+    await flushOfflinePersistence();
+    jest.requireMock('idb-keyval').get.mockResolvedValueOnce(snapshot);
+    await useOfflineStore.persist.rehydrate();
+    expect(Object.values(useOfflineStore.getState().orders)[0]).toMatchObject({
+      serverId: stale.id, pending: [], order: { localPending: false },
+    });
+    serverList();
+    expect(await loadOpenOrders()).toEqual([]);
+  });
+
+  it.each([false, true])('conserva una operación real, incluso rechazada=%s', async (failed) => {
+    seed(['real']);
+    useOfflineStore.setState({ queue: [{ id: 'real', type: 'order', synced: false, timestamp: 1,
+      data: { method: 'POST', path: `/api/orders/${stale.id}/items`, body: {} }, scope,
+      ...(failed ? { failed: { status: 409, error: 'Revisar', at: 1 } } : {}) }] });
+    serverList();
+    expect(await loadOpenOrders()).toHaveLength(1);
+    expect(useOfflineStore.getState().queue).toHaveLength(1);
+    expect(Object.values(useOfflineStore.getState().orders)[0]!.pending).toEqual(['real']);
+    expect(mockApi.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('no deja referencias huérfanas al descartar una operación', () => {
+    seed(['real']);
+    useOfflineStore.setState({ queue: [{ id: 'real', type: 'order', synced: false, timestamp: 1, data: {} }] });
+    expect(useOfflineStore.getState().discardTransaction('real')).toBe(false);
+    expect(useOfflineStore.getState().discardTransaction('real', true)).toBe(true);
+    expect(Object.values(useOfflineStore.getState().orders)[0]).toMatchObject({ pending: [], order: { localPending: false } });
+  });
+
+  it('comprueba el detalle aunque la lista alcance su límite de 200', async () => {
+    seed([]);
+    serverList(Array.from({ length: 200 }, (_, i) => ({ ...stale, id: `other-${i}` })));
+    const orders = await loadOpenOrders();
+    expect(orders).toHaveLength(200);
+    expect(orders.some(o => o.id === stale.id)).toBe(false);
+  });
+
+  it('no oculta una cuenta abierta ausente de una lista truncada', async () => {
+    seed([]);
+    mockApi.get.mockImplementation(async (path) => ({ data:
+      path === '/api/orders/admin?scope=active' ? [] : stale }));
+    expect(await loadOpenOrders()).toHaveLength(1);
+    expect(getLocalOrder(stale.id)?.status).toBe('CONFIRMED');
+  });
+
+  it('conserva la copia si falla la verificación remota', async () => {
+    seed();
+    mockApi.get.mockResolvedValueOnce({ data: [] }).mockRejectedValueOnce({ code: 'ERR_NETWORK' });
+    expect(await loadOpenOrders()).toHaveLength(1);
+    expect(getLocalOrder(stale.id)?.status).toBe('CONFIRMED');
+  });
+
+  it('no pisa una nueva ronda encolada mientras llega el detalle remoto', async () => {
+    seed([]);
+    mockApi.get.mockImplementation(async (path) => {
+      if (path === '/api/orders/admin?scope=active') return { data: [] };
+      useOfflineStore.getState().addToQueue({ id: 'new-round', type: 'order', synced: false,
+        timestamp: 1, scope, data: { method: 'POST', path: `/api/orders/${stale.id}/items`, body: { items: [] } } });
+      return { data: paid };
+    });
+    expect(await loadOpenOrders()).toHaveLength(1);
+    expect(useOfflineStore.getState().queue[0]!.id).toBe('new-round');
+  });
+});
+
 describe("migración de la cola localStorage → IndexedDB", () => {
   it("fusiona ambas colas, deduplica y conserva la versión más reciente", () => {
     const legacy = JSON.stringify({

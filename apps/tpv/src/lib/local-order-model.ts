@@ -25,6 +25,24 @@ export function findLocalOrder(orders: LocalOrders, scope: OrderScope, id: strin
   return Object.values(orders).find(r => sameOrderScope(r.scope, scope) &&
     (r.localId === id || r.serverId === id || r.order.id === id));
 }
+
+/** La cola durable manda: una referencia a un ACK retirado no es trabajo pendiente. */
+export function reconcileLocalOrderQueue(orders: LocalOrders, queue: OfflineTransaction[]): LocalOrders {
+  const liveIds = new Set(queue.filter(tx => !tx.synced).map(tx => tx.id));
+  let result = orders;
+  for (const [key, record] of Object.entries(orders)) {
+    const pending = record.pending.filter(id => liveIds.has(id));
+    // Algunas copias antiguas guardaron el id remoto solo dentro de order.
+    const serverId = record.serverId ?? (typeof record.order.id === 'string' &&
+      !record.order.id.startsWith(LOCAL_ORDER_PREFIX) ? record.order.id : undefined);
+    if (pending.length === record.pending.length && serverId === record.serverId &&
+        record.order.localPending === (pending.length > 0)) continue;
+    if (result === orders) result = { ...orders };
+    result[key] = { ...record, serverId, pending,
+      order: { ...record.order, localPending: pending.length > 0 } };
+  }
+  return result;
+}
 export function orderIdFromPath(path: string): string | null {
   return /^\/api\/orders\/([^/]+)\/(?:items|details|discount|payment|split)$/.exec(path)?.[1] ?? null;
 }

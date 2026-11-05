@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { get, set, del } from 'idb-keyval';
-import { acknowledgeLocalOrder, projectOrderTransaction, pruneLocalOrders, type LocalOrders } from '@/lib/local-order-model';
+import { acknowledgeLocalOrder, projectOrderTransaction, pruneLocalOrders, reconcileLocalOrderQueue, type LocalOrders } from '@/lib/local-order-model';
 
 export type TransactionType =
   | 'order'
@@ -191,12 +191,13 @@ const useOfflineStore = create<OfflineState>()(
         // Borrar un comando de una cuenta local dejaría rondas/pagos
         // huérfanos. Su conciliación debe conservar el registro completo.
         if (!rollback && Object.values(get().orders).some(r => r.pending.includes(transactionId))) return false;
-        set((state) => ({
-          queue: state.queue.filter((t) => t.id !== transactionId),
-        }));
+        set((state) => {
+          const queue = state.queue.filter((t) => t.id !== transactionId);
+          return { queue, orders: reconcileLocalOrderQueue(state.orders, queue) };
+        });
         return true;
       },
-      clearQueue: () => set({ queue: [] }),
+      clearQueue: () => set(state => ({ queue: [], orders: reconcileLocalOrderQueue(state.orders, []) })),
       setSyncInProgress: (inProgress) => set({ syncInProgress: inProgress }),
       setLastSync: (timestamp) => set({ lastSync: timestamp }),
       getUnsyncedTransactions: () => {
@@ -210,11 +211,10 @@ const useOfflineStore = create<OfflineState>()(
       name: 'tpv-offline-store',
       storage: createJSONStorage(() => idbStorage),
       partialize: (state) => ({ queue: state.queue, orders: state.orders, lastSync: state.lastSync }),
-      merge: (persisted, current) => ({
-        ...current,
-        ...(persisted as Partial<OfflineState>),
-        syncInProgress: false,
-      }),
+      merge: (persisted, current) => {
+        const state = { ...current, ...(persisted as Partial<OfflineState>) };
+        return { ...state, orders: reconcileLocalOrderQueue(state.orders, state.queue), syncInProgress: false };
+      },
     }
   )
 );
