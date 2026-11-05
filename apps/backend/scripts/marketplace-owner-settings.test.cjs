@@ -92,7 +92,9 @@ test('a pause blocks quote and order POST but keeps reading existing order codes
   app.use('/quotes', require('../src/routes/marketplace-quotes.routes')({ service: { createQuote: () => assert.fail('paused') } }));
   app.use('/orders', require('../src/routes/marketplace-orders-v1.routes')({ resolveAccount: async () => 'buyer',
     service: { createOrder: () => assert.fail('paused'), codesForAccount: async () => ({ pickupPin: 'test' }) } }));
+  app.use('/legacy', require('../src/routes/marketplace.routes')());
   assert.equal((await request(app).post('/quotes').send({})).body.errorCode, 'ORDERS_PAUSED');
   assert.equal((await request(app).post('/orders').send({})).body.errorCode, 'ORDERS_PAUSED');
+  assert.equal((await request(app).post('/legacy/orders').send({})).body.errorCode, 'ORDERS_PAUSED');
   assert.equal((await request(app).get('/orders/old/codes').set('Authorization', 'Bearer test')).status, 200);
 });

@@ -12,7 +12,8 @@ test('PostgreSQL saves one concurrent revision and its audit atomically', { skip
   const env = { MARKETPLACE_PIN_SECRET: 'test-only-pin-key-with-at-least-32-bytes' };
   try {
     await prisma.globalConfig.upsert({ where: { id: 'saas-config' },
-      create: { id: 'saas-config' }, update: { marketplaceSettings: require('@prisma/client').Prisma.DbNull, marketplaceSettingsVersion: 0 } });
+      create: { id: 'saas-config' }, update: { marketplaceSettingsVersion: 0 } });
+    await prisma.$executeRaw`UPDATE "global_configs" SET "marketplaceSettings" = NULL WHERE id = 'saas-config'`;
     const initialLogs = await prisma.systemLog.count({ where: { message: 'marketplace.settings.updated' } });
     const request = commissionBps => ({ version: 0, settings: { ordersEnabled: true, deliveryEnabled: true, maxDeliveryKm: 5, commissionBps } });
     const outcomes = await Promise.allSettled([saveOwnerSettings(prisma, request(1000), 'test-owner-a', env),
