@@ -57,8 +57,23 @@ const resendVerifyLimiter = rateLimit({
   },
 });
 
+// Forgot-password: 5/hour por IP. Evita abuso de envío de emails de reset
+// (costo + spam al usuario). El endpoint responde uniforme (anti-enumeración),
+// así que el limiter es la única defensa contra fuerza bruta de solicitudes.
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders,
+  legacyHeaders,
+  message: {
+    error: 'Demasiadas solicitudes de restablecimiento. Intenta en una hora.',
+    code: 'FORGOT_RATE_LIMIT',
+  },
+});
+
 module.exports = {
   aiLimiter,
   refreshLimiter,
   resendVerifyLimiter,
+  forgotPasswordLimiter,
 };

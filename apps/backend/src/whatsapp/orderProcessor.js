@@ -4,21 +4,25 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const botApi = require('./botApi');
+const { minimumOrderFailure } = require('./orderFollowup');
 
-const MAX_ORDER_ITEMS = 15;
-const MAX_ITEM_QUANTITY = 20;
+const { normalizeBotItems, missingOrderData } = require('./responsePolicy');
+const { parseCatalog, fromProducts, mentionsBbqHot, reconcileItems } = require('./pricedExtras');
 
-function normalizeBotItems(items) {
-  return (Array.isArray(items) ? items : [])
-    .filter(item => item && item.menuItemId)
-    .slice(0, MAX_ORDER_ITEMS)
-    .map(item => ({
-      menuItemId: item.menuItemId,
-      variantId: item.variantId || null,
-      quantity: Math.max(1, Math.min(MAX_ITEM_QUANTITY, parseInt(item.quantity, 10) || 1)),
-      modifierIds: Array.isArray(item.modifierIds) ? item.modifierIds : [],
-      notes: item.notes || ''
+// A confirmed summary must already include the priced extra. Do not silently
+// add a charge here, after the customer has reviewed the draft.
+async function validatePricedExtras(restaurantId, items) {
+  if (!items.some(item => mentionsBbqHot(item.notes))) return;
+  const catalog = botApi.useApi()
+    ? parseCatalog((await botApi.getContext()).menuString)
+    : fromProducts(await prisma.menuItem.findMany({
+      where: { restaurantId, id: { in: items.map(item => item.menuItemId) } },
+      include: { modifierGroups: { include: { modifiers: true } }, complements: true },
     }));
+  const priced = reconcileItems(items, catalog);
+  if (priced.some((item, index) => (item.modifierIds || []).some(id => !(items[index].modifierIds || []).includes(id)))) {
+    throw new Error('El aderezo BBQ Hot tiene costo extra. Necesito mostrarte el resumen con ese cargo antes de registrar el pedido.');
+  }
 }
 
 function normalizePaymentMethod(method, orderType = 'DELIVERY') {
@@ -139,11 +143,15 @@ async function getBotEmployeeId(restaurantId) {
 /**
  * Recibe el JSON de Gemini y crea la orden en el TPV
  */
-async function createOrderFromGemini(restaurantId, parsedJson, port = 3001, chatId = null) {
-  const items = normalizeBotItems(parsedJson.items);
-  if (parsedJson.status !== 'CONFIRMED' || items.length === 0) {
-    return null;
-  }
+async function createOrderFromGemini(restaurantId, parsedJson, port = 3001, chatId = null, inboundId = null) {
+  if (parsedJson?.status !== 'CONFIRMED') return null;
+  let items;
+  try { items = normalizeBotItems(parsedJson.items); }
+  catch (error) { return { failed: true, code: 'INVALID_ORDER_DATA', message: error.message }; }
+  const missing = missingOrderData(parsedJson);
+  if (missing) return { failed: true, code: 'INVALID_ORDER_DATA', message: missing };
+  try { await validatePricedExtras(restaurantId, items); }
+  catch (error) { return { failed: true, code: 'INVALID_ORDER_DATA', message: error.message }; }
 
   // Idempotencia + dedupe por chat EN BD: `wa:<sha1(chat)16>:<uuid>`. El uuid
   // se genera UNA vez por confirmación (postWithRetry re-manda el MISMO body,
@@ -153,7 +161,8 @@ async function createOrderFromGemini(restaurantId, parsedJson, port = 3001, chat
   // la guarda en memoria de client.js solo cubre 45 min; el duplicado real
   // #1230/#1244 llegó a los 59. Ver dedupe en store.routes.js).
   const chatRef = chatRefFor(chatId);
-  const clientOrderId = chatRef ? `wa:${chatRef}:${crypto.randomUUID()}` : undefined;
+  const eventKey = inboundId ? crypto.createHash('sha256').update(inboundId).digest('hex').slice(0, 32) : crypto.randomUUID();
+  const clientOrderId = chatRef ? `wa:${chatRef}:${eventKey}` : undefined;
 
   try {
     // Sucursal principal: en API-only viene de /api/bot/context (sin BD); en
@@ -170,18 +179,18 @@ async function createOrderFromGemini(restaurantId, parsedJson, port = 3001, chat
     }
 
     // Formatear el payload para /api/store/orders
-    const orderType = parsedJson.orderType || 'DELIVERY';
+    const orderType = parsedJson.orderType;
     const payload = {
       customerName: parsedJson.customerName || "Cliente WhatsApp",
       customerPhone: normalizeCustomerPhone(parsedJson.customerPhone),
       orderType,
-      deliveryAddress: parsedJson.deliveryAddress || 'Dirección a confirmar por WhatsApp',
-      deliveryLat: parsedJson.deliveryLat || null,
-      deliveryLng: parsedJson.deliveryLng || null,
+      deliveryAddress: orderType === 'DELIVERY' ? parsedJson.deliveryAddress.trim() : null,
+      deliveryLat: parsedJson.deliveryLat ?? null,
+      deliveryLng: parsedJson.deliveryLng ?? null,
       locationId,
       source: 'WHATSAPP',
       paymentMethod: normalizePaymentMethod(parsedJson.paymentMethod, orderType),
-      notes: 'Pedido generado por asistente de IA de WhatsApp',
+      notes: ['Pedido generado por asistente de IA de WhatsApp', typeof parsedJson.notes === 'string' ? parsedJson.notes.trim().slice(0, 1000) : ''].filter(Boolean).join('\n'),
       ...(clientOrderId ? { clientOrderId } : {}),
       items
     };
@@ -203,6 +212,8 @@ async function createOrderFromGemini(restaurantId, parsedJson, port = 3001, chat
     // Superficie del código de error para que client.js relate un mensaje
     // específico (p.ej. NO_ACTIVE_SHIFT: la caja aún no está abierta) en vez del
     // genérico "tuve un detalle". Sin código conocido → null (fallo genérico).
+    const minimumFailure = minimumOrderFailure(data);
+    if (minimumFailure) return minimumFailure;
     if (data?.code) return { failed: true, code: data.code, message: data.error };
     return null;
   }
@@ -212,10 +223,10 @@ async function createOrderFromGemini(restaurantId, parsedJson, port = 3001, chat
  * Agrega platillos a una orden existente
  */
 async function addItemsToOrder(orderId, parsedJson, restaurantId, port = 3001) {
-  const items = normalizeBotItems(parsedJson.items);
-  if (parsedJson.status !== 'ADD_TO_ORDER' || items.length === 0) {
-    return null;
-  }
+  if (parsedJson?.status !== 'ADD_TO_ORDER') return null;
+  let items;
+  try { items = normalizeBotItems(parsedJson.items); } catch { return null; }
+  try { await validatePricedExtras(restaurantId, items); } catch { return null; }
 
   // API-only: el backend resuelve empleado + sucursal y firma el JWT internamente.
   // El bot NO necesita JWT_SECRET ni tocar la BD.

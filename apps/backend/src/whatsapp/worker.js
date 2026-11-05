@@ -27,7 +27,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const botConfig = require('./botConfig');
-const { initWhatsApp, destroyWhatsApp, clearAllHandoffs, getWhatsAppClient, getLatestQr, getSessionState, getIgnoredGroupInfo, refreshIgnoredGroup } = require('./client');
+const { authorized, qrSvg } = require('./workerHttp');
+const { initWhatsApp, destroyWhatsApp, clearAllHandoffs, getWhatsAppClient, getLatestQr, getSessionState, getIgnoredGroupInfo, refreshIgnoredGroup, getOperationalStatus } = require('./client');
 
 // Al correr con volumen persistente, Chromium deja archivos Singleton* (lock del
 // perfil) en el userDataDir dentro del volumen. Como cada deploy es un contenedor
@@ -63,8 +64,7 @@ if (!process.env.WHATSAPP_BOT_RESTAURANT_ID) {
 const PORT = parseInt(process.env.PORT || '3005', 10);
 
 function isReady() {
-  const c = getWhatsAppClient();
-  return !!(c && c.info && c.info.wid);
+  return getSessionState() === 'ready';
 }
 
 function qrPageHtml() {
@@ -86,18 +86,32 @@ function qrPageHtml() {
       '<body style="font-family:system-ui;text-align:center;padding:3rem">' +
       '<h1>⏳ Esperando QR…</h1><p>Aún no hay código. Esta página se recarga sola.</p></body>';
   }
-  const img = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(qr)}`;
+  const svg = qrSvg(qr);
   return '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="10">' +
     '<title>WhatsApp Bot — Escanea el QR</title>' +
     '<body style="font-family:system-ui;text-align:center;padding:2rem">' +
     '<h1>Escanea con WhatsApp</h1>' +
     '<p>WhatsApp → Dispositivos vinculados → Vincular un dispositivo</p>' +
-    `<img src="${img}" width="320" height="320" alt="QR"/>` +
+    svg +
     '<p style="color:#888">La página se recarga cada 10 s (el QR rota).</p></body>';
 }
 
 const healthServer = http.createServer((req, res) => {
   const url = (req.url || '/').split('?')[0];
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
+  const protectedPaths = ['/qr', '/clear-handoffs', '/export-recent-chats', '/debug/ignore-group'];
+  if (protectedPaths.includes(url)) {
+    const token = process.env.WHATSAPP_BOT_ADMIN_TOKEN || process.env.WHATSAPP_BOT_DEBUG_TOKEN;
+    if (!authorized(req, token, url === '/qr')) {
+      res.writeHead(401, { 'Content-Type': 'application/json', 'WWW-Authenticate': 'Basic realm="WhatsApp admin"' });
+      return res.end(JSON.stringify({ error: 'Autenticación requerida' }));
+    }
+    const mutation = ['/clear-handoffs', '/export-recent-chats'].includes(url) || (url === '/debug/ignore-group' && (req.url || '').includes('refresh=1'));
+    if (mutation && req.method !== 'POST') { res.writeHead(405, { Allow: 'POST' }); return res.end(); }
+  }
   if (url === '/qr') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(qrPageHtml());
@@ -107,6 +121,74 @@ const healthServer = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ ok: true, cleared }));
   }
+  if (url === '/export-recent-chats') {
+    const c = getWhatsAppClient();
+    if (!c || !isReady() || !c.pupPage) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'WhatsApp client or page not ready' }));
+    }
+    (async () => {
+      try {
+        console.log('[WhatsApp Worker] Extrayendo chats via pupPage.evaluate...');
+        const extracted = await c.pupPage.evaluate(() => {
+          try {
+            const chatStore = window.Store?.Chat || (window.require && window.require('WAWebCollections')?.Chat);
+            if (!chatStore) return { error: 'No Chat store found in window.Store' };
+            const models = typeof chatStore.getModelsArray === 'function' ? chatStore.getModelsArray() : chatStore.models;
+            if (!models || !Array.isArray(models)) return { error: 'No models array found' };
+
+            const list = [];
+            for (const chat of models) {
+              const id = chat.id?._serialized || String(chat.id || '');
+              if (!id || chat.isGroup || id.includes('@broadcast') || id.includes('@newsletter')) continue;
+              
+              const rawMsgs = chat.msgs?.models || chat.msgs?._models || [];
+              const msgs = [];
+              for (const m of rawMsgs.slice(-20)) {
+                if (!m) continue;
+                msgs.push({
+                  fromMe: !!(m.id?.fromMe || m.fromMe),
+                  body: String(m.body || m.caption || ''),
+                  type: String(m.type || ''),
+                  timestamp: m.t || null,
+                });
+              }
+
+              list.push({
+                id,
+                name: chat.name || chat.formattedTitle || null,
+                unreadCount: chat.unreadCount || 0,
+                timestamp: chat.t || null,
+                messages: msgs,
+              });
+              if (list.length >= 100) break;
+            }
+            return { ok: true, chats: list };
+          } catch (e) {
+            return { error: e.message || String(e) };
+          }
+        });
+
+        if (extracted.error) {
+          console.error('[WhatsApp Worker] Error en evaluate:', extracted.error);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ error: extracted.error }));
+        }
+
+        const outPath = path.join(process.cwd(), '..', '..', 'logs', 'recent-chats.json');
+        fs.mkdirSync(path.dirname(outPath), { recursive: true });
+        fs.writeFileSync(outPath, JSON.stringify(extracted.chats, null, 2), 'utf8');
+        console.log(`[WhatsApp Worker] Exportados exitosamente ${extracted.chats.length} chats a ${outPath}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, count: extracted.chats.length, file: outPath }));
+      } catch (err) {
+        console.error('[WhatsApp Worker] Error exportando chats:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    })();
+    return;
+  }
   if (url === '/healthz') {
     // Healthcheck de DEPLOY de Railway: 200 mientras el PROCESO viva (no acopla
     // la salud de la SESIÓN, para no romper la fase QR del primer deploy).
@@ -115,20 +197,15 @@ const healthServer = http.createServer((req, res) => {
   }
   if (url === '/livez') {
     const state = getSessionState();
-    const ok = state === 'ready' || !botConfig.shouldRunHere();
+    const operations = getOperationalStatus();
+    const ok = (state === 'ready' && operations.active && operations.exclusionsReady && operations.outbox.needsReview === 0) || !botConfig.shouldRunHere();
     res.writeHead(ok ? 200 : 503, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ ok, state, runMode: botConfig.getRunMode(), standby: !botConfig.shouldRunHere() }));
+    return res.end(JSON.stringify({ ok, state, ...operations, runMode: botConfig.getRunMode(), standby: !botConfig.shouldRunHere() }));
   }
   // Diagnóstico del grupo ignorado: cuántos miembros detectó + una muestra.
   // GATEADO por token (expone teléfonos del staff). Requiere ?token= que iguale
   // WHATSAPP_BOT_DEBUG_TOKEN; sin la env, el endpoint queda deshabilitado.
   if (url === '/debug/ignore-group') {
-    const token = process.env.WHATSAPP_BOT_DEBUG_TOKEN;
-    const given = new URLSearchParams((req.url || '').split('?')[1] || '').get('token');
-    if (!token || given !== token) {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ error: 'forbidden', hint: 'set WHATSAPP_BOT_DEBUG_TOKEN y pasa ?token=' }));
-    }
     const doRespond = () => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(getIgnoredGroupInfo(), null, 2));
@@ -143,6 +220,8 @@ const healthServer = http.createServer((req, res) => {
   res.end(JSON.stringify({
     service: 'whatsapp-bot-worker',
     ready: isReady(),
+    ...getOperationalStatus(),
+    revision: 'wa-audit-fixes-2026-10-20',
     standby: !botConfig.shouldRunHere(),
     runMode: botConfig.getRunMode(),
     active: botConfig.getActive(),
@@ -151,7 +230,7 @@ const healthServer = http.createServer((req, res) => {
   }));
 });
 
-healthServer.listen(PORT, '0.0.0.0', () => {
+healthServer.listen(PORT, process.env.WHATSAPP_BOT_BIND || (botConfig.isRailwayRuntime() ? '0.0.0.0' : '127.0.0.1'), () => {
   console.log(`[WhatsApp Worker] Health/QR server en :${PORT} (GET /qr para escanear).`);
 });
 

@@ -74,8 +74,8 @@ function parseRow(row, envCfg) {
     active: isActive,
     runMode: effectiveMode,
     extraInstructions: instr || envCfg.extraInstructions,
-    ignoreNumbers: (nums && nums.length) ? nums : envCfg.ignoreNumbers,
-    ignoreGroupName: grp || envCfg.ignoreGroupName,
+    ignoreNumbers: nums !== null ? nums : envCfg.ignoreNumbers,
+    ignoreGroupName: typeof cfg.ignoreGroupName === 'string' ? grp : envCfg.ignoreGroupName,
   };
 }
 
@@ -162,7 +162,7 @@ function shouldRunHere() {
   if (mode === 'local') {
     return !isRailwayRuntime();
   }
-  return true;
+  return mode === 'cloud' && isRailwayRuntime();
 }
 
 // ── Getters síncronos (hot-path) ─────────────────────────────────────────────

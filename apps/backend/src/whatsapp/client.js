@@ -1,6 +1,12 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const crypto = require('crypto');
+const { validateModelReply, conversationReply, missingOrderData } = require('./responsePolicy');
+const { followupIntent, followupReply } = require('./orderFollowup');
+const { getStateStore } = require('./stateStore');
+const { createOutbox } = require('./outbox');
+const { readGroup, normalizedName } = require('./ignoredGroup');
 const { processWhatsAppMessage } = require('./gemini');
+const { isExplicitConfirmation, updateSession, applyFacts, SESSION_TTL } = require('./orderConversation');
 const { createOrderFromGemini, chatRefFor, normalizeCustomerPhone } = require('./orderProcessor');
 const { isAudioMessage, transcribeWhatsAppAudio } = require('./audioTranscription');
 const { prisma } = require('@mrtpvrest/database');
@@ -30,7 +36,9 @@ let lastReadyAt = 0;
 const POST_READY_SYNC_COOLDOWN_MS = 15 * 1000;
 const MAX_MSG_AGE_MS = 90 * 1000;
 // Cortafuegos global de salida: impide enviar a >3 chats distintos en 10s o >6 envíos/min total.
-const globalOutboundLog = []; // Array<{ chatKey, at }>
+const stateStore = getStateStore();
+let outbox = null;
+let inFlight = 0;
 
 // Alerta best-effort al dueño cuando el bot necesita atención (sesión perdida /
 // QR requerido). Se dispara a un webhook configurable WHATSAPP_BOT_ALERT_WEBHOOK
@@ -39,15 +47,18 @@ const globalOutboundLog = []; // Array<{ chatKey, at }>
 const alertThrottle = new Map();
 async function notifyAlert(event, detail) {
   const url = process.env.WHATSAPP_BOT_ALERT_WEBHOOK;
-  if (!url) return;
+  const token = process.env.BOT_ALERT_TOKEN;
+  if (!url || !token) return;
   const now = Date.now();
   if (now - (alertThrottle.get(event) || 0) < 5 * 60 * 1000) return; // máx 1/5min por tipo
   alertThrottle.set(event, now);
   const text = `⚠️ Bot WhatsApp (${process.env.WHATSAPP_BOT_RESTAURANT_ID || 'restaurante'}): ${event}${detail ? ` — ${detail}` : ''}`;
   try {
-    await fetch(url, {
+    const endpoint = new URL(url);
+    endpoint.searchParams.delete('token');
+    await fetch(endpoint.toString(), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       // text=Slack, content=Discord: cubre ambos sin configurar.
       body: JSON.stringify({ text, content: text, event, detail: String(detail || '') }),
       signal: AbortSignal.timeout(8000),
@@ -76,11 +87,26 @@ const recentOrderChats = new Map();
 const humanHandoffs = new Map();
 const botOutgoingIntents = new Map();
 const botSentMessages = new Map();
+const seenInbound = new Map();
+const pendingDrafts = new Map();
+const orderSessions = new Map();
+// Staff summaries wait for the next inbound message, keyed by exact chat ID.
+const resumeContexts = new Map();
+const saved = stateStore.get('conversations', {});
+const persistedMaps = { chatHistory, customerProfiles, recentOrders, recentOrderChats, humanHandoffs, seenInbound, pendingDrafts, orderSessions, resumeContexts };
+if (Date.now() - (saved.savedAt || 0) < 6 * 60 * 60 * 1000) {
+  for (const [name, map] of Object.entries(persistedMaps)) {
+    for (const [key, value] of (saved[name] || [])) map.set(key, value);
+  }
+}
+function saveConversations() {
+  stateStore.set('conversations', { savedAt: Date.now(), ...Object.fromEntries(Object.entries(persistedMaps).map(([key, map]) => [key, [...map]])) });
+}
 // Anti-spam / anti-baneo: último texto enviado por chat { chatKey: {text, at} }.
 // safeSend lo usa para NO reenviar el mismo mensaje al mismo chat en una ventana
 // corta (evita ráfagas de idénticos que disparan el bloqueo de whatsapp-web.js).
 const lastBotSendByChat = new Map();
-const HUMAN_HANDOFF_MS = 60 * 60 * 1000;
+const HUMAN_HANDOFF_MS = parseInt(process.env.WHATSAPP_HUMAN_HANDOFF_MIN || '2', 10) * 60 * 1000;
 const BOT_OUTGOING_INTENT_MS = 2 * 60 * 1000;
 const PROFILE_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 días: perfiles inactivos se purgan
 
@@ -193,7 +219,27 @@ function pauseBotForChat(chatKey, phone, reason = 'human_message_after_order') {
   if (chatKey) humanHandoffs.set(chatKey, entry);
   const phoneKey = phoneHandoffKey(phone);
   if (phoneKey) humanHandoffs.set(phoneKey, entry);
+  for (const key of new Set([phone, chatKey?.split('@')[0]].filter(Boolean))) {
+    pendingDrafts.delete(key);
+    orderSessions.delete(key);
+  }
+  saveConversations();
   return entry;
+}
+
+function unpauseBotForChat(chatKey, phone) {
+  let cleared = false;
+  if (chatKey && humanHandoffs.has(chatKey)) {
+    humanHandoffs.delete(chatKey);
+    cleared = true;
+  }
+  const phoneKey = phoneHandoffKey(phone);
+  if (phoneKey && humanHandoffs.has(phoneKey)) {
+    humanHandoffs.delete(phoneKey);
+    cleared = true;
+  }
+  if (cleared) saveConversations();
+  return cleared;
 }
 
 function getActiveHandoff(chatKey, phone) {
@@ -206,31 +252,58 @@ function messageId(msg) {
   return msg?.id?._serialized || msg?.id?.id || null;
 }
 
+function normalizeOutgoingBody(body) {
+  return String(body || '').replace(/\s+/g, ' ').trim().slice(0, 400);
+}
+
 function outgoingIntentKey(chatKey, body) {
-  return `${chatKey || ''}::${String(body || '').slice(0, 800)}`;
+  return `${chatKey || ''}::${normalizeOutgoingBody(body)}`;
 }
 
 function rememberBotOutgoingIntent(chatKey, body) {
   if (!chatKey) return;
-  botOutgoingIntents.set(outgoingIntentKey(chatKey, body), Date.now());
+  const now = Date.now();
+  botOutgoingIntents.set(outgoingIntentKey(chatKey, body), now);
+  botOutgoingIntents.set(`any::${normalizeOutgoingBody(body)}`, now);
+  botOutgoingIntents.set(`chat::${chatKey}`, now);
 }
 
 function rememberBotSentMessage(msg) {
   const id = messageId(msg);
   if (id) botSentMessages.set(id, Date.now());
+  if (msg?.id?.id) botSentMessages.set(msg.id.id, Date.now());
+}
+
+function isWhatsAppBusinessAutoMessage(body) {
+  const b = String(body || '').toLowerCase();
+  if (!b) return false;
+  return (
+    b.includes('haz tu pedido directo en nuestra tienda en línea') ||
+    b.includes('haz tu pedido directo en nuestra tienda en linea') ||
+    b.includes('master-burguer-s.mrtpvrest.com') ||
+    b.includes('soy tu asistente virtual') ||
+    b.includes('bienvenido a master burguer') ||
+    b.includes('bienvenido a master burger') ||
+    b.includes('en este momento tengo mucha demanda') ||
+    b.includes('recibí tu comprobante') ||
+    b.includes('*¡pedido confirmado!*')
+  );
 }
 
 function isBotAuthoredOutgoing(msg, chatKey) {
   const id = messageId(msg);
   if (id && botSentMessages.has(id)) return true;
+  if (msg?.id?.id && botSentMessages.has(msg.id.id)) return true;
+  if (isWhatsAppBusinessAutoMessage(msg?.body)) return true;
+
+  const now = Date.now();
   const key = outgoingIntentKey(chatKey, msg?.body);
   const timestamp = botOutgoingIntents.get(key);
   if (!timestamp) return false;
-  if (Date.now() - timestamp > BOT_OUTGOING_INTENT_MS) {
+  if (now - timestamp > BOT_OUTGOING_INTENT_MS) {
     botOutgoingIntents.delete(key);
     return false;
   }
-  botOutgoingIntents.delete(key);
   return true;
 }
 
@@ -267,37 +340,25 @@ function isIgnoredNumber(phone) {
 // así que agregar/quitar a alguien del grupo lo activa/desactiva sin tocar nada.
 // Guardamos DOS llaves por miembro para casar tanto @lid como @c.us: el id
 // serializado y los últimos 10 dígitos del "user".
-let ignoredGroup = { name: null, ids: new Set(), phones: new Set(), count: 0, loadedAt: 0, error: null };
-
-async function refreshIgnoredGroup() {
-  // Nombre del grupo editable desde el admin (BD, fallback a env). Ver botConfig.js.
+const groupSnapshot = stateStore.get('ignoredGroup', {});
+let ignoredGroup = { name: null, count: 0, loadedAt: 0, error: null, ...groupSnapshot, ids: new Set(groupSnapshot.ids || []), phones: new Set(groupSnapshot.phones || []) };
+function exclusionsReady() {
   const name = botConfig.getIgnoreGroupName();
-  if (!name || !whatsappClient) {
-    ignoredGroup = { name: null, ids: new Set(), phones: new Set(), count: 0, loadedAt: Date.now(), error: null };
-    return;
-  }
+  return !name || (normalizedName(name) === normalizedName(ignoredGroup.name) && ignoredGroup.count > 0 && Date.now() - ignoredGroup.loadedAt < 24 * 60 * 60000);
+}
+async function refreshIgnoredGroup() {
+  const name = botConfig.getIgnoreGroupName();
+  if (!name) { ignoredGroup = { name: null, ids: new Set(), phones: new Set(), count: 0, loadedAt: Date.now(), error: null }; return; }
+  if (!whatsappClient) return;
   try {
-    const chats = await whatsappClient.getChats();
-    const group = chats.find(c => c.isGroup && String(c.name || '').trim().toLowerCase() === name.toLowerCase());
-    if (!group) {
-      const availableGroups = chats.filter(c => c.isGroup).map(c => c.name).slice(0, 50);
-      ignoredGroup = { name, ids: new Set(), phones: new Set(), count: 0, loadedAt: Date.now(), error: 'grupo no encontrado', availableGroups };
-      console.warn(`[WhatsApp Bot] Grupo a ignorar "${name}" no encontrado. Grupos: ${availableGroups.join(' | ')}`);
-      return;
-    }
-    const ids = new Set();
-    const phones = new Set();
-    for (const part of (group.participants || [])) {
-      const sid = part.id?._serialized;
-      if (sid) ids.add(sid);
-      const ph = last10Digits(part.id?.user || sid || '');
-      if (ph.length >= 10) phones.add(ph);
-    }
-    ignoredGroup = { name, ids, phones, count: (group.participants || []).length, loadedAt: Date.now(), error: null };
-    console.log(`[WhatsApp Bot] Grupo ignorado "${name}": ${ignoredGroup.count} miembros (${ids.size} ids, ${phones.size} tel).`);
-  } catch (e) {
-    ignoredGroup.error = e.message;
-    console.error('[WhatsApp Bot] Error cargando el grupo a ignorar:', e.message);
+    const result = await readGroup(whatsappClient, name);
+    ignoredGroup = { ...result, ids: new Set(result.ids), phones: new Set(result.phones), name, loadedAt: Date.now(), error: null };
+    stateStore.set('ignoredGroup', { ...ignoredGroup, ids: [...ignoredGroup.ids], phones: [...ignoredGroup.phones] });
+    console.log('[WhatsApp Bot] Exclusiones cargadas: ' + ignoredGroup.count + ' miembros.');
+  } catch (error) {
+    ignoredGroup.error = error.message;
+    console.error('[WhatsApp Bot] No se pudo actualizar el grupo excluido:', error.message);
+    if (!exclusionsReady()) notifyAlert('Respuestas pausadas: falta cargar exclusiones del equipo', null);
   }
 }
 
@@ -335,7 +396,7 @@ async function fetchOrderTicketDetail(orderId, restaurantId) {
     return await prisma.order.findFirst({
       where: { id: orderId, restaurantId },
       select: {
-        orderNumber: true, subtotal: true, deliveryFee: true, total: true, discount: true,
+        orderNumber: true, status: true, subtotal: true, deliveryFee: true, total: true, discount: true,
         items: {
           select: {
             name: true, quantity: true, subtotal: true, notes: true,
@@ -416,26 +477,25 @@ function initWhatsApp(io) {
     },
   });
 
+  outbox = createOutbox({
+    store: stateStore,
+    eligibility: entry => getActiveHandoff(entry.chat, null) || !botConfig.getActive() ? 'cancel' : (sessionState === 'ready' && whatsappClient && exclusionsReady() ? 'send' : 'wait'),
+    send: async entry => {
+      rememberBotOutgoingIntent(entry.chat, entry.text);
+      const sent = await whatsappClient.sendMessage(entry.chat, entry.text);
+      rememberBotSentMessage(sent);
+      console.log('[WhatsApp Bot] Respuesta enviada.');
+    },
+    onFailure: (_entry, error) => { console.error('[WhatsApp Bot] Respuesta pendiente de revisión:', error); notifyAlert('Respuesta pendiente de revisión', error); },
+  });
+  outbox.resume();
   whatsappClient.on('qr', (qr) => {
     latestQr = qr;
     sessionState = 'qr';
     // En prod con sesión en volumen NO debería aparecer QR salvo desvinculación:
     // avisar (throttled) para que alguien lo escanee en /qr.
     notifyAlert('QR requerido — escanéalo en /qr', null);
-    if (process.env.QUIET_QR_LOG === '1') {
-      console.log('[WhatsApp Bot] Código QR actualizado (servicio en marcha en /qr).');
-    } else {
-      console.log('[WhatsApp Bot] Escanea este código QR con tu WhatsApp:');
-      qrcode.generate(qr, { small: true });
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-      console.log('\n[WhatsApp Bot] Si no puedes escanearlo en consola, abre este enlace en tu navegador:');
-      console.log(qrUrl, '\n');
-    }
-
-    // Opcional: Emitir el QR vía socket para mostrarlo en el panel TPV de Admin
-    if (io) {
-      io.emit('whatsapp:qr', qr);
-    }
+    console.log('[WhatsApp Bot] Vinculación pendiente: abre el visor QR local o autenticado.');
   });
 
   whatsappClient.on('authenticated', () => {
@@ -501,46 +561,22 @@ function initWhatsApp(io) {
     }
     const msgTsMs = rawTs * 1000;
     const nowMs = Date.now();
-    if (msgTsMs < lastReadyAt || nowMs - msgTsMs > MAX_MSG_AGE_MS) {
+    if (msgTsMs < lastReadyAt) {
       console.log(`[WhatsApp Bot] Backlog/mensaje viejo ignorado (anti-blast) de ${msg.from}: ts=${new Date(msgTsMs).toISOString()} vs ready=${new Date(lastReadyAt).toISOString()}.`);
       return;
     }
 
     // EnvÃ­o robusto (sendMessage anda mejor con @lid que msg.reply).
-    const safeSend = async (text) => {
-      try {
-        const now = Date.now();
-        // Anti-baneo: no reenviar el MISMO texto al mismo chat dentro de 60s.
-        const prevSend = lastBotSendByChat.get(chatKey);
-        if (prevSend && prevSend.text === text && now - prevSend.at < 60000) {
-          console.log(`[WhatsApp Bot] Envio duplicado suprimido (anti-spam) a ${msg.from}`);
-          return;
-        }
-        // Cortafuegos GLOBAL anti-blast: limpiar envios >60s y bloquear si hay
-        // >3 chats distintos en 10s o >=8 envios totales en 60s.
-        while (globalOutboundLog.length > 0 && now - globalOutboundLog[0].at > 60000) {
-          globalOutboundLog.shift();
-        }
-        const recent10sChats = new Set(
-          globalOutboundLog.filter((e) => now - e.at < 10000).map((e) => e.chatKey)
-        );
-        if (!recent10sChats.has(chatKey) && recent10sChats.size >= 3) {
-          console.warn(`[WhatsApp Bot] CORTAFUEGOS ANTI-BLAST: bloqueado envio a ${msg.from} (>3 chats distintos en 10s).`);
-          return;
-        }
-        if (globalOutboundLog.length >= 8) {
-          console.warn(`[WhatsApp Bot] CORTAFUEGOS ANTI-BLAST: bloqueado envio a ${msg.from} (>=8 envios en 60s).`);
-          return;
-        }
-        globalOutboundLog.push({ chatKey, at: now });
-        lastBotSendByChat.set(chatKey, { text, at: now });
-        rememberBotOutgoingIntent(chatKey, text);
-        const sent = await whatsappClient.sendMessage(msg.from, text);
-        rememberBotSentMessage(sent);
-        console.log(`[WhatsApp Bot] Respuesta enviada a ${msg.from}`);
-      } catch (err) {
-        console.error('[WhatsApp Bot] Error enviando respuesta:', err?.message || err);
+    const safeSend = async text => {
+      const id = crypto.createHash('sha256').update(String(messageId(msg) || msg.timestamp) + '\0' + chatKey + '\0' + text).digest('hex');
+      const delivery = await outbox.enqueue({ chat: chatKey, text, id });
+      const sentHistory = chatHistory.get(phone);
+      if (sentHistory && delivery.status === 'sent') {
+        sentHistory.push({ role: 'model', text });
+        pruneHistory(sentHistory);
+        saveConversations();
       }
+      return delivery;
     };
 
     // AHORRO DE TOKENS: Ignorar stickers, reacciones, notificaciones del sistema
@@ -597,6 +633,7 @@ function initWhatsApp(io) {
     // Ignorados: por lista de números (WHATSAPP_BOT_IGNORE_NUMBERS) o por
     // pertenecer al grupo ignorado (WHATSAPP_BOT_IGNORE_GROUP_NAME). En ambos
     // casos el bot NO responde (lo atiendes tú a mano).
+    if (!exclusionsReady()) return;
     if (isIgnoredNumber(phone)) {
       console.log(`[WhatsApp Bot] Número en lista de ignorados (${phone}); no se responde.`);
       return;
@@ -631,9 +668,17 @@ function initWhatsApp(io) {
       console.log(`[WhatsApp Bot] Audio transcrito de ${msg.from}: ${messageText}`);
     }
 
+    if (msg.from.includes('@lid') && whatsappClient.getContactLidAndPhone) {
+      try {
+        const linked = await whatsappClient.getContactLidAndPhone([msg.from]);
+        const pn = linked.find(x => x.pn)?.pn;
+        if (pn) updateCustomerProfile(phone, { customerPhone: pn.replace('@c.us', '') });
+      } catch { /* A contact phone will be requested if it cannot be resolved. */ }
+    }
     const detectedPhone = extractPhoneFromText(messageText);
     if (detectedPhone) updateCustomerProfile(phone, { customerPhone: detectedPhone });
     const profile = customerProfiles.get(phone) || {};
+    if (isIgnoredNumber(profile.customerPhone) || isInIgnoredGroup(msg.from, contactId, profile.customerPhone)) return;
     const isLidChat = msg.from.includes('@lid') || String(contactId || '').includes('@lid');
     const hasReliableChatPhone = !isLidChat && isValidPhoneNumber(phone);
     const isInvalidPhone = !hasReliableChatPhone && !isValidPhoneNumber(profile.customerPhone);
@@ -667,6 +712,18 @@ function initWhatsApp(io) {
       chatHistory.set(phone, []);
     }
     const history = chatHistory.get(phone);
+    const resumed = resumeContexts.get(chatKey);
+    if (resumed) {
+      resumeContexts.delete(chatKey);
+      if (Date.now() - resumed.at < SESSION_TTL) {
+        history.push({ role: 'model', text: resumed.text });
+        pruneHistory(history);
+        pendingDrafts.delete(phone);
+        orderSessions.set(phone, updateSession(orderSessions.get(phone), resumed.text, null, Date.now()).session);
+        console.log('[WhatsApp Bot] Resumen del personal aplicado al chat reactivado.');
+      }
+      saveConversations();
+    }
     if (profile.customerName && history.length === 0) {
       history.push({
         role: 'model',
@@ -743,6 +800,39 @@ function initWhatsApp(io) {
       canAdd: !!activeOrderId, // solo dentro de 15 min entra ADD_TO_ORDER
     } : null;
 
+    // Follow-up is read-only and never enters the product-generating model.
+    const followup = followupIntent(messageText, { recentOrder, hasDraft: pendingDrafts.get(phone)?.presented === true });
+    if (followup) {
+      let detail = null;
+      if (recentOrder?.orderId) {
+        detail = await fetchOrderTicketDetail(recentOrder.orderId, restaurant.id);
+      } else if (!botApi.useApi()) {
+        try {
+          const ref = chatRefFor(chatKey);
+          if (ref) detail = await prisma.order.findFirst({
+            where: { restaurantId: restaurant.id, clientOrderId: { startsWith: 'wa:' + ref + ':' }, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60000) } },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true, orderNumber: true, status: true, total: true, createdAt: true },
+          });
+          if (detail?.id) {
+            recentOrder = { orderId: detail.id, orderNumber: detail.orderNumber, total: detail.total, timestamp: new Date(detail.createdAt).getTime(), hydrated: true, canAddDb: false };
+            recentOrders.set(phone, recentOrder);
+          }
+        } catch (error) { console.warn('[WhatsApp Bot] No se pudo consultar el seguimiento:', error?.message); }
+      }
+      // A follow-up must not leave an old generated cart ready for a bare yes.
+      const interruptedDraft = pendingDrafts.get(phone);
+      if (interruptedDraft) interruptedDraft.presented = false;
+      const interruptedSession = orderSessions.get(phone);
+      if (interruptedSession) interruptedSession.cartNeedsReview = true;
+      history.push({ role: 'user', text: messageText });
+      pruneHistory(history);
+      saveConversations();
+      if (getActiveHandoff(chatKey, phone) || !botConfig.getActive() || !exclusionsReady()) return;
+      await safeSend(followupReply(detail, recentOrder));
+      return;
+    }
+
     // COMPROBANTE DE PAGO / imagen: el bot NO lee imágenes ni PDFs. Si ya hay un
     // pedido activo reciente, acusar recibo y NO mandar a Gemini (un mensaje vago
     // + el historial con el pedido hacía que Gemini re-confirmara y duplicara la
@@ -752,7 +842,7 @@ function initWhatsApp(io) {
     if ((msg.type === 'image' || msg.type === 'document') && recentConfirmedId) {
       console.log(`[WhatsApp Bot] Imagen/documento con pedido reciente ${recentConfirmedId} de ${phone}; se acusa recibo sin reprocesar.`);
       recentOrders.set(phone, { ...recentOrder, orderId: recentConfirmedId, timestamp: Date.now() });
-      await safeSend('¡Gracias! Recibí tu comprobante 🙌. Tu pedido ya está registrado y en preparación; enseguida validamos el pago. Si necesitas algo más, aquí estoy.');
+      await safeSend('Recibí tu archivo. El pago y la aceptación del pedido deben ser revisados por la caja.');
       return;
     }
 
@@ -771,15 +861,45 @@ function initWhatsApp(io) {
 
     // Procesar con Gemini
     console.log(`[WhatsApp Bot] Procesando con Gemini (phone=${phone}, invalid=${isInvalidPhone}, tenant=${restaurant.id})...`);
-    const geminiResponse = await processWhatsAppMessage(phone, messageText, restaurant.id, history, activeOrderId, isInvalidPhone, profile, activeOrderInfo);
+    const draft = pendingDrafts.get(phone);
+    if (draft?.rejectionMessage && isExplicitConfirmation(messageText)) {
+      await safeSend(draft.rejectionMessage);
+      return;
+    }
+    const previousSession = orderSessions.get(phone);
+    const { session, update, reset } = updateSession(previousSession, messageText, locationData, Date.now());
+    if (!previousSession && !reset && draft && draft.presented === undefined && Date.now() - draft.createdAt < SESSION_TTL) {
+      session.requests = [...history.filter(turn => turn.role === 'user').map(turn => String(turn.text).slice(0, 600)).slice(-8), ...session.requests];
+    }
+    if (reset) pendingDrafts.delete(phone);
+    const acceptsDraft = !reset && !!draft && draft.presented === true && draft.pricingPolicyVersion === 'catalog-extras-v1' && Date.now() - draft.createdAt < 15 * 60000 && isExplicitConfirmation(messageText);
+    const metadataOnly = Object.keys(update).length > 0;
+    const knownOrder = !session.cartNeedsReview && (session.order || (!reset && draft?.presented === true && Date.now() - draft.createdAt < SESSION_TTL ? draft.order : null));
+    if (!metadataOnly && !isExplicitConfirmation(messageText)) session.cartNeedsReview = true;
+    if (!acceptsDraft && draft) draft.presented = false;
+    orderSessions.set(phone, session);
+    let geminiResponse = acceptsDraft ? draft.order
+      : metadataOnly && knownOrder && !recentConfirmedId ? applyFacts(knownOrder, session.facts)
+      : await processWhatsAppMessage(phone, messageText, restaurant.id, history, activeOrderId, isInvalidPhone, { ...profile, currentOrder: session }, activeOrderInfo);
+    if (geminiResponse?.status !== 'AI_ERROR') geminiResponse = validateModelReply(geminiResponse);
+    if (geminiResponse?.status === 'CONFIRMED' && !acceptsDraft) {
+      geminiResponse = applyFacts(geminiResponse, session.facts);
+      session.order = geminiResponse;
+      session.cartNeedsReview = false;
+    }
+    if (geminiResponse?.status === 'AI_ERROR' && metadataOnly) {
+      const acknowledgment = update.cashTendered ? `Anoté que pagarás con $${update.cashTendered}.` : update.paymentMethod ? 'Anoté tu forma de pago.' : 'Anoté el dato de entrega.';
+      geminiResponse = { ...geminiResponse, replyMessage: acknowledgment + ' No pude completar la revisión de los productos. El pedido aún requiere revisión con la caja; no lo he registrado.' };
+    }
     console.log(`[WhatsApp Bot] Gemini status=${geminiResponse?.status}, reply=${!!geminiResponse?.replyMessage}`);
+    if (getActiveHandoff(chatKey, phone) || !botConfig.getActive() || !exclusionsReady()) {
+      console.log(`[WhatsApp Bot] Intervención humana ocurrió mientras se procesaba (${chatKey}); se omite respuesta del bot.`);
+      return;
+    }
 
     // Actualizar historial localmente
     history.push({ role: 'user', text: messageText });
-    // Guardamos la respuesta generada (si existe) para que Gemini recuerde
-    if (geminiResponse.replyMessage) {
-       history.push({ role: 'model', text: geminiResponse.replyMessage });
-    }
+    // safeSend records only the response actually delivered to the customer.
 
     // Mantener memoria suficiente para pedidos grandes sin crecer sin límite.
     pruneHistory(history);
@@ -796,7 +916,8 @@ function initWhatsApp(io) {
     // "⚠️ POSIBLE CORRECCIÓN" avisando a la caja, y (c) corre ANTES de los gates
     // de tienda cerrada/turno, así el eco de un comprobante tardío recibe acuse
     // aunque ya hayan cerrado.
-    if (status === 'CONFIRMED' && items.length > 0) {
+    const hasValidOrderItems = Array.isArray(items) && items.some(it => it && it.menuItemId && (it.quantity == null || parseInt(it.quantity, 10) > 0));
+    if (status === 'CONFIRMED' && hasValidOrderItems) {
       // CREAR LA ORDEN PRIMERO; confirmar SOLO si el TPV la registró. Antes se
       // enviaba "¡confirmado!" y DESPUÉS se creaba: si el POST fallaba, el
       // cliente esperaba un pedido que nunca existió. Además el folio y el total
@@ -813,7 +934,49 @@ function initWhatsApp(io) {
         geminiResponse.customerPhone = (hasReliableChatPhone ? phone : null)
           || profile.customerPhone || detectedPhone || null;
       }
-      const orderCreated = await createOrderFromGemini(restaurant.id, geminiResponse, process.env.PORT || 3001, chatKey);
+      const missing = missingOrderData(geminiResponse);
+      if (missing) { await safeSend(missing); return; }
+      if (!acceptsDraft) {
+        let names = new Map();
+        const choices = new Map();
+        if (botApi.useApi()) {
+          const context = await botApi.getContext();
+          for (const match of String(context.menuString || '').matchAll(/([^,\n\[\]]+)\s*\[(?:variantId|modifierId):\s*([^\]]+)\]/g)) {
+            choices.set(match[2].trim(), match[1].replace(/^.*(?:->|:)\s*/, '').trim());
+          }
+          for (const line of String(context.menuString || '').split('\n')) {
+            const id = line.match(/\[ID:\s*([^\]]+)\]/)?.[1];
+            if (id) names.set(id.trim(), line.split('[ID:')[0].replace(/^[-\s]+/, '').trim());
+          }
+        } else {
+          const products = await prisma.menuItem.findMany({ where: { restaurantId: restaurant.id, id: { in: items.map(x => x.menuItemId) } }, include: { variants: true, complements: true, modifierGroups: { include: { modifiers: true } }, comboComponents: { include: { options: { include: { optionMenuItem: { select: { name: true } } } } } } } });
+          names = new Map(products.map(p => [p.id, p.name]));
+          for (const product of products) {
+            for (const v of product.variants || []) choices.set(v.id, v.name);
+            for (const c of product.complements || []) choices.set('complement:' + c.id, c.name + (Number(c.price) > 0 ? ` (+$${c.price} c/u)` : ''));
+            for (const group of product.modifierGroups || []) for (const m of group.modifiers || []) choices.set(m.id, m.name + (Number(m.priceAdd) > 0 ? ` (+$${m.priceAdd} c/u)` : ''));
+            for (const component of product.comboComponents || []) for (const option of component.options || []) choices.set(option.id, option.optionMenuItem.name);
+          }
+        }
+        if (items.some(item => !names.has(item.menuItemId))) { await safeSend('Necesito revisar los productos del pedido. ¿Me confirmas cuáles deseas?'); return; }
+        const optionIds = item => [item.variantId, ...(item.modifierIds || []), ...(item.comboSelections || []).map(s => s.optionId)].filter(Boolean);
+        if (items.some(item => optionIds(item).some(id => !choices.has(id)))) { await safeSend('Necesito revisar las opciones del pedido con la caja antes de registrarlo.'); return; }
+        const lines = items.map(item => {
+          const extras = [...optionIds(item).map(id => choices.get(id)), item.notes].filter(Boolean);
+          return '• ' + item.quantity + 'x ' + names.get(item.menuItemId) + (extras.length ? ' (' + extras.join(', ') + ')' : '');
+        }).join('\n');
+        const nextDraft = { order: geminiResponse, createdAt: Date.now(), pricingPolicyVersion: 'catalog-extras-v1', presented: false };
+        pendingDrafts.set(phone, nextDraft);
+        saveConversations();
+        const delivery = geminiResponse.orderType === 'DELIVERY' ? 'Domicilio: ' + geminiResponse.deliveryAddress + '\nEnvío pendiente de cotizar.' : 'Para recoger.';
+        const payment = { CASH: 'efectivo', CASH_ON_DELIVERY: 'efectivo', TRANSFER: 'transferencia', CARD: 'tarjeta' }[geminiResponse.paymentMethod] || geminiResponse.paymentMethod;
+        const summaryDelivery = await safeSend('Revisa tu solicitud:\n' + lines + '\n' + delivery + '\nPago: ' + payment + (geminiResponse.notes ? '\nNotas: ' + geminiResponse.notes : '') + '\nLa caja revisa importe y disponibilidad antes de aceptar. ¿La registro? Responde SÍ.');
+        nextDraft.presented = summaryDelivery.status === 'sent';
+        return;
+      }
+      if (!draft.submissionId) { draft.submissionId = messageId(msg); saveConversations(); }
+      const orderCreated = await createOrderFromGemini(restaurant.id, geminiResponse, process.env.PORT || 3001, chatKey, draft.submissionId);
+      if (orderCreated?.id) { pendingDrafts.delete(phone); orderSessions.delete(phone); }
       if (orderCreated && orderCreated.id && orderCreated.dedupReason === 'CHAT_WINDOW') {
         // Red SERVER-SIDE anti-duplicado (vive en BD: sobrevive restarts y
         // ventanas largas — el duplicado #1230/#1244 del 2026-07-05 entró a los
@@ -834,7 +997,7 @@ function initWhatsApp(io) {
         if (orderCreated.correctionFlagged) {
           await safeSend(`Ya tenía registrado tu pedido *#${orderCreated.orderNumber}* y noté cambios en lo que me enviaste 👀. Le avisé a la caja para que lo revise y ajuste — no creé un pedido duplicado. Si quieres AGREGAR algo más, dime qué y lo sumo.`);
         } else {
-          await safeSend(`¡Tu pedido *#${orderCreated.orderNumber}* ya está registrado y en preparación! 🙌 No creé uno nuevo para no duplicarlo. Si quieres AGREGAR algo dime qué y lo sumo; y si de verdad es OTRO pedido igual, un asesor te lo confirma en un momento.`);
+          await safeSend(`Tu solicitud *#${orderCreated.orderNumber}* ya está registrada. La caja confirma su aceptación y cualquier cambio.`);
         }
       } else if (orderCreated && orderCreated.id) {
         recentOrders.set(phone, { orderId: orderCreated.id, orderNumber: orderCreated.orderNumber, total: orderCreated.total ?? null, summary: '', timestamp: Date.now() });
@@ -846,8 +1009,10 @@ function initWhatsApp(io) {
           deliveryAddress: geminiResponse.deliveryAddress,
           paymentMethod: geminiResponse.paymentMethod,
         });
-        const totalLine = orderCreated.total != null ? `\n💵 Total: $${orderCreated.total} (incluye envío si aplica)` : '';
-        const mins = orderCreated.estimatedMinutes || 30;
+        const totalLine = orderCreated.total != null ? `\n💵 Importe registrado: $${orderCreated.total} (envío pendiente si aún no fue cotizado)` : '';
+        const accepted = ['CONFIRMED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(orderCreated.status);
+        const orderLabel = accepted ? 'Pedido confirmado' : 'Solicitud registrada; pendiente de aceptación por el negocio';
+        const timing = accepted && orderCreated.estimatedMinutes ? 'Tiempo estimado: ~' + orderCreated.estimatedMinutes + ' min.' : 'La caja confirma el importe final y el tiempo de entrega.';
         // AHORRO DE TOKENS: limpiar los turnos anteriores del armado de pedido y
         // dejar únicamente el resumen compacto de la orden recién creada.
         history.length = 0;
@@ -874,11 +1039,23 @@ function initWhatsApp(io) {
             const exLn = ex.length ? `\n   ↳ ${ex.join(', ')}` : '';
             return `• ${it.quantity}x ${it.name} — $${it.subtotal}${exLn}`;
           }).join('\n');
-          const envioLn = Number(detail.deliveryFee) > 0 ? `\nEnvío: $${detail.deliveryFee}` : '';
-          const descLn = Number(orderCreated.discount) > 0 ? `\nDescuento: -$${orderCreated.discount}` : '';
-          ticket = `✅ *¡Pedido confirmado!* — Folio *#${orderCreated.orderNumber}*\n\n🧾 *Tu ticket:*\n${lineas}\n━━━━━━━━━━━━━\nSubtotal: $${detail.subtotal}${envioLn}${descLn}\n*Total: $${detail.total}*\n\n⏱️ Entrega estimada: ~${mins} min.\n¡Gracias por tu compra! 🍔`;
+          const isDelivery = String(orderCreated.orderType || geminiResponse.orderType || '').toUpperCase() === 'DELIVERY';
+          const hasDeliveryFee = Number(detail.deliveryFee) > 0;
+          let envioLn = '';
+          let notaEnvio = '';
+          if (hasDeliveryFee) {
+            envioLn = `\n🛵 Envío: ${detail.deliveryFee}`;
+          } else if (isDelivery) {
+            envioLn = `\n🛵 Envío: *Se calcula según tu ubicación*`;
+            notaEnvio = `\n📍 *Nota:* El costo de envío se confirmará y sumará de acuerdo a tu ubicación.\n`;
+          }
+          const descLn = Number(orderCreated.discount) > 0 ? `\nDescuento: -${orderCreated.discount}` : '';
+          const totalLabel = isDelivery && !hasDeliveryFee ? `*Total comida: ${detail.total}* (+ envío)` : `*Total: ${detail.total}*`;
+          ticket = `✅ *${orderLabel}* — Folio *#${orderCreated.orderNumber}*\n\n🧾 *Tu ticket:*\n${lineas}\n━━━━━━━━━━━━━\nSubtotal: ${detail.subtotal}${envioLn}${descLn}\n${totalLabel}${notaEnvio}\n${timing}\n¡Gracias! 🍔`;
         } else {
-          ticket = `✅ ¡Pedido confirmado! Folio *#${orderCreated.orderNumber}*${totalLine}\n⏱️ Tiempo estimado: ~${mins} min.\n¡Gracias por tu compra! 🍔`;
+          const isDelivery = String(orderCreated.orderType || geminiResponse.orderType || '').toUpperCase() === 'DELIVERY';
+          const notaEnvio = isDelivery ? '\n🛵 *Envío:* Se calculará con base en tu ubicación al despacharlo.' : '';
+          ticket = `✅ ${orderLabel}. Folio *#${orderCreated.orderNumber}*${totalLine}${notaEnvio}\n${timing}\n¡Gracias! 🍔`;
         }
         await safeSend(ticket);
         // Recompensa por hitos de compra (el backend la genera cada N compras).
@@ -888,6 +1065,13 @@ function initWhatsApp(io) {
           const vence = reward.expiresAt ? new Date(reward.expiresAt).toLocaleDateString('es-MX') : '';
           await safeSend(`🎉 ¡Y esta es tu compra #${reward.ordersCount} con nosotros! Te ganaste un cupón:\n🎟️ *${reward.couponCode}* — ${pct}% de descuento en tu próximo pedido${vence ? `\n📅 Vence el ${vence}` : ''}.\n¡Gracias por tu preferencia! 🙌`);
         }
+      } else if (orderCreated?.code === 'MIN_ORDER_AMOUNT') {
+        draft.presented = false;
+        draft.rejectionMessage = orderCreated.message;
+        saveConversations();
+        await safeSend(orderCreated.message);
+      } else if (orderCreated?.code === 'INVALID_ORDER_DATA') {
+        await safeSend(orderCreated.message);
       } else if (orderCreated?.code === 'NO_ACTIVE_SHIFT') {
         // La caja aún no está abierta: NO es un error técnico, es "todavía no
         // abrimos". No confirmamos ni prometemos; invitamos a esperar la apertura.
@@ -896,7 +1080,7 @@ function initWhatsApp(io) {
       } else {
         // Falla al registrar: NUNCA decir "confirmado". Dejar el hilo abierto.
         console.error(`[WhatsApp Bot] FALLO al crear orden CONFIRMED de ${phone}. items=${JSON.stringify(items)}`);
-        await safeSend('Uy, tuve un detalle registrando tu pedido 🙏. Un asesor te confirma en un momento; si gustas, escríbeme de nuevo tu pedido para reintentar.');
+        await safeSend('No pude comprobar el registro del pedido. Aún no está confirmado; contacta a la caja antes de repetirlo.');
       }
     } else if (status === 'ADD_TO_ORDER' && items.length > 0) {
       if (!activeOrderId) {
@@ -924,7 +1108,7 @@ function initWhatsApp(io) {
             role: 'model',
             text: `Productos adicionales agregados al pedido activo #${recentOrder?.orderNumber || activeOrderId}.`,
           });
-          await safeSend(geminiResponse.replyMessage ? sanitizeReply(geminiResponse.replyMessage) : '¡Listo! Lo agregué a tu pedido. 🍔');
+          await safeSend('Productos adicionales registrados. La caja confirma el nuevo total.');
         } else {
           console.error(`[WhatsApp Bot] FALLO al agregar items a la orden ${activeOrderId} de ${phone}.`);
           await safeSend('No pude agregarlo a tu pedido anterior 🙏. ¿Te lo pongo como un pedido nuevo?');
@@ -943,15 +1127,17 @@ function initWhatsApp(io) {
         await safeSend(sanitizeReply(geminiResponse.replyMessage));
       }
     } else {
-      // CONVERSING (o cualquier otro estado): responder normal, sanitizado.
+      // Conversational responses cannot assert a write or kitchen state.
       if (geminiResponse.replyMessage) {
-        await safeSend(sanitizeReply(geminiResponse.replyMessage));
+        await safeSend(sanitizeReply(conversationReply(geminiResponse.replyMessage)));
       }
     }
    } catch (handlerErr) {
       // Red de seguridad: un throw aquí (p.ej. blip de Prisma) sería
       // unhandledRejection y en Node 22 MATA el proceso. Lo contenemos.
       console.error('[WhatsApp Bot] Error no capturado en el handler de mensaje:', handlerErr?.message || handlerErr);
+   } finally {
+      saveConversations();
    }
   };
 
@@ -965,11 +1151,18 @@ function initWhatsApp(io) {
     if (sessionState !== 'ready' || !lastReadyAt || Date.now() < lastReadyAt) return;
     if (!botConfig.getActive()) return;
     const rawTs = Number(msg?.timestamp);
-    if (!Number.isFinite(rawTs) || rawTs <= 0 || rawTs * 1000 < lastReadyAt) return;
+    if (!Number.isFinite(rawTs) || rawTs <= 0 || rawTs * 1000 < lastReadyAt || Date.now() - rawTs * 1000 > MAX_MSG_AGE_MS) return;
+    if (msg.fromMe || !isCustomerChatId(msg.from)) return;
+    const id = messageId(msg);
+    if (!id || seenInbound.has(id)) return;
+    for (const [key, at] of seenInbound) if (Date.now() - at > 24 * 60 * 60000) seenInbound.delete(key);
+    seenInbound.set(id, Date.now());
+    saveConversations();
 
     const key = msg.from || 'unknown';
     const prev = chatLocks.get(key) || Promise.resolve();
-    const run = prev.then(() => processMessage(msg), () => processMessage(msg));
+    const process = async () => { inFlight++; try { await processMessage(msg); } finally { inFlight--; } };
+    const run = prev.then(process, process);
     const tail = run.catch(() => {});
     chatLocks.set(key, tail);
     tail.then(() => { if (chatLocks.get(key) === tail) chatLocks.delete(key); });
@@ -980,6 +1173,21 @@ function initWhatsApp(io) {
     try {
       if (!msg.fromMe) return;
       if (sessionState !== 'ready' || !lastReadyAt) return;
+      const mType = String(msg.type || '').toLowerCase();
+      if (
+        mType === 'notification_template' ||
+        mType === 'e2e_notification' ||
+        mType === 'gp2' ||
+        mType === 'call_log' ||
+        mType === 'revoked' ||
+        mType === 'ciphertext' ||
+        mType === 'protocol' ||
+        mType === 'system' ||
+        mType === 'poll_creation' ||
+        mType === 'reaction'
+      ) {
+        return;
+      }
       const chatKey = chatKeyForMessage(msg);
       if (!isCustomerChatId(chatKey)) return;
       if (isBotAuthoredOutgoing(msg, chatKey)) return;
@@ -989,6 +1197,55 @@ function initWhatsApp(io) {
       // reciente. Antes solo pausaba dentro de 1h de un pedido que el bot había
       // tomado (recentOrderChats); en chats atendidos a mano sin pedido, el bot
       // seguía contestando encima del humano ("Gracias" → "De nada" repetido).
+      const bodyText = String(msg.body || '').trim();
+      const lowerBody = bodyText.toLowerCase();
+
+      // Comandos de control para el personal desde el chat:
+      // #bot, !bot, /bot, #activar -> Reactiva el bot inmediatamente en este chat
+      const isReactivateCmd =
+        /^(?:#|!|\/)(?:bot|activar|tomarpedido)\b/i.test(bodyText) ||
+        lowerBody.includes('#bot') ||
+        lowerBody.includes('!bot') ||
+        lowerBody.includes('/bot');
+
+      if (isReactivateCmd) {
+        const recent = recentOrderChats.get(chatKey);
+        unpauseBotForChat(chatKey, recent?.phone || null);
+        console.log(`[WhatsApp Bot] Chat ${chatKey} RE-ACTIVADO por comando de personal ("${bodyText}").`);
+
+        // Si el mensaje fue exclusivamente el comando (ej. "#bot"), el bot saluda e invita a pedir:
+        if (/^(?:#|!|\/)(?:bot|activar|tomarpedido)$/i.test(bodyText)) {
+          const target = msg.to || msg.from;
+          if (target && whatsappClient) {
+            whatsappClient.sendMessage(target, '¡Hola! 😊 Con gusto sigo tomando tu pedido por aquí. ¿Qué se te antoja ordenar? 🍔🌮')
+              .then(sent => rememberBotSentMessage(sent))
+              .catch(e => console.error('[WhatsApp Bot] Error enviando saludo de reactivación:', e?.message));
+          }
+        } else {
+          // Si el mensaje era una respuesta con #bot (ej. "El envío son $25 #bot"):
+          // guardamos el texto limpio en el historial del bot para que conozca el contexto:
+          const cleanText = bodyText.replace(/(?:#|!|\/)bot\b/gi, '').trim();
+          // A @lid is not a phone number. Resolve the conversation only when
+          // its next inbound message supplies the same identity as normal processing.
+          if (cleanText) {
+            resumeContexts.set(chatKey, { text: cleanText, at: Date.now() });
+            saveConversations();
+          }
+        }
+        return;
+      }
+
+      // #pausa, #stop -> Pausa explícita por 2 horas si el personal quiere atender a mano
+      const isPauseCmd = /^(?:#|!|\/)(?:pausa|stop|humano|manual)$/i.test(bodyText);
+      if (isPauseCmd) {
+        const recent = recentOrderChats.get(chatKey);
+        const until = Date.now() + 2 * 60 * 60 * 1000;
+        humanHandoffs.set(chatKey, { phone: recent?.phone || null, reason: 'explicit_pause_cmd', until });
+        saveConversations();
+        console.log(`[WhatsApp Bot] Chat ${chatKey} pausado MANUALMENTE por comando por 2 horas.`);
+        return;
+      }
+
       const recent = recentOrderChats.get(chatKey);
       const handoff = pauseBotForChat(chatKey, recent?.phone || null, 'human_message');
       const until = new Date(handoff.until).toISOString();
@@ -998,7 +1255,7 @@ function initWhatsApp(io) {
     }
   });
 
-  whatsappClient.on('message', (msg) => { handleIncomingMessage(msg); });
+  whatsappClient.on('message', handleIncomingMessage);
 
   // Backfill DESACTIVADO (2026-07-03 — incidente de envío masivo). Antes, al
   // reconectar, respondía a todos los chats con no-leídos recientes → disparaba
@@ -1041,6 +1298,7 @@ async function destroyWhatsApp() {
   latestQr = null;
   lastReadyAt = 0;
   sessionState = 'standby';
+  outbox?.stop();
   if (c) {
     try {
       c.removeAllListeners();
@@ -1055,6 +1313,7 @@ async function destroyWhatsApp() {
 function clearAllHandoffs() {
   const count = humanHandoffs.size;
   humanHandoffs.clear();
+  saveConversations();
   console.log(`[WhatsApp Bot] ${count} pausa(s) por intervención humana limpiadas manualmente.`);
   return count;
 }
@@ -1063,9 +1322,11 @@ module.exports = {
   initWhatsApp,
   destroyWhatsApp,
   clearAllHandoffs,
+  unpauseBotForChat,
   getWhatsAppClient: () => whatsappClient,
   getLatestQr: () => latestQr,
   getSessionState: () => sessionState,
+  getOperationalStatus: () => ({ active: botConfig.getActive(), exclusionsReady: exclusionsReady(), inFlight, outbox: outbox?.status() || { pending: 0, needsReview: 0 } }),
   getIgnoredGroupInfo,
   refreshIgnoredGroup,
 };
