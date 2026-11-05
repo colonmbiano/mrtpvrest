@@ -71,8 +71,10 @@ const ZONES_SELECT = { where: { active: true }, orderBy: [{ priority: 'asc' }, {
 function deliveryRule(config, location, zones) {
   if (!config || !location || location.hasDelivery === false) return null;
   const { deliveryMode, deliveryFee, originLat, originLng, deliveryBaseFee, deliveryPerKm, deliveryFreeRadiusKm, deliveryMaxKm } = config;
+  const locationOrigin = location.latitude != null && location.longitude != null;
   return { deliveryMode: deliveryMode || 'FLAT', deliveryFee,
-    originLat: location.latitude ?? originLat, originLng: location.longitude ?? originLng, deliveryBaseFee, deliveryPerKm,
+    originLat: locationOrigin ? location.latitude : originLat,
+    originLng: locationOrigin ? location.longitude : originLng, deliveryBaseFee, deliveryPerKm,
     deliveryFreeRadiusKm, deliveryMaxKm,
     // La tarifa de zona es Decimal en la BD; computeDeliveryFee espera un número.
     deliveryZones: deliveryMode === 'ZONES' ? (zones || []).map(zone => ({ ...zone, fee: Number(zone.fee) })) : [] };
