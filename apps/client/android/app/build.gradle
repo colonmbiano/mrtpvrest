@@ -63,10 +63,10 @@ android {
     // locales. Sin llave el release queda sin firmar y no se puede publicar.
     signingConfigs {
         release {
-            def ksPath = System.getenv('KEYSTORE_PATH') ?: project.findProperty('MRTPV_KEYSTORE_PATH')
-            def ksPassword = System.getenv('KEYSTORE_PASSWORD') ?: project.findProperty('MRTPV_KEYSTORE_PASSWORD')
-            def alias = System.getenv('KEY_ALIAS') ?: project.findProperty('MRTPV_KEY_ALIAS')
-            def keyPass = System.getenv('KEY_PASSWORD') ?: project.findProperty('MRTPV_KEY_PASSWORD')
+            def ksPath = System.getenv('KEYSTORE_PATH') ?: project.findProperty('MRTPV_KEYSTORE_PATH') ?: localProperties.getProperty('MRTPV_KEYSTORE_PATH')
+            def ksPassword = System.getenv('KEYSTORE_PASSWORD') ?: project.findProperty('MRTPV_KEYSTORE_PASSWORD') ?: localProperties.getProperty('MRTPV_KEYSTORE_PASSWORD')
+            def alias = System.getenv('KEY_ALIAS') ?: project.findProperty('MRTPV_KEY_ALIAS') ?: localProperties.getProperty('MRTPV_KEY_ALIAS')
+            def keyPass = System.getenv('KEY_PASSWORD') ?: project.findProperty('MRTPV_KEY_PASSWORD') ?: localProperties.getProperty('MRTPV_KEY_PASSWORD')
 
             if (ksPath && file(ksPath).exists() && ksPassword && alias && keyPass) {
                 storeFile file(ksPath)
