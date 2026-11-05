@@ -186,8 +186,13 @@ El **repartidor de tienda (Employee)** se conserva en paralelo; la app elige cam
     el tablero real: perfil (`/couriers/me/profile`) + gate de verificación, presencia+GPS (`updateCourierPresence`),
     ofertas (reusa `MarketplaceOffers`, aceptar con CAS) y PIN de recolección/entrega. Verificado en la ventana
     (3006): monta, pide perfil y degrada con gracia. tsc OK.
-  - [ ] **Pendiente**: página web de registro con rol COURIER (+ Turnstile) en apps/client/registro, y prueba
-    end-to-end real (requiere encender los flags de identidad/red y aprobar un courier con ops en un entorno).
+  - [x] **Página web de registro COURIER.** `apps/client/registro?tipo=repartidor` (con cuentas activas)
+    renderiza `CourierSignup` real: nombre/correo/teléfono/ciudad + selects de vehículo y modalidad de red +
+    Turnstile, POST a `/identity/register` rol COURIER (`registerCourier`). Reusa el kit AccountUi (+ nuevo
+    `SelectField`) y la validación de `marketplace-registration`. Requiere `NEXT_PUBLIC_MARKETPLACE_ACCOUNTS=true`
+    (y `NEXT_PUBLIC_TURNSTILE_SITE_KEY` para el captcha). Verificado en la ventana (3003): render + validación OK.
+  - [ ] **Pendiente**: prueba end-to-end real (encender flags de identidad/red + aprobar un courier con ops),
+    y conectar el `apply` de couriers-v1 tras el registro si se quiere que el courier exista en la red al aprobarse.
 - **Fase 2 — Operación:** selector de modo, afiliaciones, dispatch con `courierId` de red, billetera.
 - **Fase 3 — Dinero:** payout a cuenta + conciliación con `COURIER_PAYABLE` + outbox.
 - **Fase 4 — Rollout:** quitar flag, documentar, (opcional) alta iOS.

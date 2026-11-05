@@ -49,6 +49,24 @@ export function TextField({ id, label, value, onChange, error, type = 'text', pl
   </div>;
 }
 
+export function SelectField({ id, label, value, onChange, options, error, hint }: {
+  id: string; label: string; value: string; onChange: (value: string) => void;
+  options: { value: string; label: string }[]; error?: string; hint?: string;
+}) {
+  const described = [error ? id + '-error' : '', hint ? id + '-hint' : ''].filter(Boolean).join(' ') || undefined;
+  return <div>
+    <label htmlFor={id} className="block text-sm font-bold text-[#304438]">{label}</label>
+    <select id={id} name={id} value={value} onChange={event => onChange(event.target.value)}
+      aria-invalid={Boolean(error)} aria-describedby={described}
+      className={control + ' appearance-none bg-[right_0.9rem_center] bg-no-repeat pr-10' + (error ? ' !border-red-500' : '')}
+      style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23546b5c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E\")" }}>
+      {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+    </select>
+    {hint && !error && <p id={id + '-hint'} className="mt-1 text-xs text-[#697b6d]">{hint}</p>}
+    {error && <p id={id + '-error'} role="alert" className="mt-1 text-xs font-semibold text-red-700">{error}</p>}
+  </div>;
+}
+
 export function Notice({ tone, children }: { tone: 'error' | 'success' | 'info'; children: ReactNode }) {
   const styles = tone === 'error' ? 'border-red-200 bg-red-50 text-red-800'
     : tone === 'success' ? 'border-[#b7dfc4] bg-[#f0faf2] text-[#255d3a]' : 'border-[#f3d79d] bg-[#fff8e9] text-[#795322]';
