@@ -178,7 +178,7 @@ export default function MarketplaceRegistration({ selectedRole }: { selectedRole
               <p className="text-xs leading-relaxed text-[#697b6d]">
                 Por seguridad, esta demostración no solicita contraseñas, fotografías de identificaciones ni información bancaria.
               </p>
-              <button type="submit" className={'inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f15a24] px-5 py-3 font-extrabold text-white hover:bg-[#d34d1d] sm:w-auto ' + outline}>
+              <button type="submit" className={'inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#c6410c] px-5 py-3 font-extrabold text-white hover:bg-[#a8370a] sm:w-auto ' + outline}>
                 Revisar mi información <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </button>
               {Object.keys(errors).length > 0 && <p className="text-sm font-semibold text-red-700" role="status">Corrige los campos marcados para continuar.</p>}
