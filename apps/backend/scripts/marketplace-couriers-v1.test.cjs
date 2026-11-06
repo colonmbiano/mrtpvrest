@@ -96,6 +96,26 @@ test('apply registers a courier as PENDING_VERIFICATION with normalized contact 
   assert.equal(stored.licensePlate, 'ABC123');
 });
 
+test('provisionCourier creates a courier from an approved application; idempotent by account', async () => {
+  const w = world();
+  const view = await w.service.provisionCourier({ accountId: 'acc-x', name: 'Beto Ruiz',
+    phone: '+52 55 9999 0000', email: 'Beto@Example.com', vehicleType: 'BICYCLE' });
+  assert.equal(view.verificationStatus, 'PENDING_VERIFICATION');
+  assert.equal(view.status, 'ACTIVE');
+  const stored = [...w.couriers.values()].find(c => c.accountId === 'acc-x');
+  assert.equal(stored.email, 'beto@example.com');
+  assert.equal(stored.phone, '+525599990000');
+  assert.equal(stored.licensePlate, null); // la placa se completa en la verificacion KYC
+  // Idempotente: una segunda provision devuelve el mismo courier y no crea otro.
+  const again = await w.service.provisionCourier({ accountId: 'acc-x', name: 'Beto Ruiz',
+    phone: '+525599990000', email: 'beto@example.com', vehicleType: 'BICYCLE' });
+  assert.equal(again.courierId, view.courierId);
+  assert.equal([...w.couriers.values()].filter(c => c.accountId === 'acc-x').length, 1);
+  // Datos invalidos rechazados.
+  await rejects(w.service.provisionCourier({ accountId: 'acc-y', vehicleType: 'CAMION' }), 'INVALID_VEHICLE');
+  await rejects(w.service.provisionCourier({ vehicleType: 'MOTO' }), 'INVALID_APPLICATION');
+});
+
 test('license plate is optional; valid when provided, rejected when malformed', () => {
   // Sin placa: valido para cualquier vehiculo (la placa se completa en la verificacion KYC).
   assert.equal(normalizeApplication({ name: 'Luis Ruiz', phone: '5512345678', email: 'l@x.mx', vehicleType: 'WALK' }).licensePlate, null);

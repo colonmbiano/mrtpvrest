@@ -61,7 +61,7 @@ function validateSignup(input, allowedRoles = ROLES) {
   return { fullName, email: normalizedEmail, phone: normalizedPhone, city, password, application };
 }
 
-function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now = () => new Date(), roles = null }) {
+function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now = () => new Date(), roles = null, provisionCourier = null }) {
   if (!prisma || typeof sendEmail !== 'function') throw new Error('Marketplace identity dependencies required');
   const allowedRoles = roles ? new Set(roles) : ROLES;
   if (typeof publicOrigin !== 'string' || !/^https:\/\//.test(publicOrigin)) throw new Error('Marketplace identity requires HTTPS origin');
@@ -297,17 +297,26 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
       throw new IdentityError('INVALID_REVIEW');
     }
     const application = await prisma.marketplaceApplication.findUnique({
-      where: { id: applicationId }, include: { account: { select: { emailVerifiedAt: true, disabledAt: true } } },
+      where: { id: applicationId },
+      include: { account: { select: { emailVerifiedAt: true, disabledAt: true, fullName: true, phone: true, email: true } } },
     });
     if (!application || application.role === 'BUYER') throw new IdentityError('APPLICATION_NOT_FOUND', 404);
-    if (!application.account.emailVerifiedAt || application.account.disabledAt ||
+    const account = application.account;
+    if (!account.emailVerifiedAt || account.disabledAt ||
         application.status !== 'PENDING_REVIEW') throw new IdentityError('APPLICATION_NOT_PENDING', 409);
+    // Aprobar un repartidor provisiona su identidad de red (MarketplaceNetworkCourier
+    // PENDING_VERIFICATION) ANTES de marcar la solicitud: si falla, la solicitud queda
+    // PENDING_REVIEW y se puede reintentar. provisionCourier es idempotente por cuenta.
+    // Ops verifica despues (VERIFIED). Aprobar NO es activacion, publicacion ni pagos.
+    if (decision === 'APPROVED' && application.role === 'COURIER' && provisionCourier) {
+      await provisionCourier({ accountId: application.accountId, name: account.fullName,
+        phone: account.phone, email: account.email, vehicleType: application.vehicle });
+    }
     const updated = await prisma.marketplaceApplication.updateMany({
       where: { id: applicationId, status: 'PENDING_REVIEW' },
       data: { status: decision, reviewedAt: now(), reviewedByUserId: reviewerId },
     });
     if (updated.count !== 1) throw new IdentityError('APPLICATION_NOT_PENDING', 409);
-    // Approval is NOT tenant creation, storefront publication, courier activation or payout access.
     return { id: applicationId, status: decision };
   }
 

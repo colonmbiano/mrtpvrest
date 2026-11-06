@@ -26,14 +26,25 @@ const tokenLimit = limit(60, 15 * 60 * 1000);
 // `signBuyerToken(claims, { expiresIn })`: inyectable en pruebas.
 function createMarketplaceIdentityRouter({
   Router, prisma, sendEmail, origin, isolated = false, captchaCheck, now,
-  authenticateAdmin, roles = null, signBuyerToken, signCourierToken,
+  authenticateAdmin, roles = null, signBuyerToken, signCourierToken, provisionCourier,
 } = {}) {
   const expressRouter = (Router || require('express').Router)();
   const appOrigin = origin || process.env.MARKETPLACE_IDENTITY_ORIGIN;
+  // Al aprobar una solicitud COURIER, provisiona su identidad de red (idempotente).
+  // Solo con la red activa; sin ella, aprobar solo marca la solicitud. Inyectable en pruebas.
+  const buildCourierProvisioner = () => {
+    if (process.env.MARKETPLACE_NETWORK_ENABLED !== 'true') return null;
+    const prismaClient = prisma || require('@mrtpvrest/database').prisma;
+    const { createNetworkPersistence, createNetworkCourierPorts } = require('../lib/marketplace-network-prisma');
+    const { createCouriersV1Service } = require('../lib/marketplace-couriers-v1');
+    const svc = createCouriersV1Service(createNetworkCourierPorts(createNetworkPersistence({ prisma: prismaClient })));
+    return data => svc.provisionCourier(data);
+  };
   const service = createMarketplaceIdentityService({
     prisma: prisma || require('@mrtpvrest/database').prisma,
     sendEmail: sendEmail || require('../utils/mailer').sendEmail,
     publicOrigin: appOrigin, now, roles,
+    provisionCourier: provisionCourier ?? buildCourierProvisioner(),
   });
   const signToken = signBuyerToken
     || ((claims, opts) => require('../lib/marketplace-jwt').signMarketplaceToken('buyer', claims, opts));

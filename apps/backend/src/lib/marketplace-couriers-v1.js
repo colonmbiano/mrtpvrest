@@ -112,6 +112,39 @@ function createCouriersV1Service(ports = {}) {
     return courierView(courier);
   }
 
+  // Provisiona un courier desde una solicitud de identidad YA APROBADA (sin actor):
+  // la plataforma lo llama al aprobar el registro. Idempotente por accountId; confia
+  // en los datos de la cuenta (ya validados en el alta) y deja la placa en null hasta
+  // la verificacion KYC. No concede participacion en la red (eso lo hace Ops).
+  async function provisionCourier(data) {
+    ready();
+    check(data && typeof data.accountId === 'string' && data.accountId.length > 0 && data.accountId.length <= 64,
+      'INVALID_APPLICATION', 'Cuenta invalida');
+    check(VEHICLES.includes(data.vehicleType), 'INVALID_VEHICLE', 'Tipo de vehiculo invalido');
+    const existing = await courierStore.findByAccountId(data.accountId);
+    if (existing) return courierView(existing);
+    const at = now();
+    const courier = {
+      id: crypto.randomUUID(), accountId: data.accountId,
+      name: String(data.name ?? '').trim().slice(0, 100),
+      phone: String(data.phone ?? '').replace(/[\s\-().]/g, '').slice(0, 20),
+      email: String(data.email ?? '').trim().toLowerCase().slice(0, 254),
+      vehicleType: data.vehicleType, licensePlate: null,
+      verificationStatus: 'PENDING_VERIFICATION', status: 'ACTIVE', maxActiveTasks: 1,
+      createdAt: at, updatedAt: at,
+    };
+    try {
+      await courierStore.create(courier);
+    } catch (err) {
+      if (err?.code === 'DUPLICATE') {
+        const again = await courierStore.findByAccountId(data.accountId);
+        if (again) return courierView(again);
+      }
+      throw err;
+    }
+    return courierView(courier);
+  }
+
   async function profile(actor) {
     requireCourier(actor);
     ready();
@@ -187,7 +220,7 @@ function createCouriersV1Service(ports = {}) {
     return affiliationView(row, merchant.name);
   }
 
-  return { apply, profile, affiliations, affiliate, revoke };
+  return { apply, provisionCourier, profile, affiliations, affiliate, revoke };
 }
 
 module.exports = { CourierV1Error, createCouriersV1Service, normalizeApplication, VEHICLES };

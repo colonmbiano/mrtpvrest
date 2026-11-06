@@ -139,6 +139,48 @@ test('authenticateCourier: valid creds + approved COURIER profile, else rejects 
   await failCode(() => x.service.authenticateCourier({ email: courier.email, password: courier.password }), 'INVALID_CREDENTIALS');
 });
 
+test('approving a COURIER application provisions its network identity before marking approved', async () => {
+  const x = fixture();
+  const provisioned = [];
+  const svc = createMarketplaceIdentityService({ prisma: x.prisma, sendEmail: async () => {},
+    publicOrigin: 'https://marketplace-staging.example.net',
+    provisionCourier: async data => { provisioned.push(data); } });
+  await svc.register(courier);
+  x.accounts[0].emailVerifiedAt = new Date();
+  x.applications[0].status = 'PENDING_REVIEW';
+  const appId = x.applications[0].id;
+  assert.deepEqual(await svc.reviewApplication(appId, 'rev-1', 'APPROVED'), { id: appId, status: 'APPROVED' });
+  assert.equal(x.applications[0].status, 'APPROVED');
+  assert.equal(provisioned.length, 1);
+  assert.equal(provisioned[0].accountId, x.accounts[0].id);
+  assert.equal(provisioned[0].vehicleType, 'MOTO');
+  assert.equal(provisioned[0].email, 'maria@correo.mx');
+  assert.equal(provisioned[0].name, x.accounts[0].fullName);
+  assert.equal(provisioned[0].phone, x.accounts[0].phone);
+});
+
+test('rejecting does not provision; a failed provision leaves the application pending (retryable)', async () => {
+  const x = fixture();
+  const provisioned = [];
+  const ok = createMarketplaceIdentityService({ prisma: x.prisma, sendEmail: async () => {},
+    publicOrigin: 'https://marketplace-staging.example.net', provisionCourier: async d => { provisioned.push(d); } });
+  await ok.register(courier);
+  x.accounts[0].emailVerifiedAt = new Date();
+  x.applications[0].status = 'PENDING_REVIEW';
+  await ok.reviewApplication(x.applications[0].id, 'r', 'REJECTED');
+  assert.equal(provisioned.length, 0);
+  assert.equal(x.applications[0].status, 'REJECTED');
+
+  const y = fixture();
+  const bad = createMarketplaceIdentityService({ prisma: y.prisma, sendEmail: async () => {},
+    publicOrigin: 'https://marketplace-staging.example.net', provisionCourier: async () => { throw new Error('boom'); } });
+  await bad.register(courier);
+  y.accounts[0].emailVerifiedAt = new Date();
+  y.applications[0].status = 'PENDING_REVIEW';
+  await assert.rejects(bad.reviewApplication(y.applications[0].id, 'r', 'APPROVED'));
+  assert.equal(y.applications[0].status, 'PENDING_REVIEW');
+});
+
 test('signup writes hash, creates pending profile and mails only one-use opaque fragment token', async () => {
   const x = fixture();
   assert.deepEqual(await x.service.register(buyer), {accepted:true});

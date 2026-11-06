@@ -195,10 +195,15 @@ El **repartidor de tienda (Employee)** se conserva en paralelo; la app elige cam
     el registro/identidad (`MOTO/BICYCLE/CAR/WALK`, antes `MOTO/BICI/AUTO`) y la **placa es opcional** (se
     completa en la verificación KYC), para que aprobar un registro pueda provisionar el `NetworkCourier` sin
     re-capturar datos. Tests actualizados (61/61 en couriers-v1/dispatch/identity).
-  - [ ] **Puente de provisión** (siguiente): al aprobar la solicitud COURIER en SaaS, crear el `NetworkCourier`
-    (PENDING_VERIFICATION) desde la solicitud (nombre/correo/teléfono de la cuenta + vehículo de la aplicación),
-    vía la persistencia de red. Luego ops verifica (VERIFIED) y el repartidor ya despacha.
-  - [ ] **Pendiente**: prueba end-to-end real (encender flags de identidad/red + aprobar/verificar un courier).
+  - [x] **Puente de provisión.** Aprobar una solicitud COURIER en SaaS ahora provisiona el `MarketplaceNetworkCourier`
+    (PENDING_VERIFICATION) desde la solicitud (nombre/correo/teléfono de la cuenta + vehículo de la aplicación,
+    placa null hasta KYC). `couriers-v1 provisionCourier` (idempotente por `accountId`), llamado por
+    `identity reviewApplication` **antes** de marcar la solicitud (si falla, queda PENDING_REVIEW → reintentable)
+    vía un puerto que el router cablea solo con `MARKETPLACE_NETWORK_ENABLED=true`. Ops verifica después (VERIFIED).
+    Tests: 71/71 (couriers-v1/identity/…). **Con esto el flujo queda cerrado en código:** registro web → verificar
+    correo → aprobar (SaaS) → NetworkCourier provisionado → ops verifica → login app → despacho.
+  - [ ] **Pendiente (entorno, no código)**: prueba end-to-end real — encender los flags en un entorno
+    (identidad/red + secretos) y verificar un courier con `ops/couriers/:id/approve`.
 - **Fase 2 — Operación:** selector de modo, afiliaciones, dispatch con `courierId` de red, billetera.
 - **Fase 3 — Dinero:** payout a cuenta + conciliación con `COURIER_PAYABLE` + outbox.
 - **Fase 4 — Rollout:** quitar flag, documentar, (opcional) alta iOS.
