@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { MarketplaceOffers } from '../MarketplaceOffers';
 import { MultiStopPanel } from '../MultiStopPanel';
+import { DeliveryLogo } from '../BrandMark';
 import { isNetworkOrder } from '@/lib/storeDeliveryPin';
 
 type DeliveryOrder = {
@@ -113,9 +114,7 @@ export function CourierDashboard({
     <header className="relative mx-auto max-w-5xl px-4 pb-5 pt-6 sm:px-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#c6410c] text-white shadow-[0_10px_25px_rgba(198,65,12,.22)]">
-            <Bike size={26} strokeWidth={2.5}/>
-          </div>
+          <DeliveryLogo size={48} radius={16} />
           <div>
             <p className="text-[10px] font-black uppercase tracking-[.18em] text-[#c6410c]">MRTPVREST · REPARTIDORES</p>
             <p className="mt-0.5 text-[15px] font-bold text-[#172a2a]">Hola, {firstName}</p>

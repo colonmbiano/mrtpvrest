@@ -67,7 +67,7 @@ export function SetupScreen({ step, locations, loggingIn, onLogin, onSelectLocat
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{
             width: 72, height: 72, borderRadius: 22, background: C.amberSoft,
-            border: '1px solid rgba(255,184,77,0.25)',
+            border: '1px solid rgba(250,90,32,0.22)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
           }}>
             <svg viewBox="0 0 24 24" fill="none" stroke={C.amber} strokeWidth="2"
