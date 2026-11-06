@@ -7,7 +7,10 @@
 // (canManage). Without them the service fails closed with 503. Nothing here touches a network or database.
 const crypto = require('node:crypto');
 
-const VEHICLES = ['MOTO', 'BICI', 'AUTO'];
+// Vocabulario unificado con el registro de identidad (marketplace-identity VEHICLES
+// y el registro web del cliente). Antes era ['MOTO','BICI','AUTO'] — reconciliado
+// para que aprobar una solicitud pueda provisionar el courier sin re-capturar.
+const VEHICLES = ['MOTO', 'BICYCLE', 'CAR', 'WALK'];
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE = /^\+?\d{10,15}$/;
 const PLATE = /^[A-Z0-9]{5,8}$/;
@@ -53,10 +56,11 @@ function normalizeApplication(body) {
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   check(email.length <= 254 && EMAIL.test(email), 'INVALID_EMAIL', 'Correo invalido');
   check(VEHICLES.includes(body.vehicleType), 'INVALID_VEHICLE', 'Tipo de vehiculo invalido');
+  // La placa es OPCIONAL: se completa/valida en la verificacion KYC (ops), no al
+  // darse de alta, para que aprobar un registro pueda provisionar el courier sin
+  // pedirla de nuevo. Si se envia, debe tener formato valido.
   let licensePlate = null;
-  if (body.vehicleType === 'BICI') {
-    check(body.licensePlate === undefined || body.licensePlate === null, 'INVALID_PLATE', 'Una bicicleta no lleva placa');
-  } else {
+  if (body.licensePlate !== undefined && body.licensePlate !== null && body.licensePlate !== '') {
     const plate = typeof body.licensePlate === 'string' ? body.licensePlate.replace(/[\s-]/g, '').toUpperCase() : '';
     check(PLATE.test(plate), 'INVALID_PLATE', 'Placa invalida');
     licensePlate = plate;
@@ -104,6 +108,39 @@ function createCouriersV1Service(ports = {}) {
       // Generic message: the response must not reveal which contact field is already registered.
       if (error?.code === 'DUPLICATE') fail('COURIER_EXISTS', 'No se pudo completar el registro', 409);
       throw error;
+    }
+    return courierView(courier);
+  }
+
+  // Provisiona un courier desde una solicitud de identidad YA APROBADA (sin actor):
+  // la plataforma lo llama al aprobar el registro. Idempotente por accountId; confia
+  // en los datos de la cuenta (ya validados en el alta) y deja la placa en null hasta
+  // la verificacion KYC. No concede participacion en la red (eso lo hace Ops).
+  async function provisionCourier(data) {
+    ready();
+    check(data && typeof data.accountId === 'string' && data.accountId.length > 0 && data.accountId.length <= 64,
+      'INVALID_APPLICATION', 'Cuenta invalida');
+    check(VEHICLES.includes(data.vehicleType), 'INVALID_VEHICLE', 'Tipo de vehiculo invalido');
+    const existing = await courierStore.findByAccountId(data.accountId);
+    if (existing) return courierView(existing);
+    const at = now();
+    const courier = {
+      id: crypto.randomUUID(), accountId: data.accountId,
+      name: String(data.name ?? '').trim().slice(0, 100),
+      phone: String(data.phone ?? '').replace(/[\s\-().]/g, '').slice(0, 20),
+      email: String(data.email ?? '').trim().toLowerCase().slice(0, 254),
+      vehicleType: data.vehicleType, licensePlate: null,
+      verificationStatus: 'PENDING_VERIFICATION', status: 'ACTIVE', maxActiveTasks: 1,
+      createdAt: at, updatedAt: at,
+    };
+    try {
+      await courierStore.create(courier);
+    } catch (err) {
+      if (err?.code === 'DUPLICATE') {
+        const again = await courierStore.findByAccountId(data.accountId);
+        if (again) return courierView(again);
+      }
+      throw err;
     }
     return courierView(courier);
   }
@@ -183,7 +220,7 @@ function createCouriersV1Service(ports = {}) {
     return affiliationView(row, merchant.name);
   }
 
-  return { apply, profile, affiliations, affiliate, revoke };
+  return { apply, provisionCourier, profile, affiliations, affiliate, revoke };
 }
 
 module.exports = { CourierV1Error, createCouriersV1Service, normalizeApplication, VEHICLES };

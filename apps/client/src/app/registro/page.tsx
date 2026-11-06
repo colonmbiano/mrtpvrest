@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import MarketplaceRegistration from '@/components/MarketplaceRegistration';
 import BuyerSignup from '@/components/account/BuyerSignup';
+import CourierSignup from '@/components/account/CourierSignup';
 import { isMarketplaceAccountsEnabled, isMarketplaceCatalogEnabled } from '@/lib/config';
 import { parseRegistrationRole } from '@/lib/marketplace-registration';
 
@@ -26,8 +27,11 @@ export default async function RegistrationPage({
   if (!isMarketplaceCatalogEnabled()) redirect('/');
   const { tipo } = await searchParams;
   const role = parseRegistrationRole(tipo);
-  // Con las cuentas encendidas el cliente se registra de verdad; negocio y
-  // repartidor siguen siendo la demostración (en producción solo hay compradores).
-  if (role === 'cliente' && isMarketplaceAccountsEnabled()) return <BuyerSignup />;
+  // Con las cuentas encendidas, cliente y repartidor se registran de verdad; el
+  // negocio sigue siendo la demostración por ahora.
+  if (isMarketplaceAccountsEnabled()) {
+    if (role === 'cliente') return <BuyerSignup />;
+    if (role === 'repartidor') return <CourierSignup />;
+  }
   return <MarketplaceRegistration selectedRole={role} />;
 }

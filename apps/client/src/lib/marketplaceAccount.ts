@@ -87,6 +87,15 @@ export async function registerBuyer(input: SignupInput, options?: Options): Prom
   return result.ok ? true : result;
 }
 
+export type CourierSignupInput = SignupInput & { vehicle: string; network: string };
+
+// Registro real de repartidor independiente (rol COURIER). Igual que el comprador:
+// respuesta genérica (202) y verificación por correo; la plataforma aprueba el perfil.
+export async function registerCourier(input: CourierSignupInput, options?: Options): Promise<true | AccountFailure> {
+  const result = await identityRequest('/register', { method: 'POST', body: { role: 'COURIER', ...input } }, options);
+  return result.ok ? true : result;
+}
+
 export async function verifyEmail(token: string, options?: Options): Promise<true | AccountFailure> {
   if (!isLinkToken(token)) return failure('rejected', MESSAGES.INVALID_TOKEN, 'INVALID_TOKEN');
   const result = await identityRequest('/verify-email', { method: 'POST', body: { token } }, options);

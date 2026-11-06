@@ -26,18 +26,33 @@ const tokenLimit = limit(60, 15 * 60 * 1000);
 // `signBuyerToken(claims, { expiresIn })`: inyectable en pruebas.
 function createMarketplaceIdentityRouter({
   Router, prisma, sendEmail, origin, isolated = false, captchaCheck, now,
-  authenticateAdmin, roles = null, signBuyerToken,
+  authenticateAdmin, roles = null, signBuyerToken, signCourierToken, provisionCourier,
 } = {}) {
   const expressRouter = (Router || require('express').Router)();
   const appOrigin = origin || process.env.MARKETPLACE_IDENTITY_ORIGIN;
+  // Al aprobar una solicitud COURIER, provisiona su identidad de red (idempotente).
+  // Solo con la red activa; sin ella, aprobar solo marca la solicitud. Inyectable en pruebas.
+  const buildCourierProvisioner = () => {
+    if (process.env.MARKETPLACE_NETWORK_ENABLED !== 'true') return null;
+    const prismaClient = prisma || require('@mrtpvrest/database').prisma;
+    const { createNetworkPersistence, createNetworkCourierPorts } = require('../lib/marketplace-network-prisma');
+    const { createCouriersV1Service } = require('../lib/marketplace-couriers-v1');
+    const svc = createCouriersV1Service(createNetworkCourierPorts(createNetworkPersistence({ prisma: prismaClient })));
+    return data => svc.provisionCourier(data);
+  };
   const service = createMarketplaceIdentityService({
     prisma: prisma || require('@mrtpvrest/database').prisma,
     sendEmail: sendEmail || require('../utils/mailer').sendEmail,
     publicOrigin: appOrigin, now, roles,
+    provisionCourier: provisionCourier ?? buildCourierProvisioner(),
   });
   const signToken = signBuyerToken
     || ((claims, opts) => require('../lib/marketplace-jwt').signMarketplaceToken('buyer', claims, opts));
+  const signCourier = signCourierToken
+    || ((claims, opts) => require('../lib/marketplace-jwt').signMarketplaceToken('courier', claims, opts));
+  const { COURIER_TOKEN_TTL_S } = require('../lib/marketplace-courier-identity');
   const canApply = !roles || roles.includes('MERCHANT') || roles.includes('COURIER');
+  const canCourier = !roles || roles.includes('COURIER');
   const verifyCaptcha = captchaCheck || ((token, ip) => require('../lib/turnstile').verifyTurnstile(token, ip));
   const name = cookieName(isolated);
   const cookies = { httpOnly: true, sameSite: 'strict', secure: !isolated, path: '/' };
@@ -77,7 +92,12 @@ function createMarketplaceIdentityRouter({
   expressRouter.use((req, res, next) => {
     // App URLs must not be embedded in token/HTML by a request.
     res.set('Referrer-Policy', 'no-referrer');
-    if (req.method !== 'GET' && req.method !== 'HEAD') return verifyOrigin(req, res, next);
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      // El token de courier es para apps nativas (APK): se protege con credenciales,
+      // rate limit y clave dedicada, no con la cookie same-site, así que no exige Origin.
+      if (req.path.endsWith('/courier/token')) return next();
+      return verifyOrigin(req, res, next);
+    }
     next();
   });
 
@@ -125,6 +145,17 @@ function createMarketplaceIdentityRouter({
     res.clearCookie(name, cookies);
     res.json({ success: true });
   }));
+  // Token Bearer de repartidor (password grant) para el APK, que no puede usar la
+  // cookie same-site. Protegido por credenciales + rate limit + clave dedicada;
+  // exige un perfil COURIER aprobado. La verificación de despacho (NetworkCourier
+  // ACTIVE/VERIFIED) la aplican las rutas de dispatch/couriers.
+  if (canCourier) {
+    expressRouter.post('/courier/token', authLimit, guarded(async (req, res) => {
+      const { accountId } = await service.authenticateCourier(req.body);
+      const token = signCourier({ accountId, role: 'COURIER' }, { expiresIn: COURIER_TOKEN_TTL_S });
+      res.json({ token, tokenType: 'Bearer', expiresIn: COURIER_TOKEN_TTL_S });
+    }));
+  }
   // En producción solo hay compradores: las solicitudes de negocio o repartidor no existen.
   if (canApply) {
     expressRouter.post('/applications', authLimit, auth, guarded(async (req, res) => {

@@ -4,6 +4,7 @@ import api from '@/lib/api';
 import { AlertCircle } from 'lucide-react';
 import { DispatchAuditSection } from './DispatchAuditSection';
 import { MerchantApplicationsSection } from './MerchantApplicationsSection';
+import { CourierApplicationsSection } from './CourierApplicationsSection';
 import { MarketplaceSettingsSection } from './MarketplaceSettingsSection';
 import { loadMarketplaceOverview, type MarketplaceOverview } from '@/lib/marketplaceOverview';
 
@@ -104,6 +105,8 @@ export default function MarketplacePage() {
         </div>
 
         <MerchantApplicationsSection />
+
+        <CourierApplicationsSection />
 
         <DispatchAuditSection />
 

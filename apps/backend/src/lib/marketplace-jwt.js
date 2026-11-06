@@ -19,6 +19,9 @@ const ISSUER = 'mrtpvrest-marketplace';
 const CONTEXTS = {
   buyer: { secretEnv: 'MARKETPLACE_BUYER_JWT_SECRET', audience: 'mrtpvrest-marketplace-buyer' },
   staff: { secretEnv: 'MARKETPLACE_STAFF_JWT_SECRET', audience: 'mrtpvrest-marketplace-staff' },
+  // courier: Bearer para apps nativas (APK) que no pueden usar la cookie same-site
+  // de identidad. aud 'mrtpvrest-marketplace-courier'; clave dedicada propia.
+  courier: { secretEnv: 'MARKETPLACE_COURIER_JWT_SECRET', audience: 'mrtpvrest-marketplace-courier' },
 };
 
 function context(kind) {

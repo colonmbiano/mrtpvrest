@@ -12,6 +12,7 @@ interface SetupScreenProps {
   onLogin: (email: string, password: string) => void;
   onSelectLocation: (loc: { id: string; name: string }) => void;
   onQrLink: (data: { restaurantId: string; locationId: string; locationName?: string }) => void;
+  onIndependentCourier?: () => void;
 }
 
 // Extrae los IDs de vinculación del texto de un QR. Acepta una URL
@@ -33,7 +34,7 @@ function parseLinkPayload(text: string): { restaurantId: string; locationId: str
   return null;
 }
 
-export function SetupScreen({ step, locations, loggingIn, onLogin, onSelectLocation, onQrLink }: SetupScreenProps) {
+export function SetupScreen({ step, locations, loggingIn, onLogin, onSelectLocation, onQrLink, onIndependentCourier }: SetupScreenProps) {
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -145,6 +146,16 @@ export function SetupScreen({ step, locations, loggingIn, onLogin, onSelectLocat
               </button>
             </div>
           </div>
+        )}
+
+        {/* Repartidor independiente de la red (no vinculado a una tienda). */}
+        {step === 'auth' && onIndependentCourier && (
+          <button
+            onClick={onIndependentCourier}
+            style={{ ...S.btnSecondary, width: '100%', height: 52, marginTop: 14 }}
+          >
+            SOY REPARTIDOR INDEPENDIENTE
+          </button>
         )}
 
         {/* Location step */}

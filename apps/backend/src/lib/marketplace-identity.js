@@ -61,7 +61,7 @@ function validateSignup(input, allowedRoles = ROLES) {
   return { fullName, email: normalizedEmail, phone: normalizedPhone, city, password, application };
 }
 
-function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now = () => new Date(), roles = null }) {
+function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now = () => new Date(), roles = null, provisionCourier = null }) {
   if (!prisma || typeof sendEmail !== 'function') throw new Error('Marketplace identity dependencies required');
   const allowedRoles = roles ? new Set(roles) : ROLES;
   if (typeof publicOrigin !== 'string' || !/^https:\/\//.test(publicOrigin)) throw new Error('Marketplace identity requires HTTPS origin');
@@ -169,6 +169,29 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
     return { token: raw, account: publicAccount(account) };
   }
 
+  // Password grant para apps nativas (APK): verifica credenciales y exige un
+  // perfil COURIER APROBADO, sin crear sesion (el token Bearer de courier es
+  // stateless; ver marketplace-courier-identity.js). La verificacion de despacho
+  // (MarketplaceNetworkCourier ACTIVE/VERIFIED) la aplican las rutas que lo usan.
+  async function authenticateCourier(input) {
+    const address = email(input?.email);
+    if (!EMAIL.test(address) || typeof input?.password !== 'string' || input.password.length > 128) {
+      throw new IdentityError('INVALID_CREDENTIALS', 401);
+    }
+    const account = await prisma.marketplaceAccount.findUnique({
+      where: { email: address }, include: { applications: { select: { role: true, status: true } } },
+    });
+    // Mismo factor de trabajo bcrypt para cuentas inexistentes (timing).
+    const fallbackHash = '$2a$12$QpZXirB5mzV9gZjERmBUd.9NxTfXMq.o2Ti7suIzauq/td0BqCM9e';
+    const valid = await bcrypt.compare(input.password, account?.passwordHash || fallbackHash);
+    if (!account || !valid || !account.emailVerifiedAt || account.disabledAt) {
+      throw new IdentityError('INVALID_CREDENTIALS', 401);
+    }
+    const courier = account.applications.some(a => a.role === 'COURIER' && a.status === 'APPROVED');
+    if (!courier) throw new IdentityError('COURIER_PROFILE_REQUIRED', 403);
+    return { accountId: account.id };
+  }
+
   async function currentSession(raw) {
     if (!validToken(raw)) throw new IdentityError('UNAUTHENTICATED', 401);
     const row = await prisma.marketplaceSession.findUnique({
@@ -274,21 +297,30 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
       throw new IdentityError('INVALID_REVIEW');
     }
     const application = await prisma.marketplaceApplication.findUnique({
-      where: { id: applicationId }, include: { account: { select: { emailVerifiedAt: true, disabledAt: true } } },
+      where: { id: applicationId },
+      include: { account: { select: { emailVerifiedAt: true, disabledAt: true, fullName: true, phone: true, email: true } } },
     });
     if (!application || application.role === 'BUYER') throw new IdentityError('APPLICATION_NOT_FOUND', 404);
-    if (!application.account.emailVerifiedAt || application.account.disabledAt ||
+    const account = application.account;
+    if (!account.emailVerifiedAt || account.disabledAt ||
         application.status !== 'PENDING_REVIEW') throw new IdentityError('APPLICATION_NOT_PENDING', 409);
+    // Aprobar un repartidor provisiona su identidad de red (MarketplaceNetworkCourier
+    // PENDING_VERIFICATION) ANTES de marcar la solicitud: si falla, la solicitud queda
+    // PENDING_REVIEW y se puede reintentar. provisionCourier es idempotente por cuenta.
+    // Ops verifica despues (VERIFIED). Aprobar NO es activacion, publicacion ni pagos.
+    if (decision === 'APPROVED' && application.role === 'COURIER' && provisionCourier) {
+      await provisionCourier({ accountId: application.accountId, name: account.fullName,
+        phone: account.phone, email: account.email, vehicleType: application.vehicle });
+    }
     const updated = await prisma.marketplaceApplication.updateMany({
       where: { id: applicationId, status: 'PENDING_REVIEW' },
       data: { status: decision, reviewedAt: now(), reviewedByUserId: reviewerId },
     });
     if (updated.count !== 1) throw new IdentityError('APPLICATION_NOT_PENDING', 409);
-    // Approval is NOT tenant creation, storefront publication, courier activation or payout access.
     return { id: applicationId, status: decision };
   }
 
-  return { register, resendVerification, verifyEmail, login, currentSession, logout,
+  return { register, resendVerification, verifyEmail, login, authenticateCourier, currentSession, logout,
     forgotPassword, resetPassword, applyAs, listApplications, reviewApplication };
 }
 

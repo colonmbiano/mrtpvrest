@@ -84,16 +84,28 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, persi
         try { actor(req); req.dispatchRuntime={engine,store,multiStop}; return handler(req,res,engine,store,multiStop); }
         catch (error) { return failure(error); }
       }
-      if (!authenticate && networkEnabled && req.headers?.cookie && !req.headers?.authorization) {
+      if (!authenticate && networkEnabled) {
         const prisma=require('@mrtpvrest/database').prisma;
-        const resolver=require('../lib/marketplace-network-prisma').createNetworkActorResolver({prisma,now});
-        return resolver(req).then(async identity => {
-          if (!identity?.roles.includes('COURIER')) throw new DispatchError('Repartidor requerido','COURIER_FORBIDDEN',403);
+        // Verifica al courier (cookie en web/PWA o Bearer de courier en APK) contra
+        // MarketplaceNetworkCourier y fija req.user con rol DELIVERY.
+        const asCourier = async identity => {
+          if (!identity?.roles?.includes('COURIER')) throw new DispatchError('Repartidor requerido','COURIER_FORBIDDEN',403);
           const row=await prisma.marketplaceNetworkCourier.findUnique({where:{accountId:identity.accountId}});
           if (!row || row.status!=='ACTIVE' || row.verificationStatus!=='VERIFIED') throw new DispatchError('Repartidor no aprobado','COURIER_FORBIDDEN',403);
           req.user={id:row.id,accountId:identity.accountId,role:'DELIVERY',isActive:true,isDevice:false};
           return run();
-        }).catch(failure);
+        };
+        const storeAuth = () => (authenticate || require('../middleware/auth.middleware').authenticate)(req, res, run, next);
+        if (req.headers?.authorization) {
+          // APK: Bearer de courier. Si no es un token de courier, es un token de tienda (dueño/admin).
+          return require('../lib/marketplace-courier-identity').createCourierActorResolver({now})(req)
+            .then(courier => courier ? asCourier(courier) : storeAuth())
+            .catch(failure);
+        }
+        if (req.headers?.cookie) {
+          return require('../lib/marketplace-network-prisma').createNetworkActorResolver({prisma,now})(req)
+            .then(asCourier).catch(failure);
+        }
       }
       return (authenticate || require('../middleware/auth.middleware').authenticate)(req, res, run, next);
     });

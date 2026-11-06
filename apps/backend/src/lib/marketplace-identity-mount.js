@@ -3,12 +3,27 @@
 // Decide si se monta /api/marketplace/identity (cuenta global del comprador).
 //   - Apagada salvo MARKETPLACE_IDENTITY_ENABLED=true.
 //   - staging: igual que antes; mal configurada detiene el arranque (entorno aislado).
-//   - production: solo cuentas de comprador. Mal configurada NO se monta y se
-//     registra el motivo: una bandera a medias no debe tumbar el backend.
+//   - production: por defecto SOLO cuentas de comprador. MERCHANT/COURIER se
+//     habilitan uno por uno con opt-in explícito (MARKETPLACE_IDENTITY_EXTRA_ROLES,
+//     lista separada por comas). Cualquier otro valor se ignora (fail-closed): el
+//     registro nunca se amplía por un typo o una variable heredada. Mal configurada
+//     NO se monta y se registra el motivo: una bandera a medias no debe tumbar el backend.
 // Nunca devuelve ni registra valores de variables, solo sus nombres.
 const { dedicatedSecret } = require('./marketplace-jwt');
 
+// BUYER siempre disponible en producción; el resto solo con opt-in.
 const PRODUCTION_ROLES = Object.freeze(['BUYER']);
+const OPT_IN_ROLES = Object.freeze(['MERCHANT', 'COURIER']);
+
+// Amplía los roles de producción con los pedidos explícitamente en
+// MARKETPLACE_IDENTITY_EXTRA_ROLES. No necesita secreto extra: COURIER/MERCHANT
+// operan por cookie de sesión; el emisor de JWT (/token) sigue siendo solo BUYER.
+function productionRoles(env) {
+  const raw = typeof env.MARKETPLACE_IDENTITY_EXTRA_ROLES === 'string' ? env.MARKETPLACE_IDENTITY_EXTRA_ROLES : '';
+  const requested = new Set(raw.split(',').map(value => value.trim().toUpperCase()).filter(Boolean));
+  const extra = OPT_IN_ROLES.filter(role => requested.has(role));
+  return Object.freeze([...PRODUCTION_ROLES, ...extra]);
+}
 
 function sameSiteOrigin(value) {
   let url;
@@ -41,10 +56,10 @@ function resolveIdentityMount(env = process.env) {
     if (!sameSiteOrigin(env.MARKETPLACE_IDENTITY_ORIGIN || '')) missing.push('MARKETPLACE_IDENTITY_ORIGIN');
     if (!dedicatedSecret('buyer', env)) missing.push('MARKETPLACE_BUYER_JWT_SECRET');
     if (missing.length) return { mount: false, mode, reason: 'missing_or_invalid', missing };
-    return { mount: true, mode, roles: PRODUCTION_ROLES };
+    return { mount: true, mode, roles: productionRoles(env) };
   }
 
   throw new Error('MARKETPLACE_IDENTITY_MODE must be staging or production');
 }
 
-module.exports = { resolveIdentityMount, PRODUCTION_ROLES };
+module.exports = { resolveIdentityMount, PRODUCTION_ROLES, OPT_IN_ROLES };
