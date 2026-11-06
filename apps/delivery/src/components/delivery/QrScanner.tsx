@@ -111,7 +111,7 @@ export default function QrScanner({ onResult, onClose }: Props) {
           <p style={{ fontSize: 12, opacity: 0.8, lineHeight: 1.5 }}>{error}</p>
           <button onClick={onClose} style={{
             marginTop: 20, padding: '10px 18px', borderRadius: 12,
-            background: C.amber, color: '#090909', fontWeight: 700, fontSize: 13, border: 'none',
+            background: C.amber, color: '#fff', fontWeight: 700, fontSize: 13, border: 'none',
           }}>
             Volver
           </button>

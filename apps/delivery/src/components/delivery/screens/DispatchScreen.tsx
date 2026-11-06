@@ -36,7 +36,7 @@ const DRIVER_STATUS_CONFIG: Record<DriverStatus, { label: string; color: string;
   ON_ROUTE:  { label: 'En Ruta',     color: C.amber, bg: C.amberSoft  },
   AVAILABLE: { label: 'Disponible',  color: C.green, bg: C.greenSoft  },
   PAUSED:    { label: 'En Pausa',    color: C.iris,  bg: C.irisSoft   },
-  OFFLINE:   { label: 'Offline',     color: 'rgba(255,255,255,0.3)', bg: 'rgba(255,255,255,0.06)' },
+  OFFLINE:   { label: 'Offline',     color: '#8a9a90', bg: 'rgba(23,42,42,0.06)' },
 };
 
 const ORDER_COLORS: Record<string, { color: string; bg: string }> = {

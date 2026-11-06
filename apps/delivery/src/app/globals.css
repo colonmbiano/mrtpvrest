@@ -12,7 +12,7 @@
 
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: rgba(23,42,42,0.18); border-radius: 2px; }
 
 input[type=number]::-webkit-outer-spin-button,
 input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -41,47 +41,47 @@ input[type=number] { -moz-appearance: textfield; }
 
 @layer base {
   :root {
-    /* SURFACES */
-    --bg: #0C0C0E;
-    --surface-1: #131316;
-    --surface-2: #1c1c1f;
-    --surface-3: #22242a;
-    --surface-hover: #2a2c33;
+    /* SURFACES (tema claro — guía Mercadito Colorines) */
+    --bg: #F7F9F8;
+    --surface-1: #FFFFFF;
+    --surface-2: #F2F5F3;
+    --surface-3: #EAEFEC;
+    --surface-hover: #E4EBE7;
 
     /* TEXT */
-    --text-primary: #f7f8f8;
-    --text-secondary: #A1A1AA;
-    --text-muted: #8a8f98;
-    --text-disabled: #4c515a;
+    --text-primary: #172A2A;
+    --text-secondary: #52665B;
+    --text-muted: #8A9A90;
+    --text-disabled: #B4C0B9;
 
     /* BORDERS */
-    --border: #27272A;
-    --border-strong: rgba(255, 255, 255, 0.15);
+    --border: #D6E2DA;
+    --border-strong: rgba(23, 42, 42, 0.14);
     --border-focus: var(--brand);
 
     /* SHADOWS */
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-    --shadow-md: 0 8px 16px -4px rgba(0, 0, 0, 0.6);
-    --shadow-lg: 0 16px 32px -8px rgba(0, 0, 0, 0.8);
+    --shadow-sm: 0 1px 2px rgba(23, 42, 42, 0.06);
+    --shadow-md: 0 8px 16px -4px rgba(23, 42, 42, 0.10);
+    --shadow-lg: 0 16px 32px -8px rgba(23, 42, 42, 0.14);
     --shadow-glow: 0 10px 40px -10px var(--brand-glow);
 
-    /* BRAND (mismo orange que TPV default) */
-    --brand: #FF8400;
-    --brand-hover: #ffa33d;
-    --brand-active: #e67700;
-    --brand-soft: rgba(255, 132, 0, 0.15);
-    --brand-glow: rgba(255, 132, 0, 0.35);
-    --brand-fg: #0a0a0c;
+    /* BRAND (naranja de acción AA — guía) */
+    --brand: #C6410C;
+    --brand-hover: #A8370A;
+    --brand-active: #8F2F08;
+    --brand-soft: rgba(250, 90, 32, 0.12);
+    --brand-glow: rgba(198, 65, 12, 0.28);
+    --brand-fg: #FFFFFF;
 
     /* SEMANTIC */
-    --success: #10b981;
-    --success-soft: rgba(16, 185, 129, 0.12);
-    --warning: #f59e0b;
-    --warning-soft: rgba(245, 158, 11, 0.12);
-    --danger: #ef4444;
-    --danger-soft: rgba(239, 68, 68, 0.12);
-    --info: #3b82f6;
-    --info-soft: rgba(59, 130, 246, 0.12);
+    --success: #14743B;
+    --success-soft: rgba(20, 116, 59, 0.12);
+    --warning: #B45309;
+    --warning-soft: rgba(180, 83, 9, 0.12);
+    --danger: #B42318;
+    --danger-soft: rgba(180, 35, 24, 0.10);
+    --info: #1D4ED8;
+    --info-soft: rgba(29, 78, 216, 0.10);
 
     /* RADIUS */
     --radius-sm: 6px;

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { C, S } from '@/lib/tokens';
 import VersionTag from '@/components/VersionTag';
+import { DeliveryLogo } from '@/components/delivery/BrandMark';
 
 interface LoginScreenProps {
   locationName?: string;
@@ -46,30 +47,18 @@ export function LoginScreen({ locationName = 'Sucursal', onLogin, loggingIn, log
       padding: '0 28px 40px', position: 'relative', overflow: 'hidden',
       fontFamily: C.fontBody,
     }}>
-      {/* Amber glow */}
+      {/* Brand glow */}
       <div style={{
         position: 'absolute', top: -100, left: '50%', transform: 'translateX(-50%)',
         width: 360, height: 360, borderRadius: '50%', pointerEvents: 'none',
-        background: 'radial-gradient(circle, rgba(255,184,77,0.14) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, rgba(250,90,32,0.12) 0%, transparent 70%)',
       }} />
 
       <div style={{ flex: '0 0 60px' }} />
 
-      {/* Icon */}
-      <div style={{
-        width: 80, height: 80, borderRadius: 28, background: C.amber,
-        marginBottom: 22, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 24px 64px rgba(255,184,77,0.40)',
-      }}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="#0A0A0C" strokeWidth="2.2"
-          strokeLinecap="round" strokeLinejoin="round" width="42" height="42">
-          <circle cx="5.5" cy="17.5" r="3.2" />
-          <circle cx="18.5" cy="17.5" r="3.2" />
-          <path d="M15 6h-3L9.5 10.5 7 14" />
-          <path d="M9.5 14H15.5" />
-          <path d="M13 6h2.5l3 5.5" />
-        </svg>
+      {/* Logo */}
+      <div style={{ marginBottom: 22 }}>
+        <DeliveryLogo size={80} glow />
       </div>
 
       <div style={{
@@ -89,7 +78,7 @@ export function LoginScreen({ locationName = 'Sucursal', onLogin, loggingIn, log
           <div key={i} style={{
             width: 13, height: 13, borderRadius: '50%',
             background: i < pin.length ? C.amber : 'transparent',
-            border: `2px solid ${i < pin.length ? C.amber : 'rgba(255,255,255,0.18)'}`,
+            border: `2px solid ${i < pin.length ? C.amber : 'rgba(23,42,42,0.18)'}`,
             boxShadow: i < pin.length ? '0 0 16px rgba(255,184,77,0.7)' : 'none',
             transition: 'all 0.15s cubic-bezier(.4,0,.2,1)',
           }} />

@@ -8,7 +8,7 @@ import { ArrowLeft } from 'lucide-react';
 
 export const outline = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1d8451]';
 const control = 'mt-1.5 block min-h-12 w-full rounded-xl border border-[#dce5df] bg-white px-3.5 py-3 text-base text-[#23362b] shadow-sm outline-none focus:border-[#159055] focus:ring-2 focus:ring-[#d9f4e3]';
-export const primaryButton = 'inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f15a24] px-5 py-3 font-extrabold text-white hover:bg-[#d34d1d] disabled:cursor-not-allowed disabled:opacity-60 ' + outline;
+export const primaryButton = 'inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#c6410c] px-5 py-3 font-extrabold text-white hover:bg-[#a8370a] disabled:cursor-not-allowed disabled:opacity-60 ' + outline;
 export const secondaryButton = 'inline-flex min-h-11 items-center justify-center rounded-xl border border-[#b0d7bf] bg-white px-4 py-2.5 text-sm font-bold text-[#176c42] hover:bg-[#f0faf2] disabled:opacity-60 ' + outline;
 export const textLink = 'font-bold text-[#176c42] underline-offset-2 hover:underline ' + outline;
 

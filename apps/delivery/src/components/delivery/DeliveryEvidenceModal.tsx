@@ -191,7 +191,7 @@ export function DeliveryEvidenceModal({ orderId, onClose, onSubmit }: DeliveryEv
               onClick={() => fileInputRef.current?.click()}
               style={{
                 minHeight: 56, padding: '16px', borderRadius: 16, border: 'none',
-                background: C.amber, color: '#0C0C0E', fontSize: 14, fontWeight: 700,
+                background: C.amber, color: '#fff', fontSize: 14, fontWeight: 700,
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10
               }}
             >
@@ -250,7 +250,7 @@ export function DeliveryEvidenceModal({ orderId, onClose, onSubmit }: DeliveryEv
                 onClick={confirmSignature}
                 style={{
                   flex: 1, minHeight: 56, borderRadius: 12, border: 'none',
-                  background: C.green, color: '#0C0C0E', fontSize: 12, fontWeight: 700,
+                  background: C.green, color: '#fff', fontSize: 12, fontWeight: 700,
                   cursor: 'pointer'
                 }}
               >
@@ -305,7 +305,7 @@ export function DeliveryEvidenceModal({ orderId, onClose, onSubmit }: DeliveryEv
                 onClick={() => onSubmit({ photoBase64, signatureBase64 })}
                 style={{
                   flex: 1, minHeight: 56, borderRadius: 12, border: 'none',
-                  background: C.green, color: '#0C0C0E', fontSize: 12, fontWeight: 700,
+                  background: C.green, color: '#fff', fontSize: 12, fontWeight: 700,
                   cursor: 'pointer'
                 }}
               >

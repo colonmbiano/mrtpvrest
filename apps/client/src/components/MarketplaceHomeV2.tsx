@@ -42,7 +42,7 @@ const CATEGORIES: Category[] = [
 ];
 const focus = 'focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#166534]';
 const link = 'font-bold text-[#dc4a13] hover:text-[#ae370b] hover:underline underline-offset-4 ' + focus;
-const action = 'inline-flex items-center justify-center gap-2 rounded-xl bg-[#fa5a20] px-5 py-3 font-bold text-white shadow-[0_5px_14px_rgba(234,88,12,.18)] transition hover:bg-[#df4712] ' + focus;
+const action = 'inline-flex items-center justify-center gap-2 rounded-xl bg-[#c6410c] px-5 py-3 font-bold text-white shadow-[0_5px_14px_rgba(234,88,12,.18)] transition hover:bg-[#a8370a] ' + focus;
 
 function cardTint(slug: string): CSSProperties {
   const hue = storeHue(slug);
@@ -105,7 +105,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
               <a href="#productos" className={'hidden items-center gap-2 text-sm font-semibold text-[#374e45] hover:text-[#e65320] sm:flex ' + focus}>
                 <ShoppingBag className="h-5 w-5" aria-hidden="true" /> Productos
               </a>
-              <Link href={accounts ? '/cuenta' : '/registro'} className={'inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#f15a24] px-3 py-2 text-sm font-extrabold text-white hover:bg-[#dd4c16] sm:px-4 ' + focus}>
+              <Link href={accounts ? '/cuenta' : '/registro'} className={'inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#c6410c] px-3 py-2 text-sm font-extrabold text-white hover:bg-[#a8370a] sm:px-4 ' + focus}>
                 <UserRound className="h-4 w-4" aria-hidden="true" />
                 {accounts ? <span>Mi cuenta</span> : <><span className="hidden sm:inline">Registrarme</span><span className="sm:hidden">Registro</span></>}
               </Link>

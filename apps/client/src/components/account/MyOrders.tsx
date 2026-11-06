@@ -19,7 +19,7 @@ import {
 import MarketplaceTrackingModal from '@/components/MarketplaceTrackingModal';
 import { AccountShell, Notice, secondaryButton, textLink } from './AccountUi';
 
-const ACCENT = '#f15a24';
+const ACCENT = '#c6410c';
 const PAGE = 10;
 
 function money(total: string, currency: string): string {

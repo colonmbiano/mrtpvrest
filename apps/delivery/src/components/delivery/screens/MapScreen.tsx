@@ -25,33 +25,33 @@ interface MapScreenProps {
   onBack: () => void;
 }
 
-// Tiles oscuros gratuitos (CARTO sobre datos OSM) — alineados con el design system.
-const DARK_TILES = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+// Tiles claros gratuitos (CARTO sobre datos OSM) — alineados con el tema claro de la guía.
+const MAP_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR = '© OpenStreetMap © CARTO';
 const LEAFLET_VER = '1.9.4';
 
 // ── Markers como divIcon HTML (mismo look que la versión Mapbox) ──
 function driverMarkerHTML(): string {
-  return `<div style="width:48px;height:48px;border-radius:50%;background:rgba(167,139,250,0.95);
-    border:3px solid rgba(255,255,255,0.9);box-shadow:0 0 24px rgba(167,139,250,0.7);
+  return `<div style="width:48px;height:48px;border-radius:50%;background:rgba(29,78,216,0.95);
+    border:3px solid rgba(255,255,255,0.95);box-shadow:0 2px 12px rgba(23,42,42,0.25),0 0 20px rgba(29,78,216,0.45);
     display:flex;align-items:center;justify-content:center;font-size:22px;">🏍</div>`;
 }
 
 function orderMarkerHTML(label: string | number, color: string): string {
   return `<div style="width:36px;height:36px;border-radius:50%;background:${color};
-    border:2.5px solid rgba(255,255,255,0.9);box-shadow:0 4px 16px rgba(0,0,0,0.5),0 0 20px ${color}60;
-    display:flex;align-items:center;justify-content:center;color:#090909;font-weight:800;
+    border:2.5px solid rgba(255,255,255,0.95);box-shadow:0 4px 16px rgba(23,42,42,0.25),0 0 20px ${color}55;
+    display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;
     font-family:'Outfit',system-ui,sans-serif;font-size:13px;cursor:pointer;">${label}</div>`;
 }
 
 // Popup HTML reutilizable
 function popupHTML(order: Order): string {
   return `
-    <div style="font-family:'Outfit',sans-serif;background:#141416;border:1px solid rgba(255,255,255,0.1);
-      border-radius:12px;padding:10px 14px;min-width:160px;">
-      <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">#${order.orderNumber}</div>
-      <div style="font-size:11px;color:rgba(255,255,255,0.6)">${order.customerName}</div>
-      <div style="font-size:16px;font-weight:700;color:#FFB84D;margin-top:6px">$${order.total.toFixed(2)}</div>
+    <div style="font-family:'Outfit',sans-serif;background:#ffffff;border:1px solid #d6e2da;
+      border-radius:12px;padding:10px 14px;min-width:160px;box-shadow:0 8px 24px rgba(23,42,42,0.12);">
+      <div style="font-size:13px;font-weight:700;color:#172a2a;margin-bottom:4px">#${order.orderNumber}</div>
+      <div style="font-size:11px;color:#52665b">${order.customerName}</div>
+      <div style="font-size:16px;font-weight:700;color:#c6410c;margin-top:6px">$${order.total.toFixed(2)}</div>
     </div>
   `;
 }
@@ -76,7 +76,7 @@ export function MapScreen({ orders, driverLat = 19.4326, driverLng = -99.1332, o
       leafletRef.current = L;
       const map = L.map(mapContainerRef.current, { zoomControl: false, attributionControl: true })
         .setView([driverLat, driverLng], 14);
-      L.tileLayer(DARK_TILES, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(map);
+      L.tileLayer(MAP_TILES, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(map);
       groupRef.current = L.layerGroup().addTo(map);
       mapRef.current = map;
       // El contenedor flex puede no tener tamaño en el primer tick.
@@ -134,7 +134,7 @@ export function MapScreen({ orders, driverLat = 19.4326, driverLng = -99.1332, o
     // Pedidos
     orders.forEach((order, idx) => {
       if (order.lat == null || order.lng == null) return;
-      const markerColor = order.status === 'ON_THE_WAY' ? '#FFB84D' : '#A78BFA';
+      const markerColor = order.status === 'ON_THE_WAY' ? '#C6410C' : '#1D4ED8';
       const icon = L.divIcon({ html: orderMarkerHTML(idx + 1, markerColor), className: '', iconSize: [36, 36], iconAnchor: [18, 18] });
       L.marker([order.lat, order.lng], { icon })
         .addTo(group)
@@ -156,8 +156,8 @@ export function MapScreen({ orders, driverLat = 19.4326, driverLng = -99.1332, o
           setEtaMinutes(Math.round(route.duration / 60));
           // GeoJSON viene como [lng,lat]; Leaflet usa [lat,lng].
           const latlngs = route.geometry.coordinates.map((c: number[]) => [c[1], c[0]]);
-          L.polyline(latlngs, { color: '#FFB84D', weight: 16, opacity: 0.12 }).addTo(group); // glow
-          const main = L.polyline(latlngs, { color: '#FFB84D', weight: 4.5, opacity: 0.9 }).addTo(group);
+          L.polyline(latlngs, { color: '#C6410C', weight: 16, opacity: 0.12 }).addTo(group); // glow
+          const main = L.polyline(latlngs, { color: '#C6410C', weight: 4.5, opacity: 0.9 }).addTo(group);
           try { map.fitBounds(main.getBounds(), { padding: [60, 60], maxZoom: 15 }); } catch { /* noop */ }
         })
         .catch(() => { /* Sin ruta — modo sin conexión */ });
@@ -172,13 +172,13 @@ export function MapScreen({ orders, driverLat = 19.4326, driverLng = -99.1332, o
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20,
         padding: '10px 16px 40px',
-        background: 'linear-gradient(180deg, rgba(9,9,11,0.96) 0%, rgba(9,9,11,0.5) 60%, transparent 100%)',
+        background: 'linear-gradient(180deg, rgba(247,249,248,0.97) 0%, rgba(247,249,248,0.55) 60%, transparent 100%)',
         display: 'flex', alignItems: 'center', gap: 12,
       }}>
         <button onClick={onBack} style={{
           ...S.iconBtn,
-          border: '1px solid rgba(255,255,255,0.14)',
-          background: 'rgba(255,255,255,0.07)',
+          border: '1px solid rgba(23,42,42,0.12)',
+          background: 'rgba(255,255,255,0.85)',
           backdropFilter: 'blur(12px)',
           color: C.text,
         }}>
@@ -195,7 +195,7 @@ export function MapScreen({ orders, driverLat = 19.4326, driverLng = -99.1332, o
         </div>
         <div style={{
           padding: '5px 12px', borderRadius: 20,
-          background: 'rgba(255,184,77,0.14)', border: '1px solid rgba(255,184,77,0.38)',
+          background: C.amberSoft, border: '1px solid rgba(198,65,12,0.30)',
           fontSize: 8, fontWeight: 700, color: C.amber, letterSpacing: '0.12em', textTransform: 'uppercase',
         }}>Optimizada</div>
       </div>
@@ -207,12 +207,12 @@ export function MapScreen({ orders, driverLat = 19.4326, driverLng = -99.1332, o
       {activeOrder && (
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 20,
-          background: 'rgba(9,9,11,0.97)', backdropFilter: 'blur(36px)',
+          background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(36px)',
           borderTop: `1px solid ${C.border}`,
           borderRadius: '24px 24px 0 0',
           padding: '12px 16px 44px',
         }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.12)', margin: '0 auto 16px' }} />
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(23,42,42,0.15)', margin: '0 auto 16px' }} />
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
             <div>
@@ -221,17 +221,17 @@ export function MapScreen({ orders, driverLat = 19.4326, driverLng = -99.1332, o
               </div>
               <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{activeOrder.customerName}</div>
             </div>
-            <div style={{ background: C.amberSoft, border: '1px solid rgba(255,184,77,0.28)', borderRadius: 12, padding: '6px 14px', textAlign: 'center' }}>
+            <div style={{ background: C.amberSoft, border: '1px solid rgba(198,65,12,0.28)', borderRadius: 12, padding: '6px 14px', textAlign: 'center' }}>
               <div style={{ fontFamily: C.fontDisplay, fontSize: 20, fontWeight: 700, color: C.amber, lineHeight: 1 }}>
                 ${(activeOrder.total || 0).toFixed(0)}
               </div>
-              <div style={{ fontSize: 8, color: 'rgba(255,184,77,0.55)', textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 3 }}>
+              <div style={{ fontSize: 8, color: C.amber, textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 3 }}>
                 pendiente
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, background: 'rgba(255,255,255,0.025)', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, background: 'rgba(23,42,42,0.03)', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.border}` }}>
             <svg viewBox="0 0 24 24" fill="none" stroke={C.amber} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13" style={{ flexShrink: 0 }}>
               <path d="M12 22s-8-4.5-8-11.8A8 8 0 0112 2a8 8 0 018 8.2c0 7.3-8 11.8-8 11.8z"/>
               <circle cx="12" cy="10" r="3"/>
