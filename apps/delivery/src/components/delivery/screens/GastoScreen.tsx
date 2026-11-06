@@ -17,7 +17,7 @@ const CATS = [
   { value: 'COMPRAS',       label: 'Compras / Insumos', color: '#88D66C' },
   { value: 'MANTENIMIENTO', label: 'Mantenimiento',     color: '#A78BFA' },
   { value: 'CASETAS',       label: 'Casetas / Peaje',   color: '#60A5FA' },
-  { value: 'OTROS',         label: 'Otro gasto',        color: 'rgba(255,255,255,0.4)' },
+  { value: 'OTROS',         label: 'Otro gasto',        color: '#8a9a90' },
 ];
 
 // Artículos que más compra el repartidor (derivados del histórico de gastos).

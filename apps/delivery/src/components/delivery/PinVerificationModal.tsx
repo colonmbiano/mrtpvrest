@@ -24,6 +24,7 @@ export function PinVerificationModal({
   const isPinValid = /^\d{4,6}$/.test(pin);
 
   const isPickup = type === 'PICKUP';
+  const accent = isPickup ? C.amber : C.green;
   const title = isPickup ? 'Confirmar Recolección' : 'Confirmar Entrega';
   const subtitle = isPickup
     ? `Solicita el PIN de 4 a 6 dígitos en ${targetName}`
@@ -71,7 +72,7 @@ export function PinVerificationModal({
         position: 'fixed',
         inset: 0,
         zIndex: 300,
-        background: 'rgba(9, 9, 11, 0.96)',
+        background: 'rgba(247, 249, 248, 0.98)',
         backdropFilter: 'blur(20px)',
         display: 'flex',
         flexDirection: 'column',
@@ -87,11 +88,11 @@ export function PinVerificationModal({
             onClick={onCancel}
             disabled={loading}
             style={{
-              background: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              background: C.surf2,
+              border: `1px solid ${C.border}`,
               borderRadius: 12,
               padding: '10px 16px',
-              color: '#fff',
+              color: C.text,
               fontSize: 12,
               fontWeight: 700,
               cursor: 'pointer',
@@ -105,7 +106,7 @@ export function PinVerificationModal({
               fontWeight: 700,
               letterSpacing: '0.1em',
               textTransform: 'uppercase',
-              color: isPickup ? C.amber : C.green,
+              color: accent,
             }}
           >
             {isPickup ? '📦 TIENDA' : '🏠 DESTINO'}
@@ -118,13 +119,13 @@ export function PinVerificationModal({
               fontFamily: C.fontDisplay,
               fontSize: 22,
               fontWeight: 700,
-              color: '#fff',
+              color: C.text,
               marginBottom: 4,
             }}
           >
             {title} #{orderNumber}
           </div>
-          <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.65)', lineHeight: 1.4 }}>
+          <div style={{ fontSize: 13, color: C.textDim, lineHeight: 1.4 }}>
             {subtitle}
           </div>
         </div>
@@ -149,18 +150,18 @@ export function PinVerificationModal({
                 style={{
                   height: 68,
                   borderRadius: 16,
-                  background: isFilled ? 'rgba(255, 184, 77, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                  background: isFilled ? 'rgba(198, 65, 12, 0.08)' : C.surf1,
                   border: isFilled
-                    ? `2px solid ${isPickup ? C.amber : C.green}`
-                    : '1px solid rgba(255, 255, 255, 0.12)',
+                    ? `2px solid ${accent}`
+                    : `1px solid ${C.border}`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: 28,
                   fontWeight: 700,
                   fontFamily: C.fontDisplay,
-                  color: isPickup ? C.amber : C.green,
-                  boxShadow: isFilled ? '0 0 20px rgba(255, 184, 77, 0.2)' : 'none',
+                  color: accent,
+                  boxShadow: isFilled ? '0 0 20px rgba(198, 65, 12, 0.14)' : 'none',
                   transition: 'all 0.15s ease',
                 }}
               >
@@ -209,9 +210,9 @@ export function PinVerificationModal({
                 style={{
                   height: 64,
                   borderRadius: 18,
-                  background: isAction ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.08)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  color: isAction ? 'rgba(255, 255, 255, 0.7)' : '#fff',
+                  background: isAction ? C.surf2 : C.surf1,
+                  border: `1px solid ${C.border}`,
+                  color: isAction ? C.textDim : C.text,
                   fontSize: isAction ? 16 : 24,
                   fontWeight: 700,
                   fontFamily: isAction ? C.fontBody : C.fontDisplay,
@@ -236,9 +237,9 @@ export function PinVerificationModal({
             width: '100%',
             height: 64,
             borderRadius: 20,
-            background: isPinValid ? (isPickup ? C.amber : C.green) : 'rgba(255, 255, 255, 0.1)',
+            background: isPinValid ? accent : C.surf3,
             border: 'none',
-            color: isPinValid ? '#090909' : 'rgba(255, 255, 255, 0.3)',
+            color: isPinValid ? '#fff' : C.textMuted,
             fontSize: 13,
             fontWeight: 800,
             letterSpacing: '0.14em',
@@ -246,7 +247,7 @@ export function PinVerificationModal({
             cursor: isPinValid && !loading ? 'pointer' : 'not-allowed',
             boxShadow:
               isPinValid
-                ? `0 10px 30px ${isPickup ? 'rgba(255, 184, 77, 0.35)' : 'rgba(136, 214, 108, 0.35)'}`
+                ? `0 10px 30px ${isPickup ? 'rgba(198, 65, 12, 0.25)' : 'rgba(20, 116, 59, 0.25)'}`
                 : 'none',
             transition: 'all 0.2s ease',
           }}

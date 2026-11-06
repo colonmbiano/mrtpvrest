@@ -82,7 +82,7 @@ export function CobrarScreen({ order, onBack, onConfirm }: CobrarScreenProps) {
 
         {/* Total hero */}
         <div style={{
-          background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+          background: 'rgba(23,42,42,0.03)', border: `1px solid ${C.border}`,
           borderRadius: 24, padding: '32px 20px', textAlign: 'center', position: 'relative', overflow: 'hidden',
         }}>
           <div style={{

@@ -89,7 +89,7 @@ export function LoginScreen({ locationName = 'Sucursal', onLogin, loggingIn, log
           <div key={i} style={{
             width: 13, height: 13, borderRadius: '50%',
             background: i < pin.length ? C.amber : 'transparent',
-            border: `2px solid ${i < pin.length ? C.amber : 'rgba(255,255,255,0.18)'}`,
+            border: `2px solid ${i < pin.length ? C.amber : 'rgba(23,42,42,0.18)'}`,
             boxShadow: i < pin.length ? '0 0 16px rgba(255,184,77,0.7)' : 'none',
             transition: 'all 0.15s cubic-bezier(.4,0,.2,1)',
           }} />

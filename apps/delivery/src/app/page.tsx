@@ -55,27 +55,27 @@ function AcceptOrderModal({ order, onAccept, onReject }: {
   const filled    = ((30 - secs) / 30) * CIRC;
   const remaining = CIRC - filled;
   const urgent    = secs <= 10;
-  const C_amber   = '#FFB84D', C_coral = '#FF5C33';
+  const C_amber   = '#C6410C', C_coral = '#B42318';
   const font      = "'Outfit', system-ui, sans-serif";
   const fontD     = "'Syne', system-ui, sans-serif";
 
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 200,
-      background: 'rgba(9,9,11,0.94)', backdropFilter: 'blur(24px)',
+      background: 'rgba(247,249,248,0.96)', backdropFilter: 'blur(24px)',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', padding: '28px 20px', fontFamily: font,
     }}>
       <div style={{ fontSize: 9, fontWeight: 700, color: C_amber, letterSpacing: '0.24em', textTransform: 'uppercase', marginBottom: 6 }}>
         Nueva Orden Entrante
       </div>
-      <div style={{ fontFamily: fontD, fontSize: 24, fontWeight: 700, color: '#fff', marginBottom: 24 }}>
+      <div style={{ fontFamily: fontD, fontSize: 24, fontWeight: 700, color: '#172a2a', marginBottom: 24 }}>
         #{order?.orderNumber}
       </div>
 
       <div style={{ position: 'relative', width: 128, height: 128, marginBottom: 24 }}>
         <svg width="128" height="128" viewBox="0 0 128 128">
-          <circle cx="64" cy="64" r={RING_R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8"/>
+          <circle cx="64" cy="64" r={RING_R} fill="none" stroke="rgba(23,42,42,0.10)" strokeWidth="8"/>
           <circle cx="64" cy="64" r={RING_R} fill="none"
             stroke={urgent ? C_coral : C_amber}
             strokeWidth="8" strokeLinecap="round"
@@ -91,30 +91,30 @@ function AcceptOrderModal({ order, onAccept, onReject }: {
           <div style={{ fontFamily: fontD, fontSize: 36, fontWeight: 700, lineHeight: 1, color: urgent ? C_coral : C_amber, transition: 'color 0.3s' }}>
             {secs}
           </div>
-          <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 4 }}>seg</div>
+          <div style={{ fontSize: 8, color: '#8a9a90', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 4 }}>seg</div>
         </div>
       </div>
 
-      <div style={{ width: '100%', background: '#141416', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, padding: 16, marginBottom: 20 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>{order?.customerName}</div>
+      <div style={{ width: '100%', background: '#ffffff', border: '1px solid #d6e2da', borderRadius: 20, padding: 16, marginBottom: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#172a2a', marginBottom: 6 }}>{order?.customerName}</div>
         <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start', marginBottom: 14 }}>
           <svg viewBox="0 0 24 24" fill="none" stroke={C_amber} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12" style={{ flexShrink: 0, marginTop: 2 }}>
             <path d="M12 22s-8-4.5-8-11.8A8 8 0 0112 2a8 8 0 018 8.2c0 7.3-8 11.8-8 11.8z"/>
             <circle cx="12" cy="10" r="3"/>
           </svg>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.58)', lineHeight: 1.5 }}>{order?.deliveryAddress}</span>
+          <span style={{ fontSize: 11, color: '#52665b', lineHeight: 1.5 }}>{order?.deliveryAddress}</span>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid #d6e2da' }}>
           <div style={{ display: 'flex', gap: 20 }}>
             {[['ETA', `${order?.etaMinutes || '—'} min`], ['Items', order?.items?.reduce((s: number, i: any) => s + (i.quantity || 1), 0) || '—']].map(([l, v]) => (
               <div key={l as string}>
-                <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>{l}</div>
-                <div style={{ fontFamily: fontD, fontSize: 17, fontWeight: 700, color: '#fff' }}>{v}</div>
+                <div style={{ fontSize: 8, color: '#8a9a90', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>{l}</div>
+                <div style={{ fontFamily: fontD, fontSize: 17, fontWeight: 700, color: '#172a2a' }}>{v}</div>
               </div>
             ))}
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>Total</div>
+            <div style={{ fontSize: 8, color: '#8a9a90', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>Total</div>
             <div style={{ fontFamily: fontD, fontSize: 26, fontWeight: 700, color: C_amber }}>${order?.total?.toFixed(2) || '0.00'}</div>
           </div>
         </div>
@@ -123,15 +123,15 @@ function AcceptOrderModal({ order, onAccept, onReject }: {
       <div style={{ display: 'flex', gap: 10, width: '100%' }}>
         <button onClick={onReject} style={{
           flex: 1, height: 64, borderRadius: 18, cursor: 'pointer',
-          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
-          fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)',
+          background: '#f2f5f3', border: '1px solid #d6e2da',
+          fontSize: 11, fontWeight: 700, color: '#52665b',
           letterSpacing: '0.16em', textTransform: 'uppercase', fontFamily: font,
         }}>RECHAZAR</button>
         <button onClick={onAccept} style={{
           flex: 1.4, height: 64, borderRadius: 18, cursor: 'pointer',
-          background: C_amber, border: 'none', color: '#090909',
+          background: C_amber, border: 'none', color: '#fff',
           fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase',
-          fontFamily: font, boxShadow: '0 14px 44px rgba(255,184,77,0.38)',
+          fontFamily: font, boxShadow: '0 14px 44px rgba(198,65,12,0.28)',
         }}>ACEPTAR</button>
       </div>
     </div>

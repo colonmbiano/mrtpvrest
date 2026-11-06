@@ -1,44 +1,47 @@
 // handoff/tokens.ts
-// Design tokens — MRTPV Delivery App v2
-// Alineados con el design system del monorepo
+// Design tokens — MRTPV Delivery App
+// Tema CLARO alineado con la Guía de Diseño "Mercadito Colorines / Repartidor"
+// y con el marketplace cliente (mismo sistema visual verde/naranja).
 
 export const C = {
-  // ── Fondos
-  bg:     '#090909',
-  surf1:  '#141416',
-  surf2:  '#1A1A1D',
-  surf3:  '#222226',
+  // ── Fondos (tema claro)
+  bg:     '#F7F9F8', // fondo general
+  surf1:  '#FFFFFF', // superficie / tarjeta
+  surf2:  '#F2F5F3', // superficie sutil
+  surf3:  '#EAEFEC', // superficie hundida / chips
 
-  // ── Bordes
-  border:       'rgba(255,255,255,0.07)',
-  borderStrong: 'rgba(255,255,255,0.13)',
+  // ── Bordes / divisores
+  border:       '#D6E2DA',
+  borderStrong: '#C2D2C8',
 
-  // ── Ámbar (CTA principal, totales pendientes)
-  amber:     '#FFB84D',
-  amberSoft: 'rgba(255,184,77,0.12)',
-  amberGlow: '0 16px 48px rgba(255,184,77,0.28)',
+  // ── Naranja de acción (CTA con texto blanco) y acentos de marca
+  // #C6410C da 5.04:1 sobre blanco (AA). El naranja de marca #FA5A20
+  // (3.21:1) solo se usa como tinte suave, nunca como texto pequeño.
+  amber:     '#C6410C',
+  amberSoft: 'rgba(250,90,32,0.10)',
+  amberGlow: '0 12px 28px rgba(198,65,12,0.18)',
 
-  // ── Verde (entregado, cobrado)
-  green:     '#88D66C',
-  greenSoft: 'rgba(136,214,108,0.12)',
-  greenGlow: '0 16px 48px rgba(136,214,108,0.28)',
+  // ── Verde de marca (entregado, cobrado, selección)
+  green:     '#14743B',
+  greenSoft: '#E8F4EC',
+  greenGlow: '0 12px 28px rgba(20,116,59,0.16)',
 
-  // ── Coral (error, no contesta, offline)
-  coral:     '#FF5C33',
-  coralSoft: 'rgba(255,92,51,0.10)',
+  // ── Rojo (error, no contesta, offline)
+  coral:     '#B42318',
+  coralSoft: '#FBECEC',
 
-  // ── Iris (GPS, tracking, estado listo)
-  iris:     '#A78BFA',
-  irisSoft: 'rgba(167,139,250,0.12)',
+  // ── Azul informativo (GPS, tracking, estado listo)
+  iris:     '#1D4ED8',
+  irisSoft: '#E6ECFB',
 
   // ── Advertencia
-  warn:     '#F59E0B',
-  warnSoft: 'rgba(245,158,11,0.12)',
+  warn:     '#B45309',
+  warnSoft: '#FBF0E0',
 
   // ── Texto
-  text:      '#FFFFFF',
-  textDim:   'rgba(255,255,255,0.58)',
-  textMuted: 'rgba(255,255,255,0.30)',
+  text:      '#172A2A', // principal
+  textDim:   '#52665B', // secundario
+  textMuted: '#8A9A90', // metadatos / deshabilitado
 
   // ── Tipografía
   fontDisplay: "'Syne', system-ui, sans-serif",
@@ -47,44 +50,44 @@ export const C = {
 
 // Configuración de estado de órdenes
 export const ORDER_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  PENDING:    { label: 'Pendiente',          color: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.06)' },
-  CONFIRMED:  { label: 'Confirmado',         color: C.iris,   bg: C.irisSoft  },
-  PREPARING:  { label: 'Preparando',         color: C.warn,   bg: C.warnSoft  },
-  READY:      { label: 'Listo para recoger', color: C.iris,   bg: C.irisSoft  },
-  ON_THE_WAY: { label: 'En camino',          color: C.amber,  bg: C.amberSoft },
-  DELIVERED:  { label: 'Entregado',          color: C.green,  bg: C.greenSoft },
-  CANCELLED:  { label: 'Cancelado',          color: C.coral,  bg: C.coralSoft },
+  PENDING:    { label: 'Pendiente',          color: C.textMuted, bg: C.surf3     },
+  CONFIRMED:  { label: 'Confirmado',         color: C.iris,      bg: C.irisSoft  },
+  PREPARING:  { label: 'Preparando',         color: C.warn,      bg: C.warnSoft  },
+  READY:      { label: 'Listo para recoger', color: C.iris,      bg: C.irisSoft  },
+  ON_THE_WAY: { label: 'En camino',          color: C.amber,     bg: C.amberSoft },
+  DELIVERED:  { label: 'Entregado',          color: C.green,     bg: C.greenSoft },
+  CANCELLED:  { label: 'Cancelado',          color: C.coral,     bg: C.coralSoft },
 };
 
 // Estilos reutilizables
 export const S = {
-  // Botón primario (ámbar)
+  // Botón primario (naranja de acción, texto blanco)
   btnPrimary: {
-    height: 64, width: '100%', borderRadius: 20, border: 'none',
-    background: C.amber, color: '#090909',
+    height: 64, width: '100%', borderRadius: 16, border: 'none',
+    background: C.amber, color: '#FFFFFF',
     fontSize: 12, fontWeight: 700, letterSpacing: '0.16em',
     textTransform: 'uppercase' as const,
     fontFamily: C.fontBody, cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-    boxShadow: '0 16px 48px rgba(255,184,77,0.28)',
+    boxShadow: C.amberGlow,
   },
 
-  // Botón de éxito (verde)
+  // Botón de éxito (verde, texto blanco)
   btnSuccess: {
-    height: 64, width: '100%', borderRadius: 20, border: 'none',
-    background: C.green, color: '#090909',
+    height: 64, width: '100%', borderRadius: 16, border: 'none',
+    background: C.green, color: '#FFFFFF',
     fontSize: 12, fontWeight: 700, letterSpacing: '0.16em',
     textTransform: 'uppercase' as const,
     fontFamily: C.fontBody, cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-    boxShadow: '0 16px 48px rgba(136,214,108,0.28)',
+    boxShadow: C.greenGlow,
   },
 
   // Botón secundario
   btnSecondary: {
     height: 44, paddingInline: 16, borderRadius: 12,
-    border: `1px solid rgba(255,255,255,0.07)`,
-    background: '#1A1A1D', color: 'rgba(255,255,255,0.58)',
+    border: `1px solid ${C.border}`,
+    background: C.surf1, color: C.textDim,
     fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
     textTransform: 'uppercase' as const,
     fontFamily: C.fontBody, cursor: 'pointer',
@@ -93,7 +96,8 @@ export const S = {
   // Tarjeta base
   card: {
     background: C.surf1, border: `1px solid ${C.border}`,
-    borderRadius: 20, padding: '16px',
+    borderRadius: 16, padding: '16px',
+    boxShadow: '0 1px 2px rgba(23,42,42,0.04)',
   },
 
   // Section label
@@ -105,8 +109,8 @@ export const S = {
   // Header sticky
   header: {
     position: 'sticky' as const, top: 0, zIndex: 10,
-    background: 'rgba(9,9,9,0.92)', backdropFilter: 'blur(24px)',
-    borderBottom: `1px solid rgba(255,255,255,0.07)`,
+    background: 'rgba(247,249,248,0.92)', backdropFilter: 'blur(24px)',
+    borderBottom: `1px solid ${C.border}`,
     padding: '10px 16px',
     display: 'flex', alignItems: 'center', gap: 12,
   },
@@ -114,8 +118,8 @@ export const S = {
   // Botón de icono en header
   iconBtn: {
     width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-    border: `1px solid rgba(255,255,255,0.07)`, background: '#141416',
+    border: `1px solid ${C.border}`, background: C.surf1,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', color: 'rgba(255,255,255,0.58)',
+    cursor: 'pointer', color: C.textDim,
   },
 } as const;

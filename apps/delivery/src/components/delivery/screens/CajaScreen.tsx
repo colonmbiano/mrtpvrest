@@ -117,7 +117,7 @@ export function CajaScreen({
           {/* Desglose: el efectivo en mano = fondo + cobrado − gastos − retiros */}
           <div style={{
             marginTop: 16, display: 'flex', justifyContent: 'center', gap: 0,
-            borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 14,
+            borderTop: '1px solid rgba(23,42,42,0.08)', paddingTop: 14,
           }}>
             {[
               { label: 'Fondo', value: fondo, color: C.iris },
@@ -126,7 +126,7 @@ export function CajaScreen({
             ].map((it, i) => (
               <div key={it.label} style={{
                 flex: 1, textAlign: 'center',
-                borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                borderLeft: i > 0 ? '1px solid rgba(23,42,42,0.08)' : 'none',
               }}>
                 <div style={{ fontSize: 8, fontWeight: 700, color: C.textMuted, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 3 }}>{it.label}</div>
                 <div style={{ fontFamily: C.fontDisplay, fontSize: 16, fontWeight: 700, color: it.color }}>${it.value.toFixed(0)}</div>
@@ -304,7 +304,7 @@ export function CajaScreen({
                 <div style={{ fontSize: 12, color: C.textDim, textAlign: 'center', marginBottom: 18, lineHeight: 1.5 }}>
                   El administrador recibió tu aviso y hará el corte de caja.
                 </div>
-                <button onClick={() => setCerrarOpen(false)} style={{ ...modalBtnSolid, background: C.green, color: '#0A0A0A' }}>
+                <button onClick={() => setCerrarOpen(false)} style={{ ...modalBtnSolid, background: C.green, color: '#fff' }}>
                   Entendido
                 </button>
               </>
@@ -316,7 +316,7 @@ export function CajaScreen({
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => setCerrarOpen(false)} disabled={cerrarBusy} style={modalBtnGhost}>Cancelar</button>
-                  <button onClick={confirmCerrar} disabled={cerrarBusy} style={{ ...modalBtnSolid, background: C.amber, color: '#0A0A0A' }}>
+                  <button onClick={confirmCerrar} disabled={cerrarBusy} style={{ ...modalBtnSolid, background: C.amber, color: '#fff' }}>
                     {cerrarBusy ? '...' : 'Enviar aviso'}
                   </button>
                 </div>
