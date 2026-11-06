@@ -69,7 +69,7 @@ export function AvisosScreen({ avisos, onBack, onRead }: AvisosScreenProps) {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     {unread && (
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#ffb84d', flexShrink: 0 }} />
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#C6410C', flexShrink: 0 }} />
                     )}
                     <div style={{ flex: 1, fontSize: 14, fontWeight: 700, color: C.text }}>
                       {a.title || 'Aviso'}

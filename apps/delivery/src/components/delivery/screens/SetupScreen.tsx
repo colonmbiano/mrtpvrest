@@ -103,7 +103,7 @@ export function SetupScreen({ step, locations, loggingIn, onLogin, onSelectLocat
             </div>
             {scanError && (
               <div style={{
-                fontSize: 11, color: '#ef4444', textAlign: 'center', marginBottom: 14,
+                fontSize: 11, color: '#B42318', textAlign: 'center', marginBottom: 14,
                 background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
                 borderRadius: 10, padding: '8px 10px',
               }}>{scanError}</div>

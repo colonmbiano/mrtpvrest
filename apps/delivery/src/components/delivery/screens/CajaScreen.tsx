@@ -145,7 +145,7 @@ export function CajaScreen({
               <button onClick={() => setPayoutModalOpen(true)} style={{
                 height: 38, paddingInline: 16, borderRadius: 10, cursor: 'pointer',
                 border: '1px solid rgba(59,130,246,0.3)',
-                background: 'rgba(59,130,246,0.12)', fontSize: 9, fontWeight: 700, color: '#3b82f6',
+                background: 'rgba(59,130,246,0.12)', fontSize: 9, fontWeight: 700, color: '#1D4ED8',
                 letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: C.fontBody,
               }}>Retiro bancario</button>
             )}

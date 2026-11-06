@@ -137,14 +137,14 @@ export function DesempenoScreen({
             <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
               Saldo Disponible
             </div>
-            <div style={{ fontFamily: C.fontDisplay, fontSize: 28, fontWeight: 700, color: '#3b82f6' }}>
+            <div style={{ fontFamily: C.fontDisplay, fontSize: 28, fontWeight: 700, color: '#1D4ED8' }}>
               ${todayAvailable.toFixed(2)}
             </div>
             <div style={{ fontSize: 9, color: C.textMuted, marginTop: 4 }}>Pagos con tarjeta y transferencias</div>
             {todayAvailable > 0 && onPayoutRequest && (
               <button onClick={() => setPayoutModalOpen(true)} style={{
                 width: '100%', marginTop: 12, height: 38, borderRadius: 10, border: '1px solid rgba(59,130,246,0.3)',
-                background: 'rgba(59,130,246,0.12)', fontSize: 10, fontWeight: 700, color: '#3b82f6',
+                background: 'rgba(59,130,246,0.12)', fontSize: 10, fontWeight: 700, color: '#1D4ED8',
                 letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: C.fontBody, cursor: 'pointer',
               }}>Solicitar retiro</button>
             )}
@@ -158,7 +158,7 @@ export function DesempenoScreen({
             <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
               Efectivo Pendiente de Caja
             </div>
-            <div style={{ fontFamily: C.fontDisplay, fontSize: 28, fontWeight: 700, color: '#ef4444' }}>
+            <div style={{ fontFamily: C.fontDisplay, fontSize: 28, fontWeight: 700, color: '#B42318' }}>
               ${todayCash.toFixed(2)}
             </div>
             <div style={{ fontSize: 9, color: C.textMuted, marginTop: 4 }}>Debe liquidarse en caja</div>

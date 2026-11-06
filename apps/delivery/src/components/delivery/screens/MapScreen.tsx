@@ -134,7 +134,7 @@ export function MapScreen({ orders, driverLat = 19.4326, driverLng = -99.1332, o
     // Pedidos
     orders.forEach((order, idx) => {
       if (order.lat == null || order.lng == null) return;
-      const markerColor = order.status === 'ON_THE_WAY' ? '#FFB84D' : '#A78BFA';
+      const markerColor = order.status === 'ON_THE_WAY' ? '#C6410C' : '#1D4ED8';
       const icon = L.divIcon({ html: orderMarkerHTML(idx + 1, markerColor), className: '', iconSize: [36, 36], iconAnchor: [18, 18] });
       L.marker([order.lat, order.lng], { icon })
         .addTo(group)
@@ -156,8 +156,8 @@ export function MapScreen({ orders, driverLat = 19.4326, driverLng = -99.1332, o
           setEtaMinutes(Math.round(route.duration / 60));
           // GeoJSON viene como [lng,lat]; Leaflet usa [lat,lng].
           const latlngs = route.geometry.coordinates.map((c: number[]) => [c[1], c[0]]);
-          L.polyline(latlngs, { color: '#FFB84D', weight: 16, opacity: 0.12 }).addTo(group); // glow
-          const main = L.polyline(latlngs, { color: '#FFB84D', weight: 4.5, opacity: 0.9 }).addTo(group);
+          L.polyline(latlngs, { color: '#C6410C', weight: 16, opacity: 0.12 }).addTo(group); // glow
+          const main = L.polyline(latlngs, { color: '#C6410C', weight: 4.5, opacity: 0.9 }).addTo(group);
           try { map.fitBounds(main.getBounds(), { padding: [60, 60], maxZoom: 15 }); } catch { /* noop */ }
         })
         .catch(() => { /* Sin ruta — modo sin conexión */ });

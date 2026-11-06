@@ -13,10 +13,10 @@ interface GastoScreenProps {
 // repartidor DEBE elegir (antes caía siempre en GASOLINA por estar preseleccionada,
 // y las compras de insumos salían mal clasificadas).
 const CATS = [
-  { value: 'GASOLINA',      label: 'Gasolina',          color: '#FFB84D' },
-  { value: 'COMPRAS',       label: 'Compras / Insumos', color: '#88D66C' },
-  { value: 'MANTENIMIENTO', label: 'Mantenimiento',     color: '#A78BFA' },
-  { value: 'CASETAS',       label: 'Casetas / Peaje',   color: '#60A5FA' },
+  { value: 'GASOLINA',      label: 'Gasolina',          color: '#C6410C' },
+  { value: 'COMPRAS',       label: 'Compras / Insumos', color: '#14743B' },
+  { value: 'MANTENIMIENTO', label: 'Mantenimiento',     color: '#6D28D9' },
+  { value: 'CASETAS',       label: 'Casetas / Peaje',   color: '#1D4ED8' },
   { value: 'OTROS',         label: 'Otro gasto',        color: '#8a9a90' },
 ];
 
@@ -131,9 +131,9 @@ export function GastoScreen({ onBack, onSave }: GastoScreenProps) {
                 return (
                   <button key={item} onClick={() => setDesc(toggleItem(desc, item))} style={{
                     padding: '8px 14px', borderRadius: 999, cursor: 'pointer',
-                    border: `1px solid ${active ? '#88D66C45' : C.border}`,
-                    background: active ? '#88D66C18' : C.surf2,
-                    color: active ? '#88D66C' : C.textDim,
+                    border: `1px solid ${active ? '#14743B45' : C.border}`,
+                    background: active ? '#14743B18' : C.surf2,
+                    color: active ? '#14743B' : C.textDim,
                     fontSize: 12.5, fontWeight: 600, fontFamily: C.fontBody, transition: 'all 0.15s',
                   }}>{item}</button>
                 );
