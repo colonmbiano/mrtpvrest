@@ -6,6 +6,7 @@
 // BuyerSignup con los campos de vehículo y modalidad de red.
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { COURIER_APP_URL } from '@/lib/marketplaceAppLinks';
 import { MailCheck } from 'lucide-react';
 import { normalizeRegistrationDraft, validateRegistrationDraft, EMPTY_REGISTRATION_DRAFT } from '@/lib/marketplace-registration';
 import { checkPassword, PASSWORD_MIN, registerCourier } from '@/lib/marketplaceAccount';
@@ -66,15 +67,16 @@ export default function CourierSignup() {
       <MailCheck className="h-10 w-10 text-[#14824a]" aria-hidden="true" />
       <p className="mt-3 text-sm leading-relaxed text-[#436e50]">
         Si <strong className="break-all">{sentTo}</strong> puede registrarse, te enviamos un enlace para verificarlo.
-        Ábrelo desde este mismo dispositivo. Después, la plataforma revisa tu solicitud de repartidor y, al aprobarla,
+        Después de verificar tu correo, la plataforma revisa tu solicitud de repartidor y, al aprobarla,
         podrás iniciar sesión desde la app de reparto.
       </p>
+      <a href={COURIER_APP_URL} className={primaryButton + ' mt-4'}>Abrir la app de reparto</a>
       <p className="mt-4 text-sm text-[#617567]">¿No te llegó? Revisa tu carpeta de spam o <Link href="/cuenta/entrar?reenviar=1" className={textLink}>pide otro enlace</Link>.</p>
     </AccountShell>;
   }
 
   return <AccountShell title="Regístrate como repartidor"
-    subtitle={<>Reparte para las tiendas de la red del marketplace. ¿Ya tienes cuenta? <Link href="/cuenta/entrar" className={textLink}>Entra aquí</Link>.</>}>
+    subtitle={<>Reparte para las tiendas de la red del marketplace. ¿Ya tienes cuenta? <a href={COURIER_APP_URL} className={textLink}>Entrar a reparto</a>.</>}>
     <form onSubmit={submit} noValidate className="space-y-5">
       <TextField id="name" label="Nombre completo" value={form.name} onChange={v => update('name', v)} error={errors.name}
         autoComplete="name" placeholder="Tu nombre y apellidos" maxLength={100} />
@@ -87,7 +89,7 @@ export default function CourierSignup() {
       <SelectField id="vehicle" label="¿Con qué repartes?" value={form.vehicle} onChange={v => update('vehicle', v)}
         error={errors.vehicle} options={VEHICLE_OPTIONS} />
       <SelectField id="network" label="Modalidad de reparto" value={form.network} onChange={v => update('network', v)}
-        error={errors.network} options={NETWORK_OPTIONS} hint="Puedes cambiarla después desde la app." />
+        error={errors.network} options={NETWORK_OPTIONS} />
       <TextField id="password" label="Contraseña" type="password" value={form.password} onChange={v => update('password', v)}
         error={errors.password} autoComplete="new-password" maxLength={128} hint={`Al menos ${PASSWORD_MIN} caracteres. Una frase es fácil de recordar.`} />
       <TextField id="confirm" label="Confirma tu contraseña" type="password" value={form.confirm} onChange={v => update('confirm', v)}

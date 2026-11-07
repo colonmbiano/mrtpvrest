@@ -6,6 +6,7 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { COURIER_APP_URL } from '@/lib/marketplaceAppLinks';
 import { forgotPassword, login, resendVerification, safeNextPath } from '@/lib/marketplaceAccount';
 import { AccountShell, captchaReady, Notice, primaryButton, TextField, textLink, Turnstile } from './AccountUi';
 
@@ -36,6 +37,10 @@ export default function BuyerLogin({ initialMode, next }: { initialMode: LoginMo
       setSending(false);
       if ('ok' in result) { setError(result.message); return; }
       setPassword('');
+      if (result.profiles.some(p => p.role === 'COURIER') && !result.profiles.some(p => p.role === 'BUYER')) {
+        window.location.assign(COURIER_APP_URL);
+        return;
+      }
       router.replace(safeNextPath(next));
       router.refresh();
       return;

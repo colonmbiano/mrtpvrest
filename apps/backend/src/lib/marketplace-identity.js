@@ -77,11 +77,11 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
     });
     // Fragment never reaches HTTP servers or server access logs.
     const link = publicOrigin + path + '#token=' + raw;
-    const subject = purpose === 'EMAIL_VERIFY' ? 'Verifica tu correo en MRTPVREST Marketplace' : 'Recupera tu acceso a MRTPVREST Marketplace';
+    const subject = purpose === 'EMAIL_VERIFY' ? 'Verifica tu correo en Mercadito Colorines' : 'Recupera tu acceso a Mercadito Colorines';
     // No HTML or URL values depend on user-controlled strings (only validated origin and random token).
     await sendEmail(account.email, subject,
       '<p>Solicitaste ' + (purpose === 'EMAIL_VERIFY' ? 'verificar tu correo' : 'restablecer tu contraseña') +
-      ' en MRTPVREST Marketplace.</p><p><a href="' + link + '">Continuar de forma segura</a></p>' +
+      ' en Mercadito Colorines.</p><p><a href="' + link + '">Continuar de forma segura</a></p>' +
       '<p>Si no lo solicitaste, ignora este correo.</p>');
   }
 
@@ -133,8 +133,9 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
         data: { consumedAt: now() },
       });
       if (used.count !== 1) throw new IdentityError('INVALID_TOKEN');
-      await tx.marketplaceAccount.update({
+      const account = await tx.marketplaceAccount.update({
         where: { id: record.accountId }, data: { emailVerifiedAt: now() },
+        select: { applications: { select: { role: true } } },
       });
       await tx.marketplaceApplication.updateMany({
         where: { accountId: record.accountId, role: 'BUYER', status: 'PENDING_EMAIL' },
@@ -144,7 +145,7 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
         where: { accountId: record.accountId, role: { in: ['MERCHANT','COURIER'] }, status: 'PENDING_EMAIL' },
         data: { status: 'PENDING_REVIEW' },
       });
-      return { verified: true };
+      return { verified: true, roles: account.applications.map(application => application.role) };
     });
   }
 

@@ -10,9 +10,9 @@ import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 // fonts.googleapis.com, rompiendo el build. El WebView sí tiene internet
 // en runtime y la carga es rápida con preconnect.
 export const metadata: Metadata = {
-  title: "MRTPV Delivery",
+  title: "Mercadito Colorines · Reparto",
   description: "Sistema de Reparto Premium",
-  applicationName: "MB Delivery",
+  applicationName: "Reparto Colorines",
   // CRÍTICO para iOS: Safari ignora el manifest para el modo standalone y la
   // status bar; lo controla con estos meta de Apple (apple-mobile-web-app-*).
   appleWebApp: {

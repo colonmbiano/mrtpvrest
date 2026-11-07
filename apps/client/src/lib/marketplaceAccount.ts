@@ -96,10 +96,14 @@ export async function registerCourier(input: CourierSignupInput, options?: Optio
   return result.ok ? true : result;
 }
 
-export async function verifyEmail(token: string, options?: Options): Promise<true | AccountFailure> {
+export type VerifiedRole = 'BUYER' | 'COURIER' | 'MERCHANT';
+
+export async function verifyEmail(token: string, options?: Options): Promise<{ roles: VerifiedRole[] } | AccountFailure> {
   if (!isLinkToken(token)) return failure('rejected', MESSAGES.INVALID_TOKEN, 'INVALID_TOKEN');
   const result = await identityRequest('/verify-email', { method: 'POST', body: { token } }, options);
-  return result.ok ? true : result;
+  if (!result.ok) return result;
+  const roles = isRecord(result.json) && Array.isArray(result.json.roles) ? result.json.roles : [];
+  return { roles: roles.filter((role): role is VerifiedRole => role === 'BUYER' || role === 'COURIER' || role === 'MERCHANT') };
 }
 
 export async function resendVerification(email: string, turnstileToken: string | undefined, options?: Options): Promise<true | AccountFailure> {

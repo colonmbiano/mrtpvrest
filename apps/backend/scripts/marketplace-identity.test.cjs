@@ -195,7 +195,7 @@ test('signup writes hash, creates pending profile and mails only one-use opaque 
   assert.equal(x.accounts.length,1);
   assert.equal(x.emails.length,1);
   await failCode(()=>x.service.login(buyer),'INVALID_CREDENTIALS');
-  assert.deepEqual(await x.service.verifyEmail(token), {verified:true});
+  assert.deepEqual(await x.service.verifyEmail(token), {verified:true, roles:['BUYER']});
   assert.equal(x.applications[0].status,'APPROVED');
   await failCode(()=>x.service.verifyEmail(token),'INVALID_TOKEN');
 });
@@ -204,7 +204,7 @@ test('merchant and courier require review after verification and do not create t
   for(const data of [merchant,courier]){
     const x=fixture();
     await x.service.register(data);
-    await x.service.verifyEmail(extractToken(x.emails[0].html));
+    assert.deepEqual(await x.service.verifyEmail(extractToken(x.emails[0].html)), { verified: true, roles: [data.role] });
     assert.equal(x.applications[0].status,'PENDING_REVIEW');
     assert.equal(x.prisma.tenant, undefined);
     const approved=await x.service.reviewApplication(x.applications[0].id,'superadmin-1','APPROVED');

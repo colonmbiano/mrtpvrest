@@ -28,7 +28,7 @@ import { CourierAuthScreen } from '@/components/delivery/screens/CourierAuthScre
 import { CourierHomeScreen } from '@/components/delivery/screens/CourierHomeScreen';
 import { PinVerificationModal } from '@/components/delivery/PinVerificationModal';
 import { needsStoreDeliveryPin, isDeliveryPinRejection, withDeliveryPin } from '@/lib/storeDeliveryPin';
-import { getDeliveryMode, courierSessionActive, clearCourierSession } from '@/lib/courierSession';
+import { getDeliveryMode, setDeliveryMode, courierSessionActive, clearCourierSession } from '@/lib/courierSession';
 
 type Screen =
   | 'setup' | 'login' | 'home' | 'detail'
@@ -210,6 +210,7 @@ export default function DeliveryApp() {
     if (qrRid && qrLid) {
       localStorage.setItem('restaurantId', qrRid);
       localStorage.setItem('locationId', qrLid);
+      clearCourierSession();
       const qrLn = params.get('ln');
       if (qrLn) localStorage.setItem('locationName', qrLn);
       window.history.replaceState({}, '', window.location.pathname); // limpia la URL
@@ -222,6 +223,11 @@ export default function DeliveryApp() {
       return removeNetworkListeners;
     }
 
+    if (params.get('modo') === 'independiente' || getDeliveryMode() === 'courier') {
+      setDeliveryMode('courier');
+      setScreen('courier');
+      return removeNetworkListeners;
+    }
     const restId = localStorage.getItem('restaurantId');
     const locId  = localStorage.getItem('locationId');
     if (!restId || !locId) setScreen('setup');
@@ -451,6 +457,7 @@ export default function DeliveryApp() {
       lastPresenceRef.current = null;
       setDriver(data.employee);
       setLoginError('');
+      clearCourierSession();
       localStorage.setItem('accessToken', data.token);
       setScreen('home');
       fetchOrders(data.employee);
@@ -744,13 +751,13 @@ export default function DeliveryApp() {
           onLogin={handleSetupLogin}
           onSelectLocation={finishSetup}
           onQrLink={handleQrLink}
-          onIndependentCourier={() => setScreen('courier')}
+          onIndependentCourier={() => { setDeliveryMode('courier'); setScreen('courier'); }}
         />
       )}
 
       {screen === 'courier' && (
         <CourierAuthScreen
-          onBack={() => setScreen('setup')}
+          onBack={() => { clearCourierSession(); window.history.replaceState({}, '', window.location.pathname); setScreen('setup'); }}
           onAuthenticated={() => setScreen('courier-home')}
         />
       )}

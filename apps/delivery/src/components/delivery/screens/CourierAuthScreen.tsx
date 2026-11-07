@@ -3,6 +3,7 @@
 // sesión (Bearer de courier); el alta se hace en la web. Ver lib/courierSession.
 import React, { useState } from 'react';
 import { ArrowLeft, Bike } from 'lucide-react';
+import { CourierInstall } from '../CourierInstall';
 import { C, S } from '@/lib/tokens';
 import { courierLogin, CourierAuthError } from '@/lib/courierSession';
 
@@ -11,7 +12,7 @@ interface CourierAuthScreenProps {
   onAuthenticated: () => void;
 }
 
-const REGISTER_URL = 'https://mercaditocolorines.mrtpvrest.com/registro';
+const REGISTER_URL = 'https://mercaditocolorines.mrtpvrest.com/registro?tipo=repartidor';
 
 const ERROR_MESSAGE: Record<string, string> = {
   INVALID_CREDENTIALS: 'Correo o contraseña incorrectos.',
@@ -106,11 +107,12 @@ export function CourierAuthScreen({ onBack, onAuthenticated }: CourierAuthScreen
             </button>
           </div>
 
+          <CourierInstall />
           <div style={{ marginTop: 18, textAlign: 'center', fontSize: 12, color: C.textMuted, lineHeight: 1.6 }}>
             ¿No tienes cuenta?<br />
             <a href={REGISTER_URL} target="_blank" rel="noopener noreferrer"
               style={{ color: C.green, fontWeight: 700, textDecoration: 'none' }}>
-              Regístrate en mrtpvrest.com
+              Crear cuenta de repartidor
             </a>
           </div>
         </div>

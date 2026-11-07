@@ -98,6 +98,7 @@ function storeCourierSession(token: string, expiresInSeconds: unknown): void {
   const ttl = Number(expiresInSeconds);
   const expiresAt = Number.isFinite(ttl) && ttl > 0 ? Date.now() + ttl * 1000 : 0;
   safe(() => {
+    localStorage.removeItem("accessToken");
     localStorage.setItem(TOKEN_KEY, token);
     if (expiresAt) localStorage.setItem(EXP_KEY, String(expiresAt)); else localStorage.removeItem(EXP_KEY);
     localStorage.setItem(MODE_KEY, "courier");

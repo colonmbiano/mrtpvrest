@@ -8,9 +8,9 @@ export const dynamic = "force-static";
 // la configuración crítica de iOS vive en los meta de Apple en layout.tsx.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Master Burger's Delivery",
-    short_name: "MB Delivery",
-    description: "App de reparto para repartidores de Master Burger's",
+    name: "Mercadito Colorines · Reparto",
+    short_name: "Reparto Colorines",
+    description: "Reparto de tiendas y de la red Mercadito Colorines",
     start_url: "/",
     display: "standalone",
     orientation: "portrait",

@@ -48,7 +48,7 @@ export default function BuyerSignup() {
       <MailCheck className="h-10 w-10 text-[#14824a]" aria-hidden="true" />
       <p className="mt-3 text-sm leading-relaxed text-[#436e50]">
         Si <strong className="break-all">{sentTo}</strong> puede registrarse, te enviamos un enlace para verificarlo.
-        Ábrelo desde este mismo dispositivo y después entra con tu correo y contraseña.
+        Al verificarlo podrás entrar con tu correo y contraseña.
       </p>
       <p className="mt-4 text-sm text-[#617567]">¿No te llegó? Revisa tu carpeta de spam o <Link href="/cuenta/entrar?reenviar=1" className={textLink}>pide otro enlace</Link>.</p>
     </AccountShell>;

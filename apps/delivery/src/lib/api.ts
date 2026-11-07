@@ -37,7 +37,7 @@ api.interceptors.response.use(
         localStorage.removeItem("courierToken");
         localStorage.removeItem("courierTokenExp");
         localStorage.removeItem("deliveryMode");
-        if (hadCourier) window.location.href = "/";
+        if (hadCourier) window.location.href = "/?modo=independiente";
         return Promise.reject(error);
       }
       // Unificado: NO mandamos a /setup (IDs crudos) ni a /login (no es ruta, es

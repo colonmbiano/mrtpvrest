@@ -380,9 +380,13 @@ export default function RegisterPage() {
             <p style={{ marginTop: 20, fontSize: 13, color: "var(--tx-mut)" }}>
               ¿Ya activaste tu cuenta?{" "}
               <Link href="/login" style={{ color: "var(--brand-primary)", fontWeight: 700, textDecoration: "none" }}>
-                Ir a iniciar sesión →
+                Abrir mi panel de negocios →
               </Link>
             </p>
+            <details style={{ marginTop: 16, fontSize: 14 }}>
+              <summary>Instalar el panel en mi teléfono</summary>
+              <p>En Android, abre el menú del navegador y selecciona «Instalar aplicación» o «Agregar a la pantalla principal». En iPhone, usa Compartir → Agregar a inicio desde Safari.</p>
+            </details>
           </div>
         )}
 

@@ -4,10 +4,11 @@
 // al cambiarlas en Vercel hay que redesplegar con build fresco (sin reusar cache).
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { RegistrationAccess, BusinessAccess } from '@/components/account/RegistrationAccess';
 import MarketplaceRegistration from '@/components/MarketplaceRegistration';
 import BuyerSignup from '@/components/account/BuyerSignup';
 import CourierSignup from '@/components/account/CourierSignup';
-import { isMarketplaceAccountsEnabled, isMarketplaceCatalogEnabled } from '@/lib/config';
+import { isMarketplaceAccountsEnabled, isMarketplaceCatalogEnabled, isMarketplacePreviewDemo, isMarketplaceIsolated } from '@/lib/config';
 import { parseRegistrationRole } from '@/lib/marketplace-registration';
 
 export const dynamic = 'force-dynamic';
@@ -31,11 +32,14 @@ export default async function RegistrationPage({
   if (!isMarketplaceCatalogEnabled()) redirect('/');
   const { tipo } = await searchParams;
   const role = parseRegistrationRole(tipo);
-  // Con las cuentas encendidas, cliente y repartidor se registran de verdad; el
-  // negocio sigue siendo la demostración por ahora.
-  if (isMarketplaceAccountsEnabled()) {
+  const accountsEnabled = isMarketplaceAccountsEnabled();
+  if (!accountsEnabled && (isMarketplacePreviewDemo() || isMarketplaceIsolated())) {
+    return <MarketplaceRegistration selectedRole={role} />;
+  }
+  if (role === 'negocio') return <BusinessAccess />;
+  if (accountsEnabled) {
     if (role === 'cliente') return <BuyerSignup />;
     if (role === 'repartidor') return <CourierSignup />;
   }
-  return <MarketplaceRegistration selectedRole={role} />;
+  return <RegistrationAccess accountsEnabled={accountsEnabled} />;
 }

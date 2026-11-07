@@ -39,7 +39,7 @@ export function InstallAppButton({ className }: { className: string }) {
 export function InstallAppSection() {
   const { canInstall, isInstalled, install, busy } = useInstall();
   const appleMobile = useSyncExternalStore(noSubscribe, isAppleMobile, () => false);
-  if (isInstalled || (!canInstall && !appleMobile)) return null;
+  if (isInstalled) return null;
   return <section aria-labelledby="account-install" className="mt-7">
     <h2 id="account-install" className="flex items-center gap-2 text-base font-extrabold">
       <Smartphone className="h-5 w-5 text-[#e65b27]" aria-hidden="true" /> Instala la app
@@ -49,8 +49,10 @@ export function InstallAppSection() {
       <button type="button" onClick={install} disabled={busy} className={secondaryButton + ' mt-3 gap-2'}>
         <Download className="h-4 w-4" aria-hidden="true" /> {busy ? 'Abriendo…' : 'Instalar app'}
       </button>
-    </> : <p className="mt-3 text-sm leading-relaxed text-[#617567]">
-      En iPhone o iPad, toca <strong className="text-[#304438]">Compartir</strong> y luego <strong className="text-[#304438]">«Agregar a inicio»</strong>. Así también te llegan los avisos de tus pedidos.
+    </> : appleMobile ? <p className="mt-3 text-sm leading-relaxed text-[#617567]">
+      En iPhone o iPad, toca <strong className="text-[#304438]">Compartir</strong> y luego <strong className="text-[#304438]">«Agregar a inicio»</strong>.
+    </p> : <p className="mt-3 text-sm leading-relaxed text-[#617567]">
+      Abre el menú del navegador y elige «Instalar aplicación» o «Agregar a la pantalla principal» si está disponible.
     </p>}
   </section>;
 }

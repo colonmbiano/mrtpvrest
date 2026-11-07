@@ -106,8 +106,7 @@ function createMarketplaceIdentityRouter({
     res.status(202).json({ message: 'Si la solicitud es válida, recibirás instrucciones por correo.' });
   }));
   expressRouter.post('/verify-email', authLimit, guarded(async (req, res) => {
-    await service.verifyEmail(req.body?.token);
-    res.json({ verified: true });
+    res.json(await service.verifyEmail(req.body?.token));
   }));
   expressRouter.post('/resend-verification', mailLimit, requireCaptcha, guarded(async (req, res) => {
     await service.resendVerification(req.body?.email);

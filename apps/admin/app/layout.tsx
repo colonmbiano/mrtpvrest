@@ -27,6 +27,9 @@ const dmMono = DM_Mono({
 export const metadata: Metadata = {
   title: "Panel Admin — Restaurante",
   description: "Sistema de gestión de pedidos",
+  manifest: "/panel.webmanifest",
+  icons: { apple: "/panel-192.png" },
+  appleWebApp: { capable: true, title: "Mi negocio" },
 };
 
 // Cleanup inline que corre ANTES de hidratar React. Desregistra cualquier
