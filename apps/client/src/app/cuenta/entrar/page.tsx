@@ -6,7 +6,7 @@ import { isMarketplaceAccountsEnabled, isMarketplaceCatalogEnabled } from '@/lib
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Entrar | MRTPVREST Marketplace',
+  title: 'Entrar | Mercadito Colorines',
   robots: { index: false, follow: false },
 };
 

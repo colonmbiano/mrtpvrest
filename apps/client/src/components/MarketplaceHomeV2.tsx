@@ -81,10 +81,10 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
       <header className="relative z-20 border-b border-[#e8eeeb] bg-white">
         <div className="mx-auto max-w-[1380px] px-4 sm:px-6">
           <div className="flex min-h-20 items-center justify-between gap-3 lg:gap-6">
-            <Link href="/" aria-label="MRTPVREST Marketplace, inicio" className={'flex shrink-0 items-center gap-2 ' + focus}>
+            <Link href="/" aria-label="Mercadito Colorines, inicio" className={'flex shrink-0 items-center gap-2 ' + focus}>
               <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#e9f4e9] text-2xl shadow-sm" aria-hidden="true">🛍️</span>
               <span className="flex flex-col leading-none">
-                <span className="font-display text-xl font-extrabold tracking-tight text-[#14743b] sm:text-2xl">MRT<span className="text-[#ff6426]">PV</span>REST</span>
+                <span className="font-display text-xl font-extrabold tracking-tight text-[#14743b] sm:text-2xl">Mercadito <span className="text-[#ff6426]">Colorines</span></span>
                 <span className="mt-1 text-[11px] font-semibold tracking-[.13em] text-[#65766e]">MARKETPLACE</span>
               </span>
             </Link>
@@ -146,7 +146,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
       {previewDemo && <div id="preview-info" role="status" className="mx-auto mt-3 max-w-[1380px] px-4 sm:px-6"><p className="rounded-xl border border-[#f0cf90] bg-[#fff6df] px-4 py-3 text-sm font-semibold text-[#7c5219]"><strong>Vista de demostración:</strong> Master Burguer’s y Tokki Boba aparecen con sus nombres reales. Los demás negocios, productos y precios son ejemplos ficticios. No se realizan pedidos ni pagos y no se consulta la base de datos real.</p></div>}
 
       <main id="contenido" className="mx-auto flex max-w-[1380px] flex-col gap-9 px-4 pb-12 pt-5 sm:gap-11 sm:px-6 sm:pt-7">
-        <section aria-label="Bienvenida a MRTPVREST Marketplace" className="relative isolate overflow-hidden rounded-[1.5rem] bg-[#fff0e2] shadow-[0_12px_32px_rgba(37,56,43,.08)] sm:rounded-[1.75rem]">
+        <section aria-label="Bienvenida a Mercadito Colorines" className="relative isolate overflow-hidden rounded-[1.5rem] bg-[#fff0e2] shadow-[0_12px_32px_rgba(37,56,43,.08)] sm:rounded-[1.75rem]">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,#fff9eb,transparent_60%)]" aria-hidden="true" />
           <div className="absolute inset-y-0 right-0 w-[70%] bg-cover bg-center opacity-85 sm:w-[62%]" aria-hidden="true"
             style={{ backgroundImage: "linear-gradient(90deg,#fff0e2 0%,rgba(255,240,226,.35) 40%,rgba(36,53,34,.04) 100%),url('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1300&q=82')" }} />
@@ -243,7 +243,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
         </CatalogSection>
 
         <footer className="grid gap-6 border-t border-[#dfe9e1] pt-8 text-sm text-[#647268] sm:grid-cols-3">
-          <div><strong className="font-display text-lg text-[#176f3d]">MRTPVREST <span className="text-[#f15a24]">Marketplace</span></strong><p className="mt-2">Todo lo que necesitas, más cerca de ti.</p></div>
+          <div><strong className="font-display text-lg text-[#176f3d]">Mercadito <span className="text-[#f15a24]">Colorines</span></strong><p className="mt-2">Todo lo que necesitas, más cerca de ti.</p></div>
           <div><h3 className="font-bold text-[#243b30]">Explorar</h3><a className={'mt-2 block w-fit ' + link} href="#tiendas">Tiendas</a><a className={'mt-2 block w-fit ' + link} href="#productos">Productos</a><Link className={'mt-2 block w-fit ' + link} href="/registro">Registro de usuarios</Link></div>
           <div><h3 className="font-bold text-[#243b30]">Compra con claridad</h3><p className="mt-2">Los precios, métodos de pago y condiciones de entrega se confirman en cada tienda.</p></div>
         </footer>

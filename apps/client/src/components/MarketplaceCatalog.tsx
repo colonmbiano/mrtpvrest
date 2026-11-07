@@ -67,7 +67,7 @@ export default function MarketplaceCatalog({ state, stores, products, isolated }
         <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <p className="flex items-baseline gap-1.5">
-              <span className="font-display text-xl font-extrabold tracking-tight">MRTPVREST</span>
+              <span className="font-display text-xl font-extrabold tracking-tight">Mercadito Colorines</span>
               <span className="text-sm font-bold text-[#c2410c]">mercado</span>
             </p>
             {isolated && (
@@ -136,7 +136,7 @@ export default function MarketplaceCatalog({ state, stores, products, isolated }
       </main>
 
       <footer className="border-t border-[#e7e2dc] px-4 py-6 text-center text-sm text-[#57534e]">
-        MRTPVREST Marketplace · el precio final se confirma en cada tienda
+        Mercadito Colorines · el precio final se confirma en cada tienda
       </footer>
     </div>
   );

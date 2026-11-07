@@ -5,7 +5,7 @@ import { readTestOrder, canUseLocalTestOrders } from '@/lib/marketplace-test-sto
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
-  title: 'Pedido de prueba registrado | MRTPVREST',
+  title: 'Pedido de prueba registrado | Mercadito Colorines',
   robots: { index: false, follow: false },
 };
 const money = (cents: number) =>

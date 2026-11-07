@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export function generateMetadata(): Metadata {
   return {
     ...marketplaceAppMetadata,
-    title: "Marketplace | MRTPVREST",
+    title: "Mercadito Colorines",
     description: "Busca tiendas y productos y pide directo en la tienda.",
     // La copia aislada nunca debe indexarse.
     robots: isMarketplaceIsolated() || isMarketplacePreviewDemo() ? { index: false, follow: false } : undefined,
