@@ -1,3 +1,7 @@
+// El formulario real (BuyerSignup / CourierSignup) aparece cuando el build del
+// cliente tiene NEXT_PUBLIC_MARKETPLACE_ACCOUNTS=true (y para enviarlo,
+// NEXT_PUBLIC_TURNSTILE_SITE_KEY). Como son NEXT_PUBLIC_*, se hornean en build:
+// al cambiarlas en Vercel hay que redesplegar con build fresco (sin reusar cache).
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import MarketplaceRegistration from '@/components/MarketplaceRegistration';
