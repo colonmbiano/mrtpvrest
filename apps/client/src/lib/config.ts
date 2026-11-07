@@ -38,15 +38,22 @@ export function isMarketplaceLivePreviewEnabled(): boolean {
 
 // La raíz muestra el catálogo solo cuando se pide explícitamente; sin ninguna
 // bandera conserva la redirección histórica del storefront productivo.
+// Un flag NEXT_PUBLIC está "on" con el valor "true", tolerante a espacios y
+// mayúsculas: una variable mal pegada en Vercel suele traer un espacio al final
+// ("true "), y la comparación estricta la dejaba apagada de forma silenciosa.
+function flagOn(value: string | undefined): boolean {
+  return typeof value === "string" && value.trim().toLowerCase() === "true";
+}
+
 export function isMarketplaceCatalogEnabled(): boolean {
-  return isMarketplaceIsolated() || isMarketplacePreviewDemo() || process.env.NEXT_PUBLIC_MARKETPLACE_CATALOG === "true";
+  return isMarketplaceIsolated() || isMarketplacePreviewDemo() || flagOn(process.env.NEXT_PUBLIC_MARKETPLACE_CATALOG);
 }
 
 // Cuenta global del comprador (app del cliente). Pide el backend con
 // MARKETPLACE_IDENTITY_MODE=production y MARKETPLACE_IDENTITY_ORIGIN igual al origen
 // de esta tienda. Las páginas de cuenta además exigen el catálogo encendido.
 export function isMarketplaceAccountsEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_MARKETPLACE_ACCOUNTS === "true";
+  return flagOn(process.env.NEXT_PUBLIC_MARKETPLACE_ACCOUNTS);
 }
 
 // Normaliza a origen exacto (sin path, query ni credenciales) o null.
