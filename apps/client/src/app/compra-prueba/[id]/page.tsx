@@ -5,7 +5,7 @@ import { canUseLocalTestOrders, readMultiTestOrder } from '@/lib/marketplace-tes
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
-  title: 'Compra multi-tienda de prueba | MRTPVREST', robots: { index: false, follow: false },
+  title: 'Compra multi-tienda de prueba | Mercadito Colorines', robots: { index: false, follow: false },
 };
 const money = (cents: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(cents / 100);

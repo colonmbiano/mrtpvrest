@@ -15,5 +15,5 @@ export const marketplaceAppMetadata: Pick<Metadata, 'manifest' | 'icons' | 'appl
     apple: '/icons/marketplace-apple-touch-icon.png',
   },
   // La cabecera del marketplace es blanca: la barra de estado de iOS va normal.
-  appleWebApp: { capable: true, title: 'MRTPVREST', statusBarStyle: 'default' },
+  appleWebApp: { capable: true, title: 'Mercadito Colorines', statusBarStyle: 'default' },
 };

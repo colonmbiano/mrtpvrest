@@ -10,8 +10,8 @@ export const dynamic = 'force-dynamic';
 
 export function generateMetadata(): Metadata {
   return {
-    title: 'Registro | MRTPVREST Marketplace',
-    description: 'Elige tu perfil de negocio, cliente o repartidor en MRTPVREST Marketplace.',
+    title: 'Registro | Mercadito Colorines',
+    description: 'Elige tu perfil de negocio, cliente o repartidor en Mercadito Colorines.',
     // Nunca indexar una maqueta de registro sin servicio de identidad activo.
     robots: { index: false, follow: false },
   };

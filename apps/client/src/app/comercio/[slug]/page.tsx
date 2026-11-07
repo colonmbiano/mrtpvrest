@@ -7,7 +7,7 @@ import { canUseLocalTestOrders } from '@/lib/marketplace-test-storage';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
-  title: 'Tienda · Primer pedido de prueba | MRTPVREST',
+  title: 'Tienda · Primer pedido de prueba | Mercadito Colorines',
   robots: { index: false, follow: false },
 };
 

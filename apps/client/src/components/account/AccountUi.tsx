@@ -18,7 +18,7 @@ export function AccountShell({ title, subtitle, children }: { title: string; sub
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <Link href="/" className={'flex items-center gap-2 rounded-lg font-black tracking-tight text-[#187445] ' + outline}>
           <span className="grid size-10 place-items-center rounded-xl bg-[#e6f4e8] text-xl" aria-hidden="true">🛍️</span>
-          <span>MRTPVREST <span className="text-[#f45b27]">Marketplace</span></span>
+          <span>Mercadito <span className="text-[#f45b27]">Colorines</span></span>
         </Link>
         <Link href="/" className={'flex items-center gap-1 text-sm font-semibold text-[#546b5c] hover:text-[#e65b27] ' + outline}>
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Volver a tiendas

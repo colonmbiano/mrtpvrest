@@ -10,8 +10,8 @@ export function GET() {
   const icon192 = { src: '/icons/marketplace-192.png', sizes: '192x192', type: 'image/png' };
   const manifest = {
     id: '/',
-    name: 'MRTPVREST Marketplace',
-    short_name: 'MRTPVREST',
+    name: 'Mercadito Colorines',
+    short_name: 'Mercadito',
     description: 'Busca tiendas y productos de tu zona y pide directo en la tienda.',
     start_url: '/',
     scope: '/',

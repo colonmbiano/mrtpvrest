@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 // Destino del enlace del correo de verificación (#token=… en el fragmento).
 export const metadata: Metadata = {
-  title: 'Verificar correo | MRTPVREST Marketplace',
+  title: 'Verificar correo | Mercadito Colorines',
   robots: { index: false, follow: false },
   referrer: 'no-referrer',
 };

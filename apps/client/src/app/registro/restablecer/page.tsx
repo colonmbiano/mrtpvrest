@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 // Destino del enlace de recuperación de contraseña (#token=… en el fragmento).
 export const metadata: Metadata = {
-  title: 'Cambiar contraseña | MRTPVREST Marketplace',
+  title: 'Cambiar contraseña | Mercadito Colorines',
   robots: { index: false, follow: false },
   referrer: 'no-referrer',
 };
