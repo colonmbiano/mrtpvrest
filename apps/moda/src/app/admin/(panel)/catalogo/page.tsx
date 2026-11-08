@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Search, Filter, ChevronDown, PackagePlus, Pencil, ArrowLeftRight, ClipboardCheck,
   AlertTriangle, Shirt, Wrench, Car, Boxes, DollarSign, RefreshCw, X, Plus, Layers, Trash2,
+  Upload, Download, FileText, CheckCircle2,
 } from "lucide-react";
 import api from "@/lib/admin-api";
 import { money, num } from "@/lib/admin-format";
@@ -15,6 +16,9 @@ import {
   type Giro, type SkuAttrKey,
 } from "@/lib/giro";
 import { setGiro as cacheGiro } from "@/lib/tenant";
+import { parseCatalogCsv, templateCsv, IMPORT_BATCH_SIZE, type ImportRow, type ParseError } from "@/lib/csv-import";
+
+type ImportSummary = { productsCreated: number; skusCreated: number; skusUpdated: number; errors: { row: number; sku?: string; message: string }[] };
 
 type Location = { id: string; name: string; isCentralWarehouse?: boolean };
 type RetailSku = {
@@ -59,7 +63,11 @@ export default function CatalogoPage() {
   const [stockFilter, setStockFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [modal, setModal] = useState<null | "product" | "edit" | "transfer" | "count" | "tiers">(null);
+  const [modal, setModal] = useState<null | "product" | "edit" | "transfer" | "count" | "tiers" | "import">(null);
+  // Import CSV de catálogo.
+  const [imp, setImp] = useState<{ rows: ImportRow[]; errors: ParseError[]; warnings: string[]; fileName: string } | null>(null);
+  const [impResult, setImpResult] = useState<ImportSummary | null>(null);
+  const [impBusy, setImpBusy] = useState(false);
   const [form, setForm] = useState({ ...emptyProduct });
   const [mode, setMode] = useState<"new" | "existing">("new");
   const [existingId, setExistingId] = useState("");
@@ -148,6 +156,51 @@ export default function CatalogoPage() {
       setModal(null); setForm({ ...emptyProduct }); setMode("new"); setExistingId(""); await load();
     } catch (err) { alert(errMsg(err)); } finally { setSaving(false); }
   }
+  function onImportFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite re-seleccionar el mismo archivo
+    if (!file) return;
+    setImpResult(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { rows, errors, headerWarnings } = parseCatalogCsv(String(reader.result || ""));
+      setImp({ rows, errors, warnings: headerWarnings, fileName: file.name });
+    };
+    reader.onerror = () => setImp({ rows: [], errors: [{ line: 0, message: "No se pudo leer el archivo." }], warnings: [], fileName: file.name });
+    reader.readAsText(file, "utf-8");
+  }
+
+  async function runImport() {
+    if (!imp || imp.rows.length === 0 || impBusy) return;
+    setImpBusy(true);
+    const acc: ImportSummary = { productsCreated: 0, skusCreated: 0, skusUpdated: 0, errors: [] };
+    try {
+      for (let i = 0; i < imp.rows.length; i += IMPORT_BATCH_SIZE) {
+        const chunk = imp.rows.slice(i, i + IMPORT_BATCH_SIZE);
+        const { data } = await api.post<ImportSummary>("/api/retail/v1/catalog/import", { rows: chunk });
+        acc.productsCreated += data.productsCreated || 0;
+        acc.skusCreated += data.skusCreated || 0;
+        acc.skusUpdated += data.skusUpdated || 0;
+        if (Array.isArray(data.errors)) acc.errors.push(...data.errors.map((er) => ({ ...er, row: er.row + i })));
+      }
+      setImpResult(acc); setImp(null); await load();
+    } catch (err) {
+      const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || "No se pudo importar. Revisa tu conexión.";
+      setImpResult({ ...acc, errors: [...acc.errors, { row: 0, message }] });
+    } finally {
+      setImpBusy(false);
+    }
+  }
+
+  function downloadTemplate() {
+    const blob = new Blob([templateCsv()], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "plantilla-catalogo.csv";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   function openEdit(s: RetailSku) { setEditSku(s); setEditForm({ price: String(s.price ?? ""), cost: String(s.cost ?? ""), barcode: s.barcode || "", isActive: s.isActive }); setModal("edit"); }
   async function saveEdit(e: FormEvent) {
     e.preventDefault(); if (!editSku) return; setSaving(true);
@@ -219,7 +272,8 @@ export default function CatalogoPage() {
         <span className="inline-flex h-10 items-center gap-2 rounded-xl border bg-[var(--surf-1)] px-3 text-[13px] font-semibold text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)" }}><Filter size={15} /> Filtros</span>
         <Select value={categoryFilter} onChange={setCategoryFilter} label="Categoría" options={[{ v: "all", t: "Todas" }, ...categories.map((c) => ({ v: c, t: c }))]} />
         <Select value={stockFilter} onChange={setStockFilter} label="Estado de stock" options={[{ v: "all", t: "Todos" }, { v: "disponible", t: "Disponible" }, { v: "stock_bajo", t: "Stock bajo" }, { v: "sin_stock", t: "Sin stock" }]} />
-        <button type="button" onClick={() => { setForm({ ...emptyProduct }); setMode("new"); setExistingId(""); setModal("product"); }} className="ml-auto inline-flex h-10 items-center gap-2 rounded-xl px-4 text-[13px] font-bold text-white" style={{ background: "var(--brand-primary)" }}><PackagePlus size={16} /> Nuevo producto</button>
+        <button type="button" onClick={() => { setImp(null); setImpResult(null); setModal("import"); }} className="ml-auto inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-[13px] font-bold text-[var(--tx-hi)]" style={{ borderColor: "var(--bd-1)" }}><Upload size={16} /> Importar CSV</button>
+        <button type="button" onClick={() => { setForm({ ...emptyProduct }); setMode("new"); setExistingId(""); setModal("product"); }} className="inline-flex h-10 items-center gap-2 rounded-xl px-4 text-[13px] font-bold text-white" style={{ background: "var(--brand-primary)" }}><PackagePlus size={16} /> Nuevo producto</button>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -440,6 +494,66 @@ export default function CatalogoPage() {
             <QtyField label="Conteo real" sku={allSkus.find((s) => s.id === cForm.skuId)} value={cForm.qty} onChange={(v) => setCForm({ ...cForm, qty: v })} />
             <ModalActions saving={saving} onCancel={() => setModal(null)} label="Aplicar conteo" icon={ClipboardCheck} />
           </form>
+        </Modal>
+      )}
+
+      {modal === "import" && (
+        <Modal title="Importar catálogo (CSV)" onClose={() => setModal(null)}>
+          <div className="space-y-3">
+            {!imp && !impResult && (
+              <>
+                <p className="text-[13px] leading-relaxed text-[var(--tx-mut)]">
+                  Sube un CSV con tus productos. Obligatorias: <b>producto</b>, <b>sku</b> y <b>precio</b>. Opcionales:
+                  código de barras, costo, talla/color/material/estilo, unidad, piezas_por_caja, ubicación y proveedor.
+                  Un mismo <b>producto</b> con varios SKUs (p. ej. tallas) va en varias filas.
+                </p>
+                <button type="button" onClick={downloadTemplate} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-semibold text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)" }}><Download size={15} /> Descargar plantilla</button>
+                <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed py-8 text-[13px] font-semibold text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)" }}>
+                  <FileText size={22} /> <span>Elegir archivo .csv</span>
+                  <input type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFile} />
+                </label>
+              </>
+            )}
+            {imp && (
+              <>
+                <div className="flex items-center justify-between text-[13px]">
+                  <span className="font-semibold text-[var(--tx-hi)]">{imp.fileName}</span>
+                  <button type="button" onClick={() => setImp(null)} className="text-[var(--tx-mut)] underline">cambiar</button>
+                </div>
+                <div className="rounded-xl border p-3 text-[13px]" style={{ borderColor: "var(--bd-1)" }}>
+                  <p><b>{imp.rows.length}</b> fila(s) lista(s) para importar.</p>
+                  {imp.warnings.length > 0 && <p className="mt-1 text-[12px] text-[var(--tx-mut)]">Columnas ignoradas: {imp.warnings.join(", ")}.</p>}
+                  {imp.errors.length > 0 && (
+                    <div className="mt-2 text-[12px] text-red-500">
+                      <p className="font-semibold">{imp.errors.length} problema(s) — esas filas no se importarán:</p>
+                      <ul className="mt-1 max-h-28 list-disc overflow-y-auto pl-4">{imp.errors.slice(0, 20).map((er, i) => <li key={i}>{er.message}</li>)}</ul>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button type="button" onClick={() => setModal(null)} className="flex-1 rounded-xl border py-2.5 text-[13px] font-semibold text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)" }}>Cancelar</button>
+                  <button type="button" onClick={runImport} disabled={impBusy || imp.rows.length === 0} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-[13px] font-bold text-white disabled:opacity-50" style={{ background: "var(--brand-primary)" }}><Upload size={15} />{impBusy ? "Importando…" : `Importar ${imp.rows.length}`}</button>
+                </div>
+              </>
+            )}
+            {impResult && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-[14px] font-bold text-[var(--tx-hi)]"><CheckCircle2 size={18} className="text-green-500" /> Importación lista</div>
+                <ul className="text-[13px] text-[var(--tx-mut)]">
+                  <li>Productos nuevos: <b>{impResult.productsCreated}</b></li>
+                  <li>SKUs creados: <b>{impResult.skusCreated}</b></li>
+                  <li>SKUs actualizados: <b>{impResult.skusUpdated}</b></li>
+                </ul>
+                {impResult.errors.length > 0 && (
+                  <div className="text-[12px] text-red-500">
+                    <p className="font-semibold">{impResult.errors.length} fila(s) con error:</p>
+                    <ul className="mt-1 max-h-28 list-disc overflow-y-auto pl-4">{impResult.errors.slice(0, 20).map((er, i) => <li key={i}>{er.row > 0 ? `Fila ${er.row}` : "General"}{er.sku ? ` (${er.sku})` : ""}: {er.message}</li>)}</ul>
+                  </div>
+                )}
+                <button type="button" onClick={() => setModal(null)} className="w-full rounded-xl py-2.5 text-[13px] font-bold text-white" style={{ background: "var(--brand-primary)" }}>Listo</button>
+              </div>
+            )}
+          </div>
         </Modal>
       )}
     </div>

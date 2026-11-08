@@ -734,6 +734,92 @@ router.put('/catalog/skus/:id', requireRole(...ADMIN_ROLES), async (req, res) =>
   }
 });
 
+// Import masivo de catálogo (CSV). El front parsea el archivo y manda filas ya
+// tipadas; aquí se agrupan por nombre de producto (un producto puede traer varios
+// SKUs, p. ej. ropa talla×color) y se hace UPSERT por SKU: crea el que no existe y
+// actualiza precio/costo/atributos del que sí. Tolerante a filas malas: una fila con
+// error no aborta el lote; se reporta en `errors`. Idempotente: re-importar actualiza.
+const importRowSchema = z.object({
+  producto: z.string().trim().min(1).max(200),
+  categoria: z.string().trim().max(120).optional(),
+  marca: z.string().trim().max(120).optional(),
+  sku: z.string().trim().min(1).max(120),
+  codigo_barras: z.string().trim().max(64).optional(),
+  precio: z.number().nonnegative(),
+  costo: z.number().nonnegative().optional(),
+  talla: z.string().trim().max(60).optional(),
+  color: z.string().trim().max(60).optional(),
+  material: z.string().trim().max(60).optional(),
+  estilo: z.string().trim().max(60).optional(),
+  unidad: z.enum(UNITS).optional(),
+  piezas_por_caja: z.number().positive().optional(),
+  ubicacion: z.string().trim().max(60).optional(),
+  proveedor: z.string().trim().max(120).optional(),
+});
+// Tope por request: el front parte catálogos grandes en lotes. Acota la latencia
+// y el tamaño del payload sin perder el reporte por fila.
+const importSchema = z.object({ rows: z.array(importRowSchema).min(1).max(500) });
+
+router.post('/catalog/import', requireRole(...ADMIN_ROLES), async (req, res) => {
+  try {
+    const restaurantId = restaurantIdFrom(req);
+    if (!restaurantId) return res.status(400).json({ error: 'Restaurante no identificado' });
+    const { rows } = importSchema.parse(req.body);
+
+    const summary = { productsCreated: 0, skusCreated: 0, skusUpdated: 0, errors: [] };
+    // Cache nombre→productId: evita re-consultar/duplicar un producto que aparece
+    // en varias filas (ropa: una "Camisa" con muchos SKUs).
+    const productByName = new Map();
+
+    async function resolveProductId(row) {
+      const key = row.producto;
+      if (productByName.has(key)) return productByName.get(key);
+      let product = await prisma.retailProduct.findFirst({
+        where: { restaurantId, name: key }, select: { id: true },
+      });
+      if (!product) {
+        product = await prisma.retailProduct.create({
+          data: { restaurantId, name: key, brand: row.marca || null, category: row.categoria || null },
+          select: { id: true },
+        });
+        summary.productsCreated++;
+      }
+      productByName.set(key, product.id);
+      return product.id;
+    }
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      try {
+        const productId = await resolveProductId(row);
+        const skuData = {
+          barcode: row.codigo_barras || null,
+          size: row.talla || null, color: row.color || null, material: row.material || null, style: row.estilo || null,
+          price: row.precio, cost: toNumber(row.costo),
+          unitOfMeasure: row.unidad || 'PZA',
+          unitsPerPackage: row.piezas_por_caja ?? null,
+          binLocation: row.ubicacion || null, supplierRef: row.proveedor || null,
+        };
+        const existing = await prisma.retailSku.findFirst({ where: { restaurantId, sku: row.sku }, select: { id: true } });
+        if (existing) {
+          await prisma.retailSku.update({ where: { id: existing.id }, data: skuData });
+          summary.skusUpdated++;
+        } else {
+          await prisma.retailSku.create({ data: { restaurantId, productId, sku: row.sku, ...skuData } });
+          summary.skusCreated++;
+        }
+      } catch (e) {
+        const message = e.code === 'P2002' ? 'SKU o código de barras duplicado' : (e.message || 'Error al guardar');
+        summary.errors.push({ row: i + 1, sku: row.sku, message });
+      }
+    }
+    res.status(200).json(summary);
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Formato de importación inválido', details: e.errors.slice(0, 20) });
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // RETAIL MULTIGIRO · mayoreo, compatibilidad y equivalencias
 // Ver docs/plan-retail-multigiro.md (Fases 3 y 4).
