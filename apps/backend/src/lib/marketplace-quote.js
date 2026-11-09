@@ -9,6 +9,7 @@ const crypto = require('node:crypto');
 const { decimal, MAX_CENTS } = require('./marketplace-order-money');
 const { computeDeliveryFee } = require('./delivery-fee');
 const { marketplaceDeliveryCoverage } = require('./marketplace-delivery-coverage');
+const { priceItemOptions, MAX_MODIFIERS } = require('./marketplace-item-options');
 
 const TTL_MS = 5 * 60 * 1000;
 const MAX_ITEMS = 50;
@@ -50,16 +51,30 @@ function normalize(body) {
     couponCode = body.couponCode;
   }
   check(Array.isArray(body.items) && body.items.length > 0 && body.items.length <= MAX_ITEMS, 'INVALID_ITEMS', 'Articulos invalidos');
+  // C4: cada línea puede traer variante y modificadores (ids). El mismo producto puede ir en
+  // varias líneas con opciones distintas; la misma configuración dos veces se rechaza (suma cantidades).
+  // `modifiers` es el campo antiguo y solo se acepta vacío.
   const seen = new Set();
   const items = body.items.map(item => {
-    // Modifiers are not priced in this phase, so only an empty list is accepted.
-    check(plain(item, ['menuItemId', 'quantity', 'modifiers']) && text(item.menuItemId, 64) && !seen.has(item.menuItemId)
+    check(plain(item, ['menuItemId', 'quantity', 'modifiers', 'variantId', 'modifierIds']) && text(item.menuItemId, 64)
       && Number.isInteger(item.quantity) && item.quantity >= 1 && item.quantity <= 99
-      && (item.modifiers === undefined || Array.isArray(item.modifiers) && item.modifiers.length === 0),
+      && (item.modifiers === undefined || Array.isArray(item.modifiers) && item.modifiers.length === 0)
+      && (item.variantId === undefined || item.variantId === null || text(item.variantId, 64))
+      && (item.modifierIds === undefined || Array.isArray(item.modifierIds) && item.modifierIds.length <= MAX_MODIFIERS
+        && item.modifierIds.every(id => text(id, 64))),
     'INVALID_ITEMS', 'Articulos invalidos');
-    seen.add(item.menuItemId);
-    return { menuItemId: item.menuItemId, quantity: item.quantity };
-  }).sort((a, b) => (a.menuItemId < b.menuItemId ? -1 : a.menuItemId > b.menuItemId ? 1 : 0));
+    const line = { menuItemId: item.menuItemId, quantity: item.quantity,
+      ...(item.variantId ? { variantId: item.variantId } : {}),
+      ...(item.modifierIds?.length ? { modifierIds: [...item.modifierIds].sort() } : {}) };
+    const config = JSON.stringify([line.menuItemId, line.variantId ?? null, line.modifierIds ?? []]);
+    check(!seen.has(config), 'INVALID_ITEMS', 'Articulos invalidos');
+    seen.add(config);
+    return line;
+  }).sort((a, b) => {
+    const ka = JSON.stringify([a.menuItemId, a.variantId ?? null, a.modifierIds ?? []]);
+    const kb = JSON.stringify([b.menuItemId, b.variantId ?? null, b.modifierIds ?? []]);
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
   return { ...(byId ? { merchantId: body.merchantId } : { merchantSlug: body.merchantSlug }),
     fulfillment: body.fulfillment, deliveryAddressId: body.deliveryAddressId ?? null, items, couponCode };
 }
@@ -79,10 +94,15 @@ function price({ merchant, listings, request, address }) {
     check(row && row.published === true && row.available === true, 'ITEM_NOT_AVAILABLE', 'Articulo no disponible en este comercio', 409);
     check(Number.isSafeInteger(row.unitPriceCents) && row.unitPriceCents > 0 && row.unitPriceCents <= MAX_CENTS,
       'INVALID_CATALOG_PRICE', 'Precio no disponible', 503);
-    const lineCents = row.unitPriceCents * item.quantity;
+    const priced = priceItemOptions(row, item, check);
+    check(Number.isSafeInteger(priced.unitPriceCents) && priced.unitPriceCents > 0 && priced.unitPriceCents <= MAX_CENTS,
+      'INVALID_CATALOG_PRICE', 'Precio no disponible', 503);
+    const lineCents = priced.unitPriceCents * item.quantity;
     subtotalCents += lineCents;
     check(subtotalCents <= MAX_CENTS, 'ORDER_LIMIT', 'La cotizacion excede el limite permitido', 409);
-    return { menuItemId: item.menuItemId, name: row.name, quantity: item.quantity, unitPriceCents: row.unitPriceCents, lineCents };
+    return { menuItemId: item.menuItemId, name: priced.name, quantity: item.quantity, unitPriceCents: priced.unitPriceCents, lineCents,
+      ...(priced.variantId ? { variantId: priced.variantId } : {}),
+      ...(priced.modifiers.length ? { modifiers: priced.modifiers } : {}) };
   });
   check(subtotalCents >= (merchant.minOrderCents ?? 0), 'MINIMUM_ORDER', 'No alcanza el pedido minimo', 409);
   let deliveryFeeCents = 0;
@@ -132,7 +152,10 @@ function view(quote) {
     merchantId: quote.merchantId,
     currency: 'MXN',
     items: quote.itemsSnapshot.map(line => ({ menuItemId: line.menuItemId, name: line.name, quantity: line.quantity,
-      unitPrice: decimal(line.unitPriceCents), lineTotal: decimal(line.lineCents) })),
+      unitPrice: decimal(line.unitPriceCents), lineTotal: decimal(line.lineCents),
+      ...(line.variantId ? { variantId: line.variantId } : {}),
+      ...(line.modifiers?.length ? { modifiers: line.modifiers.map(mod => ({ modifierId: mod.modifierId, name: mod.name,
+        priceAdd: decimal(mod.priceAddCents) })) } : {}) })),
     subtotal: decimal(s.subtotalCents),
     discount: '0.00',
     deliveryFee: decimal(s.deliveryFeeCents),

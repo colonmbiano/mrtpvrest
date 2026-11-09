@@ -129,8 +129,8 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
   const catalog = {
     loadMerchant: id => loadMerchantRow({ id }),
     loadMerchantBySlug: slug => loadMerchantRow({ slug }),
-    // Solo productos simples se venden por v1: sin variantes, sin grupos de
-    // modificadores obligatorios, sin combos y sin venta por peso.
+    // Se venden por v1 productos con variantes y modificadores (C4); combos y venta por peso, no.
+    // Las opciones viajan con su precio en centavos para lib/marketplace-item-options.js.
     async loadListings(merchantId, menuItemIds) {
       const [items, promoConfig] = await loadItems(merchantId, { id: { in: menuItemIds } });
       const at = now();
@@ -139,7 +139,7 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
         const unitPriceCents = cents(unit);
         return { merchantId: row.restaurantId, menuItemId: row.id, name: row.name,
           published: sellable(row, merchantId) && unitPriceCents > 0,
-          available: row.isAvailable === true, unitPriceCents };
+          available: row.isAvailable === true, unitPriceCents, ...optionsOf(row) };
       });
     },
   };
@@ -151,16 +151,38 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
         select: { id: true, restaurantId: true, categoryId: true, name: true, description: true, price: true, isPromo: true,
           promoPrice: true, promoStartTime: true, promoEndTime: true, isAvailable: true, availableOnline: true,
           soldByWeight: true, isCombo: true, category: { select: { isActive: true, restaurantId: true } },
-          variants: { where: { isAvailable: true }, select: { id: true }, take: 1 },
-          modifierGroups: { where: { OR: [{ required: true }, { minSelection: { gt: 0 } }] }, select: { id: true }, take: 1 } } }),
+          variants: { select: { id: true, name: true, price: true, isAvailable: true, sortOrder: true },
+            orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] },
+          modifierGroups: { select: { id: true, name: true, required: true, multiSelect: true, minSelection: true,
+            maxSelection: true, freeModifiersLimit: true, groupType: true,
+            modifiers: { select: { id: true, name: true, priceAdd: true, isAvailable: true }, orderBy: { id: 'asc' } } },
+            orderBy: { id: 'asc' } } } }),
       prisma.restaurantConfig.findFirst({ where: { restaurantId: merchantId },
         select: { promoStartTime: true, promoEndTime: true, timezone: true } }),
     ]);
   }
-  // Solo productos simples: sin variantes, sin modificadores obligatorios, sin combos ni venta por peso.
+  // Fuera del Mercadito: combos y venta por peso. Variantes y modificadores sí (C4).
   function sellable(row, merchantId) {
     return row.availableOnline === true && row.category?.isActive === true && row.category?.restaurantId === merchantId
-      && row.soldByWeight !== true && row.isCombo !== true && row.variants.length === 0 && row.modifierGroups.length === 0;
+      && row.soldByWeight !== true && row.isCombo !== true;
+  }
+  // Variantes y grupos en centavos. Un precio inválido deja la opción no disponible.
+  function optionsOf(row) {
+    return {
+      variants: (row.variants || []).map(variant => {
+        const priceCents = cents(variant.price);
+        return { id: variant.id, name: variant.name, priceCents: priceCents ?? 0,
+          available: variant.isAvailable === true && Number.isSafeInteger(priceCents) && priceCents > 0 };
+      }),
+      groups: (row.modifierGroups || []).map(group => ({ id: group.id, name: group.name, required: group.required === true,
+        multiSelect: group.multiSelect === true, minSelection: group.minSelection ?? 0, maxSelection: group.maxSelection ?? 0,
+        freeModifiersLimit: group.freeModifiersLimit ?? 0, groupType: group.groupType || 'ADD',
+        modifiers: (group.modifiers || []).map(mod => {
+          const priceAddCents = cents(mod.priceAdd ?? 0);
+          return { id: mod.id, name: mod.name, priceAddCents: priceAddCents ?? 0,
+            available: mod.isAvailable !== false && Number.isSafeInteger(priceAddCents) && priceAddCents >= 0 };
+        }) })),
+    };
   }
 
   // Directorio y catálogo públicos v1 (lib/marketplace-merchants-v1.js; la vista ahí es una lista
@@ -213,11 +235,26 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
           const promo = activePromoPrice(row, promoConfig || null, at);
           return { id: row.id, categoryId: row.categoryId, name: row.name, description: row.description,
             unitPriceCents: cents(row.price), promoActive: promo != null, promoPriceCents: promo == null ? null : cents(promo),
-            availableOnline: row.availableOnline, isAvailable: row.isAvailable, modifierGroups: [] };
+            availableOnline: row.availableOnline, isAvailable: row.isAvailable, ...catalogOptions(row) };
         }),
       };
     },
   };
+
+  // Vista pública de las opciones (lib/marketplace-merchants-v1.js la filtra con lista blanca).
+  function catalogOptions(row) {
+    const { variants, groups } = optionsOf(row);
+    return {
+      variants: variants.filter(variant => variant.available).map(variant => ({ id: variant.id, name: variant.name, priceCents: variant.priceCents })),
+      modifierGroups: groups.map(group => {
+        const quantity = group.groupType === 'QUANTITY';
+        const max = group.maxSelection > 0 ? group.maxSelection : (group.multiSelect || quantity ? null : 1);
+        return { id: group.id, name: group.name, required: group.required,
+          min: Math.max(group.required ? 1 : 0, group.minSelection), max, freeCount: group.freeModifiersLimit, repeatable: quantity,
+          options: group.modifiers.map(mod => ({ id: mod.id, name: mod.name, priceDeltaCents: mod.priceAddCents, available: mod.available })) };
+      }),
+    };
+  }
 
   // La cotización y la orden leen la dirección de la libreta del comprador, por cuenta.
   const addressBook = createBuyerAddressBook({ prismaClient: prisma, now });

@@ -52,7 +52,8 @@ async function fixture(options = {}) {
   let state = { quotes: new Map(), references: new Map(), orders: [], pipelines: [], counter: 0, events: [],
     restaurants: [{ id: 'r1', slug: 'store-one', isActive: true }],
     locations: [{ id: 'l1', restaurantId: 'r1', isActive: true }],
-    products: [{ id: 'burger', restaurantId: 'r1', price: 999 }, { id: 'fries', restaurantId: 'r1', price: 999 }] };
+    products: [{ id: 'burger', restaurantId: 'r1', price: 999 }, { id: 'fries', restaurantId: 'r1', price: 999 }],
+    modifiers: structuredClone(options.modifiers ?? []) };
   const calls = []; const hooks = {}; const transactions = new WeakMap();
   const merchant = { id: 'm1', restaurantId: 'r1', locationId: 'l1', slug: 'store-one', status: 'ACTIVE', open: true,
     currency: 'MXN', commissionBps: 1000, prepMinutes: 15, deliveryPolicy: 'SHARED_ONLY',
@@ -109,6 +110,8 @@ async function fixture(options = {}) {
         tx[model] = { async findFirst(args) { await before(`${model}.find`, args); return project(draft[collection].find(row => match(row, args.where)), args.select); },
           async findMany(args) { await before(`${model}.findMany`, args); return draft[collection].filter(row => match(row, args.where)).map(row => project(row, args.select)); } };
       }
+      tx.modifier = { async findMany(args) { return draft.modifiers.filter(row => args.where.id.in.includes(row.id)
+        && row.restaurantId === args.where.group.is.menuItem.is.restaurantId).map(row => ({ id: row.id })); } };
       tx.counter = { async updateMany(args) { assert.equal(args.where.restaurantId, 'r1');
         if (!draft.counter) return { count: 0 }; draft.counter++; return { count: 1 }; },
       async findFirst() { return { value: draft.counter }; }, async create(args) { draft.counter = args.data.value; return { value: draft.counter }; } };
@@ -133,11 +136,11 @@ async function fixture(options = {}) {
   } };
   const outbox = { async append({ event, tx }) { await before('outbox.append', { event, tx }); transactionState(tx).events.push(structuredClone(event)); } };
   const catalog = { async loadMerchant() { return structuredClone(merchant); }, async loadListings(_id, ids) {
-    return [{ merchantId: 'm1', menuItemId: 'burger', name: 'Hamburguesa', unitPriceCents: 1999, published: true, available: true },
-      { merchantId: 'm1', menuItemId: 'fries', name: 'Papas', unitPriceCents: 1005, published: true, available: true }].filter(row => ids.includes(row.menuItemId));
+    return structuredClone(options.listings ?? [{ merchantId: 'm1', menuItemId: 'burger', name: 'Hamburguesa', unitPriceCents: 1999, published: true, available: true },
+      { merchantId: 'm1', menuItemId: 'fries', name: 'Papas', unitPriceCents: 1005, published: true, available: true }]).filter(row => ids.includes(row.menuItemId));
   } };
   const quotes = createQuoteService({ catalog, addresses, quoteStore, now: () => clock });
-  const quoteRequest = { merchantId: 'm1', fulfillment: options.fulfillment ?? 'DELIVERY', items: [
+  const quoteRequest = { merchantId: 'm1', fulfillment: options.fulfillment ?? 'DELIVERY', items: options.items ?? [
     { menuItemId: 'burger', quantity: 3 }, { menuItemId: 'fries', quantity: 1 }] };
   if (quoteRequest.fulfillment === 'DELIVERY') quoteRequest.deliveryAddressId = 'addr1';
   const quoted = await quotes.createQuote({ accountId: ACCOUNT, idempotencyKey: `quote-${KEY}`, body: quoteRequest });
@@ -612,4 +615,27 @@ test('codesForAccount returns the same PINs only to the owning account of an act
     f.state.orders.find(o => o.id === created.orderId).status = status;
     await assert.rejects(service.codesForAccount({ accountId: ACCOUNT, orderId: created.orderId }), checkCode('ORDER_CLOSED', 409));
   }
+});
+
+// C4: variantes y modificadores cotizados por el servidor llegan al pedido como OrderItemModifier.
+test('C4: el pedido guarda variante y modificadores cotizados; un modificador borrado conserva su snapshot', async () => {
+  const listing = { merchantId: 'm1', menuItemId: 'burger', name: 'Hamburguesa', unitPriceCents: 1999, published: true, available: true,
+    variants: [{ id: 'doble', name: 'Doble', priceCents: 2999, available: true }],
+    groups: [{ id: 'g-extra', name: 'Extras', required: false, multiSelect: true, minSelection: 0, maxSelection: 0, freeModifiersLimit: 0,
+      groupType: 'ADD', modifiers: [{ id: 'queso', name: 'Queso', priceAddCents: 1500, available: true },
+        { id: 'tocino', name: 'Tocino', priceAddCents: 2000, available: true }] }] };
+  const f = await fixture({ listings: [listing], modifiers: [{ id: 'queso', restaurantId: 'r1' }],
+    items: [{ menuItemId: 'burger', quantity: 2, variantId: 'doble', modifierIds: ['tocino', 'queso'] },
+      { menuItemId: 'burger', quantity: 1 }] });
+  const order = await f.create({ paymentMethod: 'CASH' });
+  const created = f.state.orders[0];
+  const options = created.items.create.find(item => item.modifiers);
+  assert.equal(options.name, 'Hamburguesa (Doble)');
+  assert.equal(options.price, 64.99); assert.equal(options.subtotal, 129.98);
+  assert.deepEqual(options.modifiers.create, [{ modifierId: 'queso', name: 'Queso', priceAdd: 15 },
+    { modifierId: null, name: 'Tocino', priceAdd: 20 }]);
+  const plain = created.items.create.find(item => !item.modifiers);
+  assert.equal(plain.name, 'Hamburguesa'); assert.equal(plain.price, 19.99);
+  assert.equal(created.subtotal, 149.97);
+  assert.deepEqual(order.items.find(item => item.modifiers).modifiers, [{ name: 'Queso', priceAdd: '15.00' }, { name: 'Tocino', priceAdd: '20.00' }]);
 });

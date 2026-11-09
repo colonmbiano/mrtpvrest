@@ -55,15 +55,21 @@ function assertSnapshot(quote) {
     && s.subtotalCents + s.deliveryFeeCents === s.totalCents
     && s.commissionCents + s.merchantPayoutCents === s.subtotalCents && s.courierPayoutCents === s.deliveryFeeCents
     && (quote.fulfillment !== 'PICKUP' || s.deliveryFeeCents === 0), 'QUOTE_INTEGRITY_ERROR', 'Snapshot de cotizacion inconsistente', 503);
-  const seen = new Set(); let sum = 0;
+  // C4: un producto puede repetirse con opciones distintas; variante y modificadores son opcionales
+  // (las cotizaciones anteriores no los tienen).
+  let sum = 0;
   check(Array.isArray(lines) && lines.length > 0 && lines.length <= 50, 'QUOTE_INTEGRITY_ERROR', 'Articulos inconsistentes', 503);
   for (const line of lines) {
-    check(line && text(line.menuItemId) && !seen.has(line.menuItemId) && text(line.name, 200)
+    const mods = line?.modifiers ?? [];
+    check(line && text(line.menuItemId) && text(line.name, 200)
       && Number.isInteger(line.quantity) && line.quantity >= 1 && line.quantity <= 99
       && Number.isSafeInteger(line.unitPriceCents) && line.unitPriceCents > 0 && line.unitPriceCents <= MAX_CENTS
-      && Number.isSafeInteger(line.lineCents) && line.lineCents === line.unitPriceCents * line.quantity,
+      && Number.isSafeInteger(line.lineCents) && line.lineCents === line.unitPriceCents * line.quantity
+      && (line.variantId === undefined || text(line.variantId))
+      && Array.isArray(mods) && mods.length <= 30 && mods.every(mod => mod && text(mod.modifierId) && text(mod.name, 200)
+        && Number.isSafeInteger(mod.priceAddCents) && mod.priceAddCents >= 0 && mod.priceAddCents <= line.unitPriceCents),
     'QUOTE_INTEGRITY_ERROR', 'Articulo cotizado inconsistente', 503);
-    sum += line.lineCents; seen.add(line.menuItemId);
+    sum += line.lineCents;
   }
   check(sum === s.subtotalCents, 'QUOTE_INTEGRITY_ERROR', 'Subtotal cotizado inconsistente', 503);
 }
@@ -138,7 +144,8 @@ function createMarketplaceOrderOrchestrator({ quoteStore, prismaClient, merchant
     return { orderId: order.id, quoteId: meta.quoteId, merchantId: meta.merchantId, fulfillment: meta.fulfillment,
       orderNumber: order.orderNumber, status: order.status, paymentMethod: row.paymentMethod, paymentStatus: order.paymentStatus,
       currency: row.currency, ...c, items: meta.itemsSnapshot.map(line => ({ menuItemId: line.menuItemId, name: line.name,
-        quantity: line.quantity, unitPrice: decimal(line.unitPriceCents), lineTotal: decimal(line.lineCents) })),
+        quantity: line.quantity, unitPrice: decimal(line.unitPriceCents), lineTotal: decimal(line.lineCents),
+        ...(line.modifiers?.length ? { modifiers: line.modifiers.map(mod => ({ name: mod.name, priceAdd: decimal(mod.priceAddCents) })) } : {}) })),
       subtotal: decimal(s.subtotalCents), deliveryFee: decimal(s.deliveryFeeCents), discount: '0.00', tip: '0.00',
       commissionBps: s.commissionBps, commission: decimal(s.commissionCents), merchantPayout: decimal(s.merchantPayoutCents),
       courierPayout: decimal(s.courierPayoutCents), total: decimal(s.totalCents),
@@ -183,11 +190,18 @@ function createMarketplaceOrderOrchestrator({ quoteStore, prismaClient, merchant
           check(restaurant?.id === merchant.restaurantId && restaurant.slug === merchant.slug
             && location?.restaurantId === merchant.restaurantId && location.id === merchant.locationId,
           'MERCHANT_NOT_FOUND', 'Sucursal no disponible', 404);
+          const itemIds = [...new Set(quote.itemsSnapshot.map(line => line.menuItemId))];
           const items = await tx.menuItem.findMany({ where: { restaurantId: merchant.restaurantId,
-            id: { in: quote.itemsSnapshot.map(line => line.menuItemId) } }, select: { id: true, restaurantId: true } });
-          check(items.length === quote.itemsSnapshot.length && new Set(items.map(item => item.id)).size === items.length
-            && items.every(item => item.restaurantId === merchant.restaurantId && quote.itemsSnapshot.some(line => line.menuItemId === item.id)),
+            id: { in: itemIds } }, select: { id: true, restaurantId: true } });
+          check(items.length === itemIds.length && new Set(items.map(item => item.id)).size === items.length
+            && items.every(item => item.restaurantId === merchant.restaurantId && itemIds.includes(item.id)),
           'QUOTE_ITEMS_UNAVAILABLE', 'Articulos cotizados no disponibles', 409);
+          // Un modificador borrado del menú entre la cotización y la orden conserva su nombre y precio
+          // en el pedido (snapshot) sin enlace, como OrderItemModifier.modifierId con SetNull.
+          const modifierIds = [...new Set(quote.itemsSnapshot.flatMap(line => (line.modifiers ?? []).map(mod => mod.modifierId)))];
+          const liveModifiers = modifierIds.length === 0 ? new Set() : new Set((await tx.modifier.findMany({
+            where: { id: { in: modifierIds }, group: { is: { menuItem: { is: { restaurantId: merchant.restaurantId } } } } },
+            select: { id: true } })).map(mod => mod.id));
           let address = null;
           if (quote.fulfillment === 'DELIVERY') {
             address = await addresses.resolve(accountId, request.deliveryAddressId, { tx });
@@ -234,7 +248,10 @@ function createMarketplaceOrderOrchestrator({ quoteStore, prismaClient, merchant
             customerName: request.customer.name, customerPhone: request.customer.phone, customerEmail: request.customer.email,
             notes: request.notes, deliveryAddress: address?.address ?? null, deliveryLat: address?.lat ?? null, deliveryLng: address?.lng ?? null,
             items: { create: quote.itemsSnapshot.map(line => ({ menuItemId: line.menuItemId, name: line.name, quantity: line.quantity,
-              price: line.unitPriceCents / 100, subtotal: line.lineCents / 100 })) } }, select: ORDER_SELECT });
+              price: line.unitPriceCents / 100, subtotal: line.lineCents / 100,
+              ...(line.modifiers?.length ? { modifiers: { create: line.modifiers.map(mod => ({
+                modifierId: liveModifiers.has(mod.modifierId) ? mod.modifierId : null,
+                name: mod.name, priceAdd: mod.priceAddCents / 100 })) } } : {}) })) } }, select: ORDER_SELECT });
           const settlement = { ...json(s), tipCents: 0, platformFeeCents: s.commissionCents,
             commissionRate: s.commissionBps / 10000, commissionFixedCents: 0,
             orchestration: { version: 1, accountId, quoteId: quote.id, merchantId: quote.merchantId, requestKeyHash,
