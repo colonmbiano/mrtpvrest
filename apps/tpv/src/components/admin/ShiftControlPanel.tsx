@@ -29,7 +29,7 @@ export default function ShiftControlPanel({ shiftId, onChange }: Props) {
   useEffect(() => { let cancelled = false; queueMicrotask(() => { if (!cancelled) void load(); }); return () => { cancelled = true; }; }, [load]);
   useEffect(() => {
     const drivers = review?.driverReceipts || [];
-    const receipts = drivers.filter((d) => counts[d.driverId] != null && counts[d.driverId].trim() !== "").map((d) => ({
+    const receipts = drivers.filter((d) => (counts[d.driverId] || "").trim() !== "").map((d) => ({
       driverId: d.driverId, countedCash: Number(counts[d.driverId]), differenceReason: reasons[d.driverId] || "",
     }));
     const valid = Boolean(review) && drivers.every((d) => {

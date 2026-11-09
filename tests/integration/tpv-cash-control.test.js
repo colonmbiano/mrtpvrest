@@ -46,7 +46,7 @@ test('migración conserva filas antiguas sin inventar conteos ni referencias', a
     await tx.$executeRawUnsafe('CREATE TEMP TABLE "DriverCashCut" (id text PRIMARY KEY, "driverId" text, balance numeric) ON COMMIT DROP');
     await tx.$executeRawUnsafe("INSERT INTO orders(id) VALUES ('legacy')");
     await tx.$executeRawUnsafe("INSERT INTO \"DriverCashCut\"(id, balance) VALUES ('legacy', 10770)");
-    for (const statement of sql.split(';').map(s => s.trim()).filter(Boolean)) await tx.$executeRawUnsafe(statement);
+    for (const statement of sql.replace(/^--.*$/gm, '').split(';').map(s => s.trim()).filter(Boolean)) await tx.$executeRawUnsafe(statement);
     const [legacy] = await tx.$queryRawUnsafe('SELECT * FROM pg_temp."DriverCashCut"');
     assert.equal(Number(legacy.balance), 10770);
     assert.equal(legacy.countedCash, null);
