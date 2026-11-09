@@ -16,6 +16,7 @@ import { fetchMerchantRef } from '@/lib/marketplace';
 import { MarketplaceMerchantProvider } from '@/components/MarketplaceMerchantProvider';
 import InstallPWABanner from '@/components/InstallPWABanner';
 import CartDeepLinkLoader from '@/components/CartDeepLinkLoader';
+import PaymentReturn from '@/components/PaymentReturn';
 import { DineInBanner } from '@/components/DineInBanner';
 import MarketplaceStoreBar from '@/components/MarketplaceStoreBar';
 
@@ -160,6 +161,9 @@ export default async function StorefrontPage({
         style={{ ['--color-primary' as string]: primary } as React.CSSProperties}
         className="min-h-screen bg-white flex items-center justify-center p-6"
       >
+        {/* Un cliente puede pagar y volver cuando la tienda ya cerró por horario:
+            igual debe ver la confirmación de su pago (no solo "Tienda cerrada"). */}
+        <PaymentReturn slug={slug} primary={primary} currency={store.currency} locale={store.currencyLocale} />
         <div className="max-w-sm w-full text-center bg-gray-50 rounded-[40px] p-10 shadow-xl">
           {store.logo && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -271,6 +275,10 @@ export default async function StorefrontPage({
 
       {/* Rehidrata el carrito si la URL trae ?cart= (deep-link compartible). */}
       <CartDeepLinkLoader products={allItems} slug={slug} />
+
+      {/* Confirmación al volver de la pasarela (?status=success|failure|pending
+          &orderId=): muestra éxito/revisión/fallo con el estado del pedido. */}
+      <PaymentReturn slug={slug} primary={primary} currency={store.currency} locale={store.currencyLocale} />
 
       {/* PWA — banner flotante de instalación con branding del tenant */}
       <InstallPWABanner
