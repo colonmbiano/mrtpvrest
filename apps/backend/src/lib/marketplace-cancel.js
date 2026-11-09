@@ -46,22 +46,27 @@ function cancellationActorId(user) {
 
 // Puertos sobre el adaptador financiero. Se crea al usarse: sin pedidos pagados en línea,
 // cancelar no carga nada de finanzas.
-function createMarketplaceCancellation({ prisma, settlements } = {}) {
+function createMarketplaceCancellation({ prisma, settlements, deps = {} } = {}) {
   let finance = settlements || null;
   const ports = () => (finance ||= require('./marketplace-settlements-prisma').createMarketplaceSettlementsPrisma({ prisma }));
-  return {
+  const api = {
     // Dentro de la transacción de la cancelación. Lanza si no se puede reservar: entonces la
     // orden tampoco se cancela (la transacción se revierte).
-    async reserveRefund(tx, { order, restaurantId, user, reason }) {
+    // actorId: para procesos del sistema (C2), que no tienen usuario.
+    async reserveRefund(tx, { order, restaurantId, user, actorId, reason }) {
       try {
         return await ports().reserveCancellationRefund(tx, { orderId: order.id, restaurantId,
-          actorId: cancellationActorId(user), reason });
+          actorId: actorId || cancellationActorId(user), reason });
       } catch (error) {
         // Otro camino canceló la misma orden al mismo tiempo y ganó la reserva (UNIQUE de keyHash).
         if (error?.code !== 'P2002') throw error;
         throw Object.assign(new Error('Este pedido ya se está cancelando desde otro lugar; actualiza la pantalla.'),
           { status: 409, code: 'CANCELLATION_IN_PROGRESS' });
       }
+    },
+    // Termina los reembolsos que quedaron PENDING (pasarela caída). Lo corre la tarea de C2.
+    recoverRefunds(actor, options) {
+      return ports().recoverRefunds(actor, options);
     },
     // Después del commit. Nunca lanza: devuelve el estado para la respuesta del TPV.
     async completeRefund(reservation, logger = console) {
@@ -77,6 +82,68 @@ function createMarketplaceCancellation({ prisma, settlements } = {}) {
       }
     },
   };
+
+  // Cancelación completa de un pedido del Mercadito fuera de la caja: la tarea de pedidos sin
+  // aceptar (C2) y, después, la cancelación del comprador (X7). La caja sigue usando
+  // PUT /api/orders/:id/status, que además maneja mesas y el candado del corte.
+  //   fromStatuses: estados desde los que se permite (p. ej. ['PENDING_MERCHANT']).
+  //   actor: { id, name } de un proceso o del comprador; queda en la auditoría y en el reembolso.
+  // Devuelve { outcome: 'CANCELLED', order, refund } o { outcome: 'SKIPPED', reason }.
+  api.cancelOrder = async function cancelOrder({ orderId, restaurantId, fromStatuses, reason, actor, note, io,
+    logger = console }) {
+    const transaction = deps.transaction || require('./driver-cash-settlement').cashTransaction;
+    const audit = deps.audit || require('./audit-logger');
+    if (!Array.isArray(fromStatuses) || fromStatuses.length === 0) throw new Error('fromStatuses requerido');
+    if (typeof reason !== 'string' || reason.trim().length < 5) throw Object.assign(new Error('Motivo requerido'), { status: 400, code: 'REASON_REQUIRED' });
+    let reservation = null;
+    let cancelled;
+    try {
+      cancelled = await transaction(prisma, async (tx) => {
+        reservation = null;
+        const fresh = await tx.order.findFirst({ where: { id: orderId, restaurantId, source: 'MARKETPLACE' } });
+        if (!fresh || !fromStatuses.includes(fresh.status)) return null;
+        if (isOnlinePaidMarketplaceOrder(fresh)) {
+          reservation = await api.reserveRefund(tx, { order: fresh, restaurantId, actorId: actor.id, reason });
+        }
+        const notes = note ? [fresh.notes?.trim(), note].filter(Boolean).join(' — ') : fresh.notes;
+        // Condicional: si la caja aceptó en el mismo instante, gana la caja y aquí no se cancela.
+        const changed = await tx.order.updateMany({ where: { id: orderId, restaurantId, status: fresh.status },
+          data: { status: 'CANCELLED', ...(note ? { notes } : {}) } });
+        if (changed.count !== 1) throw Object.assign(new Error('El pedido cambió'), { code: 'ORDER_CHANGED' });
+        const restaurant = await tx.restaurant.findFirst({ where: { id: restaurantId }, select: { tenantId: true } });
+        await audit.record({ user: { isDevice: true, id: actor.id, name: actor.name, tenantId: restaurant?.tenantId },
+          restaurantId, locationId: fresh.locationId }, audit.AUDIT_EVENTS.ORDER_CANCEL, {
+          resource: `order:${orderId}`, reason: reason.trim(),
+          before: { status: fresh.status }, after: { status: 'CANCELLED', total: fresh.total,
+            ...(reservation ? { refundId: reservation.id, refundCents: reservation.amountCents } : {}) },
+        }, tx);
+        return { ...fresh, status: 'CANCELLED', notes };
+      });
+    } catch (error) {
+      if (['ORDER_CHANGED', 'CANCELLATION_IN_PROGRESS'].includes(error?.code)) return { outcome: 'SKIPPED', reason: error.code };
+      throw error;
+    }
+    if (!cancelled) return { outcome: 'SKIPPED', reason: 'NOT_CANCELLABLE' };
+    const refund = await api.completeRefund(reservation, logger);
+    // Lo mismo que la cancelación en caja, sin bloquear: inventario, pantallas y aviso al cliente.
+    const restore = deps.restoreInventory || ((db, id, rid) => require('../routes/orders.routes').restoreInventoryForCancelledOrder(db, id, rid));
+    await Promise.resolve().then(() => restore(prisma, orderId, restaurantId))
+      .catch(error => logger.error?.('[marketplace-cancel] inventario', { orderId, message: error?.message }));
+    if (io) {
+      const payload = { id: cancelled.id, orderNumber: cancelled.orderNumber, status: 'CANCELLED', source: 'MARKETPLACE',
+        orderType: cancelled.orderType, restaurantId, locationId: cancelled.locationId };
+      if (cancelled.locationId) {
+        io.to(`restaurant:${restaurantId}:location:${cancelled.locationId}:admins`).emit('order:updated', payload);
+        io.to(`restaurant:${restaurantId}:location:${cancelled.locationId}:kitchen`).emit('order:updated', payload);
+      }
+      io.to(`restaurant:${restaurantId}:kitchen`).emit('order:updated', payload);
+    }
+    const notify = deps.notifyOrderStatus || require('../services/notifications.service').notifyOrderStatus;
+    await Promise.resolve().then(() => notify(cancelled, 'CANCELLED'))
+      .catch(error => logger.error?.('[marketplace-cancel] aviso al cliente', { orderId, message: error?.message }));
+    return { outcome: 'CANCELLED', order: cancelled, refund };
+  };
+  return api;
 }
 
 module.exports = { MANAGER_ROLES, CANCEL_ROLES, isOnlinePaidMarketplaceOrder, marketplaceCancelBlock,

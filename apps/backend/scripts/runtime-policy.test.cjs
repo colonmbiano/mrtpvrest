@@ -38,7 +38,7 @@ test('disabling business jobs preserves socket security outside isolated mode', 
   assert.equal(sweeps, 1);
 });
 
-test('legacy startup still runs all seven jobs once and passes io to the table job', () => {
+test('legacy startup runs all eight jobs once and passes io to the table and marketplace jobs', () => {
   const calls = [];
   const modules = [];
   const io = {};
@@ -49,12 +49,12 @@ test('legacy startup still runs all seven jobs once and passes io to the table j
       return new Proxy({}, { get: (_, name) => (...args) => calls.push([name, args]) });
     },
   });
-  assert.equal(new Set(modules).size, 7);
+  assert.equal(new Set(modules).size, 8);
   assert.deepEqual(calls, [
     'sweep', ['startTrialExpiryJob', []], ['startAutoPromosJob', []],
     ['startUnverifiedPurgeJob', []], ['startRecurringPayablesJob', []],
     ['startWhatsappBotReportJob', []], ['startDemoExpiryJob', []],
-    ['startStaleTableOrdersJob', [io]],
+    ['startStaleTableOrdersJob', [io]], ['startMarketplacePendingJob', [io]],
   ]);
 });
 
