@@ -1238,8 +1238,12 @@ model LoyaltyAccount {
   id           String               @id @default(cuid())
   restaurantId String
   restaurant   Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  userId       String
-  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // userId nullable: una cuenta de invitado (acumulada por teléfono en la tienda)
+  // existe sin User hasta que el cliente se registra y se vincula.
+  userId       String?
+  user         User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Teléfono normalizado del invitado. NULL en cuentas registradas (van por userId).
+  phone        String?
   points       Int                  @default(0)
   totalEarned  Int                  @default(0)
   tier         LoyaltyTier          @default(BRONZE)
@@ -1250,6 +1254,7 @@ model LoyaltyAccount {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, restaurantId])
+  @@unique([restaurantId, phone])
   @@map("loyalty_accounts")
 }
 

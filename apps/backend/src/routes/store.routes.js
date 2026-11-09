@@ -38,7 +38,7 @@ const { sendOrderPaidEmail } = require('../lib/order-confirmation-mailer');
 const { consumePaidOrder } = require('../services/order-inventory.service');
 const { computeOpenState } = require('../utils/storeHours');
 const { authenticate } = require('../middleware/auth.middleware');
-const { addLoyaltyPoints, genLoyaltyQr, getTier } = require('../services/loyalty.service');
+const { addLoyaltyPoints, genLoyaltyQr, getTier, normalizeLoyaltyPhone } = require('../services/loyalty.service');
 const { isMilestoneEnabled, processCustomerMilestone } = require('../services/loyalty-milestone.service');
 const { runOrderDictationSmart } = require('../services/order-dictation.service');
 const { createStoreDeliveryPin } = require('../lib/store-delivery-pin');
@@ -1676,10 +1676,17 @@ router.post('/orders', async (req, res) => {
 
     discount = order.discount;
 
-    // Lealtad: si el pedido está ligado a un cliente, acumulamos puntos sobre el
-    // subtotal (crea la cuenta si no existía). Best-effort: no bloquea la orden.
+    // Lealtad: acumulamos puntos sobre el subtotal (crea la cuenta si no existía).
+    // Best-effort y fire-and-forget: envuelto en Promise.resolve para que nunca
+    // tumbe el pedido, pase lo que pase con la acumulación.
     if (loyaltyUserId) {
-      addLoyaltyPoints(loyaltyUserId, order).catch(() => null);
+      Promise.resolve(addLoyaltyPoints(loyaltyUserId, order)).catch(() => null);
+    } else if (customerPhone) {
+      // Invitado sin sesión ni código: acumula por su teléfono. Crea/liga una
+      // cuenta de lealtad por (restaurante, teléfono) que se fusiona con su User
+      // el día que se registre (customer/register). Así la gran mayoría de los
+      // pedidos de la tienda —que se hacen como invitado— sí suman puntos.
+      Promise.resolve(addLoyaltyPoints({ phone: customerPhone }, order)).catch(() => null);
     }
 
     // Notificar al TPV / KDS vía Socket.io.
@@ -2251,25 +2258,59 @@ router.post('/customer/register', async (req, res) => {
     const bonus = Math.max(0, config?.welcomeBonusPoints || 0);
 
     const passwordHash = await bcrypt.hash(password, 10);
+
+    // ¿Este teléfono ya venía acumulando puntos como invitado en la tienda?
+    // Fusionamos esa cuenta con el nuevo User (conservando sus puntos) en vez de
+    // crear otra y dejar los puntos huérfanos. El bono de bienvenida se suma encima.
+    const normPhone = normalizeLoyaltyPhone(phone);
+    const guestLoyalty = normPhone
+      ? await prisma.loyaltyAccount.findUnique({
+          where: { restaurantId_phone: { restaurantId: restaurant.id, phone: normPhone } },
+          select: { id: true, userId: true, totalEarned: true },
+        }).catch(() => null)
+      : null;
+    const mergeGuest = !!(guestLoyalty && !guestLoyalty.userId);
+
     const user = await prisma.user.create({
       data: {
         name, email, phone, passwordHash, role: 'CUSTOMER', isActive: true,
         restaurantId: restaurant.id, tenantId: restaurant.tenantId || null,
-        loyalty: {
-          create: {
-            restaurantId: restaurant.id,
-            qrCode: genLoyaltyQr(),
-            points: bonus,
-            totalEarned: bonus,
-            tier: getTier(bonus),
-            ...(bonus > 0 && {
-              transactions: { create: { type: 'BONUS', points: bonus, description: 'Bono de bienvenida' } },
-            }),
+        // Si NO hay cuenta de invitado que fusionar, creamos la de lealtad aquí
+        // mismo con el bono. Si la hay, la ligamos abajo para no perder sus puntos.
+        ...(mergeGuest ? {} : {
+          loyalty: {
+            create: {
+              restaurantId: restaurant.id,
+              qrCode: genLoyaltyQr(),
+              points: bonus,
+              totalEarned: bonus,
+              tier: getTier(bonus),
+              ...(bonus > 0 && {
+                transactions: { create: { type: 'BONUS', points: bonus, description: 'Bono de bienvenida' } },
+              }),
+            },
           },
-        },
+        }),
       },
       select: { id: true, name: true, email: true, phone: true, restaurantId: true, tenantId: true },
     });
+
+    // Fusión: ligamos la cuenta de invitado al User y le sumamos el bono.
+    if (mergeGuest) {
+      const newTotal = guestLoyalty.totalEarned + bonus;
+      await prisma.$transaction([
+        prisma.loyaltyAccount.update({
+          where: { id: guestLoyalty.id },
+          data: {
+            userId: user.id,
+            ...(bonus > 0 && { points: { increment: bonus }, totalEarned: { increment: bonus }, tier: getTier(newTotal) }),
+          },
+        }),
+        ...(bonus > 0
+          ? [prisma.loyaltyTransaction.create({ data: { accountId: guestLoyalty.id, type: 'BONUS', points: bonus, description: 'Bono de bienvenida' } })]
+          : []),
+      ]).catch(() => null);
+    }
     res.status(201).json({
       token: signCustomerToken(user),
       customer: { id: user.id, name: user.name, email: user.email, phone: user.phone },
