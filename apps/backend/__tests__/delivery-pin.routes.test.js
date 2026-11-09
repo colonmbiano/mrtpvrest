@@ -102,3 +102,23 @@ test('ruta antigua /deliver también exige el PIN al repartidor', async () => {
   expect(ok.status).toBe(200);
   expect(prisma.order.update).toHaveBeenCalledTimes(1);
 });
+
+test('repetir una entrega antigua no reabre un pedido ya liquidado', async () => {
+  const original = { ...ORDER, status: 'DELIVERED', paymentMethod: 'CASH', paymentStatus: 'PAID',
+    paidAt: new Date('2026-11-08T06:31:00Z'), shiftId: 'saturday', cashCollected: true };
+  prisma.order.findFirst.mockResolvedValue(original);
+  const res = await request(makeApp()).put('/api/delivery/d1/orders/o1/deliver').send({}).expect(200);
+  expect(res.body.paymentStatus).toBe('PAID');
+  expect(res.body.paidAt).toBe(original.paidAt.toISOString());
+  expect(res.body.shiftId).toBe('saturday');
+  expect(prisma.order.update).not.toHaveBeenCalled();
+});
+
+test('entregar un pedido prepagado conserva su cobro original', async () => {
+  const original = { ...ORDER, paymentMethod: 'CARD', paymentStatus: 'PAID',
+    paidAt: new Date('2026-11-08T01:00:00Z'), shiftId: 'saturday' };
+  prisma.order.findFirst.mockResolvedValue(original);
+  prisma.order.update.mockResolvedValue({ ...original, status: 'DELIVERED' });
+  await request(makeApp()).put('/api/delivery/d1/orders/o1/deliver').send({ deliveryPin: PIN }).expect(200);
+  expect(prisma.order.update.mock.calls[0][0].data).toEqual({ status: 'DELIVERED' });
+});

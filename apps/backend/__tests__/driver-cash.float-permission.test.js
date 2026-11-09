@@ -14,7 +14,7 @@ jest.mock('@mrtpvrest/database', () => {
   const tx = {
     driverCashMovement: { create: jest.fn(async (a) => ({ id: 'm1', ...a.data })) },
     shiftCashIn: { create: jest.fn(async () => ({ id: 'sci1' })) },
-    cashShift: { update: jest.fn(async () => ({})) },
+    cashShift: { update: jest.fn(async () => ({})), findFirst: jest.fn() },
   };
   return {
     prisma: {
@@ -60,7 +60,7 @@ function makeApp() {
 beforeEach(() => {
   jest.clearAllMocks();
   prisma.employee.findFirst.mockResolvedValue({ id: 'd1', name: 'Mau', locationId: 'loc1' });
-  prisma.cashShift.findFirst.mockResolvedValue(null); // sin turno → solo crea el FLOAT
+  tx.cashShift.findFirst.mockResolvedValue({ id: 'shift1' });
 });
 
 describe('POST /:driverId/float — permiso (requireDriverCashManager)', () => {

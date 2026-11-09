@@ -10,6 +10,7 @@ const { summarizePayments, cashCutSummary, round2, PAYMENT_METHOD_MAP } = requir
 const { sendCashCutEmail } = require('../lib/cash-cut-mailer');
 const { applyShiftVaultMovement } = require('../lib/vault');
 const audit = require('../lib/audit-logger');
+const { cashTransaction, cutDriverCash, cashConflict } = require('../lib/driver-cash-settlement');
 const router = express.Router();
 
 // ── Espejo del ciclo de caja en la bóveda ────────────────────────────────
@@ -361,131 +362,56 @@ async function performShiftClose(req, res, shift) {
       closedByEmployeeId = emp.id;
     }
 
-    // Órdenes de este turno. Atribución del efectivo por shiftOrdersWhere:
-    // no-delivery por turno/creación, delivery por fecha de cobro (paidAt).
-    const orders = await prisma.order.findMany({
-      where: shiftOrdersWhere(shift),
-      // Cobro mixto: traer el desglose para sumar la porción de cada método a su
-      // bucket (sin esto, una orden MIXED no entraría a ningún bucket del corte).
-      include: { payments: { select: { method: true, amount: true, status: true } } },
-    });
-
-    const totals = summarizePayments(orders);
-    // Detalle de transferencias para el ticket de corte (cotejo contra banco).
-    const transferOrders = transferOrdersDetail(orders);
-
-    const totalExpenses = shift.expenses.reduce((s, e) => s + e.amount, 0);
-    const totalCashIn = shift.cashIns.reduce((s, c) => s + c.amount, 0);
-    const totalSales = Object.values(totals).reduce((a, b) => a + b, 0);
-
-    // Snapshot para Cierre Ciego: Calculamos lo que DEBERÍA haber en efectivo.
-    // Los ingresos de efectivo (cambio que el cajero metió a la gaveta) suman
-    // al esperado — de lo contrario aparecerían como sobrante inexplicable.
-    const { expectedCash } = cashCutSummary({
-      openingFloat: shift.openingFloat,
-      totalCash: totals.totalCash,
-      totalExpenses,
-      totalCashIn,
-    });
-
-    const now = new Date();
-
-    // Clock-out automático: cerrar el turno de caja CIERRA también a todo el
-    // staff con turno laboral abierto en la sucursal (meseros, cajero, etc.).
-    // Es la "conexión directa" pedida: un solo botón de cierre apaga la caja
-    // y saca a todos los meseros de un jalón. EmployeeShift no tiene
-    // restaurantId (no es SCOPED_MODEL), así que filtramos por los empleados
-    // de esta sucursal — mismo patrón que /staff-active.
-    const locationStaff = await prisma.employee.findMany({
-      where: { locationId: req.locationId },
-      select: { id: true, role: true, name: true },
-    });
-    const staffIds = locationStaff.map((e) => e.id);
-
-    // Corte automático de repartidores: cerrar la caja también CIERRA la caja de
-    // cada repartidor de la sucursal con movimientos pendientes. Se calcula su
-    // corte (DriverCashCut) y se aprueban sus movimientos en la MISMA
-    // $transaction que el cierre — mismo criterio que POST /driver-cash/:id/cut
-    // (toma exactamente los movimientos approved=false y los marca por id, para
-    // que un movimiento creado durante el cierre no quede aprobado sin contar).
-    const drivers = locationStaff.filter((e) => e.role === 'DELIVERY');
-    const driverCuts = [];
-    for (const d of drivers) {
-      const movs = await prisma.driverCashMovement.findMany({
-        where: { driverId: d.id, approved: false },
-        select: { id: true, type: true, amount: true },
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const { closed, staffClockedOut, driversCut, transferOrders } = await cashTransaction(prisma, async (tx) => {
+      const current = await tx.cashShift.findFirst({
+        where: { id: shiftId, locationId: req.locationId },
+        include: { expenses: true, cashIns: true },
       });
-      if (movs.length === 0) continue;
-      const sumType = (t) => movs.filter((m) => m.type === t).reduce((s, m) => s + m.amount, 0);
-      const float = sumType('FLOAT');
-      const income = sumType('INCOME');
-      const expense = sumType('EXPENSE');
-      const returned = sumType('RETURN');
-      driverCuts.push({
-        driverId: d.id,
-        driverName: d.name || 'Repartidor',
-        totalFloat: float,
-        totalIncome: income,
-        totalExpense: expense,
-        totalReturn: returned,
-        balance: float + income - expense - returned,
-        movements: movs.length,
-        movementIds: movs.map((m) => m.id),
+      if (!current?.isOpen) throw cashConflict('El turno ya está cerrado.');
+      const now = new Date();
+      const locationStaff = await tx.employee.findMany({
+        where: { locationId: req.locationId },
+        select: { id: true, role: true, name: true, locationId: true },
       });
-    }
-
-    // El cierre de caja, el clock-out masivo y los cortes de repartidor van en
-    // una sola $transaction: o cierra todo o no cierra nada (no dejar caja
-    // cerrada con meseros vivos ni cortes de repartidor a medias).
-    const tx = [
-      prisma.cashShift.update({
-        where: { id: shiftId },
-        data: {
-          isOpen: false,
-          closedAt: now,
-          closedById: closedByEmployeeId,
-          closingFloat: closingFloat || 0,
-          notes: notes || null,
-          expectedCash,
-          ...totals,
-          totalExpenses,
-          totalCashIn,
-          totalSales,
-          ordersCount: orders.length,
-        },
-        include: { expenses: true, cashIns: true }
-      }),
-      prisma.employeeShift.updateMany({
-        where: { employeeId: { in: staffIds }, endAt: null },
-        data: { endAt: now },
-      }),
-    ];
-    for (const dc of driverCuts) {
-      tx.push(prisma.driverCashCut.create({
-        data: {
-          driverId: dc.driverId,
-          driverName: dc.driverName,
-          totalFloat: dc.totalFloat,
-          totalIncome: dc.totalIncome,
-          totalExpense: dc.totalExpense,
-          totalReturn: dc.totalReturn,
-          balance: dc.balance,
-          movements: dc.movements,
+      let driversCut = 0;
+      // First settle driver cash and its orders. Only then calculate the shift:
+      // otherwise the just-approved deliveries stay pending and miss this cut.
+      for (const driver of locationStaff.filter((e) => e.role === 'DELIVERY')) {
+        const cut = await cutDriverCash(tx, driver, {
+          restaurantId, shiftId, at: now,
           notes: `Corte automático al cierre de caja ${shiftId}`,
+        });
+        if (cut) driversCut += 1;
+      }
+      const orders = await tx.order.findMany({
+        where: shiftOrdersWhere({ ...current, closedAt: now }),
+        include: { payments: { select: { method: true, amount: true, status: true } } },
+      });
+      const totals = summarizePayments(orders);
+      const totalExpenses = current.expenses.reduce((s, e) => s + e.amount, 0);
+      const totalCashIn = current.cashIns.reduce((s, c) => s + c.amount, 0);
+      const totalSales = Object.values(totals).reduce((a, b) => a + b, 0);
+      const { expectedCash } = cashCutSummary({
+        openingFloat: current.openingFloat, totalCash: totals.totalCash,
+        totalExpenses, totalCashIn,
+      });
+      const closed = await tx.cashShift.update({
+        where: { id: shiftId, isOpen: true },
+        data: {
+          isOpen: false, closedAt: now, closedById: closedByEmployeeId,
+          closingFloat: closingFloat || 0, notes: notes || null, expectedCash,
+          ...totals, totalExpenses, totalCashIn, totalSales, ordersCount: orders.length,
         },
-      }));
-      tx.push(prisma.driverCashMovement.updateMany({
-        where: { id: { in: dc.movementIds } },
-        data: { approved: true, approvedAt: now },
-      }));
-      tx.push(prisma.driverShiftRequest.updateMany({
-        where: { driverId: dc.driverId, status: 'PENDING' },
-        data: { status: 'RESOLVED', resolvedAt: now },
-      }));
-    }
-    const [closed, clockOut] = await prisma.$transaction(tx);
-    const staffClockedOut = clockOut.count;
-    const driversCut = driverCuts.length;
+        include: { expenses: true, cashIns: true },
+      });
+      const clockOut = await tx.employeeShift.updateMany({
+        where: { employeeId: { in: locationStaff.map((e) => e.id) }, endAt: null },
+        data: { endAt: now },
+      });
+      return { closed, staffClockedOut: clockOut.count, driversCut,
+        transferOrders: transferOrdersDetail(orders) };
+    });
     // Auditoría best-effort del cierre de caja (quién, cuánto, cuántas órdenes).
     audit.record(req, audit.AUDIT_EVENTS.SHIFT_CLOSE, {
       resource: `cashShift:${closed.id}`,
@@ -564,7 +490,7 @@ router.post('/current/close', requireLocation, requireCanManageShifts, validateB
     });
     if (!shift) return res.json({ closed: false, reason: 'no_open_shift' });
     return await performShiftClose(req, res, shift);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, ...(e.code ? { code: e.code } : {}) }); }
 });
 
 // ── POST agregar gasto al turno ABIERTO de la sucursal (sin id, cola offline)
@@ -619,7 +545,7 @@ router.post('/:id/close', requireLocation, requireCanManageShifts, validateBody(
     });
     if (!shift) return res.status(404).json({ error: 'Turno no encontrado en esta sucursal' });
     return await performShiftClose(req, res, shift);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, ...(e.code ? { code: e.code } : {}) }); }
 });
 
 // ── POST revelar arqueo de un corte ciego (requiere PIN de admin) ────────

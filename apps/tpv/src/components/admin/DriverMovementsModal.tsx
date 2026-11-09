@@ -87,7 +87,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   const [savingMethod, setSavingMethod] = useState(false);
 
   // Form state
-  const [type, setType] = useState<"INCOME" | "EXPENSE" | "RETURN">("EXPENSE");
+  const [type, setType] = useState<"EXPENSE" | "RETURN">("EXPENSE");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -103,6 +103,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   const [floatAmount, setFloatAmount] = useState("");
   const [floatDesc, setFloatDesc] = useState("");
   const [floatSource, setFloatSource] = useState<"CAJA" | "EXTERNO">("CAJA");
+  const [floatPurpose, setFloatPurpose] = useState<"CAMBIO" | "COMPRAS">("CAMBIO");
   const [assigningFloat, setAssigningFloat] = useState(false);
 
   // Inventariar compras del repartidor (entrada de stock, SIN dinero). El gasto
@@ -242,13 +243,14 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   // (sale y regresa), EXTERNO sí suma (se espera de vuelta al corte).
   async function handleAssignFloat(e: React.FormEvent) {
     e.preventDefault();
-    if (!driver || !floatAmount || isNaN(Number(floatAmount)) || Number(floatAmount) <= 0) return;
+    if (assigningFloat || !driver || !Number.isFinite(Number(floatAmount)) || Number(floatAmount) <= 0) return;
     try {
       setAssigningFloat(true);
       await api.post(`/api/driver-cash/${driver.id}/float`, {
         amount: Number(floatAmount),
         description: floatDesc,
         source: floatSource,
+        purpose: floatPurpose,
       });
       setFloatAmount("");
       setFloatDesc("");
@@ -407,11 +409,10 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                 <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Tipo</label>
                 <select
                   value={type}
-                  onChange={(e) => setType(e.target.value as any)}
+                  onChange={(e) => setType(e.target.value as "EXPENSE" | "RETURN")}
                   className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm text-white outline-none"
                 >
                   <option value="EXPENSE">🔻 Gasto / Salida</option>
-                  <option value="INCOME">🔺 Ingreso / Entrada</option>
                   <option value="RETURN">🔄 Devolución</option>
                 </select>
               </div>
@@ -478,10 +479,21 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
             </button>
           </form>
 
-          {/* Asignar fondo de cambio (solo roles financieros — backend exige admin) */}
+          {/* Única asignación de fondos, tanto para cambio como para compras. */}
           {canCut && (
             <form onSubmit={handleAssignFloat} className="space-y-4 bg-[var(--surf2)] p-4 rounded-2xl border border-[var(--border)]">
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-white/40">Asignar fondo de cambio</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-white/40">Asignar fondos</h3>
+
+              <div className="space-y-1">
+                <label htmlFor="driver-fund-purpose" className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Uso del fondo</label>
+                <select id="driver-fund-purpose" value={floatPurpose}
+                  onChange={(e) => setFloatPurpose(e.target.value as "CAMBIO" | "COMPRAS")}
+                  disabled={assigningFloat}
+                  className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm text-white outline-none">
+                  <option value="CAMBIO">Dar cambio</option>
+                  <option value="COMPRAS">Compras / Insumos</option>
+                </select>
+              </div>
 
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Origen del efectivo</label>
@@ -495,6 +507,8 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                       <button
                         key={opt.value}
                         type="button"
+                        aria-pressed={active}
+                        disabled={assigningFloat}
                         onClick={() => setFloatSource(opt.value)}
                         className="rounded-xl px-3 py-2 text-left border transition-colors"
                         style={{
@@ -512,9 +526,15 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-1 space-y-1">
-                  <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Monto ($)</label>
+                  <label htmlFor="driver-fund-amount" className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Monto ($)</label>
                   <input
+                    id="driver-fund-amount"
                     type="number"
+                    min="0.01"
+                    max="50000"
+                    step="0.01"
+                    inputMode="decimal"
+                    disabled={assigningFloat}
                     value={floatAmount}
                     onChange={(e) => setFloatAmount(e.target.value)}
                     placeholder="0"
@@ -523,12 +543,15 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                   />
                 </div>
                 <div className="col-span-2 space-y-1">
-                  <label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Descripción (opcional)</label>
+                  <label htmlFor="driver-fund-description" className="text-[10px] font-bold text-[var(--text-secondary)] uppercase ml-1">Descripción (opcional)</label>
                   <input
+                    id="driver-fund-description"
                     type="text"
+                    maxLength={300}
+                    disabled={assigningFloat}
                     value={floatDesc}
                     onChange={(e) => setFloatDesc(e.target.value)}
-                    placeholder="Ej: cambio para el turno"
+                    placeholder="Ej: verduras o cambio para el turno"
                     className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm text-white outline-none"
                   />
                 </div>
@@ -536,17 +559,17 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
 
               <p className="text-[10px] text-[var(--text-secondary)] ml-1">
                 {floatSource === "CAJA"
-                  ? "Se descuenta de la caja del local (entra como movimiento de caja en el turno abierto)."
-                  : "Efectivo externo: solo cuadra el corte del repartidor, no afecta la caja del local."}
+                  ? "Sale de la caja y se devuelve al liquidar, descontando las compras comprobadas. No es un ingreso nuevo."
+                  : "Es dinero adicional de fuera del negocio. Se suma al efectivo esperado y se devuelve al liquidar, descontando las compras comprobadas."}
               </p>
 
               <button
                 type="submit"
-                disabled={assigningFloat}
+                disabled={assigningFloat || !Number.isFinite(Number(floatAmount)) || !(Number(floatAmount) > 0) || Number(floatAmount) > 50000}
                 className="w-full py-3 rounded-xl font-black text-sm uppercase tracking-widest transition-transform active:scale-95 disabled:opacity-50"
                 style={{ background: "var(--warning)", color: "var(--brand-fg)" }}
               >
-                {assigningFloat ? "Asignando…" : "Asignar fondo"}
+                {assigningFloat ? "Asignando…" : "Asignar fondos"}
               </button>
             </form>
           )}

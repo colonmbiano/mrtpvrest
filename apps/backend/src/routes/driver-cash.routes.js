@@ -2,6 +2,7 @@ const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
 const { authenticate, requireAdmin, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
 const { localDayRange } = require('../utils/dayRange');
+const { cashTransaction, cutDriverCash } = require('../lib/driver-cash-settlement');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const router = express.Router();
@@ -356,10 +357,13 @@ router.post('/:driverId/float', authenticate, requireTenantAccess, requireDriver
   try {
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
-    const { amount, description, source } = req.body;
+    const { amount, description, source = 'CAJA', purpose = 'CAMBIO' } = req.body;
     const numericAmount = Number(amount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 50000) {
       return res.status(400).json({ error: 'amount invalido' });
+    }
+    if (!['CAJA', 'EXTERNO'].includes(source) || !['CAMBIO', 'COMPRAS'].includes(purpose)) {
+      return res.status(400).json({ error: 'Selecciona un origen y un destino válidos para el fondo.' });
     }
     // Física del cajón según el ORIGEN del fondo (regla del dueño, 2026-07-04):
     //
@@ -377,25 +381,23 @@ router.post('/:driverId/float', authenticate, requireTenantAccess, requireDriver
     //    el esperado → SOBRANTE fantasma (caso real 2026-07-03: fondo de $400
     //    de la cartera del dueño → sobrante de +$395.35 en el cierre).
     const fromShift = source !== 'EXTERNO';
-    let openShift = null;
-    if (!fromShift && driver.locationId) {
-      openShift = await prisma.cashShift.findFirst({
+    const movement = await cashTransaction(prisma, async (tx) => {
+      const openShift = await tx.cashShift.findFirst({
         where: { locationId: driver.locationId, isOpen: true },
         orderBy: { openedAt: 'desc' },
         select: { id: true },
       });
-    }
-    const movement = await prisma.$transaction(async (tx) => {
+      if (!openShift) throw Object.assign(new Error('Abre un turno de caja antes de asignar fondos.'), { status: 409 });
       const mov = await tx.driverCashMovement.create({
         data: {
           driverId: driver.id,
           type: 'FLOAT',
-          category: 'CAMBIO',
+          category: purpose,
           amount: numericAmount,
-          description: description || (fromShift ? 'Fondo de cambio (desde caja)' : 'Fondo de cambio (externo)'),
+          description: `${purpose === 'COMPRAS' ? 'Compras' : 'Cambio'} · ${fromShift ? 'Desde caja' : 'Aportación externa'}${typeof description === 'string' && description.trim() ? `: ${description.trim().slice(0, 300)}` : ''}`,
         },
       });
-      if (openShift) {
+      if (!fromShift) {
         await tx.shiftCashIn.create({
           data: {
             shiftId: openShift.id,
@@ -414,7 +416,7 @@ router.post('/:driverId/float', authenticate, requireTenantAccess, requireDriver
     const io = req.app.get('io');
     if (io) io.to(`driver:${driver.id}`).emit('cashUpdated', { driverId: driver.id });
     res.json(movement);
-  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(e.status || 500).json({ error: e.status ? e.message : 'Error interno' }); }
 });
 
 router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.single('photo'), async (req, res) => {
@@ -424,6 +426,12 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
     const { type, category, amount, description, orderId, supplierId, dueDate, pending } = req.body;
     const numericAmount = Number(amount);
     if (!['INCOME', 'EXPENSE', 'RETURN'].includes(type)) return res.status(400).json({ error: 'type invalido' });
+    if (type === 'INCOME' && category !== 'DELIVERY') {
+      return res.status(409).json({
+        error: 'Para entregar dinero al repartidor usa Asignar fondos y selecciona su origen.',
+        code: 'USE_ASSIGN_FUNDS',
+      });
+    }
     if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 50000) {
       return res.status(400).json({ error: 'amount invalido' });
     }
@@ -529,20 +537,14 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
     //    gasto se cubre con efectivo de la caja (fondo entregado o efectivo de
     //    entregas que el cierre espera de vuelta), así que debe restar.
     //
-    //  - INGRESO que NO es cobro de entrega (p. ej. el FONDO PARA COMPRAS que la
-    //    caja le entrega al repartidor) → ShiftCashIn (suma al efectivo esperado):
-    //    es dinero REAL de la caja, solo que en manos del repartidor. Debe "sumar
-    //    al total de la caja" para que el gasto que salga de ese fondo quede
-    //    respaldado. SIN esto, el gasto se restaba del esperado sin haber sumado
-    //    el fondo con que se pagó → aparecía un SOBRANTE fantasma en el cajón.
-    //
+    //  - Fondos de cambio/compras se asignan SOLO por /float, con su origen.
+    //    Un fondo desde caja no crea ingreso nuevo; uno externo sí lo crea.
     //  - Cobro de entrega (INCOME category 'DELIVERY') → NO se refleja aquí: ya
     //    está contado vía totalCash de la venta de la orden; reflejarlo sería
     //    DOBLE INGRESO. (Además esos llegan por POST /collect, no por aquí.)
     const mirrorsExpense = type === 'EXPENSE';
-    const mirrorsCashIn = type === 'INCOME' && category !== 'DELIVERY';
     let openShift = null;
-    if ((mirrorsExpense || mirrorsCashIn) && driver.locationId) {
+    if (mirrorsExpense && driver.locationId) {
       openShift = await prisma.cashShift.findFirst({
         where: { locationId: driver.locationId, isOpen: true },
         orderBy: { openedAt: 'desc' },
@@ -574,20 +576,6 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
         await tx.cashShift.update({
           where: { id: openShift.id },
           data: { totalExpenses: { increment: numericAmount } },
-        });
-      }
-      if (openShift && mirrorsCashIn) {
-        await tx.shiftCashIn.create({
-          data: {
-            shiftId: openShift.id,
-            description: `Fondo repartidor ${driver.name}${description ? `: ${description}` : ''}`,
-            amount: numericAmount,
-            category: 'FONDO_REPARTIDOR',
-          },
-        });
-        await tx.cashShift.update({
-          where: { id: openShift.id },
-          data: { totalCashIn: { increment: numericAmount } },
         });
       }
       return mov;
@@ -714,48 +702,18 @@ router.post('/:driverId/cut', authenticate, requireTenantAccess, requireDriverCa
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
     const { notes } = req.body;
-    // El corte toma EXACTAMENTE los movimientos pendientes (no aprobados) desde
-    // el último corte — el mismo conjunto que se muestra en las vistas de caja,
-    // así lo que ves es lo que se corta. Se marcan por id (no por ventana de
-    // tiempo) para que un movimiento creado durante el corte no quede aprobado
-    // sin haberse contado.
-    const movements = await prisma.driverCashMovement.findMany({
-      where: { driverId: driver.id, approved: false },
+    const cut = await cashTransaction(prisma, async (tx) => {
+      const shift = await tx.cashShift.findFirst({
+        where: { locationId: driver.locationId, isOpen: true },
+        orderBy: { openedAt: 'desc' }, select: { id: true },
+      });
+      return cutDriverCash(tx, driver, {
+        restaurantId: req.restaurantId || req.user?.restaurantId,
+        shiftId: shift?.id, notes: notes || null,
+      });
     });
-
-    const float = movements.filter(m => m.type === 'FLOAT').reduce((s, m) => s + m.amount, 0);
-    const income = movements.filter(m => m.type === 'INCOME').reduce((s, m) => s + m.amount, 0);
-    const expense = movements.filter(m => m.type === 'EXPENSE').reduce((s, m) => s + m.amount, 0);
-    const returned = movements.filter(m => m.type === 'RETURN').reduce((s, m) => s + m.amount, 0);
-
-    const cut = await prisma.driverCashCut.create({
-      data: {
-        driverId: driver.id,
-        driverName: driver.name || 'Repartidor',
-        totalFloat: float,
-        totalIncome: income,
-        totalExpense: expense,
-        totalReturn: returned,
-        balance: float + income - expense - returned,
-        movements: movements.length,
-        notes: notes || null,
-      },
-    });
-
-    await prisma.driverCashMovement.updateMany({
-      where: { id: { in: movements.map(m => m.id) } },
-      data: { approved: true, approvedAt: new Date() },
-    });
-
-    // Resuelve cualquier solicitud de cierre pendiente del repartidor: el corte
-    // ya se hizo, así que el aviso desaparece del panel admin.
-    await prisma.driverShiftRequest.updateMany({
-      where: { driverId: driver.id, status: 'PENDING' },
-      data: { status: 'RESOLVED', resolvedAt: new Date() },
-    });
-
-    res.json(cut);
-  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+    res.json(cut || { alreadyClosed: true, movements: 0, balance: 0 });
+  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(e.status || 500).json({ error: e.status ? e.message : 'Error interno', ...(e.code ? { code: e.code } : {}) }); }
 });
 
 router.get('/cuts', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {
@@ -819,6 +777,7 @@ router.get('/pending-collection', authenticate, requireTenantAccess, requireDriv
       where: {
         status: 'DELIVERED',
         paidAt: null,
+        paymentStatus: { not: 'PAID' },
         ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { restaurantId } : {}),
       },
       select: {
