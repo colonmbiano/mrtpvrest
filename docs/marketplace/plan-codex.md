@@ -85,7 +85,7 @@ un commit cuyo mensaje empiece con su ID (ej. `C1:`), o que exista el archivo nu
 | 7 | X9 | 2 | Límite de intentos en Redis | X2 | Pendiente |
 | 8 | X10 | 2 | Tokens del repartidor | X2 | Pendiente |
 | 9 | X11 | 2 | Regla de SQL crudo | X2 | Pendiente |
-| 10 | X7 | 2 | Cancelar desde la cuenta y WhatsApp a la tienda | C1 | Pendiente |
+| 10 | X7 | 2 | Cancelar desde la cuenta y WhatsApp a la tienda | C2 | Pendiente |
 | 11 | X8 | 2 | Sucursal por cobertura | C4 | Pendiente |
 | 12 | X13 | 3 | Botón Verificar y documentos del repartidor | X2 | Pendiente |
 | 13 | X12 | 3 | Ofertas con zona y distancia | C6 | Pendiente |
@@ -215,11 +215,12 @@ Claude en C6; solo documéntalo.)
 
 **Listo cuando:** la tabla de `docs/TENANCY.md` cubre las 12 consultas.
 
-### X7 · Cancelar desde la cuenta y WhatsApp a la tienda  (espera a C1)
+### X7 · Cancelar desde la cuenta y WhatsApp a la tienda  (espera a C2)
 
 **Haz:**
-1. `POST /api/marketplace/v1/orders/:id/cancel` en `routes/marketplace-orders-v1.routes.js`, usando el servicio de
-   cancelación de C1 (`lib/marketplace-cancel.js`) con el comprador como actor. Solo en `PENDING_PAYMENT` o
+1. `POST /api/marketplace/v1/orders/:id/cancel` en `routes/marketplace-orders-v1.routes.js`, usando la función compartida de
+   cancelación que deja C2 en `lib/marketplace-cancel.js`, con el comprador como actor (reglas y reembolso en
+   `docs/marketplace/cancelacion-reembolso.md`). Solo en `PENDING_PAYMENT` o
    `PENDING_MERCHANT` y solo el dueño de la cuenta.
 2. En `apps/client`: botón "Cancelar pedido" en `src/components/account/MyOrders.tsx` y
    `src/components/MarketplaceTrackingModal.tsx` en esos estados.

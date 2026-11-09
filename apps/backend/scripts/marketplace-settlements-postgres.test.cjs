@@ -7,7 +7,7 @@ const { randomUUID } = require('node:crypto');
 const ROOT = path.resolve(__dirname, '../../..');
 const { createMarketplaceSettlementsPrisma } = require('../src/lib/marketplace-settlements-prisma');
 const { buildOrderCaptureTransaction, recordLedgerTransaction } = require('../src/lib/marketplace-ledger');
-const { tenantGuard } = require('../../../packages/database/tenant-guard');
+const { tenantGuard, runWithTenant } = require('../../../packages/database/tenant-guard');
 
 async function run() {
   process.env.NODE_PATH = path.dirname(path.dirname(path.dirname(require.resolve('@prisma/client/package.json', { paths: [path.join(ROOT, 'packages/database')] }))));
@@ -97,6 +97,35 @@ async function run() {
     const recovered = await service().recoverRefunds(actor);
     assert(recovered.items.some(row => row.orderId === recovery && row.status === 'POSTED'));
     pass('reserva pendiente recuperada al recrear servicio tras fallo de pasarela');
+
+    // C1: la caja rechaza un pedido pagado en línea. La reserva va en la TX de la cancelación,
+    // dentro del contexto del comercio (guard en ENFORCE), y el reembolso se asienta después.
+    const rejected = await paidOrder();
+    await base.order.update({ where: { id: rejected }, data: { status: 'PENDING_MERCHANT' } });
+    const cancelInput = { orderId: rejected, restaurantId: restaurant.id, actorId: 'staff-cashier', reason: 'Sin existencias' };
+    const reservation = await runWithTenant({ restaurantId: restaurant.id, role: 'CASHIER' }, () => prisma.$transaction(async tx => {
+      const held = await service().reserveCancellationRefund(tx, cancelInput);
+      await tx.order.update({ where: { id: rejected }, data: { status: 'CANCELLED' } });
+      return held;
+    }, { isolationLevel: 'Serializable' }));
+    assert.equal(reservation.status, 'PENDING'); assert.equal(reservation.amountCents, 13000);
+    const posted = await service().completeRefund(reservation);
+    assert.equal(posted.status, 'POSTED'); assert.equal(posted.paymentStatus, 'REFUNDED');
+    const after = await base.order.findUnique({ where: { id: rejected } });
+    assert.equal(after.status, 'CANCELLED'); assert.equal(after.paymentStatus, 'REFUNDED');
+    // Un segundo camino (tarea de C2) reutiliza la misma reserva: ningún segundo reembolso.
+    const again = await prisma.$transaction(tx => service().reserveCancellationRefund(tx, { ...cancelInput, actorId: 'system-c2' }));
+    assert.equal(again.id, reservation.id); assert.equal((await service().completeRefund(again)).replayed, true);
+    assert.equal(await base.marketplaceRefund.count({ where: { orderId: rejected } }), 1);
+    // Si la reserva falla (otro comercio), la cancelación se revierte con ella.
+    const foreign = await paidOrder();
+    await base.order.update({ where: { id: foreign }, data: { status: 'PENDING_MERCHANT' } });
+    await assert.rejects(prisma.$transaction(async tx => {
+      await tx.order.update({ where: { id: foreign }, data: { status: 'CANCELLED' } });
+      await service().reserveCancellationRefund(tx, { ...cancelInput, orderId: foreign, restaurantId: 'otro-comercio' });
+    }), error => error.code === 'ORDER_NOT_FOUND');
+    assert.equal((await base.order.findUnique({ where: { id: foreign } })).status, 'PENDING_MERCHANT');
+    pass('cancelación: reserva en la TX con guard ENFORCE, reembolso total una sola vez y reversión si falla');
 
     const published = [];
     const drain = () => service().drainOutbox({ publish: async event => { published.push(event.eventKey); }, limit: 100 });

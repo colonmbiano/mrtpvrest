@@ -60,3 +60,19 @@ describe('notifyLowStock', () => {
     expect(prisma.location.findUnique).not.toHaveBeenCalled();
   });
 });
+
+describe('marketplaceRefundText', () => {
+  const { marketplaceRefundText } = require('../src/services/notifications.service');
+  const order = { orderNumber: 'M-12', source: 'MARKETPLACE', paymentProvider: 'MERCADOPAGO', paymentStatus: 'PAID' };
+
+  it('avisa del reembolso total al cancelar un pedido del Mercadito pagado en línea', () => {
+    expect(marketplaceRefundText(order, 'CANCELLED')).toContain('Te devolvemos el total');
+    expect(marketplaceRefundText({ ...order, paymentStatus: 'REFUNDED' }, 'CANCELLED')).toContain('M-12');
+  });
+
+  it('no aplica a otros estados, pagos en efectivo ni pedidos fuera del Mercadito', () => {
+    expect(marketplaceRefundText(order, 'CONFIRMED')).toBeNull();
+    expect(marketplaceRefundText({ ...order, paymentStatus: 'PENDING', paymentProvider: null }, 'CANCELLED')).toBeNull();
+    expect(marketplaceRefundText({ ...order, source: 'TPV' }, 'CANCELLED')).toBeNull();
+  });
+});

@@ -259,4 +259,45 @@ test('rutas habilitadas usan adaptadores, validan permisos y declaran si hay pub
   assert.equal((await request('POST', '/ops/finance/recover', { body: { unexpected: true } })).statusCode, 400);
 });
 
+// C1: cancelación de un pedido pagado en línea → reembolso total reservado en la TX de la cancelación.
+const cancelInput = { orderId: 'o1', restaurantId: 'r1', actorId: 'staff-u1', reason: 'Pedido rechazado por el comercio' };
+test('cancelación reserva el reembolso total en la TX de quien cancela y lo asienta después', async () => {
+  const w = fixture(); const svc = w.service();
+  const reservation = await w.prisma.$transaction(db => svc.reserveCancellationRefund(db, cancelInput));
+  assert.equal(reservation.status, 'PENDING'); assert.equal(reservation.amountCents, 13000);
+  assert.equal(w.calls.length, 0, 'la pasarela no se llama dentro de la transacción');
+  const done = await svc.completeRefund(reservation);
+  assert.equal(done.status, 'POSTED'); assert.equal(done.amountCents, 13000); assert.equal(done.paymentStatus, 'REFUNDED');
+  assert.equal(w.state.pipeline.order.paymentStatus, 'REFUNDED'); assert.equal(w.state.payment.status, 'REFUNDED');
+  assert.equal(w.calls[0].amountCents, 13000);
+  assert.equal(w.state.refunds[0].data.actorId, 'staff-u1'); assert.equal(w.state.refunds[0].data.reason, cancelInput.reason);
+});
+test('dos caminos que cancelan la misma orden comparten reserva: nunca dos reembolsos', async () => {
+  const w = fixture(); const svc = w.service();
+  const first = await w.prisma.$transaction(db => svc.reserveCancellationRefund(db, cancelInput));
+  const second = await w.prisma.$transaction(db => svc.reserveCancellationRefund(db, { ...cancelInput, actorId: 'system-c2', reason: 'Sin respuesta en 15 minutos' }));
+  assert.equal(second.id, first.id);
+  await svc.completeRefund(first); await svc.completeRefund(second);
+  assert.equal(w.state.refunds.length, 1); assert.equal(w.provider.size, 1);
+});
+test('falla de la pasarela deja la reserva PENDING y la recuperación la termina una sola vez', async () => {
+  const w = fixture(); const svc = w.service();
+  const reservation = await w.prisma.$transaction(db => svc.reserveCancellationRefund(db, cancelInput));
+  w.flags.providerDown = true; await assert.rejects(svc.completeRefund(reservation));
+  assert.equal(w.state.refunds[0].status, 'PENDING'); w.flags.providerDown = false;
+  const recovered = await svc.recoverRefunds(SUPER); assert.equal(recovered.items[0].status, 'POSTED');
+  assert.equal(w.provider.size, 1);
+});
+test('cancelación sin motivo, de otro comercio o sin actor no reserva nada', async () => {
+  const w = fixture(); const svc = w.service();
+  await rejects(w.prisma.$transaction(db => svc.reserveCancellationRefund(db, { ...cancelInput, reason: ' ' })), 'REASON_REQUIRED');
+  await rejects(w.prisma.$transaction(db => svc.reserveCancellationRefund(db, { ...cancelInput, restaurantId: 'r2' })), 'ORDER_NOT_FOUND');
+  await rejects(w.prisma.$transaction(db => svc.reserveCancellationRefund(db, { ...cancelInput, actorId: 'staff:u1' })), 'UNAUTHENTICATED');
+  assert.equal(w.state.refunds.length, 0);
+});
+test('una reserva de reembolso de operaciones abierta impide la de cancelación', async () => {
+  const w = fixture(); const svc = w.service(); w.flags.providerDown = true; await assert.rejects(refund(w, 100));
+  await rejects(w.prisma.$transaction(db => svc.reserveCancellationRefund(db, cancelInput)), 'REFUND_IN_PROGRESS');
+});
+
 module.exports = { fixture };
