@@ -55,3 +55,27 @@ El cliente recibe el aviso "fue cancelado. Te devolvemos el total, envío inclui
 - `apps/backend/scripts/marketplace-settlements-postgres.test.cjs --disposable`: PostgreSQL 16 desechable con
   el guard en ENFORCE, 9/9 escenarios (incluye la cancelación y la reversión si la reserva falla).
 - Pendiente: prueba con cuenta sandbox real de Mercado Pago y aceptación en navegador desde el TPV.
+
+## Pedidos sin aceptar (C2)
+
+`apps/backend/src/jobs/marketplacePending.job.js` corre cada minuto en el backend:
+
+- Cancela los pedidos del Mercadito por aceptar (`PENDING_MERCHANT`) que llevan más de 15 minutos esperando
+  (decisión del 9/nov). El reloj corre desde `paidAt` si se pagó en línea y desde `createdAt` si es en efectivo.
+  Motivo en la auditoría: "Sin respuesta del comercio en 15 minutos"; nota visible en el pedido:
+  "⏱ Cancelado automáticamente: el comercio no respondió en 15 min.". Si se pagó en línea, reembolso total.
+- Cada 5 minutos termina los reembolsos que quedaron `PENDING` porque Mercado Pago no respondió.
+- No toca `PENDING_PAYMENT`: el comercio no lo ve y el cliente aún puede pagarlo.
+- Usa la cancelación compartida `createMarketplaceCancellation().cancelOrder()` de `lib/marketplace-cancel.js`
+  (la misma que usará la cancelación del comprador, X7). Es condicional sobre el estado: si la caja acepta en el
+  mismo instante, gana la caja.
+
+Variable: `MARKETPLACE_PENDING_MERCHANT_TTL_MIN` (minutos, por defecto 15; `0` apaga la cancelación y deja solo la
+recuperación de reembolsos). La tarea no corre con `ENABLE_BACKGROUND_JOBS=false` ni en `MARKETPLACE_ISOLATED`.
+
+Migración `20261109180000_order_status_source_index`: índice `orders(status, source)` para la consulta del
+barrido. Solo agrega un índice.
+
+Evidencia: `apps/backend/scripts/marketplace-pending.test.cjs` (12 pruebas con dobles) y el escenario C2 de
+`marketplace-settlements-postgres.test.cjs --disposable`: un pedido con 16 minutos se cancela y se reembolsa una sola
+vez aunque corran dos instancias a la vez; uno con 5 minutos sigue esperando.

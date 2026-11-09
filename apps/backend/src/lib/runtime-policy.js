@@ -78,6 +78,7 @@ function startBackgroundTasks(policy, io, { startRevalidationSweep, loadJob = re
   loadJob('../jobs/whatsappBotReport.job').startWhatsappBotReportJob();
   loadJob('../jobs/demoExpiry.job').startDemoExpiryJob();
   loadJob('../jobs/staleTableOrders.job').startStaleTableOrdersJob(io);
+  loadJob('../jobs/marketplacePending.job').startMarketplacePendingJob(io);
 }
 
 module.exports = { resolveRuntimePolicy, createCorsOriginCheck, createSocketAdmission, startBackgroundTasks };

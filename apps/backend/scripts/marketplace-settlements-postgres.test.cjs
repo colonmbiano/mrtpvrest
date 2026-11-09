@@ -127,6 +127,37 @@ async function run() {
     assert.equal((await base.order.findUnique({ where: { id: foreign } })).status, 'PENDING_MERCHANT');
     pass('cancelación: reserva en la TX con guard ENFORCE, reembolso total una sola vez y reversión si falla');
 
+    // C2: la tarea de pedidos sin aceptar cancela y reembolsa con la cancelación compartida, contra
+    // PostgreSQL real: dos instancias a la vez cancelan una sola vez y reembolsan una sola vez.
+    process.env.DATABASE_URL ||= 'postgresql://codex_test@127.0.0.1:55449/marketplace_codex_test';
+    const { createMarketplaceCancellation } = require('../src/lib/marketplace-cancel');
+    const { createMarketplacePendingJob } = require('../src/jobs/marketplacePending.job');
+    const pgTransaction = async (client, work) => {
+      for (let attempt = 0; ; attempt++) {
+        try { return await client.$transaction(work, { isolationLevel: 'Serializable', maxWait: 5000, timeout: 15000 }); }
+        catch (error) { if (error?.code !== 'P2034' || attempt >= 4) throw error; }
+      }
+    };
+    const quiet = { info() {}, error() {} };
+    const pendingJob = () => createMarketplacePendingJob({ prisma, now: () => new Date(), logger: quiet,
+      cancellation: createMarketplaceCancellation({ prisma, settlements: service(), deps: { transaction: pgTransaction,
+        restoreInventory: async () => {}, notifyOrderStatus: async () => {} } }) });
+    const waiting = await paidOrder();
+    await base.order.update({ where: { id: waiting }, data: { status: 'PENDING_MERCHANT', paidAt: new Date(Date.now() - 16 * 60000) } });
+    const fresh = await paidOrder();
+    await base.order.update({ where: { id: fresh }, data: { status: 'PENDING_MERCHANT', paidAt: new Date(Date.now() - 5 * 60000) } });
+    // La base desechable se reutiliza entre corridas: se retiran restos de corridas anteriores.
+    await base.order.updateMany({ where: { status: 'PENDING_MERCHANT', id: { notIn: [waiting, fresh] } }, data: { status: 'CANCELLED' } });
+    const runs = await Promise.all([pendingJob().run(), pendingJob().run()]);
+    assert.equal(runs.reduce((sum, r) => sum + (r.cancelled || 0), 0), 1, 'una sola instancia cancela');
+    const gone = await base.order.findUnique({ where: { id: waiting } });
+    assert.equal(gone.status, 'CANCELLED'); assert.equal(gone.paymentStatus, 'REFUNDED');
+    assert.match(gone.notes, /no respondió en 15 min/);
+    assert.equal(await base.marketplaceRefund.count({ where: { orderId: waiting } }), 1);
+    assert.equal((await base.order.findUnique({ where: { id: fresh } })).status, 'PENDING_MERCHANT', 'uno de 5 min sigue esperando');
+    assert.equal(await base.accessLog.count({ where: { resource: 'order:' + waiting, action: 'ORDER_CANCEL' } }), 1);
+    pass('C2: pedido sin aceptar a los 15 min se cancela y reembolsa una vez aunque corran dos instancias');
+
     const published = [];
     const drain = () => service().drainOutbox({ publish: async event => { published.push(event.eventKey); }, limit: 100 });
     await Promise.all([drain(), drain()]);

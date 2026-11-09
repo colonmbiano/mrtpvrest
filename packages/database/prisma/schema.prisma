@@ -989,6 +989,8 @@ model Order {
   @@index([tableId])
   @@index([customerId])
   @@index([createdById])
+  // Barrido de pedidos del Mercadito sin aceptar (jobs/marketplacePending.job.js, cada minuto).
+  @@index([status, source])
   @@map("orders")
 }
 
