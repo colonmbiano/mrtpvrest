@@ -87,6 +87,19 @@ describe('PUT /:id/payment · keepStatus', () => {
     expect(res.body.code).toBe('OFFLINE_TOTAL_CHANGED');
   });
 
+  test('cobro online también exige que la orden siga sin pagar al actualizar', async () => {
+    await request(makeApp()).put('/api/orders/o1/payment').send({ paymentMethod: 'CASH' }).expect(200);
+    expect(tx.order.update.mock.calls[0][0].where.paymentStatus).toEqual({ not: 'PAID' });
+  });
+
+  test('si otra caja liquida durante la lectura inicial, la transacción no vuelve a cobrar', async () => {
+    tx.order.findFirst.mockResolvedValue({ id: 'o1', locationId: 'loc1', paymentStatus: 'PAID',
+      paidAt: new Date('2026-11-08T06:31:00Z'), shiftId: 'saturday' });
+    const res = await request(makeApp()).put('/api/orders/o1/payment').send({ paymentMethod: 'CASH' }).expect(200);
+    expect(res.body.shiftId).toBe('saturday');
+    expect(tx.order.update).not.toHaveBeenCalled();
+  });
+
   test('replay outbox offline devuelve 200 OK inmediatamente si la orden ya está pagada y coincide el importe', async () => {
     prisma.order.findFirst.mockResolvedValueOnce({
       id: 'o1',

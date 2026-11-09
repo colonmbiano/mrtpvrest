@@ -2103,12 +2103,22 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
       // Atribuir el cobro al turno abierto AHORA, no al de creación (ver
       // openShiftIdForCobro). Se resuelve dentro de la $transaction del cobro.
       const target = await tx.order.findFirst({
-        where: { id: req.params.id, restaurantId }, select: { locationId: true, source: true, status: true, paymentStatus: true },
+        where: { id: req.params.id, restaurantId },
+        select: { id: true, locationId: true, source: true, status: true, paymentStatus: true,
+          deliveryDriverId: true, total: true, paymentMethod: true },
       });
       // Marketplace: no se cobra en caja si aún no se acepta o si ya se pagó en línea.
       const chargeLocked = marketplaceChargeBlock(target);
       if (chargeLocked) throw Object.assign(new Error(chargeLocked.body.error), { marketplaceBlock: chargeLocked });
-      const cobroShiftId = target ? await openShiftIdForCobro(tx, target.locationId) : null;
+      if (target?.paymentStatus === 'PAID') {
+        return tx.order.findFirst({ where: { id: req.params.id, restaurantId } });
+      }
+      const previous = target ? await previousDriverSettlement(tx, target) : null;
+      if (previous && (paymentMethod !== 'CASH' || tenderResult)) {
+        throw cashConflict('El pedido ya se liquidó en efectivo en un corte anterior.');
+      }
+      const paidAt = previous?.at || now;
+      const cobroShiftId = previous?.shiftId || (target ? await openShiftIdForCobro(tx, target.locationId) : null);
       let resolvedMethod;
       let cashCollected;
       if (tenderResult) {
@@ -2132,10 +2142,10 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
         cashCollected = paymentMethod === 'CASH';
       }
       const paid = await tx.order.update({
-        where: { id: req.params.id, restaurantId, status: { not: 'CANCELLED' },
+        where: { id: req.params.id, restaurantId, status: { not: 'CANCELLED' }, paymentStatus: { not: 'PAID' },
           // Compare-and-set: un cambio concurrente de importe o un segundo
           // cobro no puede cerrar silenciosamente otra cuenta.
-          ...(expectedTotal != null ? { total: expectedTotal, paymentStatus: { not: 'PAID' } } : {}),
+          ...(expectedTotal != null ? { total: expectedTotal } : {}),
         },
         data: {
           paymentMethod: resolvedMethod,
@@ -2144,9 +2154,9 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
           // entrega — un pedido puede pagarse por anticipado. Sin el flag, el
           // cobro cierra la orden en DELIVERED (comportamiento del TPV).
           ...(keepStatus ? {} : { status: 'DELIVERED' }),
-          paidAt: now,
+          paidAt,
           cashCollected,
-          cashCollectedAt: cashCollected ? now : null,
+          cashCollectedAt: cashCollected ? paidAt : null,
           // La propina del cobro mixto sí se persiste (mejora el cuadre del
           // cajón vs. el método único, que la deja informativa en notas).
           ...(tenderResult && Number(tip) > 0 ? { tip: Number(tip) } : {}),
@@ -2169,11 +2179,11 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
     res.json(order);
   } catch (e) {
     if (e.marketplaceBlock) return sendBlock(res, e.marketplaceBlock);
-    if (req.body.expectedTotal != null && e.code === 'P2025') {
+    if (e.code === 'P2025') {
       return res.status(409).json({ code: 'OFFLINE_TOTAL_CHANGED',
         error: 'La cuenta cambió de importe, ya fue cobrada o no está disponible. Revisa el cobro local antes de conciliar.' });
     }
-    res.status(500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: e.message, ...(e.code ? { code: e.code } : {}) });
   }
 });
 
