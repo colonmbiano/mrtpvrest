@@ -406,8 +406,11 @@ const jsonResponse = (body, status = 200) => new Response(JSON.stringify(body), 
 
 test('carts with variants, modifiers or combos cannot be quoted in v1', () => {
   assert.equal(unsupportedReason([cartLine()]), null);
-  assert.match(unsupportedReason([cartLine({ variantId: 'xl' })]), /variante/);
-  assert.match(unsupportedReason([cartLine({ modifierIds: ['queso'] })]), /modificadores/);
+  // C4: variantes y modificadores se cotizan; complementos y venta por peso no.
+  assert.equal(unsupportedReason([cartLine({ variantId: 'xl' })]), null);
+  assert.equal(unsupportedReason([cartLine({ modifierIds: ['queso'] })]), null);
+  assert.match(unsupportedReason([cartLine({ modifierIds: ['queso', 'complement:papas'] })]), /complementos/);
+  assert.match(unsupportedReason([cartLine({ weightKg: 0.5 })]), /peso/);
   assert.match(unsupportedReason([cartLine({ comboSelections: [{ componentId: 'c', optionId: 'o' }] })]), /combo/);
   assert.match(unsupportedReason([cartLine({ menuItemId: '' })]), /identificador/);
 });
@@ -415,7 +418,7 @@ test('carts with variants, modifiers or combos cannot be quoted in v1', () => {
 test('the quote body sends ids, quantities and empty modifiers; delivery needs an address, pickup omits it', () => {
   const delivery = buildQuoteBody({ merchant: { merchantId: 'm1', slug: 'taqueria' }, lines: [cartLine()], fulfillment: 'DELIVERY', deliveryAddressId: 'addr-1' });
   assert.deepEqual(delivery, { merchantId: 'm1', fulfillment: 'DELIVERY', deliveryAddressId: 'addr-1',
-    items: [{ menuItemId: 'burger', quantity: 2, modifiers: [] }] });
+    items: [{ menuItemId: 'burger', quantity: 2 }] });
   const pickup = buildQuoteBody({ merchant: { merchantId: 'm1', slug: 'taqueria' }, lines: [cartLine()], fulfillment: 'PICKUP', deliveryAddressId: 'addr-1' });
   assert.equal('deliveryAddressId' in pickup, false);
 });
@@ -496,7 +499,10 @@ test('marketplace checkout is pickup or delivery, cash or online, and never sile
     { ok: true, fulfillment: 'DELIVERY', paymentMethod: 'ONLINE' });
   assert.match(checkMarketplaceEligibility({ orderType: 'DINE_IN', paymentMethod: 'CASH', lines: plain }).message, /mesa/);
   assert.match(checkMarketplaceEligibility({ orderType: 'TAKEOUT', paymentMethod: 'TRANSFER', lines: plain }).message, /pago/);
-  assert.match(checkMarketplaceEligibility({ orderType: 'TAKEOUT', paymentMethod: 'CASH', lines: [cartLine({ modifierIds: ['x'] })] }).message, /modificadores/);
+  // C4: con modificadores sí se puede; con complementos todavía no.
+  assert.equal(checkMarketplaceEligibility({ orderType: 'TAKEOUT', paymentMethod: 'CASH', lines: [cartLine({ modifierIds: ['x'] })] }).ok, true);
+  assert.match(checkMarketplaceEligibility({ orderType: 'TAKEOUT', paymentMethod: 'CASH',
+    lines: [cartLine({ modifierIds: ['complement:x'] })] }).message, /complementos/);
 });
 
 test('placeOrder keeps the tracking token and order number when the server returns them', async () => {
@@ -773,4 +779,10 @@ test('a new delivery address needs text and a map point; quoted money is read in
   assert.equal(moneyCents('0.29'), 29);
   assert.equal(moneyCents('30'), null);
   assert.equal(moneyCents(undefined), null);
+});
+
+test('C4: la cotización envía variante y modificadores, nunca complementos ni precios', () => {
+  const body = buildQuoteBody({ merchant: { merchantId: 'm1', slug: 'tienda' }, fulfillment: 'PICKUP',
+    lines: [cartLine({ variantId: 'doble', modifierIds: ['queso', 'tocino'], price: 999 })] });
+  assert.deepEqual(body.items, [{ menuItemId: 'burger', quantity: 2, variantId: 'doble', modifierIds: ['queso', 'tocino'] }]);
 });

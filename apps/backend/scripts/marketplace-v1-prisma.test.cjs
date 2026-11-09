@@ -143,11 +143,12 @@ test('la dirección de la cotización y la orden sale de la libreta del comprado
   assert.equal(await addresses.resolve('guest:b', 'a1'), null);
 });
 
-test('solo se venden productos simples, disponibles en línea y con precio', async () => {
+test('se venden productos con opciones; combos, por peso, ocultos y sin precio no', async () => {
   const items = [
     item(),
-    item({ id: 'variante', variants: [{ id: 'v1' }] }),
-    item({ id: 'obligatorio', modifierGroups: [{ id: 'g1' }] }),
+    item({ id: 'variante', variants: [{ id: 'v1', name: 'Grande', price: 99.9, isAvailable: true }] }),
+    item({ id: 'obligatorio', modifierGroups: [{ id: 'g1', name: 'Salsa', required: true, multiSelect: false, minSelection: 0,
+      maxSelection: 0, freeModifiersLimit: 0, groupType: 'ADD', modifiers: [{ id: 'mod1', name: 'Verde', priceAdd: 5, isAvailable: true }] }] }),
     item({ id: 'peso', soldByWeight: true }),
     item({ id: 'combo', isCombo: true }),
     item({ id: 'oculto', availableOnline: false }),
@@ -161,8 +162,15 @@ test('solo se venden productos simples, disponibles en línea y con precio', asy
   const rows = await catalog.loadListings('r1', items.map(i => i.id));
   assert.deepEqual(prisma.calls[0][1].where, { restaurantId: 'r1', id: { in: items.map(i => i.id) } });
   const byId = Object.fromEntries(rows.map(r => [r.menuItemId, r]));
-  assert.deepEqual(byId.m1, { merchantId: 'r1', menuItemId: 'm1', name: 'Taco', published: true, available: true, unitPriceCents: 8550 });
-  for (const id of ['variante', 'obligatorio', 'peso', 'combo', 'oculto', 'categoria-inactiva', 'categoria-ajena', 'gratis']) {
+  assert.deepEqual(byId.m1, { merchantId: 'r1', menuItemId: 'm1', name: 'Taco', published: true, available: true, unitPriceCents: 8550,
+    variants: [], groups: [] });
+  // C4: variantes y modificadores se venden, con sus precios en centavos.
+  assert.equal(byId.variante.published, true);
+  assert.deepEqual(byId.variante.variants, [{ id: 'v1', name: 'Grande', priceCents: 9990, available: true }]);
+  assert.equal(byId.obligatorio.published, true);
+  assert.deepEqual(byId.obligatorio.groups, [{ id: 'g1', name: 'Salsa', required: true, multiSelect: false, minSelection: 0,
+    maxSelection: 0, freeModifiersLimit: 0, groupType: 'ADD', modifiers: [{ id: 'mod1', name: 'Verde', priceAddCents: 500, available: true }] }]);
+  for (const id of ['peso', 'combo', 'oculto', 'categoria-inactiva', 'categoria-ajena', 'gratis']) {
     assert.equal(byId[id].published, false, id);
   }
   assert.equal(byId.agotado.published, true);

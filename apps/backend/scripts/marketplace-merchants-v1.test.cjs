@@ -52,7 +52,10 @@ const CATALOGS = {
           { id: 'o1', name: 'Queso', priceDeltaCents: 1500, available: true },
           { id: 'o2', name: 'Agotado', priceDeltaCents: 0, available: false }] }] },
       { id: 'refresco', categoryId: 'c-bebidas', name: 'Refresco', unitPriceCents: 3000, promoActive: false,
-        promoPriceCents: 2000, availableOnline: true, isAvailable: true, position: 1 },
+        promoPriceCents: 2000, availableOnline: true, isAvailable: true, position: 1,
+        variants: [{ id: 'v-grande', name: 'Grande', priceCents: 4000 }, { id: 'v-rota', name: 'Rota', priceCents: -1 }],
+        modifierGroups: [{ id: 'g-salsas', name: 'Salsas', required: true, min: 1, max: null, freeCount: 2, repeatable: true,
+          options: [{ id: 's1', name: 'Verde', priceDeltaCents: 500, available: true }] }] },
       { id: 'promo-no-baja', categoryId: 'c-tacos', name: 'Quesadilla', unitPriceCents: 1000, promoActive: true,
         promoPriceCents: 1200, availableOnline: true, isAvailable: true, position: 2 },
       { id: 'oculto-online', categoryId: 'c-tacos', name: 'Interno', unitPriceCents: 900, availableOnline: false,
@@ -192,8 +195,8 @@ test('catalog prices are exact strings, promos only apply when real, and modifie
   const catalog = await service().getMerchantCatalog('taqueria-centro');
   const tacos = catalog.categories.find(category => category.name === 'Tacos').items;
   assert.deepEqual(tacos[0], { id: 'pastor', name: 'Tacos al pastor', description: 'Con pina', unitPrice: '25.00',
-    promoPrice: '20.00', modifiers: [{ id: 'g1', name: 'Extras', required: false, min: 0, max: 2,
-      options: [{ id: 'o1', name: 'Queso', priceDelta: '15.00' }] }] });
+    promoPrice: '20.00', variants: [], modifiers: [{ id: 'g1', name: 'Extras', required: false, min: 0, max: 2,
+      freeCount: 0, repeatable: false, options: [{ id: 'o1', name: 'Queso', priceDelta: '15.00' }] }] });
   assert.equal(tacos[1].unitPrice, '10.00');
   assert.equal(tacos[1].promoPrice, null, 'promo above the regular price is not a discount');
   const drink = catalog.categories.find(category => category.name === 'Bebidas').items[0];
@@ -283,4 +286,12 @@ test('route: default router without ports is 503 and unexpected failures do not 
 test('the v1 merchants router is mounted under /api/marketplace/v1', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.js'), 'utf8');
   assert.match(source, /app\.use\('\/api\/marketplace\/v1',\s*require\('\.\/routes\/marketplace-merchants-v1\.routes'\)\(\)\)/);
+});
+
+test('C4: variantes con precio válido y grupos con opciones gratis y repetibles en el catálogo', async () => {
+  const catalog = await service().getMerchantCatalog('taqueria-centro');
+  const drink = catalog.categories.find(category => category.name === 'Bebidas').items[0];
+  assert.deepEqual(drink.variants, [{ id: 'v-grande', name: 'Grande', price: '40.00' }]);
+  assert.deepEqual(drink.modifiers, [{ id: 'g-salsas', name: 'Salsas', required: true, min: 1, max: null, freeCount: 2,
+    repeatable: true, options: [{ id: 's1', name: 'Verde', priceDelta: '5.00' }] }]);
 });

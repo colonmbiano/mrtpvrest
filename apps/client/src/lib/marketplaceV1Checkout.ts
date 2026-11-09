@@ -1,8 +1,8 @@
 // Checkout del marketplace sobre la API v1: cotización y orden (plan §5-6). Módulo
 // puro: la URL de la API y el fetch se inyectan para probarlo sin red.
 // El precio final lo calcula siempre el servidor; el cliente solo envía ids y
-// cantidades. La cotización no aplica variantes, modificadores ni combos, así que un
-// carrito con esas opciones no puede usar este camino.
+// cantidades, más la variante y los modificadores elegidos (C4). Combos, complementos y
+// venta por peso no se cotizan, así que un carrito con esas opciones no puede usar este camino.
 import type { CartLine } from './cartStore';
 import { getOrCreateGuestId, isGuestId, randomHexId } from './guestIdentity';
 import { getBuyerToken } from './marketplaceAccount';
@@ -69,15 +69,29 @@ export function isCheckoutUrl(value: unknown): value is string {
 }
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-// Primer motivo por el que el carrito no puede cotizarse en v1; null si todas las líneas son simples.
+// Los complementos viajan en modifierIds con este prefijo (convenio del TPV y la tienda).
+const COMPLEMENT_PREFIX = 'complement:';
+
+// Primer motivo por el que el carrito no puede cotizarse en v1; null si todas las líneas se pueden cotizar.
 export function unsupportedReason(lines: CartLine[]): string | null {
   for (const line of lines) {
     if (!line.menuItemId) return `"${line.name}" no tiene identificador de producto`;
-    if (line.variantId) return `"${line.name}" tiene variante`;
-    if ((line.modifierIds?.length ?? 0) > 0) return `"${line.name}" tiene modificadores`;
     if ((line.comboSelections?.length ?? 0) > 0) return `"${line.name}" es un combo`;
+    if (line.weightKg != null) return `"${line.name}" se vende por peso`;
+    if ((line.modifierIds ?? []).some(id => id.startsWith(COMPLEMENT_PREFIX))) return `"${line.name}" tiene complementos`;
   }
   return null;
+}
+
+// Línea de la cotización: ids del producto, su variante y sus modificadores. El precio lo pone el servidor.
+function quoteItem(line: CartLine): Record<string, unknown> {
+  const modifierIds = (line.modifierIds ?? []).filter(id => typeof id === 'string' && id && !id.startsWith(COMPLEMENT_PREFIX));
+  return {
+    menuItemId: line.menuItemId,
+    quantity: line.quantity,
+    ...(line.variantId ? { variantId: line.variantId } : {}),
+    ...(modifierIds.length > 0 ? { modifierIds } : {}),
+  };
 }
 
 // 32 caracteres hexadecimales: cumple KEY_RE y no depende de un contexto seguro.
@@ -123,7 +137,7 @@ export function buildQuoteBody(input: {
   const body: Record<string, unknown> = {
     ...merchant,
     fulfillment: input.fulfillment,
-    items: input.lines.map(line => ({ menuItemId: line.menuItemId, quantity: line.quantity, modifiers: [] })),
+    items: input.lines.map(quoteItem),
   };
   const coupon = input.couponCode?.trim();
   if (coupon) body.couponCode = coupon;

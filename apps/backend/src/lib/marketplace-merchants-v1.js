@@ -115,11 +115,22 @@ function modifierGroups(groups) {
       required: group.required === true,
       min: Number.isInteger(group.min) && group.min >= 0 ? group.min : 0,
       max: Number.isInteger(group.max) && group.max >= 0 ? group.max : null,
+      // C4: cuántas opciones del grupo no cobran y si una opción se puede repetir ("2 Salsa").
+      freeCount: Number.isInteger(group.freeCount) && group.freeCount > 0 ? group.freeCount : 0,
+      repeatable: group.repeatable === true,
       options: (Array.isArray(group.options) ? group.options : [])
         .filter(option => option && typeof option.id === 'string' && typeof option.name === 'string' && option.available !== false)
         .map(option => ({ id: option.id, name: option.name, priceDelta: money(option.priceDeltaCents ?? 0) }))
         .filter(option => option.priceDelta !== null),
     }));
+}
+
+// C4: variantes disponibles; su precio reemplaza al del producto.
+function variantsView(variants) {
+  return (Array.isArray(variants) ? variants : [])
+    .filter(variant => variant && typeof variant.id === 'string' && typeof variant.name === 'string')
+    .map(variant => ({ id: variant.id, name: variant.name, price: money(variant.priceCents) }))
+    .filter(variant => variant.price !== null);
 }
 
 // Promo only when the adapter reports it active and the promo price is a real discount.
@@ -142,7 +153,7 @@ function catalogView(merchant, catalog) {
     const unitPrice = money(item.unitPriceCents);
     if (unitPrice === null) continue;
     bucket.items.push({ id: item.id, name: item.name, description: text(item.description), unitPrice,
-      promoPrice: promoPrice(item), modifiers: modifierGroups(item.modifierGroups) });
+      promoPrice: promoPrice(item), variants: variantsView(item.variants), modifiers: modifierGroups(item.modifierGroups) });
   }
   return {
     merchant: { id: merchant.id, slug: merchant.slug, name: merchant.name, open: merchant.open === true },
