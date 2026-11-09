@@ -27,6 +27,7 @@ const { releaseTableAfterPayment } = require('../services/table-lifecycle.servic
 const { claimKitchenPrint, releaseKitchenPrint } = require('../lib/print-claim');
 const audit = require('../lib/audit-logger');
 const { cashTransaction, previousDriverSettlement, cashConflict } = require('../lib/driver-cash-settlement');
+const { requiredReason, controlError, assertOpenPaymentPeriod } = require('../lib/cash-control');
 const {
   createOrderSchema,
   addItemsSchema,
@@ -533,6 +534,15 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
     const paidOnCreate = Boolean(
       paymentMethod && ['DELIVERED', 'COMPLETED', 'PAID'].includes(String(status || '').toUpperCase())
     );
+    let responsibleId = null;
+    if (orderType === 'DELIVERY' && req.body.deliveryDriverId) {
+      const responsible = await prisma.employee.findFirst({
+        where: { id: String(req.body.deliveryDriverId), locationId: req.locationId, isActive: true,
+          location: { restaurantId } }, select: { id: true },
+      });
+      if (!responsible) return res.status(400).json({ error: 'Responsable de entrega inválido.' });
+      responsibleId = responsible.id;
+    }
 
     // Resolver cada item con su menuItem y modificadores (validados contra DB).
     // El precio del item siempre se re-lee del servidor, igual que los priceAdd
@@ -689,6 +699,8 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
       discount: mayDiscount ? discount : 0,
       promoDiscount: bulkPromoDiscount,
     });
+
+    const discountReason = serverDiscount > 0 ? requiredReason(req.body.discountReason, 'Escribe el motivo del descuento (mínimo 5 caracteres).') : null;
 
     if (req.body.expectedTotal != null &&
         Math.round(Number(req.body.expectedTotal) * 100) !== Math.round(serverTotal * 100)) {
@@ -863,6 +875,7 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
           restaurantId,
           locationId: req.locationId,
           shiftId: req.shiftId,
+          deliveryDriverId: responsibleId,
           // Empleado del TPV que tomó el pedido (req.user.id = Employee.id en
           // sesiones del TPV). Permite atribuir actividad a meseros/cajeros.
           createdById: req.user?.id || null,
@@ -939,6 +952,9 @@ router.post('/tpv', authenticate, requireTenantAccess, requireRole('CASHIER', 'W
         });
       }));
 
+      if (discountReason) await audit.record(req, audit.AUDIT_EVENTS.DISCOUNT_APPLIED, {
+        resource: `order:${created.id}`, reason: discountReason, after: { discount: serverDiscount, total: serverTotal },
+      }, tx);
       if (paidOnCreate) await consumePaidOrder(tx, created.id, restaurantId);
       return tx.order.findUnique({
         where: { id: created.id },
@@ -1573,7 +1589,7 @@ router.delete('/items/:itemId', authenticate, requireTenantAccess, requireRole('
     }
 
     res.json(updatedOrder);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, code: e.code }); }
 });
 
 // ── DELETE /items/:itemId/modifiers/:modRowId ───────────────────────────────
@@ -1675,7 +1691,7 @@ router.delete('/items/:itemId/modifiers/:modRowId',
     }
 
     res.json(updatedOrder);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, code: e.code }); }
 });
 
 // ── GESTIÓN DE PAGOS Y CUENTAS ──
@@ -1754,7 +1770,7 @@ router.post('/:id/print-bill', authenticate, requireTenantAccess, requireRole('A
     } catch (err) { console.error('Error impresora:', err.message); }
 
     res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, code: e.code }); }
 });
 
 // Aplica/edita el descuento de un pedido ya guardado y recalcula el total.
@@ -1768,6 +1784,7 @@ router.put('/:id/discount', authenticate, requireTenantAccess, requireRole('CASH
   try {
     const restaurantId = req.user?.restaurantId || req.restaurantId;
     const { type, value, reason } = req.body || {};
+    const discountReason = requiredReason(reason, 'Escribe el motivo del descuento (mínimo 5 caracteres).');
     const numValue = Number(value);
     if (!['percent', 'fixed'].includes(type) || !Number.isFinite(numValue) || numValue < 0) {
       return res.status(400).json({ error: 'Descuento inválido' });
@@ -1775,12 +1792,12 @@ router.put('/:id/discount', authenticate, requireTenantAccess, requireRole('CASH
 
     const order = await prisma.order.findFirst({
       where: { id: req.params.id, restaurantId },
-      select: { id: true, subtotal: true, discount: true, deliveryFee: true, total: true, orderNumber: true, status: true, source: true },
+      select: { id: true, subtotal: true, discount: true, deliveryFee: true, total: true, orderNumber: true, status: true, source: true, paymentStatus: true },
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
     const locked = marketplaceEditBlock(order);
     if (locked) return sendBlock(res, locked);
-    if (['DELIVERED', 'CANCELLED'].includes(order.status)) {
+    if (order.paymentStatus === 'PAID' || ['DELIVERED', 'CANCELLED'].includes(order.status)) {
       return res.status(409).json({ error: 'No se puede modificar un pedido cerrado' });
     }
 
@@ -1791,20 +1808,26 @@ router.put('/:id/discount', authenticate, requireTenantAccess, requireRole('CASH
     const discount = Math.min(Math.max(0, Math.round(rawDiscount * 100) / 100), subtotal);
     const total = Math.max(0, subtotal - discount + deliveryFee);
 
-    const updated = await prisma.order.update({
+    const updated = await cashTransaction(prisma, async (tx) => {
+    const fresh = await tx.order.findFirst({ where: { id: order.id, restaurantId } });
+    if (!fresh || fresh.paymentStatus === 'PAID' || ['DELIVERED', 'CANCELLED'].includes(fresh.status)) throw controlError('El pedido ya está cerrado.', 'ORDER_CLOSED');
+    if (Number(fresh.subtotal) !== Number(order.subtotal) || Number(fresh.discount) !== Number(order.discount)) throw controlError('El importe cambió. Actualiza el pedido.', 'ORDER_CHANGED');
+    const updated = await tx.order.update({
       where: { id: order.id },
       data: { discount, total },
     });
 
-    audit.record(req, audit.AUDIT_EVENTS.DISCOUNT_APPLIED, {
+    await audit.record(req, audit.AUDIT_EVENTS.DISCOUNT_APPLIED, {
       resource: `order:${order.id}`,
-      reason: typeof reason === 'string' && reason.trim() ? reason.trim().slice(0, 200) : null,
+      reason: discountReason,
       before: { discount: order.discount, total: order.total },
       after: { discount, total, type, value: numValue, orderNumber: order.orderNumber },
-    }).catch(() => {});
+    }, tx);
+    return updated;
+    });
 
     res.json(updated);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, code: e.code }); }
 });
 
 router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, res) => {
@@ -1888,6 +1911,7 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
 
 router.put('/:id/status', authenticate, requireTenantAccess, validateBody(updateStatusSchema), async (req, res) => {
   try {
+    const restaurantId = req.user?.restaurantId || req.restaurantId;
     const { status } = req.body;
     // Estado previo: el restore de inventario solo debe correr en la
     // transición real → CANCELLED (no si la orden ya estaba cancelada).
@@ -1898,7 +1922,7 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
         // Para sumar un pedido por confirmar a la cuenta de su mesa (abajo).
         tableId: true, locationId: true, orderType: true, customerName: true, notes: true,
         tip: true, discount: true, pointsUsed: true, couponId: true,
-        paymentStatus: true, paymentProviderRef: true,
+        paymentStatus: true, paymentProviderRef: true, deliveryDriverId: true, source: true,
       },
     });
     if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
@@ -1908,6 +1932,12 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
     // duplicado en replays del outbox).
     const role = req.user?.role;
     const statusChanged = existing.status !== status;
+    const cancelReason = status === 'CANCELLED' && statusChanged
+      ? requiredReason(req.body.reason, 'Escribe el motivo de la cancelación (mínimo 5 caracteres).') : null;
+    if (existing.orderType === 'DELIVERY' && existing.source !== 'MARKETPLACE'
+      && ['ON_THE_WAY', 'DELIVERED'].includes(status) && !existing.deliveryDriverId) {
+      return res.status(409).json({ error: 'Asigna primero al responsable de la entrega.', code: 'DELIVERY_RESPONSIBLE_REQUIRED' });
+    }
     if (statusChanged && !canTransition(existing.status, status, role)) {
       return res.status(409).json({ error: `Transición inválida (${existing.status} → ${status})`, code: 'INVALID_TRANSITION' });
     }
@@ -1932,10 +1962,19 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
         return res.json(merged);
       }
     }
-    const order = await prisma.order.update({
-      where: { id: existing.id },
-      data: { status, ...(resolvesTable ? { awaitingTableConfirmation: false } : {}) },
-    });
+    const updateData = { status, ...(resolvesTable ? { awaitingTableConfirmation: false } : {}) };
+    const order = status === 'CANCELLED' && statusChanged
+      ? await cashTransaction(prisma, async (tx) => {
+        const fresh = await tx.order.findFirst({ where: { id: existing.id, restaurantId } });
+        if (!fresh) throw controlError('Pedido no encontrado.', 'ORDER_NOT_FOUND', 404);
+        if (fresh.paymentStatus === 'PAID') await assertOpenPaymentPeriod(tx, fresh, restaurantId);
+        const cancelled = await tx.order.update({ where: { id: existing.id, restaurantId }, data: updateData });
+        await audit.record(req, audit.AUDIT_EVENTS.ORDER_CANCEL, {
+          resource: `order:${existing.id}`, reason: cancelReason,
+          before: { status: fresh.status }, after: { status: 'CANCELLED', total: fresh.total },
+        }, tx);
+        return cancelled;
+      }) : await prisma.order.update({ where: { id: existing.id }, data: updateData });
     if (confirmsTable && order.tableId) {
       await prisma.table.update({ where: { id: order.tableId }, data: { status: 'OCCUPIED' } }).catch(() => {});
     }
@@ -1987,21 +2026,8 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
       );
     }
 
-    // Auditoría best-effort de la cancelación (acción sensible: quién y qué).
-    if (status === 'CANCELLED') {
-      audit.record(req, audit.AUDIT_EVENTS.ORDER_CANCEL, {
-        resource: `order:${order.id}`,
-        after: {
-          orderNumber: order.orderNumber,
-          orderType: order.orderType,
-          total: order.total,
-          tableId: order.tableId,
-        },
-      }).catch(() => {});
-    }
-
     res.json(order);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, code: e.code }); }
 });
 
 // Cobrar (marcar PAID) es exclusivo de Cajero o superior — los MESEROS no
@@ -2105,13 +2131,25 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
       const target = await tx.order.findFirst({
         where: { id: req.params.id, restaurantId },
         select: { id: true, locationId: true, source: true, status: true, paymentStatus: true,
-          deliveryDriverId: true, total: true, paymentMethod: true },
+          deliveryDriverId: true, orderType: true, total: true, paymentMethod: true },
       });
       // Marketplace: no se cobra en caja si aún no se acepta o si ya se pagó en línea.
       const chargeLocked = marketplaceChargeBlock(target);
       if (chargeLocked) throw Object.assign(new Error(chargeLocked.body.error), { marketplaceBlock: chargeLocked });
       if (target?.paymentStatus === 'PAID') {
         return tx.order.findFirst({ where: { id: req.params.id, restaurantId } });
+      }
+      if (req.body.deliveryDriverId) {
+        if (target?.orderType !== 'DELIVERY') throw controlError('Solo los domicilios tienen responsable.', 'INVALID_ORDER_TYPE', 400);
+        const employee = await tx.employee.findFirst({ where: {
+          id: String(req.body.deliveryDriverId), locationId: target.locationId, isActive: true,
+          location: { restaurantId },
+        }, select: { id: true } });
+        if (!employee) throw controlError('Responsable no encontrado en esta sucursal.', 'INVALID_RESPONSIBLE', 400);
+        if (target.deliveryDriverId && target.deliveryDriverId !== employee.id) {
+          throw controlError('Revisa primero la asignación del repartidor antes de cambiar el responsable.', 'RESPONSIBLE_ALREADY_ASSIGNED');
+        }
+        detailData.deliveryDriverId = employee.id;
       }
       const previous = target ? await previousDriverSettlement(tx, target) : null;
       if (previous && (paymentMethod !== 'CASH' || tenderResult)) {
@@ -2917,10 +2955,36 @@ router.post('/:id/split', authenticate, requireTenantAccess, requireOrderMergeRo
 // ── PUT /:id/void-payment — Anular un cobro (solo ADMIN) ──────────────
 // Revierte un pago marcado como PAID: deja la orden como pendiente de cobro
 // y conserva una nota de auditoría con el nombre del admin que anuló.
+// Atribución operativa: no simula un nuevo cobro ni modifica un corte cerrado.
+router.put('/:id/responsible', authenticate, requireTenantAccess, requireRole('CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN'), async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const reason = requiredReason(req.body.reason, 'Escribe el motivo de la asignación.');
+    const updated = await cashTransaction(prisma, async (tx) => {
+      const order = await tx.order.findFirst({ where: { id: req.params.id, restaurantId } });
+      if (!order || order.orderType !== 'DELIVERY') throw Object.assign(new Error('Pedido a domicilio no encontrado.'), { status: 404 });
+      if (order.paymentStatus === 'PAID') await assertOpenPaymentPeriod(tx, order, restaurantId);
+      const employee = await tx.employee.findFirst({
+        where: { id: String(req.body.employeeId || ''), locationId: order.locationId, isActive: true, location: { restaurantId } },
+        select: { id: true, name: true },
+      });
+      if (!employee) throw Object.assign(new Error('Responsable no válido para esta sucursal.'), { status: 400 });
+      const saved = await tx.order.update({ where: { id: order.id, restaurantId }, data: { deliveryDriverId: employee.id } });
+      await audit.record(req, audit.AUDIT_EVENTS.DELIVERY_RESPONSIBLE, {
+        resource: `order:${order.id}`, reason,
+        before: { deliveryDriverId: order.deliveryDriverId }, after: { deliveryDriverId: employee.id, name: employee.name },
+      }, tx);
+      return saved;
+    });
+    res.json(updated);
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, code: e.code }); }
+});
+
 router.put('/:id/void-payment', authenticate, requireTenantAccess, requirePermission('reopen_table'), async (req, res) => {
   try {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const reason = requiredReason(req.body?.reason, 'Escribe el motivo de la anulación del cobro.');
 
     const existing = await prisma.order.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: 'Orden no encontrada' });
@@ -2936,10 +3000,18 @@ router.put('/:id/void-payment', authenticate, requireTenantAccess, requirePermis
     const voidedBy =
       req.user?.name || req.user?.email || `empleado#${req.user?.id}`;
     const stamp = new Date().toISOString();
-    const auditNote = `[Cobro anulado por ${voidedBy} el ${stamp}]`;
+    const auditNote = `[Cobro anulado por ${voidedBy} el ${stamp}: ${reason}]`;
     const notes = existing.notes ? `${existing.notes}\n${auditNote}` : auditNote;
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await cashTransaction(prisma, async (tx) => {
+      const current = await tx.order.findFirst({ where: { id, restaurantId }, include: { payments: true } });
+      await assertOpenPaymentPeriod(tx, current, restaurantId);
+      if (current.paymentStatus !== 'PAID') throw controlError('El cobro ya cambió. Actualiza el pedido.', 'PAYMENT_CHANGED');
+      if ((current.payments || []).length || Number(current.refundedAmount || 0) > 0 || current.paymentProviderId) throw controlError('Este cobro tiene un desglose o pago de pasarela. Usa el reembolso y la conciliación.', 'PAYMENT_BREAKDOWN_LOCKED');
+      if (current.deliveryDriverId) {
+        const movement = await tx.driverCashMovement.findFirst({ where: { orderId: id, driverId: current.deliveryDriverId, type: 'INCOME', category: 'DELIVERY' } });
+        if (movement) throw controlError('Hay efectivo registrado al repartidor. Usa la corrección o el reembolso para conservar su cuadre.', 'DRIVER_CASH_LINKED');
+      }
       // Si se cobró "a cuenta de empleado", anular el cargo PENDIENTE para que el
       // empleado deje de deberlo. No se toca uno ya liquidado en una raya cerrada
       // (status SETTLED): revertirlo corrompería una corrida pagada.
@@ -2947,10 +3019,12 @@ router.put('/:id/void-payment', authenticate, requireTenantAccess, requirePermis
         where: { orderId: id, restaurantId, status: 'PENDING' },
         data: { status: 'CANCELLED' },
       });
-      return tx.order.update({
+      const order = await tx.order.update({
         where: { id },
         data: {
           paymentStatus: 'PENDING',
+          transferVerified: false, transferVerifiedAt: null, transferVerifiedBy: null, transferVerificationReference: null,
+          cardVerified: false, cardVerifiedAt: null, cardVerifiedBy: null, cardVerificationReference: null,
           cashCollected: false,
           cashCollectedAt: null,
           cashCollectedBy: null,
@@ -2963,6 +3037,12 @@ router.put('/:id/void-payment', authenticate, requireTenantAccess, requirePermis
           items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
         },
       });
+      await audit.record(req, audit.AUDIT_EVENTS.PAYMENT_VOID, {
+        resource: `order:${id}`, reason,
+        before: { paymentMethod: current.paymentMethod, paymentStatus: current.paymentStatus, shiftId: current.shiftId },
+        after: { paymentStatus: 'PENDING' },
+      }, tx);
+      return order;
     });
 
     const io = req.app.get('io');
@@ -2972,7 +3052,7 @@ router.put('/:id/void-payment', authenticate, requireTenantAccess, requirePermis
     }
 
     res.json(updated);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, ...(e.code ? { code: e.code } : {}) }); }
 });
 
 // ── PUT /:id/correct-payment-method ───────────────────────────────────────
@@ -2991,6 +3071,7 @@ router.put('/:id/correct-payment-method', authenticate, requireTenantAccess, req
   try {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.restaurantId;
+    const reason = requiredReason(req.body?.reason, 'Escribe el motivo de la corrección del pago.');
     const newMethod = String(req.body?.paymentMethod || '').toUpperCase();
     if (!CORRECTABLE_PAYMENT_METHODS.has(newMethod)) {
       return res.status(400).json({ error: 'Método de pago inválido' });
@@ -3008,22 +3089,30 @@ router.put('/:id/correct-payment-method', authenticate, requireTenantAccess, req
       return res.status(400).json({ error: 'La orden ya tiene ese método de pago' });
     }
 
+    if (existing.paymentMethod === 'MIXED' || Number(existing.refundedAmount || 0) > 0) {
+      return res.status(409).json({ error: 'Un cobro mixto o con reembolso requiere conciliación del desglose original.', code: 'PAYMENT_BREAKDOWN_LOCKED' });
+    }
     const wasCash = existing.paymentMethod === 'CASH';
     const willBeCash = newMethod === 'CASH';
     const correctedBy =
       req.user?.name || req.user?.email || `empleado#${req.user?.id}`;
     const stamp = new Date().toISOString();
-    const auditNote = `[Método de pago corregido de ${existing.paymentMethod || '—'} a ${newMethod} por ${correctedBy} el ${stamp}]`;
+    const auditNote = `[Método de pago corregido de ${existing.paymentMethod || '—'} a ${newMethod} por ${correctedBy} el ${stamp}: ${reason}]`;
     const notes = existing.notes ? `${existing.notes}\n${auditNote}` : auditNote;
 
     // 'created' | 'exists' | 'removed' | 'locked' | null — para que la UI avise.
     let cashAdjusted = null;
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await cashTransaction(prisma, async (tx) => {
+      const current = await tx.order.findFirst({ where: { id, restaurantId } });
+      await assertOpenPaymentPeriod(tx, current, restaurantId);
+      if (current.paymentStatus !== 'PAID' || current.paymentMethod !== existing.paymentMethod || Number(current.total) !== Number(existing.total)) throw controlError('El cobro cambió. Actualiza antes de corregirlo.', 'PAYMENT_CHANGED');
       const order = await tx.order.update({
         where: { id },
         data: {
           paymentMethod: newMethod,
+          transferVerified: false, transferVerifiedAt: null, transferVerifiedBy: null, transferVerificationReference: null,
+          cardVerified: false, cardVerifiedAt: null, cardVerifiedBy: null, cardVerificationReference: null,
           // El efectivo se marca como cobrado; al dejar de ser efectivo se limpia
           // el rastro de cobro en mano (no aplica para transferencia/tarjeta).
           cashCollected: willBeCash,
@@ -3035,6 +3124,10 @@ router.put('/:id/correct-payment-method', authenticate, requireTenantAccess, req
           user: { select: { name: true, phone: true } },
           items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
         },
+      });
+
+      await tx.paymentTransaction.updateMany({
+        where: { orderId: id, status: 'PAID' }, data: { method: newMethod },
       });
 
       // Reconciliar la caja SOLO si la orden tiene repartidor asignado.
@@ -3064,16 +3157,18 @@ router.put('/:id/correct-payment-method', authenticate, requireTenantAccess, req
             cashAdjusted = 'created';
           }
         } else if (!willBeCash && wasCash && movement) {
-          if (movement.approved) {
-            // Corte ya cerrado: no tocamos un período liquidado.
-            cashAdjusted = 'locked';
-          } else {
+          if (!movement.approved) {
             await tx.driverCashMovement.delete({ where: { id: movement.id } });
             cashAdjusted = 'removed';
           }
         }
       }
 
+      await audit.record(req, audit.AUDIT_EVENTS.PAYMENT_METHOD_CORRECT, {
+        resource: `order:${id}`, reason,
+        before: { paymentMethod: current.paymentMethod, shiftId: current.shiftId },
+        after: { paymentMethod: newMethod, cashAdjusted },
+      }, tx);
       return order;
     });
 
@@ -3084,7 +3179,7 @@ router.put('/:id/correct-payment-method', authenticate, requireTenantAccess, req
     }
 
     res.json({ order: updated, cashAdjusted });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, ...(e.code ? { code: e.code } : {}) }); }
 });
 
 // ── POST /:id/refund — Reembolsar un ticket YA cobrado (total o parcial) ──────

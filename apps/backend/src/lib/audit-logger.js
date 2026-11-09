@@ -23,6 +23,14 @@ const AUDIT_EVENTS = Object.freeze({
   // Acción sensible (devuelve dinero): se registra quién, cuánto, motivo y si
   // fue total o parcial. Gateada por permiso reopen_table en la ruta.
   ORDER_REFUND: 'ORDER_REFUND',
+  DRIVER_FUND_ASSIGN: 'DRIVER_FUND_ASSIGN',
+  DRIVER_CASH_CUT: 'DRIVER_CASH_CUT',
+  DRIVER_EXPENSE: 'DRIVER_EXPENSE',
+  DRIVER_RECEIPT: 'DRIVER_RECEIPT',
+  PAYMENT_METHOD_CORRECT: 'PAYMENT_METHOD_CORRECT',
+  PAYMENT_VOID: 'PAYMENT_VOID',
+  PAYMENT_VERIFY: 'PAYMENT_VERIFY',
+  DELIVERY_RESPONSIBLE: 'DELIVERY_RESPONSIBLE',
 });
 
 const VALID_EVENTS = new Set(Object.values(AUDIT_EVENTS));

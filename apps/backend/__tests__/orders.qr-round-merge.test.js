@@ -135,6 +135,7 @@ const accept = (io) => request(makeApp(io)).put('/api/orders/o1/status').send({ 
 
 beforeEach(() => {
   jest.clearAllMocks();
+  prisma.$transaction.mockImplementation(async (fn) => fn(prisma));
   prisma.order.update.mockImplementation(async ({ data }) => ({ ...HELD, restaurantId: 'r1', orderNumber: 3002, ...data }));
   prisma.table.update.mockResolvedValue({});
   prisma.bulkPromo.findMany.mockResolvedValue([]);
@@ -296,14 +297,14 @@ describe('PUT /api/orders/:id/status · cuándo el pedido aceptado se vuelve la 
   });
 
   test('rechazar nunca busca cuenta: cancela como antes', async () => {
-    prisma.order.findFirst.mockResolvedValueOnce(HELD);
+    prisma.order.findFirst.mockResolvedValue(HELD);
 
-    const res = await request(makeApp()).put('/api/orders/o1/status').send({ status: 'CANCELLED' });
+    const res = await request(makeApp()).put('/api/orders/o1/status').send({ status: 'CANCELLED', reason: 'Pedido rechazado por el operador' });
 
     expect(res.status).toBe(200);
     // Una sola lectura (el pedido): no busca la cuenta de la mesa. Reponer el
     // inventario al cancelar abre su propia transacción en segundo plano.
-    expect(prisma.order.findFirst).toHaveBeenCalledTimes(1);
+    expect(prisma.order.findFirst).toHaveBeenCalledTimes(2);
     expect(prisma.order.update.mock.calls[0][0].data).toEqual({ status: 'CANCELLED', awaitingTableConfirmation: false });
   });
 });

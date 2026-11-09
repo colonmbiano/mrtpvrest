@@ -618,6 +618,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         // silencio): preguntamos si agregar a esa cuenta o cancelar.
         const orderData = {
           orderType: ticket.type,
+          ...(ticket.type === "DELIVERY" && driverId ? { deliveryDriverId: driverId } : {}),
           items: itemsPayload,
           tableId: ticket.tableId || null,
           numberOfGuests: ticket.numberOfGuests ?? null,
@@ -625,6 +626,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           customerPhone: ticket.phone || null,
           subtotal: currentSubtotal,
           discount: ticket.discount,
+          discountReason: ticket.discountReason,
           total: currentSubtotal - ticket.discount,
         };
         let res = await apiOrQueue("order", "POST", "/api/orders/tpv", orderData, localOrderOptions());
@@ -778,7 +780,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         customerName: ticket.name?.trim() ? ticket.name.trim() : null,
         customerPhone: ticket.phone?.trim() ? ticket.phone.trim() : null,
         ...(ticket.type === "DELIVERY"
-          ? { deliveryAddress: ticket.address?.trim() ? ticket.address.trim() : null }
+          ? { deliveryAddress: ticket.address?.trim() ? ticket.address.trim() : null, ...(driverId ? { deliveryDriverId: driverId } : {}) }
           : {}),
       };
       // Cobro mixto: cuando llegan renglones por método, el cobro manda
@@ -825,7 +827,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             "order",
             "PUT",
             `/api/orders/${activeOrderId}/discount`,
-            { type: "fixed", value: ticket.discount },
+            { type: "fixed", value: ticket.discount, reason: ticket.discountReason },
           );
           if (!discountRes.ok) {
             toast.error("No se pudo guardar el descuento: " + (discountRes.error || ""));
@@ -838,6 +840,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
         // 2. Si no hay activeOrderId, creamos la orden completa normalmente
         const orderData = {
           orderType: ticket.type,
+          ...(ticket.type === "DELIVERY" && driverId ? { deliveryDriverId: driverId } : {}),
           items: itemsPayload,
           tableId: ticket.tableId || null,
           numberOfGuests: ticket.numberOfGuests ?? null,
@@ -846,6 +849,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           deliveryAddress: ticket.type === "DELIVERY" ? (ticket.address || null) : null,
           subtotal,
           discount: ticket.discount,
+          discountReason: ticket.discountReason,
           total: total + tipAmount,
           // A cuenta de empleado: crear SIN pagar (el charge-to-employee la cierra
           // aplicando el descuento). Marcarla PAID aquí la dejaría con el método
@@ -900,7 +904,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
               "order",
               "PUT",
               `/api/orders/${ex.id}/discount`,
-              { type: "fixed", value: ticket.discount },
+              { type: "fixed", value: ticket.discount, reason: ticket.discountReason },
             );
             if (!discRes.ok) {
               toast.error("No se pudo guardar el descuento: " + (discRes.error || ""));
@@ -1487,9 +1491,9 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           total={total}
           discount={ticket.discount}
           requiresDiscountOverride={!canApplyDiscount}
-          onApplyDiscount={(type, value) => {
+          onApplyDiscount={(type, value, reason) => {
             const amount = type === "percent" ? subtotal * (value / 100) : value;
-            updateTicket({ discount: amount, discountType: type });
+            updateTicket({ discount: amount, discountType: type, discountReason: reason });
             toast.success(
               amount > 0
                 ? `Descuento aplicado: $${amount.toFixed(2)}${

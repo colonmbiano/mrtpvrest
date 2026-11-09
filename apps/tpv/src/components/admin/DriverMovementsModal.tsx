@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { requestControlText } from "@/lib/request-control-text";
 import api from "@/lib/api";
 import { apiOrQueue } from "@/lib/offline";
 
@@ -10,6 +11,9 @@ type Movement = {
   amount: number;
   description: string | null;
   createdAt: string;
+  photoUrl?: string | null;
+  receiptStatus?: string;
+  receiptReason?: string | null;
 };
 
 type DriverOrder = {
@@ -77,6 +81,8 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [cutting, setCutting] = useState(false);
+  const [countedCash, setCountedCash] = useState("");
+  const [differenceReason, setDifferenceReason] = useState("");
   const [orders, setOrders] = useState<DriverOrder[]>([]);
   const [ordersSummary, setOrdersSummary] = useState<OrdersSummary | null>(null);
   const [loadingOrders, setLoadingOrders] = useState(false);
@@ -164,6 +170,8 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   async function toggleTransferVerified(o: DriverOrder) {
     if (!driver || verifyingIds.has(o.id)) return;
     const next = !o.transferVerified;
+    const detail = (await requestControlText(next ? "Referencia bancaria (mínimo 5 caracteres):" : "Motivo para retirar la verificación:"));
+    if (!detail || detail.trim().length < 5) return;
     setVerifyingIds((p) => new Set(p).add(o.id));
     setOrders((prev) =>
       prev.map((x) => (x.id === o.id ? { ...x, transferVerified: next } : x)),
@@ -178,7 +186,8 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
         : s,
     );
     try {
-      await api.patch(`/api/driver-cash/${driver.id}/orders/${o.id}/verify-transfer`, { verified: next });
+      await api.patch(`/api/driver-cash/${driver.id}/orders/${o.id}/verify-transfer`, { verified: next,
+        ...(next ? { reference: detail.trim() } : { reason: detail.trim() }) });
     } catch (e) {
       console.error(e);
       // Revertir
@@ -271,10 +280,13 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   // el corte ya esté cerrado, donde avisa con `cashAdjusted: 'locked'`).
   async function correctPaymentMethod(order: DriverOrder, method: string) {
     if (savingMethod) return;
+    const reason = (await requestControlText("Motivo de la corrección del pago (mínimo 5 caracteres):"));
+    if (!reason || reason.trim().length < 5) return;
     setSavingMethod(true);
     try {
       const { data } = await api.put(`/api/orders/${order.id}/correct-payment-method`, {
         paymentMethod: method,
+        reason: reason.trim(),
       });
       // Refleja el cambio en la fila sin re-fetch inmediato.
       setOrders((prev) =>
@@ -340,24 +352,46 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
   async function handleCut() {
     if (!driver || !movements.length) return;
     const bal = summary?.balance ?? 0;
+    if (countedCash.trim() === "" || !Number.isFinite(Number(countedCash)) || Number(countedCash) < 0) {
+      alert("Captura el efectivo que realmente recibiste."); return;
+    }
+    if (Math.abs(Number(countedCash) - bal) >= 0.01 && differenceReason.trim().length < 5) {
+      alert("Escribe el motivo de la diferencia."); return;
+    }
     if (!window.confirm(
       `¿Cerrar el corte de ${driver.name}?\n\n` +
-      `Entrega en caja: $${bal.toFixed(0)}\n` +
+      `Esperado: $${bal.toFixed(2)}\nRecibido: $${Number(countedCash).toFixed(2)}\n` +
       `Movimientos: ${movements.length}\n\n` +
       `Se aprueban todos los movimientos pendientes. No se puede deshacer.`
     )) return;
     try {
       setCutting(true);
-      await api.post(`/api/driver-cash/${driver.id}/cut`, {});
+      const { data } = await api.post(`/api/driver-cash/${driver.id}/cut`, { countedCash: Number(countedCash), differenceReason: differenceReason.trim() });
       await fetchMovements();
       onRefresh();
-      alert(`Corte realizado. Balance entregado: $${bal.toFixed(0)}`);
+      setCountedCash(""); setDifferenceReason("");
+      alert(`Corte registrado. Recibido: $${Number(data.countedCash).toFixed(2)} · Diferencia: $${Number(data.cashDifference).toFixed(2)}`);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: string } } };
       alert(err?.response?.data?.error || "No se pudo realizar el corte");
     } finally {
       setCutting(false);
     }
+  }
+
+  async function saveReceipt(movementId: string, photo?: File) {
+    if (!driver) return;
+    const form = new FormData();
+    if (photo) form.append("photo", photo);
+    else {
+      const reason = (await requestControlText("Motivo para autorizar este gasto sin comprobante (mínimo 5 caracteres):"));
+      if (!reason || reason.trim().length < 5) return;
+      form.append("reason", reason.trim());
+    }
+    try {
+      await api.post(`/api/driver-cash/${driver.id}/movements/${movementId}/receipt`, form);
+      await fetchMovements(); onRefresh();
+    } catch (e: unknown) { alert((e as { response?: { data?: { error?: string } } }).response?.data?.error || "No se pudo guardar el comprobante."); }
   }
 
   if (!driver) return null;
@@ -577,6 +611,16 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
           {/* Balance + corte: cerrar la caja del repartidor (solo roles financieros) */}
           {canCut && (
             <div className="space-y-3">
+              <label htmlFor="driver-counted-cash" className="block text-sm font-bold">Efectivo que recibiste del repartidor</label>
+              <input id="driver-counted-cash" type="number" min="0" step="0.01" inputMode="decimal"
+                value={countedCash} onChange={(e) => setCountedCash(e.target.value)}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-sm" />
+              {countedCash.trim() !== "" && <p className="text-sm">Diferencia: ${(Number(countedCash) - (summary?.balance || 0)).toFixed(2)}</p>}
+              {countedCash.trim() !== "" && Math.abs(Number(countedCash) - (summary?.balance || 0)) >= 0.01 && <>
+                <label htmlFor="driver-difference-reason" className="block text-sm">Motivo de la diferencia</label>
+                <input id="driver-difference-reason" maxLength={500} value={differenceReason} onChange={(e) => setDifferenceReason(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-sm" />
+              </>}
               <div className="rounded-2xl bg-[var(--surf2)] border border-[var(--border)] p-4">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1">Balance a entregar</div>
                 <div className="text-2xl font-black text-white tabular-nums">${(summary?.balance ?? 0).toFixed(0)}</div>
@@ -588,7 +632,8 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
               <button
                 type="button"
                 onClick={handleCut}
-                disabled={cutting || movements.length === 0}
+                disabled={cutting || movements.length === 0 || countedCash.trim() === "" || !Number.isFinite(Number(countedCash)) || Number(countedCash) < 0
+                  || (Math.abs(Number(countedCash) - (summary?.balance || 0)) >= 0.01 && differenceReason.trim().length < 5)}
                 className="w-full py-3.5 rounded-xl font-black text-sm uppercase tracking-widest transition-transform active:scale-95 disabled:opacity-40"
                 style={{ background: accent, color: "var(--brand-fg)" }}
               >
@@ -629,6 +674,16 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                         </div>
                         <div className="min-w-0">
                           <div className="text-xs font-bold text-white truncate">{m.description || m.category}</div>
+                          {m.type === "EXPENSE" && <div className="mt-1 space-y-1 text-xs">
+                            {m.photoUrl ? <a href={m.photoUrl} target="_blank" rel="noreferrer" className="underline">Ver comprobante</a>
+                              : m.receiptStatus === "EXCEPTION" ? <span>Sin comprobante, excepción autorizada: {m.receiptReason}</span>
+                                : <span className="text-amber-400">Comprobante pendiente</span>}
+                            <label className="block cursor-pointer underline">Adjuntar foto
+                              <input aria-label={`Comprobante de ${m.description || m.category}`} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only"
+                                onChange={(e) => { const photo = e.target.files?.[0]; if (photo) void saveReceipt(m.id, photo); e.target.value = ""; }} />
+                            </label>
+                            {canCut && !m.photoUrl && m.receiptStatus !== "EXCEPTION" && <button type="button" className="underline" onClick={() => void saveReceipt(m.id)}>Justificar excepción</button>}
+                          </div>}
                           <div className="text-[10px] text-[var(--text-secondary)]">{new Date(m.createdAt).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" })}</div>
                         </div>
                       </div>

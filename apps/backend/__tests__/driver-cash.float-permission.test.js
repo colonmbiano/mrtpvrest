@@ -1,3 +1,4 @@
+jest.mock('../src/lib/audit-logger', () => ({ ...jest.requireActual('../src/lib/audit-logger'), record: jest.fn(async () => {}) }));
 'use strict';
 
 // Permiso de POST /:driverId/float (asignar fondo de cambio desde el modal del

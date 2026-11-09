@@ -55,7 +55,7 @@ beforeEach(() => {
       update: jest.fn(async ({ data }) => { Object.assign(shift, data); return { ...shift }; }),
     },
     driverCashMovement: {
-      findMany: jest.fn(async () => movement.approved ? [] : [{ ...movement }]),
+      findMany: jest.fn(async ({ where }) => where.type === 'EXPENSE' || movement.approved ? [] : [{ ...movement }]),
       updateMany: jest.fn(async ({ data }) => { Object.assign(movement, data); return { count: 1 }; }),
     },
     driverCashCut: { create: jest.fn(async ({ data }) => ({ id: 'cut1', ...data })) },
@@ -65,7 +65,7 @@ beforeEach(() => {
 });
 
 test('corte manual liquida los pedidos y los movimientos juntos en el turno original', async () => {
-  const res = await request(app).post('/cash/d1/cut').send({}).expect(200);
+  const res = await request(app).post('/cash/d1/cut').send({ countedCash: 300 }).expect(200);
   expect(res.body.balance).toBe(300);
   expect(order.paymentStatus).toBe('PAID');
   expect(order.shiftId).toBe('saturday');
@@ -76,7 +76,7 @@ test('corte manual liquida los pedidos y los movimientos juntos en el turno orig
 });
 
 test('cerrar caja liquida primero y luego incluye el efectivo en el MISMO corte', async () => {
-  const res = await request(app).post('/shifts/saturday/close').send({ closingFloat: 800 }).expect(200);
+  const res = await request(app).post('/shifts/saturday/close').send({ closingFloat: 800, driverReceipts: [{ driverId: 'd1', countedCash: 300 }] }).expect(200);
   expect(res.body.totalCash).toBe(300);
   expect(res.body.expectedCash).toBe(800);
   expect(res.body.driversCut).toBe(1);
@@ -88,10 +88,10 @@ test('cerrar caja liquida primero y luego incluye el efectivo en el MISMO corte'
 });
 
 test('repetir corte sin movimientos no crea otro corte ni mueve el pedido', async () => {
-  await request(app).post('/cash/d1/cut').send({}).expect(200);
+  await request(app).post('/cash/d1/cut').send({ countedCash: 300 }).expect(200);
   const settledAt = order.paidAt;
   shift.id = 'sunday';
-  const res = await request(app).post('/cash/d1/cut').send({}).expect(200);
+  const res = await request(app).post('/cash/d1/cut').send({ countedCash: 300 }).expect(200);
   expect(res.body.alreadyClosed).toBe(true);
   expect(order.paidAt).toBe(settledAt);
   expect(order.shiftId).toBe('saturday');
@@ -101,7 +101,7 @@ test('repetir corte sin movimientos no crea otro corte ni mueve el pedido', asyn
 test('cobro ya confirmado por caja conserva su fecha y turno al cortar al repartidor', async () => {
   Object.assign(order, { paymentStatus: 'PAID', paidAt: new Date('2026-11-08T02:00:00Z'), shiftId: 'saturday' });
   const original = order.paidAt;
-  await cutDriverCash(prisma, driver, { restaurantId: 'r1', shiftId: 'sunday' });
+  await cutDriverCash(prisma, driver, { countedCash: 300, restaurantId: 'r1', shiftId: 'sunday' });
   expect(order.paidAt).toBe(original);
   expect(order.shiftId).toBe('saturday');
   expect(prisma.order.updateMany).not.toHaveBeenCalled();
@@ -113,20 +113,20 @@ test.each([
   ['transferencia registrada como efectivo', { paymentMethod: 'TRANSFER' }],
 ])('no aprueba el corte si hay %s', async (_label, changes) => {
   Object.assign(order, changes);
-  await expect(cutDriverCash(prisma, driver, { restaurantId: 'r1', shiftId: 'saturday' }))
+  await expect(cutDriverCash(prisma, driver, { countedCash: 300, restaurantId: 'r1', shiftId: 'saturday' }))
     .rejects.toMatchObject({ status: 409 });
   expect(prisma.driverCashCut.create).not.toHaveBeenCalled();
   expect(movement.approved).toBe(false);
 });
 
 test('sin turno no aprueba una liquidación de pedidos', async () => {
-  await expect(cutDriverCash(prisma, driver, { restaurantId: 'r1' })).rejects.toMatchObject({ status: 409 });
+  await expect(cutDriverCash(prisma, driver, { countedCash: 300, restaurantId: 'r1' })).rejects.toMatchObject({ status: 409 });
   expect(prisma.driverCashCut.create).not.toHaveBeenCalled();
 });
 
 test('cobros de otro restaurante/repartidor no se liquidan por id sin scope', async () => {
   prisma.order.findMany.mockResolvedValue([]);
-  await expect(cutDriverCash(prisma, driver, { restaurantId: 'r1', shiftId: 'saturday' }))
+  await expect(cutDriverCash(prisma, driver, { countedCash: 300, restaurantId: 'r1', shiftId: 'saturday' }))
     .rejects.toMatchObject({ status: 409 });
   expect(prisma.order.findMany).toHaveBeenCalledWith(expect.objectContaining({
     where: expect.objectContaining({ restaurantId: 'r1', deliveryDriverId: 'd1', locationId: 'loc1' }),
@@ -136,7 +136,7 @@ test('cobros de otro restaurante/repartidor no se liquidan por id sin scope', as
 
 test('una aprobación concurrente provoca conflicto en vez de aprobar dos veces', async () => {
   prisma.driverCashMovement.updateMany.mockResolvedValue({ count: 0 });
-  await expect(cutDriverCash(prisma, driver, { restaurantId: 'r1', shiftId: 'saturday' }))
+  await expect(cutDriverCash(prisma, driver, { countedCash: 300, restaurantId: 'r1', shiftId: 'saturday' }))
     .rejects.toMatchObject({ status: 409 });
 });
 
@@ -147,4 +147,31 @@ test('reintenta conflictos serializables y no reintenta otros errores financiero
   db.$transaction.mockReset().mockRejectedValue(new Error('No hay efectivo'));
   await expect(cashTransaction(db, async () => {})).rejects.toThrow('No hay efectivo');
   expect(db.$transaction).toHaveBeenCalledTimes(1);
+});
+
+test('rechaza corte sin conteo explícito sin tocar efectivo, pedido ni corte', async () => {
+  const res = await request(app).post('/cash/d1/cut').send({}).expect(409);
+  expect(res.body.code).toBe('COUNTED_CASH_REQUIRED');
+  expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  expect(prisma.driverCashCut.create).not.toHaveBeenCalled();
+  expect(movement.approved).toBe(false);
+});
+test('faltante requiere motivo y guarda importe real, diferencia y receptor', async () => {
+  await request(app).post('/cash/d1/cut').send({ countedCash: 200 }).expect(409);
+  expect(prisma.driverCashCut.create).not.toHaveBeenCalled();
+  const res = await request(app).post('/cash/d1/cut')
+    .send({ countedCash: 200, differenceReason: 'Se entregaron cien pesos menos' }).expect(200);
+  expect(res.body).toMatchObject({ balance: 300, countedCash: 200, cashDifference: -100,
+    differenceReason: 'Se entregaron cien pesos menos', receivedById: 'owner', shiftId: 'saturday' });
+  expect(movement.cutId).toBe('cut1');
+});
+test('cierre general rechaza conteo omitido y no cierra ni aprueba movimientos', async () => {
+  await request(app).post('/shifts/saturday/close').send({ closingFloat: 800 }).expect(409);
+  expect(prisma.cashShift.update).not.toHaveBeenCalled();
+  expect(movement.approved).toBe(false);
+});
+test('una apertura no puede cerrar silenciosamente el turno anterior', async () => {
+  const res = await request(app).post('/shifts/open').send({ openingFloat: 500, employeeId: 'd1' }).expect(409);
+  expect(res.body.code).toBe('SHIFT_ALREADY_OPEN');
+  expect(prisma.cashShift.update).not.toHaveBeenCalled();
 });

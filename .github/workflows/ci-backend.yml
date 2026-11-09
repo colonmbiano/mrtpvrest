@@ -96,7 +96,7 @@ jobs:
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/mrtpvrest_test"
         run: |
           pnpm --filter @mrtpvrest/database exec prisma db push --schema=prisma/schema.prisma
-          node --test tests/integration/table-reassignment.test.js
+          node --test tests/integration/table-reassignment.test.js tests/integration/tpv-cash-control.test.js
 
       - name: Contratos seguros del registro Marketplace (sin BD ni correo)
         run: node --test apps/backend/scripts/marketplace-identity.test.cjs apps/backend/scripts/marketplace-courier-identity.test.cjs

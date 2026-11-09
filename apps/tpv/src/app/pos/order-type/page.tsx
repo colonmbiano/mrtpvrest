@@ -35,6 +35,7 @@ import {
   type PaidTicketLite,
 } from "@/lib/paid-tickets-cache";
 import { useAuthStore } from "@/store/authStore";
+import { requestControlText } from "@/lib/request-control-text";
 import api from "@/lib/api";
 import { getLocalOrders, loadOpenOrders, loadOrder, mergeLocalPaidOrders, waitForOfflineHydration } from "@/lib/order-repository";
 import { ONLINE_SOURCES, chargeBlockedLabel, isMarketplaceOrder, itemsLocked, kitchenPrintReady, needsAcceptance } from "@/lib/webOrders";
@@ -616,9 +617,11 @@ export default function OrderTypePage() {
     async (id: string) => {
       const fromMarketplace = isMarketplaceOrder(openOrders.find((o: any) => String(o.id) === id));
       if (fromMarketplace && !confirm("¿Rechazar este pedido del marketplace? Se avisará al cliente.")) return;
+      const reason = (await requestControlText("Motivo del rechazo (mínimo 5 caracteres):"))?.trim();
+      if (!reason || reason.length < 5) return;
       setRejectingWebId(id);
       try {
-        await api.put(`/api/orders/${id}/status`, { status: "CANCELLED" });
+        await api.put(`/api/orders/${id}/status`, { status: "CANCELLED", reason });
         toast.success(fromMarketplace ? "Pedido del marketplace rechazado" : "Pedido de mesa rechazado");
         fetchOpenOrders();
       } catch (err: any) {
@@ -661,10 +664,12 @@ export default function OrderTypePage() {
 
   const handleCorrectPaymentMethod = useCallback(
     async (o: { id: string }, method: string) => {
+      const reason = (await requestControlText("Motivo del cambio de método de pago (mínimo 5 caracteres):"))?.trim();
+      if (!reason || reason.length < 5) return;
       try {
         const { data } = await api.put(
           `/api/orders/${o.id}/correct-payment-method`,
-          { paymentMethod: method },
+          { paymentMethod: method, reason },
         );
         // Refleja el cambio en el cache local de cobrados (la fila y el chip de
         // método se actualizan al instante; el picker excluye el nuevo método).

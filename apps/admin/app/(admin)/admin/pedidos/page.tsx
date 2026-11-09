@@ -68,8 +68,10 @@ export default function PedidosPage() {
   }, [fetchData]);
 
   async function changeStatus(orderId: string, status: string) {
+    const reason = status === "CANCELLED" ? window.prompt("Motivo de la cancelación (mínimo 5 caracteres):")?.trim() : undefined;
+    if (status === "CANCELLED" && (!reason || reason.length < 5)) return;
     try {
-      await api.put(`/api/orders/${orderId}/status`, { status });
+      await api.put(`/api/orders/${orderId}/status`, { status, ...(reason ? { reason } : {}) });
       setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: status as StatusKey } : o)));
     } catch (e) {
       const err = e as { response?: { data?: { error?: string } } };

@@ -1,3 +1,4 @@
+jest.mock('../src/lib/audit-logger', () => ({ ...jest.requireActual('../src/lib/audit-logger'), record: jest.fn(async () => {}) }));
 'use strict';
 
 // Cuentas por pagar (estado PENDIENTE/PAGADO en gastos y compras).

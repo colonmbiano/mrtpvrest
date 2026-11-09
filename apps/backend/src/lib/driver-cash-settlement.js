@@ -1,6 +1,8 @@
 'use strict';
 
 const { consumePaidOrder } = require('../services/order-inventory.service');
+const audit = require('./audit-logger');
+const { round2 } = require('./money');
 
 function cashConflict(message) {
   return Object.assign(new Error(message), { status: 409, code: 'DRIVER_CASH_CONFLICT' });
@@ -20,11 +22,25 @@ async function cashTransaction(prisma, work) {
   }
 }
 
-async function cutDriverCash(tx, driver, { restaurantId, shiftId, at = new Date(), notes = null }) {
+async function cutDriverCash(tx, driver, { restaurantId, shiftId, at = new Date(), notes = null,
+  countedCash, differenceReason, auditContext }) {
   const movements = await tx.driverCashMovement.findMany({
     where: { driverId: driver.id, approved: false },
   });
   if (movements.length === 0) return null;
+  const sum = (type) => movements.filter((m) => m.type === type)
+    .reduce((total, m) => total + Number(m.amount), 0);
+  const balance = round2(sum('FLOAT') + sum('INCOME') - sum('EXPENSE') - sum('RETURN'));
+  if (countedCash == null || countedCash === '' || !Number.isFinite(Number(countedCash))
+    || Number(countedCash) < 0 || Number(countedCash) > 9999999999.99) {
+    throw Object.assign(cashConflict(`Captura el efectivo recibido de ${driver.name}.`), { code: 'COUNTED_CASH_REQUIRED' });
+  }
+  const counted = round2(Number(countedCash));
+  const difference = round2(counted - balance);
+  const reason = typeof differenceReason === 'string' ? differenceReason.trim().slice(0, 500) : '';
+  if (Math.abs(difference) >= 0.01 && reason.length < 5) {
+    throw Object.assign(cashConflict('Escribe el motivo de la diferencia de efectivo.'), { code: 'CASH_DIFFERENCE_REASON_REQUIRED' });
+  }
 
   const deliveryAmounts = new Map();
   for (const movement of movements) {
@@ -66,26 +82,33 @@ async function cutDriverCash(tx, driver, { restaurantId, shiftId, at = new Date(
     }
   }
 
-  const sum = (type) => movements.filter((m) => m.type === type)
-    .reduce((total, m) => total + Number(m.amount), 0);
   const cut = await tx.driverCashCut.create({
     data: {
       driverId: driver.id, driverName: driver.name || 'Repartidor',
       totalFloat: sum('FLOAT'), totalIncome: sum('INCOME'),
       totalExpense: sum('EXPENSE'), totalReturn: sum('RETURN'),
-      balance: sum('FLOAT') + sum('INCOME') - sum('EXPENSE') - sum('RETURN'),
+      balance,
       movements: movements.length, notes,
+      shiftId: shiftId || null, countedCash: counted, cashDifference: difference,
+      differenceReason: reason || null,
+      receivedById: auditContext?.user?.id || null,
+      receivedByName: auditContext?.user?.name || auditContext?.user?.email || null,
     },
   });
   const approved = await tx.driverCashMovement.updateMany({
     where: { id: { in: movements.map((m) => m.id) }, driverId: driver.id, approved: false },
-    data: { approved: true, approvedAt: at },
+    data: { approved: true, approvedAt: at, cutId: cut.id },
   });
   if (approved.count !== movements.length) throw cashConflict('Estos movimientos ya se liquidaron en otro corte.');
   await tx.driverShiftRequest.updateMany({
     where: { driverId: driver.id, status: 'PENDING' },
     data: { status: 'RESOLVED', resolvedAt: at },
   });
+  if (auditContext) await audit.record(auditContext, audit.AUDIT_EVENTS.DRIVER_CASH_CUT, {
+    resource: `driverCashCut:${cut.id}`, reason: reason || null,
+    after: { driverId: driver.id, shiftId, expectedCash: balance, countedCash: counted, difference,
+      movementIds: movements.map((m) => m.id) },
+  }, tx);
   return cut;
 }
 

@@ -26,6 +26,8 @@ export default function CajaRepartidoresPage() {
   const [loading, setLoading]   = useState(true);
   const [cuttingId, setCuttingId] = useState<string | null>(null);
   const [cutNotes, setCutNotes] = useState("");
+  const [countedCash, setCountedCash] = useState("");
+  const [differenceReason, setDifferenceReason] = useState("");
   const [showCutModal, setShowCutModal] = useState<any>(null);
   const [showFloatModal, setShowFloatModal] = useState<any>(null);
   const [floatAmount, setFloatAmount] = useState("");
@@ -98,8 +100,11 @@ export default function CajaRepartidoresPage() {
   async function doCut(driver: any) {
     setCuttingId(driver.id);
     try {
-      await api.post(`/api/driver-cash/${driver.id}/cut`, { notes: cutNotes });
-      setShowCutModal(null); setCutNotes("");
+      if (countedCash.trim() === "" || !Number.isFinite(Number(countedCash)) || Number(countedCash) < 0) {
+        toast.error("Captura el efectivo recibido."); return;
+      }
+      await api.post(`/api/driver-cash/${driver.id}/cut`, { notes: cutNotes, countedCash: Number(countedCash), differenceReason });
+      setShowCutModal(null); setCutNotes(""); setCountedCash(""); setDifferenceReason("");
       fetchAll();
       toast.success(`Corte de caja realizado para ${driver.name}`);
     } catch (err: any) { toast.error(err.response?.data?.error || "Error"); }
@@ -200,7 +205,7 @@ export default function CajaRepartidoresPage() {
                 <div className="text-[10px] text-tx-mut">Efectivo en mano</div>
                 <div className="font-display font-extrabold text-primary">${(r.balance || 0).toFixed(0)}</div>
               </div>
-              <Button icon={Scissors} onClick={() => setShowCutModal({ id: r.driverId, name: r.driverName })}>
+              <Button icon={Scissors} onClick={() => { setCountedCash(""); setDifferenceReason(""); setShowCutModal({ id: r.driverId, name: r.driverName }); }}>
                 Hacer corte
               </Button>
             </div>
@@ -358,7 +363,7 @@ export default function CajaRepartidoresPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowCutModal(d.driver)}
+                  onClick={() => { setCountedCash(""); setDifferenceReason(""); setShowCutModal(d.driver); }}
                   aria-label="Corte"
                   className="grid h-10 w-10 shrink-0 place-items-center rounded-ds-md"
                   style={{ background: "var(--accent-soft)", color: "var(--brand-primary)" }}
@@ -443,7 +448,8 @@ export default function CajaRepartidoresPage() {
                 {cut.notes && <div className="mt-0.5 text-[11px] text-primary">{cut.notes}</div>}
               </div>
               <div className="shrink-0 text-right">
-                <div className="font-display font-extrabold text-primary">${cut.balance.toFixed(0)}</div>
+                <div className="font-display font-extrabold text-primary">${Number(cut.balance).toFixed(2)}</div>
+                {cut.countedCash != null && <div className="text-xs text-muted">Recibido ${Number(cut.countedCash).toFixed(2)} · diferencia ${Number(cut.cashDifference || 0).toFixed(2)}{cut.receivedByName ? ` · ${cut.receivedByName}` : ""}{cut.differenceReason ? ` · ${cut.differenceReason}` : ""}</div>}
                 {cut.totalFloat > 0 && <div className="text-[11px]" style={{ color: "var(--info)" }}>fondo ${cut.totalFloat.toFixed(0)}</div>}
                 <div className="text-[11px]" style={{ color: "var(--ok)" }}>+${cut.totalIncome.toFixed(0)}</div>
                 <div className="text-[11px]" style={{ color: "var(--err)" }}>-${cut.totalExpense.toFixed(0)}</div>
@@ -509,19 +515,25 @@ export default function CajaRepartidoresPage() {
       {/* modal corte de caja */}
       <Modal
         open={!!showCutModal}
-        onClose={() => { setShowCutModal(null); setCutNotes(""); }}
+        onClose={() => { setShowCutModal(null); setCutNotes(""); setCountedCash(""); setDifferenceReason(""); }}
         title="Corte de caja"
         subtitle={showCutModal?.name}
         size="sm"
         footer={
           <>
-            <Button variant="secondary" onClick={() => { setShowCutModal(null); setCutNotes(""); }}>Cancelar</Button>
-            <Button disabled={cuttingId === showCutModal?.id} onClick={() => doCut(showCutModal)}>
+            <Button variant="secondary" onClick={() => { setShowCutModal(null); setCutNotes(""); setCountedCash(""); setDifferenceReason(""); }}>Cancelar</Button>
+            <Button disabled={cuttingId === showCutModal?.id || countedCash.trim() === ""} onClick={() => doCut(showCutModal)}>
               {cuttingId === showCutModal?.id ? "..." : "Confirmar corte"}
             </Button>
           </>
         }
       >
+        <label htmlFor="driver-counted-cash" className="mb-1 block text-sm">Efectivo recibido del repartidor</label>
+        <input id="driver-counted-cash" type="number" min="0" step="0.01" inputMode="decimal" value={countedCash}
+          onChange={(e) => setCountedCash(e.target.value)} className="mb-3 w-full rounded-ds-md border border-[var(--bd-1)] bg-[var(--surf-2)] p-3 text-tx" />
+        <label htmlFor="driver-difference-reason" className="mb-1 block text-sm">Motivo si hay diferencia</label>
+        <input id="driver-difference-reason" maxLength={500} value={differenceReason} onChange={(e) => setDifferenceReason(e.target.value)}
+          className="mb-3 w-full rounded-ds-md border border-[var(--bd-1)] bg-[var(--surf-2)] p-3 text-tx" />
         <Textarea
           value={cutNotes} onChange={(e) => setCutNotes(e.target.value)}
           placeholder="Notas del corte (opcional)" rows={3}
