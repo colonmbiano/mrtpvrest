@@ -370,7 +370,7 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
       await fetchMovements();
       onRefresh();
       setCountedCash(""); setDifferenceReason("");
-      alert(`Corte registrado. Recibido: $${Number(data.countedCash).toFixed(2)} · Diferencia: $${Number(data.cashDifference).toFixed(2)}`);
+      alert(data.alreadyClosed ? "Ese corte ya estaba recibido; no se creó otro." : `Corte registrado. Recibido: $${Number(data.countedCash).toFixed(2)} · Diferencia: $${Number(data.cashDifference).toFixed(2)}`);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: string } } };
       alert(err?.response?.data?.error || "No se pudo realizar el corte");
