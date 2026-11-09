@@ -1,27 +1,14 @@
 'use strict';
 
-// Tests del reflejo de los movimientos del repartidor en la CAJA PRINCIPAL.
-// Modelo de una sola caja, sin doble gasto ni doble ingreso:
-//  - INCOME que NO es cobro de entrega (fondo para compras que la caja entrega
-//    al repartidor) → crea ShiftCashIn (suma al efectivo esperado). Sin esto, el
-//    gasto que sale de ese fondo se restaba sin haber sumado el fondo → sobrante
-//    fantasma en el cajón.
-//  - INCOME category 'DELIVERY' (cobro de entrega) → NO crea ShiftCashIn: ya está
-//    contado vía totalCash de la venta; reflejarlo sería doble ingreso.
-//  - EXPENSE → ShiftExpense (comportamiento existente, intacto).
-//  - POST /float (fondo de cambio) → depende del ORIGEN (regla del dueño):
-//      · CAJA (default): el efectivo sale del cajón y regresa al corte del
-//        repartidor → neto cero; NO crea ShiftCashIn (sumarlo sin registrar la
-//        salida = faltante fantasma). Solo vive en la caja del repartidor.
-//      · EXTERNO: dinero que entra de fuera; el repartidor lo devuelve al
-//        liquidar → SÍ crea ShiftCashIn (sin él = sobrante fantasma).
+// Fondos de cambio y compras usan SOLO /float, distinguiendo CAJA de EXTERNO.
+// El formulario genérico no puede volver a crear una entrada ficticia de caja.
 
 jest.mock('@mrtpvrest/database', () => {
   const tx = {
     driverCashMovement: { create: jest.fn(async (a) => ({ id: 'm1', ...a.data })) },
     shiftExpense: { create: jest.fn(async () => ({ id: 'se1' })) },
     shiftCashIn: { create: jest.fn(async () => ({ id: 'sci1' })) },
-    cashShift: { update: jest.fn(async () => ({})) },
+    cashShift: { update: jest.fn(async () => ({})), findFirst: jest.fn() },
   };
   return {
     prisma: {
@@ -64,24 +51,19 @@ beforeEach(() => {
   jest.clearAllMocks();
   prisma.employee.findFirst.mockResolvedValue({ id: 'd1', name: 'Mau', locationId: 'loc1' });
   prisma.driverCashMovement.findFirst.mockResolvedValue(null); // sin duplicado (dedupe)
+  tx.cashShift.findFirst.mockResolvedValue({ id: 'shift1' });
   prisma.cashShift.findFirst.mockResolvedValue({ id: 'shift1' }); // turno abierto
 });
 
 describe('POST /:driverId/movements — reflejo en la caja principal', () => {
-  test('INCOME (fondo para compras) crea ShiftCashIn y NO ShiftExpense', async () => {
-    await request(makeApp())
+  test('INCOME para compras exige la única asignación de fondos, sin escribir dinero', async () => {
+    const res = await request(makeApp())
       .post('/api/driver-cash/d1/movements')
       .send({ type: 'INCOME', category: 'COMPRAS', amount: 1000, description: 'Para compras' })
-      .expect(200);
-
-    expect(tx.shiftCashIn.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ shiftId: 'shift1', amount: 1000, category: 'FONDO_REPARTIDOR' }),
-    }));
-    expect(tx.cashShift.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'shift1' },
-      data: { totalCashIn: { increment: 1000 } },
-    }));
-    expect(tx.shiftExpense.create).not.toHaveBeenCalled();
+      .expect(409);
+    expect(res.body.code).toBe('USE_ASSIGN_FUNDS');
+    expect(tx.driverCashMovement.create).not.toHaveBeenCalled();
+    expect(tx.shiftCashIn.create).not.toHaveBeenCalled();
   });
 
   test('INCOME cobro de entrega (category DELIVERY) NO crea ShiftCashIn (evita doble ingreso)', async () => {
@@ -109,12 +91,15 @@ describe('POST /:driverId/movements — reflejo en la caja principal', () => {
     expect(tx.shiftCashIn.create).not.toHaveBeenCalled();
   });
 
-  test('sin turno abierto no refleja nada en la caja', async () => {
-    prisma.cashShift.findFirst.mockResolvedValue(null);
+  test('sin turno abierto no permite asignar fondos', async () => {
+    tx.cashShift.findFirst.mockResolvedValue(null);
+    const log = jest.spyOn(console, 'error').mockImplementation(() => {});
     await request(makeApp())
-      .post('/api/driver-cash/d1/movements')
-      .send({ type: 'INCOME', category: 'COMPRAS', amount: 1000 })
-      .expect(200);
+      .post('/api/driver-cash/d1/float')
+      .send({ amount: 1000, purpose: 'COMPRAS', source: 'CAJA' })
+      .expect(409);
+    log.mockRestore();
+    expect(tx.driverCashMovement.create).not.toHaveBeenCalled();
     expect(tx.shiftCashIn.create).not.toHaveBeenCalled();
     expect(tx.shiftExpense.create).not.toHaveBeenCalled();
   });
@@ -163,4 +148,19 @@ describe('POST /:driverId/float — fondo de cambio (efecto según origen)', () 
       data: { totalCashIn: { increment: 400 } },
     }));
   });
+});
+
+test.each(['CAMBIO', 'COMPRAS'])('fondo %s desde caja no crea ingresos nuevos', async (purpose) => {
+  await request(makeApp()).post('/api/driver-cash/d1/float')
+    .send({ amount: 1000, purpose, source: 'CAJA' }).expect(200);
+  expect(tx.driverCashMovement.create).toHaveBeenCalledWith(expect.objectContaining({
+    data: expect.objectContaining({ type: 'FLOAT', category: purpose, amount: 1000 }),
+  }));
+  expect(tx.shiftCashIn.create).not.toHaveBeenCalled();
+});
+
+test('fondos con origen desconocido no crean dinero', async () => {
+  await request(makeApp()).post('/api/driver-cash/d1/float')
+    .send({ amount: 1000, source: 'OTRO' }).expect(400);
+  expect(tx.driverCashMovement.create).not.toHaveBeenCalled();
 });

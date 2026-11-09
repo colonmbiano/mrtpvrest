@@ -73,19 +73,21 @@ totales; solo lectura; respeta el corte ciego (detalle por PIN si aplica).
 
 ---
 
-## 3. (pendiente) UI "Asignar fondo para compras" en la app del repartidor
+## 3. Asignación única de fondos y liquidación de repartidores
 
-**Contexto:** el backend ya refleja el fondo del repartidor como ingreso de caja
-(`ShiftCashIn FONDO_REPARTIDOR`, PR #106). Falta la UI clara para asignarlo por el
-camino correcto en vez de capturarlo como "Ingreso" genérico.
+**Implementado (2026-11-09):** un solo formulario de **Asignar fondos** en TPV y
+admin para cambio o compras. Usa exclusivamente `POST /api/driver-cash/:driverId/float`.
+Se elimina la alternativa de capturarlo como `INCOME` genérico y el backend la
+rechaza para evitar ingresos ficticios. Origen **CAJA**: traslado interno, no
+suma efectivo nuevo. Origen **EXTERNO**: sí crea `ShiftCashIn`. Ambos usos se
+registran como `FLOAT` y requieren un turno abierto.
 
-**Qué:** acción **"Asignar fondo"** (cambio / compras) en
-`apps/tpv/.../admin/DriverMovementsModal.tsx` y/o la app `apps/delivery`, que pegue
-a `POST /api/driver-cash/:driverId/float` (o `/movements` INCOME con categoría
-clara). Mostrar el fondo asignado en el resumen de la caja del repartidor.
-
-**Aceptación:** asignar un fondo desde la UI lo registra como fondo (no como cobro)
-y suma al efectivo esperado de la caja.
+El corte manual y automático liquidan los movimientos y sus pedidos en una sola
+transacción serializable antes de calcular el efectivo del turno. Reintentar
+un cobro o una entrega no mueve una liquidación anterior a otro turno. Las
+confirmaciones tardías de pedidos pendientes con movimientos ya aprobados
+recuperan la fecha y el turno originales. No se recalculan automáticamente los
+cortes históricos cerrados.
 
 ---
 

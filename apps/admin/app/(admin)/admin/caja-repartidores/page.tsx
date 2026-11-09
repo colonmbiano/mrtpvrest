@@ -29,6 +29,8 @@ export default function CajaRepartidoresPage() {
   const [showCutModal, setShowCutModal] = useState<any>(null);
   const [showFloatModal, setShowFloatModal] = useState<any>(null);
   const [floatAmount, setFloatAmount] = useState("");
+  const [floatSource, setFloatSource] = useState<"CAJA" | "EXTERNO">("CAJA");
+  const [floatPurpose, setFloatPurpose] = useState<"CAMBIO" | "COMPRAS">("CAMBIO");
   const [floatBusy, setFloatBusy] = useState(false);
   const [selectedPayout, setSelectedPayout] = useState<any>(null);
 
@@ -106,13 +108,14 @@ export default function CajaRepartidoresPage() {
 
   async function doAssignFloat(driver: any) {
     const n = Number(floatAmount);
-    if (!(n > 0)) return;
+    if (floatBusy || !Number.isFinite(n) || !(n > 0) || n > 50000) return;
     setFloatBusy(true);
     try {
-      await api.post(`/api/driver-cash/${driver.id}/float`, { amount: n });
+      await api.post(`/api/driver-cash/${driver.id}/float`, { amount: n, source: floatSource, purpose: floatPurpose });
       setShowFloatModal(null); setFloatAmount("");
+      setFloatSource("CAJA"); setFloatPurpose("CAMBIO");
       fetchAll();
-      toast.success(`Fondo de cambio asignado a ${driver.name}: $${n.toFixed(0)}`);
+      toast.success(`Fondo asignado a ${driver.name}: $${n.toFixed(2)}`);
     } catch (err: any) { toast.error(err.response?.data?.error || "Error"); }
     finally { setFloatBusy(false); }
   }
@@ -346,8 +349,8 @@ export default function CajaRepartidoresPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setFloatAmount(""); setShowFloatModal(d.driver); }}
-                  aria-label="Asignar cambio"
+                  onClick={() => { setFloatAmount(""); setFloatSource("CAJA"); setFloatPurpose("CAMBIO"); setShowFloatModal(d.driver); }}
+                  aria-label="Asignar fondos"
                   className="grid h-10 w-10 shrink-0 place-items-center rounded-ds-md"
                   style={{ background: "var(--info-soft)", color: "var(--info)" }}
                 >
@@ -454,12 +457,12 @@ export default function CajaRepartidoresPage() {
       <Modal
         open={!!showFloatModal}
         onClose={() => { if (!floatBusy) { setShowFloatModal(null); setFloatAmount(""); } }}
-        title="Asignar cambio"
+        title="Asignar fondos"
         size="sm"
         footer={
           <>
             <Button variant="secondary" disabled={floatBusy} onClick={() => { setShowFloatModal(null); setFloatAmount(""); }}>Cancelar</Button>
-            <Button disabled={floatBusy || !(Number(floatAmount) > 0)} onClick={() => doAssignFloat(showFloatModal)}>
+            <Button disabled={floatBusy || !Number.isFinite(Number(floatAmount)) || !(Number(floatAmount) > 0) || Number(floatAmount) > 50000} onClick={() => doAssignFloat(showFloatModal)}>
               {floatBusy ? "..." : "Asignar"}
             </Button>
           </>
@@ -468,12 +471,32 @@ export default function CajaRepartidoresPage() {
         {showFloatModal && (
           <>
             <p className="mb-4 text-sm text-tx-mut">
-              Fondo de caja para <b className="text-tx">{showFloatModal.name}</b>. Suma a su efectivo en mano para dar cambio y cubrir compras; no cuenta como venta.
+              Fondo para <b className="text-tx">{showFloatModal.name}</b>. Selecciona su uso y de dónde sale el dinero.
             </p>
+            <label htmlFor="fund-purpose" className="mb-1 block text-sm text-tx-mut">Uso del fondo</label>
+            <select id="fund-purpose" value={floatPurpose} disabled={floatBusy}
+              onChange={(e) => setFloatPurpose(e.target.value as "CAMBIO" | "COMPRAS")}
+              className="mb-4 w-full rounded-ds-md border border-[var(--bd-1)] bg-[var(--surf-2)] p-3 text-tx">
+              <option value="CAMBIO">Dar cambio</option>
+              <option value="COMPRAS">Compras / Insumos</option>
+            </select>
+            <label htmlFor="fund-source" className="mb-1 block text-sm text-tx-mut">Origen del efectivo</label>
+            <select id="fund-source" value={floatSource} disabled={floatBusy}
+              onChange={(e) => setFloatSource(e.target.value as "CAJA" | "EXTERNO")}
+              className="mb-4 w-full rounded-ds-md border border-[var(--bd-1)] bg-[var(--surf-2)] p-3 text-tx">
+              <option value="CAJA">Desde caja</option>
+              <option value="EXTERNO">Aportación externa</option>
+            </select>
+            <p className="mb-4 text-sm text-tx-mut">
+              {floatSource === "CAJA"
+                ? "Sale de caja y regresa al liquidar, descontando las compras. No es un ingreso nuevo."
+                : "Es dinero adicional de fuera del negocio y aumenta el efectivo esperado del turno."}
+            </p>
+            <label htmlFor="fund-amount" className="mb-1 block text-sm text-tx-mut">Monto ($)</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 font-display text-2xl font-extrabold" style={{ color: "var(--info)" }}>$</span>
               <input
-                type="number" inputMode="decimal" autoFocus value={floatAmount}
+                id="fund-amount" type="number" min="0.01" max="50000" step="0.01" inputMode="decimal" autoFocus value={floatAmount} disabled={floatBusy}
                 onChange={(e) => setFloatAmount(e.target.value)} placeholder="0"
                 className="h-16 w-full rounded-ds-md pl-9 pr-4 font-display text-2xl font-extrabold outline-none"
                 style={{ background: "var(--surf-2)", border: "1px solid var(--bd-1)", color: "var(--tx)" }}

@@ -26,6 +26,7 @@ const { nextOrderNumber } = require('../lib/order-number');
 const { releaseTableAfterPayment } = require('../services/table-lifecycle.service');
 const { claimKitchenPrint, releaseKitchenPrint } = require('../lib/print-claim');
 const audit = require('../lib/audit-logger');
+const { cashTransaction, previousDriverSettlement, cashConflict } = require('../lib/driver-cash-settlement');
 const {
   createOrderSchema,
   addItemsSchema,
@@ -1706,23 +1707,30 @@ async function openShiftIdForCobro(client, locationId) {
 router.post('/:id/confirm-payment', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER'), async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
-    // Atribuir el cobro al turno abierto AHORA (ver openShiftIdForCobro).
-    const existing = await prisma.order.findFirst({
-      where: { id: req.params.id, restaurantId }, select: { locationId: true },
-    });
-    const cobroShiftId = existing ? await openShiftIdForCobro(prisma, existing.locationId) : null;
-    const order = await prisma.$transaction(async tx => {
-      const paid = await tx.order.update({
-      where: { id: req.params.id, restaurantId, status: { not: 'CANCELLED' } },
-      data: { status: 'CONFIRMED', paidAt: new Date(), paymentStatus: 'PAID', ...(cobroShiftId ? { shiftId: cobroShiftId } : {}) },
-      include: { user: true }
-    });
+    const order = await cashTransaction(prisma, async (tx) => {
+      const existing = await tx.order.findFirst({ where: { id: req.params.id, restaurantId }, include: { user: true } });
+      if (!existing) throw Object.assign(new Error('Pedido no encontrado'), { status: 404 });
+      if (existing.status === 'CANCELLED') throw cashConflict('El pedido está cancelado.');
+      if (existing.paymentStatus === 'PAID') return existing;
+      const previous = await previousDriverSettlement(tx, existing);
+      const cobroShiftId = previous?.shiftId || await openShiftIdForCobro(tx, existing.locationId);
+      if (!cobroShiftId) throw cashConflict('Abre un turno de caja antes de confirmar el cobro.');
+      const claimed = await tx.order.updateMany({
+        where: { id: existing.id, restaurantId, status: { not: 'CANCELLED' }, paymentStatus: { not: 'PAID' }, paidAt: null },
+        data: {
+          status: previous ? 'DELIVERED' : 'CONFIRMED', paidAt: previous?.at || new Date(),
+          paymentStatus: 'PAID', shiftId: cobroShiftId,
+          ...(previous ? { cashCollected: true, cashCollectedAt: previous.at } : {}),
+        },
+      });
+      if (claimed.count !== 1) throw cashConflict('El cobro cambió. Actualiza e intenta de nuevo.');
+      const paid = await tx.order.findFirst({ where: { id: existing.id, restaurantId }, include: { user: true } });
       await consumePaidOrder(tx, paid.id, restaurantId);
       return paid;
-    }, { timeout: 30000 });
+    });
     await releaseTableIfDineIn(order.id);
     res.json({ ok: true, order });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, ...(e.code ? { code: e.code } : {}) }); }
 });
 
 router.post('/:id/print-bill', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER', 'WAITER'), async (req, res) => {
@@ -1810,32 +1818,43 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
     const method = ['CASH', 'TRANSFER', 'CARD', 'OTHER'].includes(rawMethod) ? rawMethod : 'CASH';
     const isCash = method === 'CASH';
     const restaurantId = req.restaurantId || req.user?.restaurantId;
-    // Atribuir el cobro al turno abierto AHORA (ver openShiftIdForCobro).
-    const existing = await prisma.order.findFirst({
-      where: { id: req.params.id, restaurantId }, select: { locationId: true },
-    });
-    const cobroShiftId = existing ? await openShiftIdForCobro(prisma, existing.locationId) : null;
-    const order = await prisma.$transaction(async tx => {
-      const paid = await tx.order.update({
-      where: { id: req.params.id, restaurantId, status: { not: 'CANCELLED' } },
-      data: {
-        paymentMethod: method,
-        cashCollected: isCash,
-        cashCollectedAt: isCash ? new Date() : null,
-        paymentStatus: 'PAID',
-        paidAt: new Date(),
-        status: 'DELIVERED',
-        ...(cobroShiftId ? { shiftId: cobroShiftId } : {}),
+    let newlyPaid = false;
+    const order = await cashTransaction(prisma, async (tx) => {
+      const existing = await tx.order.findFirst({ where: { id: req.params.id, restaurantId } });
+      if (!existing) throw Object.assign(new Error('Pedido no encontrado'), { status: 404 });
+      if (existing.status === 'CANCELLED') throw cashConflict('El pedido está cancelado.');
+      // A replay is a read: never change the date, shift or method of a paid order.
+      if (existing.paymentStatus === 'PAID') {
+        if (existing.paymentMethod !== method) {
+          throw cashConflict('El pedido ya está pagado. Usa la corrección de método de pago.');
+        }
+        newlyPaid = false;
+        return existing;
       }
-    });
+      const previous = await previousDriverSettlement(tx, existing);
+      if (previous && !isCash) throw cashConflict('El pedido ya se liquidó en efectivo en un corte anterior.');
+      const cobroShiftId = previous?.shiftId || await openShiftIdForCobro(tx, existing.locationId);
+      if (!cobroShiftId) throw cashConflict('Abre un turno de caja antes de confirmar el cobro.');
+      const now = previous?.at || new Date();
+      const claimed = await tx.order.updateMany({
+        where: { id: existing.id, restaurantId, paymentStatus: { not: 'PAID' }, paidAt: null, status: { not: 'CANCELLED' } },
+        data: {
+          paymentMethod: method, paymentStatus: 'PAID', status: 'DELIVERED',
+          paidAt: now, shiftId: cobroShiftId,
+          cashCollected: isCash, cashCollectedAt: isCash ? now : null,
+        },
+      });
+      if (claimed.count !== 1) throw cashConflict('El cobro cambió. Actualiza el pedido e intenta de nuevo.');
+      const paid = await tx.order.findFirst({ where: { id: existing.id, restaurantId } });
       await consumePaidOrder(tx, paid.id, restaurantId);
+      newlyPaid = !previous;
       return paid;
-    }, { timeout: 30000 });
+    });
 
     // Kick del cajón solo para efectivo: una transferencia no abre la caja.
     // Fire-and-forget: un cobro nunca debe fallar porque el cajón esté
     // desconectado o no haya impresora de caja configurada.
-    if (isCash) {
+    if (isCash && newlyPaid) {
       try {
         const { kickCashDrawerForLocation } = require('../services/printer.service');
         kickCashDrawerForLocation(order.locationId).catch(() => {});
@@ -1850,7 +1869,7 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
     // confirmación de pago que NO disparaba notificación. Mismo evento que
     // usan online/terminal para que el TPV lo trate igual.
     const io = req.app.get('io');
-    if (io) {
+    if (io && newlyPaid) {
       const payload = {
         orderId: order.id,
         orderNumber: order.orderNumber,
@@ -1864,7 +1883,7 @@ router.put('/:id/confirm-cash', authenticate, requireTenantAccess, async (req, r
     }
 
     res.json(order);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, ...(e.code ? { code: e.code } : {}) }); }
 });
 
 router.put('/:id/status', authenticate, requireTenantAccess, validateBody(updateStatusSchema), async (req, res) => {
@@ -2084,12 +2103,22 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
       // Atribuir el cobro al turno abierto AHORA, no al de creación (ver
       // openShiftIdForCobro). Se resuelve dentro de la $transaction del cobro.
       const target = await tx.order.findFirst({
-        where: { id: req.params.id, restaurantId }, select: { locationId: true, source: true, status: true, paymentStatus: true },
+        where: { id: req.params.id, restaurantId },
+        select: { id: true, locationId: true, source: true, status: true, paymentStatus: true,
+          deliveryDriverId: true, total: true, paymentMethod: true },
       });
       // Marketplace: no se cobra en caja si aún no se acepta o si ya se pagó en línea.
       const chargeLocked = marketplaceChargeBlock(target);
       if (chargeLocked) throw Object.assign(new Error(chargeLocked.body.error), { marketplaceBlock: chargeLocked });
-      const cobroShiftId = target ? await openShiftIdForCobro(tx, target.locationId) : null;
+      if (target?.paymentStatus === 'PAID') {
+        return tx.order.findFirst({ where: { id: req.params.id, restaurantId } });
+      }
+      const previous = target ? await previousDriverSettlement(tx, target) : null;
+      if (previous && (paymentMethod !== 'CASH' || tenderResult)) {
+        throw cashConflict('El pedido ya se liquidó en efectivo en un corte anterior.');
+      }
+      const paidAt = previous?.at || now;
+      const cobroShiftId = previous?.shiftId || (target ? await openShiftIdForCobro(tx, target.locationId) : null);
       let resolvedMethod;
       let cashCollected;
       if (tenderResult) {
@@ -2113,10 +2142,10 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
         cashCollected = paymentMethod === 'CASH';
       }
       const paid = await tx.order.update({
-        where: { id: req.params.id, restaurantId, status: { not: 'CANCELLED' },
+        where: { id: req.params.id, restaurantId, status: { not: 'CANCELLED' }, paymentStatus: { not: 'PAID' },
           // Compare-and-set: un cambio concurrente de importe o un segundo
           // cobro no puede cerrar silenciosamente otra cuenta.
-          ...(expectedTotal != null ? { total: expectedTotal, paymentStatus: { not: 'PAID' } } : {}),
+          ...(expectedTotal != null ? { total: expectedTotal } : {}),
         },
         data: {
           paymentMethod: resolvedMethod,
@@ -2125,9 +2154,9 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
           // entrega — un pedido puede pagarse por anticipado. Sin el flag, el
           // cobro cierra la orden en DELIVERED (comportamiento del TPV).
           ...(keepStatus ? {} : { status: 'DELIVERED' }),
-          paidAt: now,
+          paidAt,
           cashCollected,
-          cashCollectedAt: cashCollected ? now : null,
+          cashCollectedAt: cashCollected ? paidAt : null,
           // La propina del cobro mixto sí se persiste (mejora el cuadre del
           // cajón vs. el método único, que la deja informativa en notas).
           ...(tenderResult && Number(tip) > 0 ? { tip: Number(tip) } : {}),
@@ -2150,11 +2179,11 @@ router.put('/:id/payment', authenticate, requireTenantAccess, requireRole('CASHI
     res.json(order);
   } catch (e) {
     if (e.marketplaceBlock) return sendBlock(res, e.marketplaceBlock);
-    if (req.body.expectedTotal != null && e.code === 'P2025') {
+    if (e.code === 'P2025') {
       return res.status(409).json({ code: 'OFFLINE_TOTAL_CHANGED',
         error: 'La cuenta cambió de importe, ya fue cobrada o no está disponible. Revisa el cobro local antes de conciliar.' });
     }
-    res.status(500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: e.message, ...(e.code ? { code: e.code } : {}) });
   }
 });
 

@@ -632,6 +632,12 @@ router.put('/:driverId/orders/:orderId/deliver', authenticate, requireTenantAcce
     if (existing.source === 'MARKETPLACE') {
       return res.status(409).json({ error: 'Entrega este pedido del marketplace con el código del cliente desde la app.', code: 'PIN_CONFIRMATION_REQUIRED' });
     }
+    // Legacy clients can replay an old delivery after the driver/cashier cut.
+    // Delivery must never reopen a payment or erase the original settlement.
+    if (existing.status === 'DELIVERED') {
+      await ensureCashOnDeliveryMovement(existing);
+      return res.json(existing);
+    }
     if (req.user?.role === 'DELIVERY' && existing.status !== 'DELIVERED') {
       try { await storeDeliveryPin.assertCourierPin(existing, req.body?.deliveryPin); }
       catch (error) {
@@ -643,9 +649,11 @@ router.put('/:driverId/orders/:orderId/deliver', authenticate, requireTenantAcce
       where: { id: existing.id },
       data: {
         status: 'DELIVERED',
-        paidAt: null,
-        paymentStatus: 'PENDING',
-        cashCollected: false,
+        ...(existing.paymentStatus === 'PAID' ? {} : {
+          paidAt: null,
+          paymentStatus: 'PENDING',
+          cashCollected: false,
+        }),
       },
       include: { items: { include: { menuItem: true } } },
     });
