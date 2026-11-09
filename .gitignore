@@ -107,3 +107,6 @@ supabase/.branches/
 # Bitácora y plan de trabajo locales (no se versionan; el repo es público)
 /MARKETPLACE-TRABAJO.md
 /PLAN-CODEX.md
+
+# Cliente Prisma y datos de pruebas locales del marketplace (PostgreSQL desechable)
+.marketplace-local/
