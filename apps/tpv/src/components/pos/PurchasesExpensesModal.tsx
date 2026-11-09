@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, Wallet, ShoppingBag, Plus, Trash2, Camera, Loader2, AlertTriangle, CheckCircle2, Sparkles, FileWarning, History, RefreshCw, HandCoins, ChevronLeft, Users, Vault, Banknote, CreditCard } from "lucide-react";
+import ManagerOverrideModal from "@/components/ManagerOverrideModal";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
@@ -163,6 +164,7 @@ interface Props {
 }
 
 export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
+  const [overrideAction, setOverrideAction] = useState<"expense" | "salary" | null>(null);
   const [tab, setTab] = useState<Tab>("expense");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH_DRAWER");
 
@@ -505,7 +507,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
       if (code === "NO_OPEN_SHIFT") {
         toast.error("No hay turno de caja abierto. Ábrelo antes de pagar en efectivo.");
       } else if (code === "ADMIN_AUTH_REQUIRED") {
-        toast.error("El pago excede tu límite de cajero. Pide autorización de admin.");
+        setOverrideAction("salary");
       } else {
         toast.error("Error: " + (err?.response?.data?.error || err?.message));
       }
@@ -542,7 +544,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
       } else if (code === "ADMIN_AUTH_REQUIRED") {
         // Puede ser por tope de cajero o por mover la bóveda: el backend ya
         // manda el motivo exacto, no lo adivinemos aquí.
-        toast.error(err?.response?.data?.error || "Requiere PIN de admin.");
+        setOverrideAction("expense");
       } else {
         toast.error("Error: " + (err?.response?.data?.error || err?.message));
       }
@@ -599,6 +601,8 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
   if (!isOpen) return null;
 
   return (
+    <>
+      <ManagerOverrideModal isOpen={overrideAction !== null} onClose={() => setOverrideAction(null)} permission="manage_driver_cash" onSuccess={() => { const action = overrideAction; setOverrideAction(null); if (action === "salary") void submitSalary(); else void submitExpense(); }} />
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onClick={onClose}
@@ -838,6 +842,7 @@ export default function PurchasesExpensesModal({ isOpen, onClose }: Props) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

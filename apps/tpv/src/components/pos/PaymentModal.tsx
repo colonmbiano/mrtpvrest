@@ -95,6 +95,7 @@ interface PaymentModalProps {
   onApplyDiscount?: (
     type: "percent" | "fixed",
     value: number,
+    reason: string,
   ) => void | Promise<void>;
   /** Sugerencias de propina en porcentaje. Default [10,15,20]. */
   tipSuggestions?: number[];
@@ -589,11 +590,12 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   const handleApplyDiscount = async (
     type: "percent" | "fixed",
     value: number,
+    reason: string,
   ) => {
     if (!onApplyDiscount) return;
     setDiscountSaving(true);
     try {
-      await onApplyDiscount(type, value);
+      await onApplyDiscount(type, value, reason);
     } catch {
       // El caller muestra el error; mantenemos abierto el modal de pago.
     } finally {
@@ -1089,8 +1091,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           requiresOverride={requiresDiscountOverride}
           initialType="fixed"
           initialValue={displayDiscount}
-          onApply={(type, value) => {
-            void handleApplyDiscount(type, value);
+          onApply={(type, value, reason) => {
+            void handleApplyDiscount(type, value, reason);
           }}
         />
       )}

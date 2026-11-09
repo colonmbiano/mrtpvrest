@@ -10,6 +10,7 @@
 
 jest.mock('@mrtpvrest/database', () => ({
   prisma: {
+    driverCashCut: { findMany: jest.fn(async () => []) },
     employee: { findMany: jest.fn() },
     driverCashMovement: { findMany: jest.fn() },
     order: { findMany: jest.fn() },
@@ -161,4 +162,14 @@ test('ventana: consulta movimientos y órdenes dentro de [openedAt, closedAt] de
       paidAt: { gte: shift.openedAt, lte: shift.closedAt },
     }),
   }));
+});
+
+test('reporte usa el conteo guardado y conserva null para cortes históricos sin conteo', async () => {
+  prisma.employee.findMany.mockResolvedValue([{ id: 'd1', name: 'Polo' }]);
+  prisma.driverCashMovement.findMany.mockResolvedValue([{ driverId: 'd1', type: 'FLOAT', amount: 300 }]);
+  prisma.order.findMany.mockResolvedValue([]);
+  prisma.driverCashCut.findMany.mockResolvedValueOnce([{ driverId: 'd1', countedCash: 200, cashDifference: -100 }]);
+  expect((await shiftDriverLiquidation(shift))[0]).toMatchObject({ entregadoReal: 200, diferencia: -100 });
+  prisma.driverCashCut.findMany.mockResolvedValueOnce([{ driverId: 'd1', countedCash: null, cashDifference: null }]);
+  expect((await shiftDriverLiquidation(shift))[0]).toMatchObject({ entregadoReal: null, diferencia: null });
 });

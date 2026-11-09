@@ -946,6 +946,11 @@ model Order {
   transferVerified   Boolean   @default(false)
   transferVerifiedAt DateTime?
   transferVerifiedBy String?
+  cardVerified       Boolean   @default(false)
+  cardVerifiedAt     DateTime?
+  cardVerifiedBy     String?
+  transferVerificationReference String?
+  cardVerificationReference String?
 
   conektaOrderId        String?
   conektaChargeId       String?
@@ -2977,6 +2982,16 @@ model DriverCashMovement {
   approved    Boolean   @default(false)
   approvedAt  DateTime?
   createdAt   DateTime  @default(now())
+  shiftId     String?
+  cutId       String?
+  fundSource  String?
+  createdById String?
+  receiptStatus String @default("PENDING")
+  receiptReason String?
+
+  @@index([driverId, approved])
+  @@index([shiftId, driverId])
+  @@index([cutId])
 }
 
 model DriverCashCut {
@@ -2991,6 +3006,14 @@ model DriverCashCut {
   movements    Int      @default(0)
   notes        String?
   createdAt    DateTime @default(now())
+  shiftId          String?
+  countedCash      Decimal? @db.Decimal(12, 2)
+  cashDifference   Decimal? @db.Decimal(12, 2)
+  differenceReason String?
+  receivedById     String?
+  receivedByName   String?
+
+  @@index([shiftId, driverId])
 }
 
 // Solicitud del repartidor para que el admin cierre su turno / haga el corte de

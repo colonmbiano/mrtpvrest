@@ -7,7 +7,10 @@
 
 jest.mock('@mrtpvrest/database', () => {
   const tx = {
-    order: { update: jest.fn() },
+    order: { update: jest.fn(), findFirst: jest.fn() },
+    cashShift: { findFirst: jest.fn() },
+    paymentTransaction: { updateMany: jest.fn(async () => ({ count: 0 })) },
+    accessLog: { create: jest.fn(async () => ({})) },
     driverCashMovement: { findFirst: jest.fn(), create: jest.fn(), delete: jest.fn() },
   };
   return {
@@ -70,6 +73,8 @@ function baseOrder(overrides = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  tx.order.findFirst.mockImplementation(() => prisma.order.findUnique());
+  tx.cashShift.findFirst.mockResolvedValue(null);
   tx.order.update.mockImplementation(async ({ data }) => ({ id: 'o1', ...data }));
 });
 
@@ -81,7 +86,7 @@ describe('PUT /api/orders/:id/correct-payment-method', () => {
 
     const res = await request(makeApp())
       .put('/api/orders/o1/correct-payment-method')
-      .send({ paymentMethod: 'CASH' })
+      .send({ reason: 'Corrección confirmada por caja', paymentMethod: 'CASH' })
       .expect(200);
 
     expect(tx.order.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -98,11 +103,11 @@ describe('PUT /api/orders/:id/correct-payment-method', () => {
 
   test('no duplica el ingreso si ya existe un movimiento para esa orden', async () => {
     prisma.order.findUnique.mockResolvedValue(baseOrder());
-    tx.driverCashMovement.findFirst.mockResolvedValue({ id: 'm1', approved: false });
+    tx.driverCashMovement.findFirst.mockImplementation(async ({ where }) => where.approved === true ? null : { id: 'm1', approved: false });
 
     const res = await request(makeApp())
       .put('/api/orders/o1/correct-payment-method')
-      .send({ paymentMethod: 'CASH' })
+      .send({ reason: 'Corrección confirmada por caja', paymentMethod: 'CASH' })
       .expect(200);
 
     expect(tx.driverCashMovement.create).not.toHaveBeenCalled();
@@ -111,11 +116,11 @@ describe('PUT /api/orders/:id/correct-payment-method', () => {
 
   test('CASH → TRANSFER retira el movimiento si el corte aún no se cierra', async () => {
     prisma.order.findUnique.mockResolvedValue(baseOrder({ paymentMethod: 'CASH' }));
-    tx.driverCashMovement.findFirst.mockResolvedValue({ id: 'm1', approved: false });
+    tx.driverCashMovement.findFirst.mockImplementation(async ({ where }) => where.approved === true ? null : { id: 'm1', approved: false });
 
     const res = await request(makeApp())
       .put('/api/orders/o1/correct-payment-method')
-      .send({ paymentMethod: 'TRANSFER' })
+      .send({ reason: 'Corrección confirmada por caja', paymentMethod: 'TRANSFER' })
       .expect(200);
 
     expect(tx.driverCashMovement.delete).toHaveBeenCalledWith({ where: { id: 'm1' } });
@@ -131,11 +136,12 @@ describe('PUT /api/orders/:id/correct-payment-method', () => {
 
     const res = await request(makeApp())
       .put('/api/orders/o1/correct-payment-method')
-      .send({ paymentMethod: 'TRANSFER' })
-      .expect(200);
+      .send({ reason: 'Corrección confirmada por caja', paymentMethod: 'TRANSFER' })
+      .expect(409);
 
     expect(tx.driverCashMovement.delete).not.toHaveBeenCalled();
-    expect(res.body.cashAdjusted).toBe('locked');
+    expect(tx.order.update).not.toHaveBeenCalled();
+    expect(res.body.code).toBe('CLOSED_DRIVER_CUT_LOCKED');
   });
 
   test('rechaza una orden que no está pagada', async () => {
@@ -143,7 +149,7 @@ describe('PUT /api/orders/:id/correct-payment-method', () => {
 
     await request(makeApp())
       .put('/api/orders/o1/correct-payment-method')
-      .send({ paymentMethod: 'CASH' })
+      .send({ reason: 'Corrección confirmada por caja', paymentMethod: 'CASH' })
       .expect(400);
 
     expect(tx.order.update).not.toHaveBeenCalled();
@@ -154,14 +160,14 @@ describe('PUT /api/orders/:id/correct-payment-method', () => {
 
     await request(makeApp())
       .put('/api/orders/o1/correct-payment-method')
-      .send({ paymentMethod: 'CASH' })
+      .send({ reason: 'Corrección confirmada por caja', paymentMethod: 'CASH' })
       .expect(400);
   });
 
   test('rechaza un método inválido', async () => {
     await request(makeApp())
       .put('/api/orders/o1/correct-payment-method')
-      .send({ paymentMethod: 'BITCOIN' })
+      .send({ reason: 'Corrección confirmada por caja', paymentMethod: 'BITCOIN' })
       .expect(400);
 
     expect(prisma.order.findUnique).not.toHaveBeenCalled();

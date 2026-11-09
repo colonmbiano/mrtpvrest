@@ -1,3 +1,4 @@
+jest.mock('../src/lib/audit-logger', () => ({ ...jest.requireActual('../src/lib/audit-logger'), record: jest.fn(async () => {}) }));
 'use strict';
 
 // Pedidos del marketplace en el TPV: los que esperan al comercio
@@ -7,6 +8,7 @@
 
 jest.mock('@mrtpvrest/database', () => ({
   prisma: {
+    $transaction: jest.fn(async (fn) => fn(require('@mrtpvrest/database').prisma)),
     order: { findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
     table: { update: jest.fn() },
     stockMovement: { findMany: jest.fn().mockResolvedValue([]) },
@@ -111,9 +113,9 @@ describe('PUT /api/orders/:id/status', () => {
   it('rechazar un pedido del marketplace lo cancela', async () => {
     prisma.order.findFirst.mockResolvedValue(marketplaceOrder('PENDING_MERCHANT'));
     prisma.order.update.mockResolvedValue({ id: 'o1', status: 'CANCELLED', restaurantId: 'r1', locationId: 'l1', orderType: 'DELIVERY' });
-    const res = await request(makeApp()).put('/api/orders/o1/status').send({ status: 'CANCELLED' });
+    const res = await request(makeApp()).put('/api/orders/o1/status').send({ status: 'CANCELLED', reason: 'Pedido rechazado por el operador' });
     expect(res.status).toBe(200);
-    expect(prisma.order.update).toHaveBeenCalledWith({ where: { id: 'o1' }, data: { status: 'CANCELLED' } });
+    expect(prisma.order.update).toHaveBeenCalledWith({ where: { id: 'o1', restaurantId: 'r1' }, data: { status: 'CANCELLED' } });
   });
 
   it('no deja confirmar a mano un pedido que espera el pago', async () => {

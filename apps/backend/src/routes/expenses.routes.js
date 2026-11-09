@@ -19,6 +19,7 @@ const { round2 } = require('../lib/money');
 const { applyVaultMovement, vaultDenied, channelForMethod } = require('../lib/vault');
 const { authenticate, requireTenantAccess } = require('../middleware/auth.middleware');
 const { requireFeatureFlag } = require('../lib/modules');
+const { hasValidOverride } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 // Gate del módulo de inventario (donde viven gastos operativos).
@@ -152,10 +153,9 @@ router.post('/', async (req, res) => {
     const rate = payrollRate != null && Number.isFinite(Number(payrollRate)) ? Number(payrollRate) : null;
 
     // Tope para cashier — si excede, debe haber sido autorizado por admin
-    // (frontend pide PIN y vuelve a postear con header x-admin-authorized).
+    // La autorización requiere un token de supervisor validado por el servidor.
     if (userRole === 'CASHIER' && amt > CASHIER_LIMIT_PER_EXPENSE) {
-      const authHeader = req.headers['x-admin-authorized'];
-      if (authHeader !== 'true') {
+      if (!hasValidOverride(req, 'manage_driver_cash')) {
         return res.status(402).json({
           error: `Gasto excede el límite de cajero ($${CASHIER_LIMIT_PER_EXPENSE}). Se requiere autorización de admin.`,
           code: 'ADMIN_AUTH_REQUIRED',
@@ -330,7 +330,7 @@ router.post('/:id/settle', async (req, res) => {
 
     // Tope del cajero también al LIQUIDAR (no solo al crear): un pago en
     // efectivo grande requiere autorización admin, igual que la creación.
-    if (userRole === 'CASHIER' && pay > CASHIER_LIMIT_PER_EXPENSE && req.headers['x-admin-authorized'] !== 'true') {
+    if (userRole === 'CASHIER' && pay > CASHIER_LIMIT_PER_EXPENSE && !hasValidOverride(req, 'manage_driver_cash')) {
       return res.status(402).json({
         error: `Pago excede el límite de cajero ($${CASHIER_LIMIT_PER_EXPENSE}). Se requiere autorización de admin.`,
         code: 'ADMIN_AUTH_REQUIRED',

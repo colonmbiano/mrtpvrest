@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
 import { apiOrQueue, shiftActionQueued } from "@/lib/offline";
+import ShiftControlPanel, { type DriverReceiptInput } from "./ShiftControlPanel";
 
 const EXPENSE_CATEGORIES = [
   { value: "SUPPLIES", label: "🛒 Insumos" },
@@ -60,6 +61,12 @@ export default function ShiftModal({ employee, onClose, onShiftClosed, onShiftOp
   const [previewData, setPreviewData] = useState<any>(null);
   const [previewErr, setPreviewErr]   = useState("");
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [driverReceipts, setDriverReceipts] = useState<DriverReceiptInput[]>([]);
+  const [closeReviewReason, setCloseReviewReason] = useState("");
+  const [reviewValid, setReviewValid] = useState(false);
+  const updateCloseReview = useCallback((receipts: DriverReceiptInput[], reason: string, valid: boolean) => {
+    setDriverReceipts(receipts); setCloseReviewReason(reason); setReviewValid(valid);
+  }, []);
 
   const fetchShift = useCallback(async () => {
     setLoading(true);
@@ -237,7 +244,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed, onShiftOp
       const res = await shiftActionQueued(
         "shift-close",
         "close",
-        { closingFloat: Number(closingFloat) || 0, notes: closeNotes },
+        { closingFloat: Number(closingFloat) || 0, notes: closeNotes, driverReceipts, closeReviewReason },
         shift?.id,
       );
       if (res.ok) {
@@ -598,6 +605,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed, onShiftOp
           {/* ── TAB: CERRAR TURNO ── */}
           {tab === "close" && !isClosed && (
             <div className="flex flex-col gap-4">
+              {shift?.id && <ShiftControlPanel shiftId={shift.id} onChange={updateCloseReview} />}
               <div className="rounded-2xl p-4 text-center" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)" }}>
                 <div className="text-4xl mb-2">🔒</div>
                 <div className="font-syne font-black text-lg text-white mb-1">Cerrar turno</div>
@@ -608,7 +616,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed, onShiftOp
 
               <div>
                 <label className="text-xs font-bold mb-2 block uppercase tracking-wider" style={{ color: "var(--muted)" }}>
-                  Fondo de caja al cierre
+                  Efectivo total contado en caja
                 </label>
                 <input type="number" value={closingFloat} onChange={e => setClosingFloat(e.target.value)}
                   placeholder="$0.00"
@@ -727,7 +735,7 @@ export default function ShiftModal({ employee, onClose, onShiftClosed, onShiftOp
                 </div>
               )}
 
-              <button onClick={closeShift} disabled={closing}
+              <button onClick={closeShift} disabled={closing || (Boolean(shift?.id) && !reviewValid) || closingFloat.trim() === ""}
                 className="w-full py-4 rounded-2xl font-syne font-black text-base"
                 style={{ background: "#ef4444", color: "#fff" }}>
                 {closing ? "Cerrando turno..." : "🔒 Cerrar turno definitivamente"}

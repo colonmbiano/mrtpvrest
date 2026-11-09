@@ -11,7 +11,7 @@ interface DiscountModalProps {
   /** Si el rol actual ya tiene `apply_discount`, no requerimos PIN. */
   requiresOverride: boolean;
   /** Aplica al ticket. type: percent → value es %; fixed → value es $. */
-  onApply: (type: "percent" | "fixed", value: number) => void;
+  onApply: (type: "percent" | "fixed", value: number, reason: string) => void;
   /** Prellenado editable: tipo/valor del descuento actual del pedido. */
   initialType?: "percent" | "fixed";
   initialValue?: number;
@@ -52,6 +52,7 @@ export default function DiscountModal({
     initialValue && initialValue > 0 ? String(initialValue) : ""
   );
   const [showOverride, setShowOverride] = useState(false);
+  const [reason, setReason] = useState("");
   const [error, setError] = useState("");
 
   // Al abrir, prellenar con el descuento vigente del pedido (editable).
@@ -64,6 +65,7 @@ export default function DiscountModal({
       setType(initialType ?? "percent");
       setValueStr(initialValue && initialValue > 0 ? String(initialValue) : "");
       setError("");
+      setReason("");
     });
     return () => { cancelled = true; };
   }, [isOpen, initialType, initialValue]);
@@ -92,11 +94,12 @@ export default function DiscountModal({
         : "Ingresa un monto entre 0 y el subtotal");
       return;
     }
+    if (reason.trim().length < 5) { setError("Escribe el motivo del descuento (mínimo 5 caracteres)"); return; }
     if (requiresOverride) {
       setShowOverride(true);
       return;
     }
-    onApply(type, value);
+    onApply(type, value, reason.trim());
     reset();
     onClose();
   }
@@ -194,6 +197,9 @@ export default function DiscountModal({
               )}
             </div>
 
+            <label className="text-sm text-white/70">Motivo del descuento
+              <textarea aria-label="Motivo del descuento" maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} className="mt-2 w-full rounded-xl bg-white/5 border border-white/10 p-3 text-white" />
+            </label>
             {/* PREVIEW */}
             {valid && (
               <div className="rounded-2xl bg-white/5 border border-white/10 p-4 space-y-2">
@@ -235,7 +241,7 @@ export default function DiscountModal({
               </button>
               <button
                 type="button"
-                disabled={!valid}
+                disabled={!valid || reason.trim().length < 5}
                 onClick={handlePrimary}
                 className="flex-[2] min-h-[56px] h-14 rounded-2xl bg-[var(--brand)] text-[var(--brand-fg)] font-black uppercase tracking-[0.15em] text-[12px] flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-[0_10px_30px_var(--brand-glow)] disabled:opacity-30 disabled:active:scale-100"
               >
@@ -260,7 +266,7 @@ export default function DiscountModal({
         onClose={() => setShowOverride(false)}
         permission="apply_discount"
         onSuccess={() => {
-          onApply(type, value);
+          onApply(type, value, reason.trim());
           reset();
           setShowOverride(false);
           onClose();

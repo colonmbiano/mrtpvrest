@@ -1,3 +1,4 @@
+jest.mock('../src/lib/audit-logger', () => ({ ...jest.requireActual('../src/lib/audit-logger'), record: jest.fn(async () => {}) }));
 'use strict';
 
 // Fondos de cambio y compras usan SOLO /float, distinguiendo CAJA de EXTERNO.

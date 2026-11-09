@@ -1,11 +1,53 @@
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
-const { authenticate, requireAdmin, requireTenantAccess, requireRole } = require('../middleware/auth.middleware');
+const { authenticate, requireAdmin, requireTenantAccess, requireRole, hasValidOverride } = require('../middleware/auth.middleware');
 const { localDayRange } = require('../utils/dayRange');
 const { cashTransaction, cutDriverCash } = require('../lib/driver-cash-settlement');
+const { digitalPaymentEntries, verifyOrderPayment, requiredReason, controlError } = require('../lib/cash-control');
+const audit = require('../lib/audit-logger');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const router = express.Router();
+
+router.get('/payments', authenticate, requireTenantAccess, requireDriverCashManager, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const where = { restaurantId, paymentStatus: 'PAID', status: { not: 'CANCELLED' },
+      paymentMethod: { in: ['TRANSFER', 'SPEI', 'OXXO', 'CARD', 'CARD_PRESENT', 'MIXED'] },
+      ...(req.locationId ? { locationId: req.locationId } : {}) };
+    if (req.query.shiftId) {
+      const shift = await prisma.cashShift.findFirst({
+        where: { id: String(req.query.shiftId), location: { restaurantId }, ...(req.locationId ? { locationId: req.locationId } : {}) },
+      });
+      if (!shift) return res.status(404).json({ error: 'Turno no encontrado.' });
+      where.locationId = shift.locationId;
+      where.paidAt = { gte: shift.openedAt, lte: shift.closedAt || new Date() };
+    }
+    const orders = await prisma.order.findMany({ where,
+      include: { payments: { select: { method: true, amount: true, status: true } } },
+      orderBy: { paidAt: 'desc' }, take: 500,
+    });
+    const entries = orders.flatMap(digitalPaymentEntries);
+    const items = req.query.pending === 'true' ? entries.filter((p) => !p.verified) : entries;
+    res.json({ items, count: items.length, pendingCount: entries.filter((p) => !p.verified).length,
+      pendingTotal: entries.filter((p) => !p.verified).reduce((n, p) => n + p.amount, 0), limited: orders.length === 500 });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+router.patch('/payments/:orderId/verify', authenticate, requireTenantAccess, requireDriverCashManager, async (req, res) => {
+  try {
+    const restaurantId = req.restaurantId || req.user?.restaurantId;
+    const updated = await cashTransaction(prisma, async (tx) => {
+      const order = await tx.order.findFirst({
+        where: { id: req.params.orderId, restaurantId, ...(req.locationId ? { locationId: req.locationId } : {}) },
+        include: { payments: true },
+      });
+      if (!order) throw controlError('Pedido no encontrado.', 'ORDER_NOT_FOUND', 404);
+      return verifyOrderPayment(tx, order, req.body || {}, req);
+    });
+    res.json({ id: updated.id, transferVerified: updated.transferVerified, cardVerified: updated.cardVerified });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, code: e.code }); }
+});
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -222,51 +264,27 @@ router.get('/:driverId/orders', authenticate, requireTenantAccess, async (req, r
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
 });
 
-// ── Verificar / desverificar el cobro por TRANSFERENCIA de un pedido ──────────
-// El repartidor cobró por SPEI y el admin confirma contra el banco que el dinero
-// llegó. Solo aplica a paymentMethod=TRANSFER. Es admin-only (mismo rol que el
-// corte): el repartidor NO puede auto-verificar su propia transferencia, igual
-// que no aprueba su propio efectivo. No mueve caja ni totales — solo marca el
-// pedido y deja auditoría (quién/cuándo). No bloquea el corte.
-router.patch(
-  '/:driverId/orders/:orderId/verify-transfer',
-  authenticate,
-  requireTenantAccess,
-  requireDriverCashManager,
-  async (req, res) => {
-    try {
-      const driver = await assertDriverAccess(req, res);
-      if (!driver) return;
-      const { orderId } = req.params;
-      const verified = req.body?.verified !== false; // default true
-      const restaurantId = req.restaurantId || req.user?.restaurantId;
+// Compatibilidad: ambas vistas de transferencias usan el mismo verificador.
+async function verifyTransferForRequest(req, res, driverId = null) {
+  const restaurantId = req.restaurantId || req.user?.restaurantId;
+  const updated = await cashTransaction(prisma, async (tx) => {
+    const order = await tx.order.findFirst({
+      where: { id: req.params.orderId, restaurantId, ...(driverId ? { deliveryDriverId: driverId } : {}) },
+      include: { payments: true },
+    });
+    if (!order) throw controlError('Pedido no encontrado.', 'ORDER_NOT_FOUND', 404);
+    return verifyOrderPayment(tx, order, { ...req.body, method: 'TRANSFER' }, req);
+  });
+  res.json(updated);
+}
 
-      const order = await prisma.order.findFirst({
-        where: {
-          id: orderId,
-          deliveryDriverId: driver.id,
-          ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { restaurantId } : {}),
-        },
-        select: { id: true, paymentMethod: true, transferVerified: true },
-      });
-      if (!order) return res.status(404).json({ error: 'Pedido no encontrado para este repartidor' });
-      if (order.paymentMethod !== 'TRANSFER') {
-        return res.status(400).json({ error: 'El pedido no se cobró por transferencia' });
-      }
-
-      const updated = await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          transferVerified: verified,
-          transferVerifiedAt: verified ? new Date() : null,
-          transferVerifiedBy: verified ? (req.user?.name || req.user?.id || null) : null,
-        },
-        select: { id: true, transferVerified: true, transferVerifiedAt: true, transferVerifiedBy: true },
-      });
-      res.json(updated);
-    } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
-  },
-);
+router.patch('/:driverId/orders/:orderId/verify-transfer', authenticate, requireTenantAccess, requireDriverCashManager, async (req, res) => {
+  try {
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
+    await verifyTransferForRequest(req, res, driver.id);
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, code: e.code }); }
+});
 
 // ── GET /api/driver-cash/transfers/pending ───────────────────────────────
 // Conciliación SPEI: TODAS las transferencias PAID del restaurante aún sin
@@ -320,29 +338,8 @@ router.get('/transfers/pending', authenticate, requireTenantAccess, requireDrive
 // o sin repartidor — cubre tienda online). Body {verified} default true. Deja
 // auditoría (quién/cuándo). No mueve caja.
 router.patch('/transfers/:orderId/verify', authenticate, requireTenantAccess, requireDriverCashManager, async (req, res) => {
-  try {
-    const restaurantId = req.restaurantId || req.user?.restaurantId;
-    const { orderId } = req.params;
-    const verified = req.body?.verified !== false; // default true
-    const order = await prisma.order.findFirst({
-      where: { id: orderId, ...(req.user?.role !== 'SUPER_ADMIN' && restaurantId ? { restaurantId } : {}) },
-      select: { id: true, paymentMethod: true },
-    });
-    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
-    if (order.paymentMethod !== 'TRANSFER') {
-      return res.status(400).json({ error: 'El pedido no se cobró por transferencia' });
-    }
-    const updated = await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        transferVerified: verified,
-        transferVerifiedAt: verified ? new Date() : null,
-        transferVerifiedBy: verified ? (req.user?.name || req.user?.id || null) : null,
-      },
-      select: { id: true, transferVerified: true, transferVerifiedAt: true, transferVerifiedBy: true },
-    });
-    res.json(updated);
-  } catch (e) { console.error(req.method, req.originalUrl, e); res.status(500).json({ error: 'Error interno' }); }
+  try { await verifyTransferForRequest(req, res); }
+  catch (e) { res.status(e.status || 500).json({ error: e.message, code: e.code }); }
 });
 
 // ── Asignar fondo de cambio (caja chica) — manager de caja del repartidor ──
@@ -395,6 +392,7 @@ router.post('/:driverId/float', authenticate, requireTenantAccess, requireDriver
           category: purpose,
           amount: numericAmount,
           description: `${purpose === 'COMPRAS' ? 'Compras' : 'Cambio'} · ${fromShift ? 'Desde caja' : 'Aportación externa'}${typeof description === 'string' && description.trim() ? `: ${description.trim().slice(0, 300)}` : ''}`,
+          shiftId: openShift.id, fundSource: source, createdById: req.user.id,
         },
       });
       if (!fromShift) {
@@ -411,6 +409,10 @@ router.post('/:driverId/float', authenticate, requireTenantAccess, requireDriver
           data: { totalCashIn: { increment: numericAmount } },
         });
       }
+      await audit.record(req, audit.AUDIT_EVENTS.DRIVER_FUND_ASSIGN, {
+        resource: `driverCashMovement:${mov.id}`,
+        after: { driverId: driver.id, shiftId: openShift.id, amount: numericAmount, source, purpose },
+      }, tx);
       return mov;
     });
     const io = req.app.get('io');
@@ -423,7 +425,8 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
   try {
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
-    const { type, category, amount, description, orderId, supplierId, dueDate, pending } = req.body;
+    const { type, amount, description, orderId, supplierId, dueDate, pending } = req.body;
+    const category = ({ GASOLINE: 'GASOLINA', OTHER: 'OTROS', EMERGENCY_PURCHASE: 'COMPRAS' })[req.body.category] || req.body.category;
     const numericAmount = Number(amount);
     if (!['INCOME', 'EXPENSE', 'RETURN'].includes(type)) return res.status(400).json({ error: 'type invalido' });
     if (type === 'INCOME' && category !== 'DELIVERY') {
@@ -434,6 +437,9 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
     }
     if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 50000) {
       return res.status(400).json({ error: 'amount invalido' });
+    }
+    if (type === 'EXPENSE' && numericAmount > 500 && !isStaff(req.user) && !hasValidOverride(req, 'manage_driver_cash')) {
+      return res.status(402).json({ error: 'Este gasto requiere autorización del responsable de caja.', code: 'ADMIN_AUTH_REQUIRED', requiredPermission: 'manage_driver_cash', limit: 500 });
     }
 
     // Idempotencia: evita que un doble-tap o reintento de red cree movimientos
@@ -480,7 +486,7 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
       // autorización de admin (mismo espíritu que CASHIER_LIMIT en /api/expenses).
       // El staff (admin/manager o manage_driver_cash) no tiene tope.
       const DRIVER_PAYABLE_LIMIT = 500;
-      if (numericAmount > DRIVER_PAYABLE_LIMIT && !isStaff(req.user) && req.headers['x-admin-authorized'] !== 'true') {
+      if (numericAmount > DRIVER_PAYABLE_LIMIT && !isStaff(req.user) && !hasValidOverride(req, 'manage_driver_cash')) {
         return res.status(402).json({
           error: `La deuda excede el límite del repartidor ($${DRIVER_PAYABLE_LIMIT}). Se requiere autorización de admin.`,
           code: 'ADMIN_AUTH_REQUIRED',
@@ -562,6 +568,8 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
           description: description || null,
           photoUrl,
           orderId: orderId || null,
+          shiftId: openShift?.id || null, createdById: req.user.id,
+          receiptStatus: photoUrl ? 'ATTACHED' : 'PENDING',
         },
       });
       if (openShift && mirrorsExpense) {
@@ -578,6 +586,10 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
           data: { totalExpenses: { increment: numericAmount } },
         });
       }
+      if (type === 'EXPENSE') await audit.record(req, audit.AUDIT_EVENTS.DRIVER_EXPENSE, {
+        resource: `driverCashMovement:${mov.id}`,
+        after: { driverId: driver.id, amount: numericAmount, category, shiftId: openShift?.id || null, hasReceipt: Boolean(photoUrl) },
+      }, tx);
       return mov;
     });
     res.json(movement);
@@ -701,7 +713,7 @@ router.post('/:driverId/cut', authenticate, requireTenantAccess, requireDriverCa
   try {
     const driver = await assertDriverAccess(req, res);
     if (!driver) return;
-    const { notes } = req.body;
+    const { notes, countedCash, differenceReason } = req.body;
     const cut = await cashTransaction(prisma, async (tx) => {
       const shift = await tx.cashShift.findFirst({
         where: { locationId: driver.locationId, isOpen: true },
@@ -710,10 +722,39 @@ router.post('/:driverId/cut', authenticate, requireTenantAccess, requireDriverCa
       return cutDriverCash(tx, driver, {
         restaurantId: req.restaurantId || req.user?.restaurantId,
         shiftId: shift?.id, notes: notes || null,
+        countedCash, differenceReason, auditContext: req,
       });
     });
     res.json(cut || { alreadyClosed: true, movements: 0, balance: 0 });
   } catch (e) { console.error(req.method, req.originalUrl, e); res.status(e.status || 500).json({ error: e.status ? e.message : 'Error interno', ...(e.code ? { code: e.code } : {}) }); }
+});
+
+router.post('/:driverId/movements/:movementId/receipt', authenticate, requireTenantAccess, upload.single('photo'), async (req, res) => {
+  try {
+    const driver = await assertDriverAccess(req, res);
+    if (!driver) return;
+    const existing = await prisma.driverCashMovement.findFirst({
+      where: { id: req.params.movementId, driverId: driver.id, type: 'EXPENSE' },
+    });
+    if (!existing) return res.status(404).json({ error: 'Gasto no encontrado.' });
+    if (!req.file && !isStaff(req.user)) return res.status(403).json({ error: 'Solo el responsable de caja puede autorizar una excepción de comprobante.' });
+    const reason = req.file ? null : requiredReason(req.body.reason, 'Explica por qué se autoriza este gasto sin comprobante.');
+    const photoUrl = req.file ? await uploadPhoto(req.file.buffer, 'driver-cash') : null;
+    const movement = await cashTransaction(prisma, async (tx) => {
+      const saved = await tx.driverCashMovement.update({
+        where: { id: existing.id },
+        data: photoUrl ? { photoUrl, receiptStatus: 'ATTACHED', receiptReason: null }
+          : { receiptStatus: 'EXCEPTION', receiptReason: reason },
+      });
+      await audit.record(req, audit.AUDIT_EVENTS.DRIVER_RECEIPT, {
+        resource: `driverCashMovement:${existing.id}`, reason,
+        before: { receiptStatus: existing.receiptStatus },
+        after: { receiptStatus: saved.receiptStatus, hasPhoto: Boolean(saved.photoUrl) },
+      }, tx);
+      return saved;
+    });
+    res.json(movement);
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, code: e.code }); }
 });
 
 router.get('/cuts', authenticate, requireTenantAccess, requireAdmin, async (req, res) => {

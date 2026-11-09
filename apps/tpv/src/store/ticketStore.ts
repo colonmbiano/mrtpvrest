@@ -175,6 +175,7 @@ export type TicketData = {
   items: CartItem[];
   discount: number;
   discountType: "percent" | "fixed";
+  discountReason?: string;
   // Comensales declarados al iniciar la cuenta DINE_IN.
   numberOfGuests?: number | null;
   // Comensal activo al que se asignan los items que se agregan ahora

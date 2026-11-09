@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import { buildOrderItemsPayload, comboPartsFromOrderItem } from "@/lib/modifiers";
+import { requestControlText } from "@/lib/request-control-text";
 import api from "@/lib/api";
 import { loadOpenOrders, loadOrder, mergeLocalPaidOrders, waitForOfflineHydration } from "@/lib/order-repository";
 import { localItemsFromCart } from "@/lib/local-order-model";
@@ -318,7 +319,7 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const handleConfirmDrawerPayment = async (
     method: string,
     tip?: { percent: number; amount: number },
-    _driverId?: string | null,
+    driverId?: string | null,
     _printReceipt?: boolean,
     account?: { employeeId: string; discountPct: number | null } | null,
     payments?: { method: string; amount: number }[],
@@ -358,8 +359,8 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     // backend valide el cuadre y guarde el desglose; el servidor re-valida.
     const isMixed = method === "MIXED" && Array.isArray(payments) && payments.length > 0;
     const payBody = isMixed
-      ? { payments, tip: tip?.amount ?? 0 }
-      : { paymentMethod: method };
+      ? { payments, tip: tip?.amount ?? 0, ...(driverId ? { deliveryDriverId: driverId } : {}) }
+      : { paymentMethod: method, ...(driverId ? { deliveryDriverId: driverId } : {}) };
     const res = await apiOrQueue(
       "payment",
       "PUT",
@@ -937,12 +938,14 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const handleApplyPaymentDiscount = async (
     type: "percent" | "fixed",
     value: number,
+    reason: string,
   ) => {
     if (!payOrder) return;
     try {
       const result = await apiOrQueue('order', 'PUT', `/api/orders/${payOrder.id}/discount`, {
         type,
         value,
+        reason,
       });
       if (!result.ok) throw new Error(result.error || 'No se pudo guardar el descuento');
       const data = result.data;
@@ -1021,8 +1024,10 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     if (!window.confirm(`¿Eliminar el ticket #${label}? Esta acción no se puede deshacer.`)) {
       return;
     }
+    const reason = (await requestControlText("Motivo de la cancelación (mínimo 5 caracteres):"))?.trim();
+    if (!reason || reason.length < 5) return;
     try {
-      await api.put(`/api/orders/${order.id}/status`, { status: "CANCELLED" });
+      await api.put(`/api/orders/${order.id}/status`, { status: "CANCELLED", reason });
       useActiveOrderStore.getState().clear();
       useTicketStore.getState().clearActiveItems();
       await fetchOpenOrders();
@@ -1232,10 +1237,12 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
 
   const handleCorrectPaymentMethod = useCallback(
     async (o: { id: string }, method: string) => {
+      const reason = (await requestControlText("Motivo del cambio de método de pago (mínimo 5 caracteres):"))?.trim();
+      if (!reason || reason.length < 5) return;
       try {
         const { data } = await api.put(
           `/api/orders/${o.id}/correct-payment-method`,
-          { paymentMethod: method },
+          { paymentMethod: method, reason },
         );
         // Refleja el cambio en el cache local de cobrados (la fila y el chip de
         // método se actualizan al instante; el picker excluye el nuevo método).
@@ -1538,9 +1545,11 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     async (id: string) => {
       const fromMarketplace = isMarketplaceOrder(openOrders.find((o: any) => o.id === id));
       if (fromMarketplace && !confirm("¿Rechazar este pedido del marketplace? Se avisará al cliente.")) return;
+      const reason = (await requestControlText("Motivo del rechazo (mínimo 5 caracteres):"))?.trim();
+      if (!reason || reason.length < 5) return;
       setRejectingWebId(id);
       try {
-        await api.put(`/api/orders/${id}/status`, { status: "CANCELLED" });
+        await api.put(`/api/orders/${id}/status`, { status: "CANCELLED", reason });
         toast.success(fromMarketplace ? "Pedido del marketplace rechazado" : "Pedido de mesa rechazado");
         fetchOpenOrders();
       } catch (err: any) {

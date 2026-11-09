@@ -12,6 +12,12 @@ const openShiftSchema = z.object({
 const closeShiftSchema = z.object({
   closingFloat: z.coerce.number().nonnegative(),
   notes:        z.string().max(2000).optional().nullable(),
+  closeReviewReason: z.string().max(500).optional(),
+  driverReceipts: z.array(z.object({
+    driverId: z.string().min(1),
+    countedCash: z.number().finite().nonnegative().max(9999999999.99),
+    differenceReason: z.string().max(500).optional(),
+  })).max(100).optional(),
 }).passthrough();
 
 module.exports = { openShiftSchema, closeShiftSchema };

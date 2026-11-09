@@ -80,6 +80,7 @@ const ORDER = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  prisma.$transaction.mockImplementation(async (fn) => fn(prisma));
   prisma.order.update.mockImplementation(async ({ data }) => ({ ...ORDER, ...data }));
   prisma.table.update.mockResolvedValue({});
   prisma.stockMovement.findMany.mockResolvedValue([]);
@@ -122,11 +123,11 @@ describe('PUT /api/orders/:id/status · mesa por confirmar', () => {
     prisma.order.findFirst.mockResolvedValue({ id: 'o1', status: 'PENDING', awaitingTableConfirmation: true });
     const io = fakeIo();
 
-    const res = await request(makeApp(io)).put('/api/orders/o1/status').send({ status: 'CANCELLED' });
+    const res = await request(makeApp(io)).put('/api/orders/o1/status').send({ status: 'CANCELLED', reason: 'Pedido rechazado por el operador' });
 
     expect(res.status).toBe(200);
     expect(prisma.order.update).toHaveBeenCalledWith({
-      where: { id: 'o1' },
+      where: { id: 'o1', restaurantId: 'r1' },
       data: { status: 'CANCELLED', awaitingTableConfirmation: false },
     });
     expect(prisma.table.update).not.toHaveBeenCalled();
@@ -137,7 +138,7 @@ describe('PUT /api/orders/:id/status · mesa por confirmar', () => {
     prisma.order.findFirst.mockResolvedValue({ id: 'o1', status: 'PENDING', awaitingTableConfirmation: false });
     const io = fakeIo();
 
-    const res = await request(makeApp(io)).put('/api/orders/o1/status').send({ status: 'CANCELLED' });
+    const res = await request(makeApp(io)).put('/api/orders/o1/status').send({ status: 'CANCELLED', reason: 'Pedido rechazado por el operador' });
 
     expect(res.status).toBe(200);
     expect(prisma.order.update.mock.calls[0][0].data).toEqual({ status: 'CANCELLED' });

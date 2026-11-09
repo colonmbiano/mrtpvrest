@@ -80,7 +80,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
 
       <header className="relative z-20 border-b border-[#e8eeeb] bg-white">
         <div className="mx-auto max-w-[1380px] px-4 sm:px-6">
-          <div className="flex min-h-20 items-center justify-between gap-3 lg:gap-6">
+          <div className="flex min-h-20 flex-wrap items-center justify-between gap-3 py-3 md:flex-nowrap md:py-0 lg:gap-6">
             <Link href="/" aria-label="Mercadito Colorines, inicio" className={'flex shrink-0 items-center gap-2 ' + focus}>
               <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#e9f4e9] text-2xl shadow-sm" aria-hidden="true">🛍️</span>
               <span className="flex flex-col leading-none">

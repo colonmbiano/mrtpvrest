@@ -79,7 +79,7 @@ describe('rutas :: la caja no edita productos de un pedido del marketplace', () 
     ['cambiar cantidad', app => request(app).put('/api/orders/items/i1').send({ quantity: 3 })],
     ['quitar producto', app => request(app).delete('/api/orders/items/i1')],
     ['quitar un extra', app => request(app).delete('/api/orders/items/i1/modifiers/mod1')],
-    ['descuento', app => request(app).put('/api/orders/o1/discount').send({ type: 'fixed', value: 10 })],
+    ['descuento', app => request(app).put('/api/orders/o1/discount').send({ type: 'fixed', value: 10, reason: 'Descuento manual autorizado' })],
     ['cambiar tipo', app => request(app).patch('/api/orders/o1/type').send({ type: 'TAKEOUT' })],
     ['juntar cuentas', app => request(app).post('/api/orders/o2/merge/o1')],
     ['dividir cuenta', app => request(app).post('/api/orders/o1/split').send({ items: [{ id: 'i1', quantity: 1 }] })],
