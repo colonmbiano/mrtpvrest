@@ -203,10 +203,17 @@ const MESSAGES = {
   },
 };
 
+// Pedido del Mercadito pagado en línea y cancelado: se reembolsa completo (lib/marketplace-cancel.js).
+function marketplaceRefundText(order, status) {
+  if (status !== 'CANCELLED' || order?.source !== 'MARKETPLACE' || order.paymentProvider !== 'MERCADOPAGO'
+    || !['PAID', 'REFUNDED'].includes(order.paymentStatus)) return null;
+  return `Tu pedido ${order.orderNumber} fue cancelado. Te devolvemos el total, envío incluido, a tu medio de pago de Mercado Pago; puede tardar unos días en reflejarse.`;
+}
+
 async function notifyOrderStatus(order, status) {
   const msg = MESSAGES[status];
   if (!msg) return;
-  const text = msg.body(order.orderNumber);
+  const text = marketplaceRefundText(order, status) || msg.body(order.orderNumber);
   // Push
   await sendPushToOrder(order.id, {
     title: msg.title,
@@ -344,4 +351,4 @@ async function notifyLowStock(ingredient, locationId) {
   } catch (e) { console.error('notifyLowStock:', e.message); }
 }
 
-module.exports = { notifyOrderStatus, notifyOrderStatusById, notifyIngredientShortage, notifyNewOrder, notifyLowStock, sendWhatsApp, sendOrderWhatsApp, sendPushToOrder, sendPushToDriver, notifyDriversNewDeliveryOrder };
+module.exports = { marketplaceRefundText, notifyOrderStatus, notifyOrderStatusById, notifyIngredientShortage, notifyNewOrder, notifyLowStock, sendWhatsApp, sendOrderWhatsApp, sendPushToOrder, sendPushToDriver, notifyDriversNewDeliveryOrder };

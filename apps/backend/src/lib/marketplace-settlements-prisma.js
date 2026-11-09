@@ -3,7 +3,7 @@
 // Adaptadores financieros v1. La reserva se confirma ANTES de llamar a la
 // pasarela; la clave estable permite recuperarla sin volver a cobrar/reembolsar.
 // No se inicia ningún worker ni se conecta a la BD al importar este módulo.
-const { randomUUID } = require('node:crypto');
+const { randomUUID, createHash } = require('node:crypto');
 const { createSettlementsV1Service, SettlementsV1Error, allocate, refundLedger } = require('./marketplace-settlements-v1');
 const { createMarketplacePaymentGateway } = require('./marketplace-payment-gateway');
 const { buildOrderSettlementTransaction, recordLedgerTransaction } = require('./marketplace-ledger');
@@ -13,6 +13,7 @@ const TX = { isolationLevel: 'Serializable', maxWait: 5000, timeout: 15000 };
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const PARTS = ['merchant', 'platform', 'courier'];
 const emptyParts = () => ({ merchant: 0, platform: 0, courier: 0 });
+const digest = value => createHash('sha256').update(value).digest('hex');
 function check(ok, code, message, status = 409) {
   if (!ok) throw new SettlementsV1Error(code, message, status);
 }
@@ -129,41 +130,68 @@ function createMarketplaceSettlementsPrisma({ prisma, getGateway = createMarketp
   }
   async function reserve({ actor, orderId, request, requestHash, keyHash }) {
     finance(actor);
-    return transaction(async db => {
-      const row = await pipeline(db, orderId, true); await authorized(actor, row, db);
-      const old = await db.marketplaceRefund.findFirst({ where: { restaurantId: row.restaurantId, keyHash } });
-      if (old) {
-        check(old.requestHash === requestHash && old.orderId === orderId, 'IDEMPOTENCY_CONFLICT', 'Clave usada para otro reembolso');
-        return old;
-      }
-      const active = await db.marketplaceRefund.findFirst({ where: { restaurantId: row.restaurantId, activeOrderId: orderId } });
-      check(!active, 'REFUND_IN_PROGRESS', 'Hay un reembolso pendiente de conciliacion');
-      const payment = await captured(db, row); const lines = await ledger(db, row, payment);
-      const prior = await refunded(db, row); const parts = financialParts(row);
-      const remaining = row.settlement.totalCents - prior.total;
-      check(remaining > 0 && row.order.paymentStatus === 'PAID', 'ORDER_ALREADY_REFUNDED', 'La orden no tiene saldo reembolsable');
-      const amount = request.amountCents ?? remaining;
-      check(int(amount) && amount > 0 && amount <= remaining, 'REFUND_EXCEEDS_PAYMENT', 'El reembolso excede el saldo');
-      const balances = Object.fromEntries(PARTS.map(part => [part, parts[part] - prior.parts[part]]));
-      const allocation = allocate(amount, balances);
-      const settled = lines.some(line => line.eventType === 'ORDER_SETTLED');
-      if (settled && allocation.courier > 0) {
-        const payable = lines.filter(line => line.account === 'COURIER_PAYABLE')
-          .reduce((sum, line) => sum + (line.type === 'CREDIT' ? 1 : -1) * cents(line.amount), 0);
-        check(payable >= allocation.courier, 'PAYOUT_RECONCILIATION_REQUIRED', 'Concilia primero el retiro del repartidor');
-        const pending = await db.marketplaceDriverPayout.count({ where: { restaurantId: row.restaurantId, status: 'PENDING' } });
-        check(pending === 0, 'PAYOUT_RECONCILIATION_REQUIRED', 'Hay retiros pendientes que reservan el saldo');
-      }
-      const id = randomUUID();
-      const data = { actorId: actor.accountId, reason: request.reason, paymentId: payment.id,
-        providerPaymentId: payment.providerPaymentId, collectorId: row.collectorId, allocation, settled,
-        courierId: row.dispatch?.task?.currentAssignment?.courierId ?? row.dispatch?.assignment?.courierId ?? null,
-        previousRefundedCents: prior.total, refundedCents: prior.total + amount, remainingCents: remaining - amount,
-        paymentStatus: remaining === amount ? 'REFUNDED' : 'PARTIALLY_REFUNDED' };
-      check(data.collectorId, 'PAYMENT_INTEGRITY_ERROR', 'Cobrador del pago no registrado', 503);
-      return db.marketplaceRefund.create({ data: { id, restaurantId: row.restaurantId, orderId, keyHash, requestHash,
-        activeOrderId: orderId, amountCents: amount, data, status: 'PENDING' } });
-    });
+    const work = db => reserveIn(db, { actorId: actor.accountId, orderId, request, requestHash, keyHash,
+      authorize: row => authorized(actor, row, db) });
+    try { return await transaction(work); }
+    catch (error) {
+      // Dos solicitudes con la misma clave: la que pierde la carrera choca con el UNIQUE de keyHash.
+      // Un segundo intento ya ve la reserva ganadora y la devuelve (o rechaza un cuerpo distinto).
+      if (error?.code !== 'P2002') throw error;
+      return transaction(work);
+    }
+  }
+  // Núcleo de la reserva, dentro de la transacción de quien llama. La cancelación de un pedido
+  // (lib/marketplace-cancel.js) lo usa en la MISMA transacción que pasa la orden a CANCELLED: no
+  // queda una orden cancelada sin su reembolso reservado, ni un reembolso de una orden viva.
+  async function reserveIn(db, { actorId: actorAccountId, orderId, request, requestHash, keyHash, authorize, restaurantId }) {
+    const row = await pipeline(db, orderId, true);
+    check(!restaurantId || row.restaurantId === restaurantId, 'ORDER_NOT_FOUND', 'Orden no encontrada', 404);
+    if (authorize) await authorize(row);
+    const old = await db.marketplaceRefund.findFirst({ where: { restaurantId: row.restaurantId, keyHash } });
+    if (old) {
+      check(old.requestHash === requestHash && old.orderId === orderId, 'IDEMPOTENCY_CONFLICT', 'Clave usada para otro reembolso');
+      return old;
+    }
+    const active = await db.marketplaceRefund.findFirst({ where: { restaurantId: row.restaurantId, activeOrderId: orderId } });
+    check(!active, 'REFUND_IN_PROGRESS', 'Hay un reembolso pendiente de conciliacion');
+    const payment = await captured(db, row); const lines = await ledger(db, row, payment);
+    const prior = await refunded(db, row); const parts = financialParts(row);
+    const remaining = row.settlement.totalCents - prior.total;
+    check(remaining > 0 && row.order.paymentStatus === 'PAID', 'ORDER_ALREADY_REFUNDED', 'La orden no tiene saldo reembolsable');
+    const amount = request.amountCents ?? remaining;
+    check(int(amount) && amount > 0 && amount <= remaining, 'REFUND_EXCEEDS_PAYMENT', 'El reembolso excede el saldo');
+    const balances = Object.fromEntries(PARTS.map(part => [part, parts[part] - prior.parts[part]]));
+    const allocation = allocate(amount, balances);
+    const settled = lines.some(line => line.eventType === 'ORDER_SETTLED');
+    if (settled && allocation.courier > 0) {
+      const payable = lines.filter(line => line.account === 'COURIER_PAYABLE')
+        .reduce((sum, line) => sum + (line.type === 'CREDIT' ? 1 : -1) * cents(line.amount), 0);
+      check(payable >= allocation.courier, 'PAYOUT_RECONCILIATION_REQUIRED', 'Concilia primero el retiro del repartidor');
+      const pending = await db.marketplaceDriverPayout.count({ where: { restaurantId: row.restaurantId, status: 'PENDING' } });
+      check(pending === 0, 'PAYOUT_RECONCILIATION_REQUIRED', 'Hay retiros pendientes que reservan el saldo');
+    }
+    const id = randomUUID();
+    const data = { actorId: actorAccountId, reason: request.reason, paymentId: payment.id,
+      providerPaymentId: payment.providerPaymentId, collectorId: row.collectorId, allocation, settled,
+      courierId: row.dispatch?.task?.currentAssignment?.courierId ?? row.dispatch?.assignment?.courierId ?? null,
+      previousRefundedCents: prior.total, refundedCents: prior.total + amount, remainingCents: remaining - amount,
+      paymentStatus: remaining === amount ? 'REFUNDED' : 'PARTIALLY_REFUNDED' };
+    check(data.collectorId, 'PAYMENT_INTEGRITY_ERROR', 'Cobrador del pago no registrado', 503);
+    return db.marketplaceRefund.create({ data: { id, restaurantId: row.restaurantId, orderId, keyHash, requestHash,
+      activeOrderId: orderId, amountCents: amount, data, status: 'PENDING' } });
+  }
+  // Reembolso TOTAL (envío incluido) por cancelación. La clave sale de la orden, no de la
+  // solicitud: cualquier camino que cancele la misma orden (caja, tarea de pedidos sin aceptar,
+  // comprador) reutiliza la misma reserva y nunca reembolsa dos veces.
+  function cancellationKeys(orderId) {
+    return { keyHash: digest(`marketplace-cancel:${orderId}`),
+      requestHash: digest(JSON.stringify({ orderId, kind: 'CANCELLATION', amountCents: null })) };
+  }
+  async function reserveCancellationRefund(db, { orderId, restaurantId, actorId: who, reason }) {
+    check(ID.test(who || ''), 'UNAUTHENTICATED', 'Actor de la cancelacion requerido', 401);
+    check(typeof reason === 'string' && reason.trim().length >= 5, 'REASON_REQUIRED', 'Motivo de cancelacion requerido', 400);
+    return reserveIn(db, { actorId: who, orderId, restaurantId, request: { amountCents: null, reason: reason.trim().slice(0, 200) },
+      ...cancellationKeys(orderId) });
   }
   async function complete(reservation) {
     if (reservation.status === 'POSTED') return result(reservation, true);
@@ -290,7 +318,8 @@ function createMarketplaceSettlementsPrisma({ prisma, getGateway = createMarketp
     }
     return results;
   }
-  return { ...service, reconcileOrder, recoverRefunds, drainOutbox, settlementStore };
+  return { ...service, reconcileOrder, recoverRefunds, drainOutbox, settlementStore,
+    reserveCancellationRefund, completeRefund: complete };
 }
 
 module.exports = { createMarketplaceSettlementsPrisma, financialParts };

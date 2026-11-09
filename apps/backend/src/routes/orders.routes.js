@@ -5,6 +5,8 @@ const { createHash } = require('node:crypto');
 // Pedidos del marketplace: sin editar productos/montos en el TPV y sin cobrarlos en caja si no
 // se han aceptado o ya se pagaron en línea.
 const { marketplaceEditBlock, marketplaceChargeBlock } = require('../lib/marketplace-order-lock');
+// Cancelación del Mercadito: roles por estado y reembolso total del pago en línea (C1).
+const { marketplaceCancelBlock, isOnlinePaidMarketplaceOrder, createMarketplaceCancellation } = require('../lib/marketplace-cancel');
 const sendBlock = (res, block) => res.status(block.status).json(block.body);
 
 const { consumePaidOrder, discountInventory, assertStockAvailable, restoreInventoryForCancelledOrder, resolveRecipeFlatItems } = require('../services/order-inventory.service');
@@ -12,6 +14,7 @@ const { consumePaidOrder, discountInventory, assertStockAvailable, restoreInvent
 const { readPackaging, publicState, setPackaging, changePackagingType, lockOrder } = require('../services/order-packaging.service');
 const express = require('express');
 const { prisma } = require('@mrtpvrest/database');
+const marketplaceCancellation = createMarketplaceCancellation({ prisma });
 const { normalizePhone } = require('@mrtpvrest/config/phone');
 const { authenticate, requireAdmin, requireTenantAccess, requireRole, requirePermission, userHasPermission, hasValidOverride } = require('../middleware/auth.middleware');
 const { requireActiveShift } = require('../middleware/shift.middleware');
@@ -1923,6 +1926,7 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
         tableId: true, locationId: true, orderType: true, customerName: true, notes: true,
         tip: true, discount: true, pointsUsed: true, couponId: true,
         paymentStatus: true, paymentProviderRef: true, deliveryDriverId: true, source: true,
+        paymentProvider: true, paymentProviderId: true,
       },
     });
     if (!existing) return res.status(404).json({ error: 'Pedido no encontrado' });
@@ -1940,6 +1944,11 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
     }
     if (statusChanged && !canTransition(existing.status, status, role)) {
       return res.status(409).json({ error: `Transición inválida (${existing.status} → ${status})`, code: 'INVALID_TRANSITION' });
+    }
+    // Mercadito: quién puede cancelar depende del estado y de si ya se pagó en línea.
+    if (status === 'CANCELLED' && statusChanged) {
+      const blocked = marketplaceCancelBlock(existing, role);
+      if (blocked) return res.status(blocked.status).json(blocked.body);
     }
 
     // Pedido de mesa por confirmar (QR desde internet, ver store.routes): aceptarlo
@@ -1963,18 +1972,32 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
       }
     }
     const updateData = { status, ...(resolvesTable ? { awaitingTableConfirmation: false } : {}) };
+    // Reserva del reembolso de un pedido del Mercadito pagado en línea (misma TX que la cancelación).
+    let refundReservation = null;
     const order = status === 'CANCELLED' && statusChanged
       ? await cashTransaction(prisma, async (tx) => {
+        refundReservation = null;
         const fresh = await tx.order.findFirst({ where: { id: existing.id, restaurantId } });
         if (!fresh) throw controlError('Pedido no encontrado.', 'ORDER_NOT_FOUND', 404);
-        if (fresh.paymentStatus === 'PAID') await assertOpenPaymentPeriod(tx, fresh, restaurantId);
+        // El estado pudo cambiar desde la primera lectura (p. ej. otra caja lo aceptó).
+        const blocked = marketplaceCancelBlock(fresh, role);
+        if (blocked) throw controlError(blocked.body.error, blocked.body.code, blocked.status);
+        if (isOnlinePaidMarketplaceOrder(fresh)) {
+          // El dinero está en Mercado Pago, no en el cajón: no aplica el candado del corte. Si no
+          // se puede reservar el reembolso, la orden tampoco se cancela.
+          refundReservation = await marketplaceCancellation.reserveRefund(tx, { order: fresh, restaurantId,
+            user: req.user, reason: cancelReason });
+        } else if (fresh.paymentStatus === 'PAID') await assertOpenPaymentPeriod(tx, fresh, restaurantId);
         const cancelled = await tx.order.update({ where: { id: existing.id, restaurantId }, data: updateData });
         await audit.record(req, audit.AUDIT_EVENTS.ORDER_CANCEL, {
           resource: `order:${existing.id}`, reason: cancelReason,
-          before: { status: fresh.status }, after: { status: 'CANCELLED', total: fresh.total },
+          before: { status: fresh.status }, after: { status: 'CANCELLED', total: fresh.total,
+            ...(refundReservation ? { refundId: refundReservation.id, refundCents: refundReservation.amountCents } : {}) },
         }, tx);
         return cancelled;
       }) : await prisma.order.update({ where: { id: existing.id }, data: updateData });
+    // Después del commit: Mercado Pago. Si falla, la reserva queda PENDING y se recupera después.
+    const refund = await marketplaceCancellation.completeRefund(refundReservation);
     if (confirmsTable && order.tableId) {
       await prisma.table.update({ where: { id: order.tableId }, data: { status: 'OCCUPIED' } }).catch(() => {});
     }
@@ -2026,8 +2049,11 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
       );
     }
 
-    res.json(order);
-  } catch (e) { res.status(e.status || 500).json({ error: e.message, code: e.code }); }
+    res.json(refund ? { ...order, refund } : order);
+  } catch (e) {
+    // Los errores de la reserva del reembolso (marketplace-settlements-prisma) traen statusCode.
+    res.status(e.status || e.statusCode || 500).json({ error: e.message, code: e.code });
+  }
 });
 
 // Cobrar (marcar PAID) es exclusivo de Cajero o superior — los MESEROS no
