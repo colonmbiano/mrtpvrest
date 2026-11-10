@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, ChevronRight, AlarmClock, ShieldAlert, Lock,
@@ -12,6 +12,7 @@ import { shiftActionQueued } from '@/lib/offline';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useAuthStore } from '@/store/authStore';
 import PurchasesExpensesModal from '@/components/pos/PurchasesExpensesModal';
+import ShiftControlPanel, { type DriverReceiptInput } from '@/components/admin/ShiftControlPanel';
 import { usePrinters, useReceiptIdentity, useFullTicketConfig } from '@/hooks/usePrinters';
 import { printShiftCloseTicket, type ShiftCloseTicketInput } from '@/lib/printer-tcp';
 
@@ -118,6 +119,15 @@ export default function CierreTurno() {
   const [error, setError] = useState('');
   const [showExpenses, setShowExpenses] = useState(false);
   const [showCashIn, setShowCashIn] = useState(false);
+  const [driverReceipts, setDriverReceipts] = useState<DriverReceiptInput[]>([]);
+  const [closeReviewReason, setCloseReviewReason] = useState('');
+  const [reviewValid, setReviewValid] = useState(false);
+  const [reviewRevision, setReviewRevision] = useState(0);
+  const updateCloseReview = useCallback((receipts: DriverReceiptInput[], reason: string, valid: boolean) => {
+    setDriverReceipts(receipts);
+    setCloseReviewReason(reason);
+    setReviewValid(valid);
+  }, []);
 
   // Post-cierre: el turno ya cerrado (respuesta del backend) + estado de impresión.
   const [closedShift, setClosedShift] = useState<Shift | null>(null);
@@ -282,7 +292,7 @@ export default function CierreTurno() {
     canReveal && countedValid && expectedCashLive != null ? counted - expectedCashLive : null;
 
   const onSubmit = async () => {
-    if (!shift || !countedValid) return;
+    if (!shift?.id || !countedValid || !reviewValid) return;
     setSubmitting(true);
     setError('');
     try {
@@ -291,12 +301,14 @@ export default function CierreTurno() {
       // el corte server-side corra DESPUÉS de las órdenes encoladas).
       const res = await shiftActionQueued<Shift>(
         'shift-close', 'close',
-        { closingFloat: counted, notes: notes.trim() || null },
+        { closingFloat: counted, notes: notes.trim() || null, driverReceipts, closeReviewReason },
         shift.id || undefined,
       );
 
       if (!res.ok) {
         setError(res.error || 'No pudimos cerrar el turno');
+        setReviewValid(false);
+        setReviewRevision((revision) => revision + 1);
         setSubmitting(false);
         return;
       }
@@ -545,6 +557,13 @@ export default function CierreTurno() {
       <div className="relative z-10 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-6 p-6 md:p-8 overflow-auto">
         {/* LEFT */}
         <div className="flex flex-col gap-5">
+          {shift?.id ? (
+            <ShiftControlPanel key={`${shift.id}:${reviewRevision}`} shiftId={shift.id} onChange={updateCloseReview} />
+          ) : shift?._offline ? (
+            <p role="alert" className="rounded-2xl border border-amber-400/30 p-4 text-sm text-amber-300">
+              Reconecta para revisar los pendientes antes de confirmar el cierre. Puedes guardar el borrador mientras tanto.
+            </p>
+          ) : null}
           {/* TOTAL EN CAJA */}
           <div className="rounded-3xl p-6 md:p-8 flex flex-col gap-5 bg-white/5 backdrop-blur-md border border-white/10">
             <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -804,12 +823,17 @@ export default function CierreTurno() {
           <div className="flex flex-col gap-2.5 px-5 py-5 border-t border-white/10">
             <button
               onClick={onSubmit}
-              disabled={!shift || submitting || !countedValid}
+              disabled={!shift?.id || submitting || !countedValid || !reviewValid}
               className="w-full inline-flex items-center justify-center gap-2.5 rounded-2xl py-4 min-h-[56px] text-sm font-black tracking-tight text-[var(--brand-fg)] bg-[var(--brand)] active:scale-95 transition-transform disabled:opacity-40 shadow-[0_15px_40px_var(--brand-glow)]"
             >
               <Lock size={16} strokeWidth={3} />
               {submitting ? 'Cerrando…' : 'Confirmar y Cerrar Turno'}
             </button>
+            {shift?.id && !reviewValid && (
+              <p className="text-xs text-amber-300" role="status">
+                Completa la revisión del cierre: registra el efectivo recibido de los repartidores y, si quedan pendientes, explica el motivo.
+              </p>
+            )}
             <button
               onClick={onSaveDraft}
               className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3 min-h-[48px] text-xs font-bold text-white/55 active:scale-95 transition-transform"

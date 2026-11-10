@@ -29,3 +29,30 @@ test("verifica un pago con referencia antes de retirarlo de los pendientes", asy
     method: "TRANSFER", verified: true, reference: "SPEI-12345",
   }));
 });
+
+test("identifica cada gasto sin comprobante con concepto, monto y responsable", async () => {
+  (api.get as jest.Mock).mockResolvedValue({ data: { ...review, driverReceipts: [],
+    warnings: [{ code: "MISSING_RECEIPTS", count: 2, label: "Gastos sin comprobante" }],
+    responsibles: [{ id: "kebra", name: "Kebra", role: "DELIVERY" }, { id: "polo", name: "Polo", role: "DELIVERY" }],
+    missingReceipts: [{ id: "g1", driverId: "kebra", description: "Lata de elotes", amount: 25 },
+      { id: "g2", driverId: "polo", description: "Aceite para la camioneta", amount: 120 }] } });
+  render(<ShiftControlPanel shiftId="s1" onChange={jest.fn()} />);
+  expect(await screen.findByText("Lata de elotes · $25.00")).toBeInTheDocument();
+  expect(screen.getByText("Aceite para la camioneta · $120.00")).toBeInTheDocument();
+  expect(screen.getByText("Kebra")).toBeInTheDocument();
+  expect(screen.getByText("Polo")).toBeInTheDocument();
+});
+
+test("invalida la revisión previa mientras actualiza y si falla la consulta", async () => {
+  (api.get as jest.Mock).mockResolvedValueOnce({ data: { ...review, driverReceipts: [] } });
+  const onChange = jest.fn();
+  render(<ShiftControlPanel shiftId="s1" onChange={onChange} />);
+  await waitFor(() => expect(onChange).toHaveBeenLastCalledWith([], "", true));
+  let rejectRefresh!: (reason: Error) => void;
+  (api.get as jest.Mock).mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectRefresh = reject; }));
+  fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+  await waitFor(() => expect(onChange).toHaveBeenLastCalledWith([], "", false));
+  rejectRefresh(new Error("Sin conexión"));
+  expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo revisar el cierre");
+  expect(onChange).toHaveBeenLastCalledWith([], "", false);
+});

@@ -21,10 +21,13 @@ export default function ShiftControlPanel({ shiftId, onChange }: Props) {
   const [references, setReferences] = useState<Record<string, string>>({});
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const load = useCallback(async () => {
+    setLoading(true);
     try { const { data } = await api.get<Review>(`/api/shifts/${shiftId}/preclose`); setReview(data); setError(""); }
-    catch { setError("No se pudo revisar el cierre. Actualiza cuando haya conexión; el cierre definitivo requiere esta revisión."); }
+    catch { setReview(null); setError("No se pudo revisar el cierre. Actualiza cuando haya conexión; el cierre definitivo requiere esta revisión."); }
+    finally { setLoading(false); }
   }, [shiftId]);
   useEffect(() => { let cancelled = false; queueMicrotask(() => { if (!cancelled) void load(); }); return () => { cancelled = true; }; }, [load]);
   useEffect(() => {
@@ -32,13 +35,13 @@ export default function ShiftControlPanel({ shiftId, onChange }: Props) {
     const receipts = drivers.filter((d) => (counts[d.driverId] || "").trim() !== "").map((d) => ({
       driverId: d.driverId, countedCash: Number(counts[d.driverId]), differenceReason: reasons[d.driverId] || "",
     }));
-    const valid = Boolean(review) && drivers.every((d) => {
+    const valid = !loading && !busy && Boolean(review) && drivers.every((d) => {
       const raw = counts[d.driverId]; const n = Number(raw);
       return raw != null && raw.trim() !== "" && Number.isFinite(n) && n >= 0
         && (Math.abs(n - d.expectedCash) < 0.01 || (reasons[d.driverId] || "").trim().length >= 5);
     }) && (!review?.warnings.length || reason.trim().length >= 5);
     onChange(receipts, reason, valid);
-  }, [review, counts, reasons, reason, onChange]);
+  }, [review, loading, busy, counts, reasons, reason, onChange]);
 
   async function verify(p: Review["unverifiedPayments"][number]) {
     const key = `${p.id}:${p.method}`;
@@ -63,9 +66,9 @@ export default function ShiftControlPanel({ shiftId, onChange }: Props) {
 
   return <section className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surf2)] p-4">
     <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Revisión del cierre</h3>
-      <button type="button" onClick={() => void load()} className="text-sm underline">Actualizar</button></div>
+      <button type="button" disabled={loading || busy !== null} onClick={() => void load()} className="text-sm underline disabled:opacity-50">Actualizar</button></div>
     {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
-    {!review && !error && <p className="text-sm">Revisando pendientes…</p>}
+    {loading && <p role="status" className="text-sm">Revisando pendientes…</p>}
     {review?.driverReceipts.map((d) => <div key={d.driverId} className="space-y-2 rounded-xl border border-[var(--border)] p-3">
       <p className="text-sm font-bold">{d.name} · esperado ${d.expectedCash.toFixed(2)}</p>
       <label className="block text-sm" htmlFor={`cash-${d.driverId}`}>Efectivo que recibiste</label>
@@ -99,7 +102,16 @@ export default function ShiftControlPanel({ shiftId, onChange }: Props) {
         {review.responsibles.map((r) => <option key={r.id} value={r.id}>{r.name} · {r.role}</option>)}
       </select>
     </div>)}
-    {!!review?.missingReceipts.length && <p className="text-sm">Los comprobantes pendientes se adjuntan o justifican en Movimientos del repartidor. El gasto ya está descontado de caja.</p>}
+    {!!review?.missingReceipts.length && <div className="space-y-2">
+      <h4 className="text-sm font-bold">Gastos sin comprobante</h4>
+      <ul className="space-y-2">
+        {review.missingReceipts.map((receipt) => <li key={receipt.id} className="rounded-xl border border-[var(--border)] p-3 text-sm">
+          <p className="font-bold">{receipt.description || "Gasto sin descripción"} · ${receipt.amount.toFixed(2)}</p>
+          <p>{review.responsibles.find((person) => person.id === receipt.driverId)?.name || "Repartidor"}</p>
+        </li>)}
+      </ul>
+      <p className="text-sm">Adjunta el comprobante o registra una excepción autorizada en Movimientos del repartidor. El gasto ya está descontado de caja.</p>
+    </div>}
     {!!review?.warnings.length && <>
       <label htmlFor="close-review-reason" className="block text-sm font-bold">Si quedan pendientes, explica por qué autorizas el cierre</label>
       <textarea id="close-review-reason" className={inputClass} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} rows={3} />
