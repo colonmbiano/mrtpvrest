@@ -7,7 +7,7 @@ jest.mock('../src/lib/audit-logger', () => ({ ...jest.requireActual('../src/lib/
 jest.mock('@mrtpvrest/database', () => ({
   prisma: {
     $transaction: jest.fn(async (fn) => fn(require('@mrtpvrest/database').prisma)),
-    order: { findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+    order: { findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
     table: { update: jest.fn() },
     cashShift: { findFirst: jest.fn().mockResolvedValue(null) },
     driverCashMovement: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -67,6 +67,7 @@ beforeEach(() => {
   // Las lecturas encoladas de una prueba que respondió antes de la TX no pasan a la siguiente.
   prisma.order.findFirst.mockReset();
   prisma.order.update.mockReset();
+  prisma.order.updateMany.mockReset();
   mockRole = 'CASHIER';
   mockFinance.reserveCancellationRefund.mockResolvedValue({ id: 'rf1', orderId: 'o1', amountCents: 13000, status: 'PENDING' });
   mockFinance.completeRefund.mockResolvedValue({ refundId: 'rf1', status: 'POSTED', amountCents: 13000 });
@@ -158,5 +159,26 @@ describe('PUT /api/orders/:id/status → CANCELLED en pedidos del Mercadito', ()
     const res = await cancel();
     expect(res.status).toBe(200);
     expect(mockFinance.reserveCancellationRefund).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('entrega del Mercadito sin código desde caja', () => {
+  test.each([undefined, 'no', 'x'.repeat(201)])('sin motivo válido rechaza antes de escribir', async reason => {
+    prisma.order.findFirst.mockResolvedValue(paid('READY'));
+    const res = await request(makeApp()).put('/api/orders/o1/status').send({ status: 'DELIVERED', reason });
+    expect(res.status).toBe(422);
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+  test('entrega y audita motivo y actor en la misma transacción', async () => {
+    prisma.order.findFirst.mockResolvedValueOnce(paid('READY')).mockResolvedValueOnce(paid('DELIVERED'));
+    prisma.order.updateMany.mockResolvedValue({ count: 1 });
+    const res = await request(makeApp()).put('/api/orders/o1/status').send({ status: 'DELIVERED', reason: 'Cliente perdió el código' });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('DELIVERED');
+    const audit = require('../src/lib/audit-logger');
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ user: expect.objectContaining({ id: 'u1' }) }),
+      'MARKETPLACE_DELIVERED_WITHOUT_PIN',
+      expect.objectContaining({ reason: 'Cliente perdió el código', resource: 'order:o1' }), prisma);
   });
 });

@@ -9,6 +9,7 @@ const AUDIT_EVENTS = Object.freeze({
   SHIFT_OPEN: 'SHIFT_OPEN',
   SHIFT_CLOSE: 'SHIFT_CLOSE',
   ORDER_CANCEL: 'ORDER_CANCEL',
+  MARKETPLACE_DELIVERED_WITHOUT_PIN: 'MARKETPLACE_DELIVERED_WITHOUT_PIN',
   DISCOUNT_APPLIED: 'DISCOUNT_APPLIED',
   // Una orden nueva se fusionó como ronda en una cuenta de mesa ya abierta
   // (el operador confirmó "agregar a la cuenta existente"). Hace rastreable

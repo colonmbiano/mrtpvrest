@@ -527,7 +527,7 @@ router.put('/:driverId/orders/:orderId/status', authenticate, requireTenantAcces
   try {
     const { order, changed } = await deliveryIncidents.updateStatus({
       orderId: req.params.orderId, driverId: req.params.driverId, body: req.body,
-      actor: req.user, restaurantId: req.restaurantId, prismaClient: prisma,
+      actor: req.user, restaurantId: req.restaurantId, prismaClient: prisma, auditRequest: req,
     });
     const io = req.app.get('io');
     if (io) {
