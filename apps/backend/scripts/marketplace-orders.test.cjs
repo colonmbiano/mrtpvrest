@@ -30,7 +30,7 @@ function balance(f) {
 }
 function http(f, options = {}) {
   const routes = new Map();
-  createRouter({ storeSlugs: 'alpha,beta', Router: () => ({ get: (path, fn) => routes.set(`GET ${path}`, fn),
+  createRouter({ env: { MARKETPLACE_LEGACY_ORDERS_ENABLED: 'true' }, storeSlugs: 'alpha,beta', Router: () => ({ get: (path, fn) => routes.set(`GET ${path}`, fn),
     post: (path, fn) => routes.set(`POST ${path}`, fn) }), getPrisma: () => f.prisma,
   orderOptions: { pinSecrets: { test: 'offline-fixture-pin-key-with-at-least-32-bytes' }, activePinKeyId: 'test',
     getPaymentGateway: async args => ({ collectorId: args.restaurantId === 'r1' ? '123' : '456',
