@@ -82,6 +82,11 @@ function http(f) {
       if (name === '../lib/tenantModules') return { VALID_MODULE_KEYS: [] };
       if (name === '../lib/promo') return {};
       if (name === '../lib/saas-marketplace') return require('../src/lib/saas-marketplace');
+      // El subrouter de configuración se monta al cargar SaaS. Estos contratos
+      // ejercitan /marketplace/overview y sus comprobaciones de autorización.
+      if (name === './marketplace-owner-settings.routes') {
+        return () => (_req, _res, next) => next();
+      }
       if (name === 'crypto') return require('node:crypto');
       throw new Error(`Forbidden route import: ${name}`);
     } };
