@@ -45,11 +45,9 @@ function normalize(body) {
   check(['DELIVERY', 'PICKUP'].includes(body.fulfillment), 'INVALID_QUOTE_REQUEST', 'Tipo de entrega invalido');
   if (body.fulfillment === 'DELIVERY') check(text(body.deliveryAddressId, 64), 'ADDRESS_REQUIRED', 'Direccion requerida');
   else check(body.deliveryAddressId === undefined, 'INVALID_QUOTE_REQUEST', 'PICKUP no admite direccion');
-  let couponCode = null;
-  if (body.couponCode !== undefined) {
-    check(typeof body.couponCode === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(body.couponCode), 'INVALID_COUPON', 'Codigo de cupon invalido');
-    couponCode = body.couponCode;
-  }
+  check(body.couponCode === undefined, 'COUPON_NOT_SUPPORTED',
+    'Los cupones aún no aplican en Mercadito Colorines', 409);
+  const couponCode = null;
   check(Array.isArray(body.items) && body.items.length > 0 && body.items.length <= MAX_ITEMS, 'INVALID_ITEMS', 'Articulos invalidos');
   // C4: cada línea puede traer variante y modificadores (ids). El mismo producto puede ir en
   // varias líneas con opciones distintas; la misma configuración dos veces se rechaza (suma cantidades).

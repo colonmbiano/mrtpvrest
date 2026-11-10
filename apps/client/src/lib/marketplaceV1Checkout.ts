@@ -123,13 +123,12 @@ export function pinForFulfillment(fulfillment: Fulfillment | null | undefined,
 }
 
 // El cotizador acepta merchantId o merchantSlug; se envía uno solo (el id cuando la API lo expone).
-// couponCode es opcional: solo viaja si el comprador escribió un cupón.
+// El Mercadito no admite cupones durante el piloto.
 export function buildQuoteBody(input: {
   merchant: { merchantId: string | null; slug: string };
   lines: CartLine[];
   fulfillment: Fulfillment;
   deliveryAddressId?: string;
-  couponCode?: string;
 }): Record<string, unknown> {
   const merchant = input.merchant.merchantId
     ? { merchantId: input.merchant.merchantId }
@@ -139,8 +138,6 @@ export function buildQuoteBody(input: {
     fulfillment: input.fulfillment,
     items: input.lines.map(quoteItem),
   };
-  const coupon = input.couponCode?.trim();
-  if (coupon) body.couponCode = coupon;
   if (input.fulfillment === 'DELIVERY') body.deliveryAddressId = input.deliveryAddressId;
   return body;
 }
