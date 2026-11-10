@@ -8,6 +8,7 @@ const ROOT = path.resolve(__dirname, '../../..');
 const { createMarketplaceSettlementsPrisma } = require('../src/lib/marketplace-settlements-prisma');
 const { buildOrderCaptureTransaction, recordLedgerTransaction } = require('../src/lib/marketplace-ledger');
 const { tenantGuard, runWithTenant } = require('../../../packages/database/tenant-guard');
+const { createCommissionStatements } = require('../src/lib/marketplace-commissions');
 
 async function run() {
   process.env.NODE_PATH = path.dirname(path.dirname(path.dirname(require.resolve('@prisma/client/package.json', { paths: [path.join(ROOT, 'packages/database')] }))));
@@ -157,6 +158,68 @@ async function run() {
     assert.equal((await base.order.findUnique({ where: { id: fresh } })).status, 'PENDING_MERCHANT', 'uno de 5 min sigue esperando');
     assert.equal(await base.accessLog.count({ where: { resource: 'order:' + waiting, action: 'ORDER_CANCEL' } }), 1);
     pass('C2: pedido sin aceptar a los 15 min se cancela y reembolsa una vez aunque corran dos instancias');
+
+    // ── C5: estado de cuenta de comisiones en efectivo ─────────────────────
+    const ctag = tag + '_c5';
+    const cTenant = await base.tenant.create({ data: { name: ctag, slug: ctag, ownerEmail: ctag + '@example.test' } });
+    const cRest = await base.restaurant.create({ data: { tenantId: cTenant.id, name: ctag, slug: ctag } });
+    const cLoc = await base.location.create({ data: { restaurantId: cRest.id, name: 'Sucursal comisiones', slug: ctag } });
+    let cn = 0;
+    async function cashOrder({ status = 'DELIVERED', method = 'CASH', at = '2026-10-10T18:00:00Z', subtotal = 20000, fee = 2000, rest = cRest, loc = cLoc } = {}) {
+      cn++; const id = ctag + '_' + cn;
+      await base.order.create({ data: { id, restaurantId: rest.id, locationId: loc.id, orderNumber: id, source: 'MARKETPLACE',
+        orderType: 'DELIVERY', status, paymentMethod: method === 'CASH' ? 'CASH' : 'CARD', paymentStatus: 'PENDING',
+        subtotal: subtotal / 100, deliveryFee: 30, total: subtotal / 100 + 30, createdAt: new Date(at),
+        marketplacePipeline: { create: { storeSlug: ctag, requestHash: 'a'.repeat(64), trackingTokenHash: 'b'.repeat(64),
+          trackingExpiresAt: new Date('2026-11-01'), pinKeyId: 'test', pickupPinHash: 'c'.repeat(64), deliveryPinHash: 'd'.repeat(64),
+          paymentMethod: method, currency: 'MXN', createdAt: new Date(at),
+          settlement: { subtotalCents: subtotal, deliveryFeeCents: 3000, totalCents: subtotal + 3000, commissionBps: 1000,
+            commissionCents: fee, platformFeeCents: fee, merchantPayoutCents: subtotal - fee, courierPayoutCents: 3000 } } } } });
+      return id;
+    }
+    await cashOrder(); await cashOrder({ subtotal: 15000, fee: 1500 });
+    await cashOrder({ status: 'CANCELLED' }); await cashOrder({ method: 'ONLINE' });
+    await cashOrder({ at: '2026-11-01T05:59:00Z' });                 // 31/oct 23:59 en CDMX
+    await cashOrder({ at: '2026-11-01T06:00:00Z' });                 // 1/nov: fuera de octubre
+    const stuck = await cashOrder({ status: 'READY' });
+    await cashOrder({ rest: restaurant, loc: location });            // otro comercio
+    const commissions = () => createCommissionStatements({ prisma, now: () => new Date('2026-11-09T18:00:00Z') });
+    const platform = { accountId: 'saas-c5', roles: ['SUPER_ADMIN'], isActive: true };
+    const live = await commissions().merchantDetail(platform, cRest.id, { period: '2026-10' });
+    assert.deepEqual([live.ordersCount, live.salesCents, live.commissionCents, live.cancelledCount, live.pendingCount],
+      [3, 55000, 5500, 1, 1]);
+    await assert.rejects(commissions().issue(platform, cRest.id, { period: '2026-10' }), error => error.code === 'ORDERS_PENDING');
+    await base.order.update({ where: { id: stuck }, data: { status: 'CANCELLED' } });
+    const issued = await Promise.all([commissions().issue(platform, cRest.id, { period: '2026-10' }),
+      commissions().issue(platform, cRest.id, { period: '2026-10' })]);
+    assert.equal(issued.filter(result => !result.replayed).length, 1);
+    assert.equal(await base.marketplaceCommissionStatement.count({ where: { restaurantId: cRest.id } }), 1);
+    const row = await base.marketplaceCommissionStatement.findFirst({ where: { restaurantId: cRest.id } });
+    assert.equal(row.status, 'ISSUED'); assert.equal(row.commissionCents, 5500); assert.equal(row.lines.length, 3);
+    assert.equal(row.periodStart.toISOString(), '2026-10-01T06:00:00.000Z');
+    pass('C5: emisión concurrente de octubre congela 3 pedidos en efectivo (cancelado, en línea y de otro mes fuera) una sola vez');
+
+    const owner5 = { accountId: 'owner-c5', roles: ['MERCHANT_OWNER'], isActive: true, tenantId: cTenant.id, restaurantId: cRest.id };
+    const mine = await runWithTenant({ restaurantId: cRest.id, role: 'MERCHANT_OWNER' },
+      () => commissions().merchantStatements(owner5, { period: '2026-10' }));
+    assert.equal(mine.statement.commissionCents, 5500); assert.equal(mine.history.length, 1);
+    await assert.rejects(runWithTenant({ restaurantId: cRest.id, role: 'MERCHANT_OWNER' },
+      () => commissions().merchantStatements(owner5, { restaurantId: restaurant.id })), error => error.code === 'MERCHANT_FORBIDDEN');
+    const list = await runWithTenant({ restaurantId: null, role: 'SUPER_ADMIN' }, () => commissions().listPeriod(platform, { period: '2026-10' }));
+    assert(list.items.some(item => item.restaurantId === cRest.id && item.status === 'ISSUED'));
+    assert(list.items.some(item => item.restaurantId === restaurant.id && item.status === 'TO_ISSUE'));
+    pass('C5: el comercio ve solo su estado de cuenta con el guard en ENFORCE; la plataforma ve todos');
+
+    const pays = await Promise.allSettled([
+      commissions().markPaid(platform, cRest.id, { period: '2026-10', reference: 'SPEI-A' }),
+      commissions().markPaid(platform, cRest.id, { period: '2026-10', reference: 'SPEI-B' })]);
+    assert.equal(pays.filter(p => p.status === 'fulfilled').length, 1);
+    assert.equal(pays.find(p => p.status === 'rejected').reason.code, 'ALREADY_PAID');
+    const paid = await base.marketplaceCommissionStatement.findFirst({ where: { restaurantId: cRest.id } });
+    assert.equal(paid.status, 'PAID'); assert(paid.paidAt); assert.equal(paid.paidBy, 'saas-c5');
+    await assert.rejects(base.marketplaceCommissionStatement.update({ where: { id: paid.id }, data: { status: 'PAID', paidAt: null } }));
+    await assert.rejects(base.marketplaceCommissionStatement.update({ where: { id: paid.id }, data: { commissionCents: -1 } }));
+    pass('C5: dos pagos a la vez, solo uno gana; los CHECK de la tabla rechazan pagado sin fecha y montos negativos');
 
     const published = [];
     const drain = () => service().drainOutbox({ publish: async event => { published.push(event.eventKey); }, limit: 100 });
