@@ -106,7 +106,7 @@ jobs:
         env:
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/mrtpvrest_test"
         run: |
-          pnpm --filter @mrtpvrest/database exec prisma db push --schema=prisma/schema.prisma
+          pnpm --filter @mrtpvrest/database run db:migrate
           node --test tests/integration/table-reassignment.test.js tests/integration/tpv-cash-control.test.js
 
       - name: Configuración concurrente Marketplace en PostgreSQL
