@@ -673,14 +673,14 @@ test('no code is shown when the matching PIN is missing or the fulfillment is un
 });
 
 // ── Cotización con cupón y desglose de montos ─────────────────────────────────
-test('buildQuoteBody sends couponCode only when the buyer typed one', () => {
+test('buildQuoteBody omits coupons even when a caller supplies one', () => {
   const base = { merchant: { merchantId: 'm1', slug: 'taqueria' }, lines: [cartLine()], fulfillment: 'PICKUP' };
   assert.equal(buildQuoteBody(base).couponCode, undefined);
   assert.equal('couponCode' in buildQuoteBody({ ...base, couponCode: '   ' }), false, 'blank coupons are not sent');
-  assert.equal(buildQuoteBody({ ...base, couponCode: '  VERANO10 ' }).couponCode, 'VERANO10', 'the code is trimmed');
+  assert.equal('couponCode' in buildQuoteBody({ ...base, couponCode: '  VERANO10 ' }), false);
 });
 
-test('requestQuote sends the coupon in the body and maps the amount breakdown', async () => {
+test('requestQuote sends no coupon and maps the amount breakdown', async () => {
   let sentBody;
   const body = buildQuoteBody({ merchant: { merchantId: 'm1', slug: 'taqueria' }, lines: [cartLine()], fulfillment: 'PICKUP', couponCode: 'VERANO10' });
   const quote = await requestQuote('https://api.example', body, KEY, async (url, init) => {
@@ -688,7 +688,7 @@ test('requestQuote sends the coupon in the body and maps the amount breakdown', 
     return jsonResponse({ quoteId: 'q1', expiresAt: '2026-10-23T12:05:00.000Z', total: '180.00',
       subtotal: '200.00', discount: '20.00', deliveryFee: '0.00' }, 201);
   });
-  assert.equal(sentBody.couponCode, 'VERANO10');
+  assert.equal('couponCode' in sentBody, false);
   assert.deepEqual(quote, { quoteId: 'q1', expiresAt: '2026-10-23T12:05:00.000Z', total: '180.00',
     subtotal: '200.00', discount: '20.00', deliveryFee: '0.00' });
 });

@@ -559,3 +559,14 @@ test('malformed explicit credentials fail closed and injected identity resolvers
   const res = await invoke(handler, { body: request(), headers: { authorization: 'invalid', 'idempotency-key': KEY } });
   assert.equal(res.statusCode, 201);
 });
+
+test('coupons fail explicitly before catalog reads or quote persistence', async () => {
+  for (const couponCode of ['VERANO10', '', null, 123]) {
+    const w = world();
+    w.catalog.loadMerchant = () => assert.fail('Coupon must reject before catalog access');
+    await assert.rejects(quote(w, request({ couponCode })), error =>
+      error.code === 'COUPON_NOT_SUPPORTED' && error.statusCode === 409
+      && error.message === 'Los cupones aún no aplican en Mercadito Colorines');
+    assert.equal(w.store.saved.size, 0);
+  }
+});
