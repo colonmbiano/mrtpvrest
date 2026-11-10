@@ -26,6 +26,11 @@ function fixture() {
       assert.ok(a); Object.assign(a, data); return a;
     },
   };
+  prisma.marketplaceAccount.updateMany = async ({ where, data }) => {
+    const rows = accounts.filter(row => row.id === where.id && (where.termsAcceptedAt !== null || !row.termsAcceptedAt));
+    rows.forEach(row => Object.assign(row, data));
+    return { count: rows.length };
+  };
   prisma.marketplaceApplication = {
     findUnique: async ({ where }) => {
       if (where.id) {
@@ -99,7 +104,7 @@ function fixture() {
   return { prisma, accounts, applications, tokens, sessions, emails, service };
 }
 const buyer = { role:'BUYER', fullName: 'María Pérez', email: 'Maria@Correo.mx',
-  phone: '722 123 4567', city: 'Colorines', password: 'Frase Larga Segura 2026!' };
+  termsAccepted: true, phone: '722 123 4567', city: 'Colorines', password: 'Frase Larga Segura 2026!' };
 const merchant = { ...buyer, role:'MERCHANT', businessName: 'Negocio Local',
   businessType: 'RESTAURANT', deliveryMode: 'BOTH' };
 const courier = { ...buyer, role:'COURIER', vehicle:'MOTO', network:'SHARED' };
@@ -425,4 +430,29 @@ test('token endpoint: no buyer profile, no buyer token; a missing key fails clos
   const unavailable = await request(noKey).post(path + '/token').set('Cookie', cookie).set('Origin', origin);
   assert.equal(unavailable.status, 503); assert.equal(unavailable.body.code, 'IDENTITY_UNAVAILABLE');
   assert.ok(!JSON.stringify(unavailable.body).includes('e'.repeat(48)));
+});
+
+
+test('signup requires explicit acceptance and records a server timestamp', async () => {
+  const x = fixture();
+  for (const termsAccepted of [undefined, false, 'true', 1]) {
+    await failCode(x.service.register({ ...buyer, termsAccepted }), 'TERMS_ACCEPTANCE_REQUIRED');
+  }
+  assert.equal(x.accounts.length, 0);
+  await x.service.register(buyer);
+  assert(x.accounts[0].termsAcceptedAt instanceof Date);
+});
+
+test('a legacy courier accepts once before receiving credentials', async () => {
+  const x = fixture();
+  await x.service.register(courier);
+  const account = x.accounts[0];
+  account.emailVerifiedAt = new Date();
+  account.applications[0].status = 'APPROVED';
+  account.termsAcceptedAt = null;
+  await failCode(x.service.authenticateCourier({ ...courier, termsAccepted: false }), 'TERMS_ACCEPTANCE_REQUIRED');
+  await x.service.authenticateCourier({ ...courier, termsAccepted: true });
+  const acceptedAt = account.termsAcceptedAt;
+  await x.service.authenticateCourier({ email: courier.email, password: courier.password });
+  assert.equal(account.termsAcceptedAt, acceptedAt);
 });

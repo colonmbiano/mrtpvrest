@@ -87,6 +87,7 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
 
   async function register(input) {
     const data = validateSignup(input, allowedRoles);
+    if (input.termsAccepted !== true) throw new IdentityError("TERMS_ACCEPTANCE_REQUIRED", 422);
     // Unverified duplicates are deliberately indistinguishable from new signups.
     if (await prisma.marketplaceAccount.findUnique({ where: { email: data.email }, select: { id: true } })) {
       return { accepted: true };
@@ -98,7 +99,7 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
         tx.marketplaceAccount.create({
           data: {
             email: data.email, fullName: data.fullName, phone: data.phone,
-            city: data.city, passwordHash, applications: { create: data.application },
+            city: data.city, passwordHash, termsAcceptedAt: now(), applications: { create: data.application },
           },
         })
       );
@@ -189,6 +190,12 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
     }
     const courier = account.applications.some(a => a.role === 'COURIER' && a.status === 'APPROVED');
     if (!courier) throw new IdentityError('COURIER_PROFILE_REQUIRED', 403);
+    if (!account.termsAcceptedAt) {
+      if (input.termsAccepted !== true) throw new IdentityError('TERMS_ACCEPTANCE_REQUIRED', 422);
+      await prisma.marketplaceAccount.updateMany({
+        where: { id: account.id, termsAcceptedAt: null }, data: { termsAcceptedAt: now() },
+      });
+    }
     return { accountId: account.id };
   }
 

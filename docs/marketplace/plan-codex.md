@@ -81,7 +81,7 @@ un commit cuyo mensaje empiece con su ID (ej. `C1:`), o que exista el archivo nu
 | 2 | X3 | 1 | Pedido legado detrás de bandera | X2 | Fusionado |
 | 3 | X4 | 1 | Cupón rechazado con mensaje | X2 | PR abierto |
 | 4 | X5 | 1 | Alarma y contador en el TPV | X2 | Fusionado |
-| 5 | X1 | 1 | Aviso de privacidad, términos y aceptación | X2 | Pendiente |
+| 5 | X1 | 1 | Aviso de privacidad, términos y aceptación | X2 | PR abierto |
 | 6 | X6 | 1 | Entrega sin código con motivo | C1 | PR abierto |
 | 7 | X9 | 2 | Límite de intentos en Redis | X2 | Pendiente |
 | 8 | X10 | 2 | Tokens del repartidor | X2 | Pendiente |

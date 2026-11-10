@@ -109,13 +109,13 @@ function storeCourierSession(token: string, expiresInSeconds: unknown): void {
  * y marca deliveryMode='courier'. Lanza CourierAuthError con el código del backend
  * (INVALID_CREDENTIALS 401, COURIER_PROFILE_REQUIRED 403, etc.).
  */
-export async function courierLogin(email: string, password: string): Promise<{ token: string; expiresIn: number }> {
+export async function courierLogin(email: string, password: string, termsAccepted = false): Promise<{ token: string; expiresIn: number }> {
   let res: Response;
   try {
     res = await fetch(`${getApiUrl()}/api/marketplace/identity/courier/token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim(), password }),
+      body: JSON.stringify({ email: email.trim(), password, termsAccepted }),
     });
   } catch {
     throw new CourierAuthError("NETWORK", 0);

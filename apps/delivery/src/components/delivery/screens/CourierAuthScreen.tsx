@@ -14,6 +14,7 @@ interface CourierAuthScreenProps {
 const REGISTER_URL = 'https://mercaditocolorines.mrtpvrest.com/registro';
 
 const ERROR_MESSAGE: Record<string, string> = {
+  TERMS_ACCEPTANCE_REQUIRED: 'Lee y acepta el aviso de privacidad y los términos para continuar.',
   INVALID_CREDENTIALS: 'Correo o contraseña incorrectos.',
   COURIER_PROFILE_REQUIRED: 'Tu cuenta aún no tiene un perfil de repartidor aprobado.',
   RATE_LIMIT: 'Demasiados intentos. Espera unos minutos.',
@@ -25,17 +26,20 @@ const ERROR_MESSAGE: Record<string, string> = {
 export function CourierAuthScreen({ onBack, onAuthenticated }: CourierAuthScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [needsTerms, setNeedsTerms] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   async function submit() {
-    if (busy || !email.trim() || !password) return;
+    if (busy || !email.trim() || !password || (needsTerms && !termsAccepted)) return;
     setBusy(true); setError('');
     try {
-      await courierLogin(email, password);
+      await courierLogin(email, password, termsAccepted);
       onAuthenticated();
     } catch (e) {
       const code = e instanceof CourierAuthError ? e.code : 'LOGIN_FAILED';
+      if (code === 'TERMS_ACCEPTANCE_REQUIRED') setNeedsTerms(true);
       setError(ERROR_MESSAGE[code] || 'No se pudo iniciar sesión. Intenta de nuevo.');
     } finally {
       setBusy(false);
@@ -97,9 +101,13 @@ export function CourierAuthScreen({ onBack, onAuthenticated }: CourierAuthScreen
                   }} />
               </div>
             ))}
+            {needsTerms && <label style={{ display: 'flex', gap: 10, fontSize: 13, color: C.text, lineHeight: 1.5 }}>
+              <input type="checkbox" required checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} />
+              <span>Acepto el <a href="https://mercaditocolorines.mrtpvrest.com/privacidad" target="_blank" rel="noopener noreferrer">aviso de privacidad</a> y los <a href="https://mercaditocolorines.mrtpvrest.com/terminos" target="_blank" rel="noopener noreferrer">términos</a>.</span>
+            </label>}
             <button
               onClick={() => void submit()}
-              disabled={busy || !email.trim() || !password}
+              disabled={busy || !email.trim() || !password || (needsTerms && !termsAccepted)}
               style={{ ...S.btnSuccess, marginTop: 8, opacity: busy || !email.trim() || !password ? 0.6 : 1 }}
             >
               {busy ? 'ENTRANDO…' : 'INICIAR SESIÓN'}

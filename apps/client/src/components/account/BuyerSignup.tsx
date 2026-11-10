@@ -7,13 +7,14 @@ import Link from 'next/link';
 import { MailCheck } from 'lucide-react';
 import { normalizeRegistrationDraft, validateRegistrationDraft, EMPTY_REGISTRATION_DRAFT } from '@/lib/marketplace-registration';
 import { checkPassword, PASSWORD_MIN, registerBuyer } from '@/lib/marketplaceAccount';
-import { AccountShell, captchaReady, Notice, primaryButton, TextField, textLink, Turnstile } from './AccountUi';
+import { TermsAcceptance, AccountShell, captchaReady, Notice, primaryButton, TextField, textLink, Turnstile } from './AccountUi';
 
 export default function BuyerSignup() {
   const [form, setForm] = useState({ name: '', email: '', phone: '', city: '', password: '', confirm: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [captcha, setCaptcha] = useState('');
   const [resetCaptcha, setResetCaptcha] = useState(0);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [sending, setSending] = useState(false);
   const [serverError, setServerError] = useState('');
   const [sentTo, setSentTo] = useState('');
@@ -32,11 +33,12 @@ export default function BuyerSignup() {
     if (passwordProblem) problems[form.password.length < PASSWORD_MIN || form.password.length > 128 ? 'password' : 'confirm'] = passwordProblem;
     setErrors(problems);
     if (Object.keys(problems).length) return;
+    if (!termsAccepted) { setServerError('Acepta el aviso de privacidad y los términos.'); return; }
     if (!captchaReady(captcha)) { setServerError('Completa la verificación de seguridad.'); return; }
     const clean = normalizeRegistrationDraft(draft);
     setSending(true);
     const result = await registerBuyer({ fullName: clean.name, email: clean.email, phone: clean.phone, city: clean.city,
-      password: form.password, turnstileToken: captcha || undefined });
+      password: form.password, termsAccepted, turnstileToken: captcha || undefined });
     setSending(false);
     setResetCaptcha(n => n + 1);
     if (result === true) { setSentTo(clean.email); setForm(old => ({ ...old, password: '', confirm: '' })); }
@@ -69,9 +71,10 @@ export default function BuyerSignup() {
         error={errors.password} autoComplete="new-password" maxLength={128} hint={`Al menos ${PASSWORD_MIN} caracteres. Una frase es fácil de recordar.`} />
       <TextField id="confirm" label="Confirma tu contraseña" type="password" value={form.confirm} onChange={v => update('confirm', v)}
         error={errors.confirm} autoComplete="new-password" maxLength={128} />
+      <TermsAcceptance checked={termsAccepted} onChange={setTermsAccepted} />
       <Turnstile onToken={setCaptcha} resetSignal={resetCaptcha} />
       {serverError && <Notice tone="error">{serverError}</Notice>}
-      <button type="submit" disabled={sending} className={primaryButton}>{sending ? 'Creando tu cuenta…' : 'Crear cuenta'}</button>
+      <button type="submit" disabled={sending || !termsAccepted} className={primaryButton}>{sending ? 'Creando tu cuenta…' : 'Crear cuenta'}</button>
       {Object.keys(errors).length > 0 && <p className="text-sm font-semibold text-red-700" role="status">Corrige los campos marcados para continuar.</p>}
     </form>
   </AccountShell>;
