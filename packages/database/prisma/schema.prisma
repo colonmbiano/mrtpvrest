@@ -5229,6 +5229,8 @@ model MarketplaceNetworkTask {
   @@unique([orderId, restaurantId])
   @@index([restaurantId, status])
   @@index([merchantId, status, id])
+  // C6: el motor carga solo tareas vivas (status NOT IN terminadas).
+  @@index([status, id])
   @@map("marketplace_network_tasks")
 }
 model MarketplaceNetworkOffer {
@@ -5241,6 +5243,8 @@ model MarketplaceNetworkOffer {
   payload Json
   @@index([courierId, status, expiresAt])
   @@index([restaurantId, taskId])
+  // C6: el motor carga solo las ofertas vigentes/aceptadas de las tareas vivas.
+  @@index([taskId, status])
   @@map("marketplace_network_offers")
 }
 model MarketplaceNetworkAssignment {
@@ -5252,6 +5256,7 @@ model MarketplaceNetworkAssignment {
   payload Json
   @@index([courierId, status])
   @@index([restaurantId, taskId])
+  @@index([taskId])
   @@map("marketplace_network_assignments")
 }
 model MarketplaceNetworkCourier {
