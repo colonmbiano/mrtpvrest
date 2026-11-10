@@ -4,6 +4,8 @@
 // lib/marketplace-identity-mount.js). La tienda y la API deben ser del mismo
 // sitio (cookies SameSite Strict). No usa el auth ni los clientes por tienda.
 const rateLimit = require('express-rate-limit');
+const { IdentityRateStore, createIdentityRedis } = require('../lib/marketplace-identity-rate-store');
+const identityRedis = createIdentityRedis();
 const { createMarketplaceIdentityService, IdentityError, SESSION_MS } = require('../lib/marketplace-identity');
 
 // Token de comprador para las APIs v1 (direcciones, cotización, orden,
@@ -12,15 +14,16 @@ const BUYER_TOKEN_TTL_S = 15 * 60;
 
 const cookieName = isolated => isolated ? 'mrtpv_market_staging' : '__Host-mrtpv_market';
 const noStore = (_, res, next) => { res.set('Cache-Control', 'no-store'); next(); };
-const limit = (max, windowMs) => rateLimit({ windowMs, max,
+const limit = (prefix, max, windowMs) => rateLimit({ windowMs, max,
+  store: new IdentityRateStore(prefix, identityRedis),
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'Demasiados intentos. Intenta más tarde.', code: 'RATE_LIMIT' },
 });
-const signupLimit = limit(5, 60 * 60 * 1000);
-const authLimit = limit(15, 15 * 60 * 1000);
-const mailLimit = limit(3, 60 * 60 * 1000);
+const signupLimit = limit('signup', 5, 60 * 60 * 1000);
+const authLimit = limit('auth', 15, 15 * 60 * 1000);
+const mailLimit = limit('mail', 3, 60 * 60 * 1000);
 // Se renueva cada pocos minutos por pestaña: más holgado que el login.
-const tokenLimit = limit(60, 15 * 60 * 1000);
+const tokenLimit = limit('token', 60, 15 * 60 * 1000);
 
 // `roles`: perfiles que se pueden registrar o solicitar (null = todos, staging).
 // `signBuyerToken(claims, { expiresIn })`: inyectable en pruebas.
