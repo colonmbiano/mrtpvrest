@@ -198,10 +198,12 @@ test('real quote service feeds ONLINE creation with exact snapshots, nested item
   assert.equal(f.calls.find(call => call.name === '$transaction').args.isolationLevel, 'Serializable');
 });
 
-test('CASH creates pending merchant order, OFFERING task and no false paid state', async () => {
+test('CASH creates pending merchant order, a waiting task without offer and no false paid state', async () => {
   const f = await fixture(); const result = await f.create({ paymentMethod: 'CASH' });
   assert.equal(result.status, 'PENDING_MERCHANT'); assert.equal(result.paymentMethod, 'CASH'); assert.equal(result.paymentStatus, 'PENDING');
-  assert.equal(result.dispatch.status, 'OFFERING'); assert.equal(f.state.pipelines[0].dispatch.offer.source, 'SHARED');
+  // C7: la red oferta cuando la caja marca LISTO, no antes de que el comercio acepte.
+  assert.equal(result.dispatch.status, 'WAITING_READY'); assert.equal(f.state.pipelines[0].dispatch.offer, null);
+  assert.equal(f.state.pipelines[0].dispatch.task.dispatchMode, 'SHARED');
   assert.equal(f.state.orders[0].status, 'PENDING_MERCHANT'); assert.equal(f.state.events.length, 1);
 });
 
@@ -217,9 +219,23 @@ for (const policy of ['OWN_ONLY', 'OWN_THEN_SHARED', 'MANUAL']) {
     const f = await fixture(); f.merchant.deliveryPolicy = policy;
     const result = await f.create({ paymentMethod: 'CASH' }); const dispatch = f.state.pipelines[0].dispatch;
     assert.equal(dispatch.offer, null); assert.equal(dispatch.task.deliveryPolicy, policy);
-    assert.equal(result.dispatch.status, policy === 'MANUAL' ? 'WAITING_READY' : 'OFFERING');
+    assert.equal(result.dispatch.status, 'WAITING_READY');
+    assert.equal(dispatch.task.dispatchMode, policy === 'MANUAL' ? null : 'OWN');
   });
 }
+
+test('C7: la tarea de red se liga a la fila de la red del comercio y paga el 100% del envío', async () => {
+  const f = await fixture(); f.merchant.deliveryPolicy = 'SHARED_ONLY'; f.merchant.dispatchMerchantId = 'net-m1';
+  await f.create({ paymentMethod: 'CASH' }); const task = f.state.pipelines[0].dispatch.task;
+  assert.equal(task.merchantId, 'net-m1'); assert.equal(task.deliveryPolicy, 'SHARED_ONLY');
+  assert.equal(task.payoutAmount, f.state.pipelines[0].settlement.courierPayoutCents / 100);
+});
+
+test('C7: sin política el comercio entrega con sus repartidores (MANUAL)', async () => {
+  const f = await fixture(); delete f.merchant.deliveryPolicy;
+  await f.create({ paymentMethod: 'CASH' }); const task = f.state.pipelines[0].dispatch.task;
+  assert.equal(task.deliveryPolicy, 'MANUAL'); assert.equal(task.dispatchMode, null); assert.equal(task.merchantId, f.merchant.id);
+});
 
 test('PINs have six digits, use HMAC domain separation, and persist only hashes', async () => {
   const f = await fixture(); const result = await f.create(); const pipeline = f.state.pipelines[0];

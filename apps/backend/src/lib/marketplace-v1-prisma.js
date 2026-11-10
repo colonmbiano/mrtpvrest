@@ -9,8 +9,13 @@
 // Entrega a domicilio: la dirección sale de la libreta del comprador
 // (lib/marketplace-buyer-addresses.js) y el envío se cobra con la regla de la
 // tienda (RestaurantConfig.deliveryMode FLAT | DISTANCE | ZONES, lib/delivery-fee.js).
-// La entregan los repartidores PROPIOS de la tienda con el PIN del comprador: la tarea
-// de despacho nace en política MANUAL, sin oferta a la red (lib/marketplace-store-delivery.js).
+// Quién la entrega lo decide la política de despacho que el comercio eligió en el admin para la
+// sucursal (fila de marketplace_network_merchants, PUT /api/marketplace/v1/merchants/:id/delivery-policy):
+//   · OWN_ONLY / SHARED_ONLY / OWN_THEN_SHARED → la tarea nace con esa política y la red de
+//     repartidores la oferta cuando la caja marca el pedido LISTO (C7, lib/marketplace-network-prisma.js).
+//   · Sin política elegida, otra política o la red apagada (MARKETPLACE_NETWORK_ENABLED != 'true') →
+//     MANUAL: la entregan los repartidores PROPIOS de la tienda con el PIN del comprador
+//     (lib/marketplace-store-delivery.js). Nunca se pasa a la red por inferencia.
 // Se activa aparte con MARKETPLACE_V1_DELIVERY_ENABLED=true.
 //
 // Apagado por defecto: MARKETPLACE_V1_ORDERS_ENABLED=true lo activa. Además hace
@@ -28,6 +33,8 @@ const { createMarketplaceTrackingService } = require('./marketplace-tracking-v1'
 const { createBuyerAddressBook } = require('./marketplace-buyer-addresses');
 const { createBuyerPushStore } = require('./marketplace-buyer-push');
 const { createMerchantOrderNotifier } = require('./marketplace-v1-notify');
+const { validateDeliveryPolicy } = require('./marketplace-dispatch');
+const NETWORK_DELIVERY_POLICIES = ['OWN_ONLY', 'SHARED_ONLY', 'OWN_THEN_SHARED'];
 const { MAX_CENTS } = require('./marketplace-order-money');
 
 function httpsUrl(value) {
@@ -94,8 +101,9 @@ const STORE_TASK_PREFIX = 'store:';
 
 // acceptsOnline(restaurantId): opcional; agrega ONLINE a los métodos de pago públicos del comercio.
 // networkPresence(): opcional; devuelve el presenceStore de la red (G1) para el seguimiento.
+// networkDispatch: la red de repartidores está encendida; solo entonces se respeta una política de red.
 function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEnabled = false, acceptsOnline = null,
-  networkPresence = null, maxDeliveryKm = 5, now = () => new Date() } = {}) {
+  networkPresence = null, networkDispatch = false, maxDeliveryKm = 5, now = () => new Date() } = {}) {
   const merchantScope = where => ({ ...where, isActive: true, ...APPROVED_MERCHANT });
   // Sucursal de la orden: la primera sucursal activa del restaurante (ver merchants.resolve).
   const FIRST_LOCATION = { where: { isActive: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 1 };
@@ -294,6 +302,22 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
     },
   };
 
+  // C7: política de despacho que el comercio eligió para la sucursal. Solo una política de red
+  // explícita y válida la manda a la red; todo lo demás es MANUAL (reparto propio de la tienda).
+  async function dispatchPolicy(restaurantId, locationId, tx) {
+    if (!networkDispatch || !locationId) return { deliveryPolicy: 'MANUAL' };
+    const row = await db(tx).marketplaceNetworkMerchant.findFirst({ where: { restaurantId, locationId },
+      select: { id: true, payload: true } });
+    const p = row?.payload;
+    if (!row || !p || !NETWORK_DELIVERY_POLICIES.includes(p.deliveryPolicy)) return { deliveryPolicy: 'MANUAL' };
+    try {
+      const policy = validateDeliveryPolicy({ deliveryPolicy: p.deliveryPolicy,
+        fallbackSeconds: p.fallbackSeconds ?? 30, maxDistanceKm: p.maxDistanceKm ?? 10 });
+      // La tarea de red se liga a la fila de la red (no al restaurante): ahí viven afiliaciones y política.
+      return { ...policy, dispatchMerchantId: row.id };
+    } catch { return { deliveryPolicy: 'MANUAL' }; }
+  }
+
   const merchants = {
     // Sucursal de la orden: la primera sucursal activa del restaurante.
     async resolve(merchantId, { tx } = {}) {
@@ -301,9 +325,10 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
         select: { id: true, slug: true, config: { select: DELIVERY_SELECT },
           locations: { ...FIRST_LOCATION, select: { id: true, hasDelivery: true, latitude: true, longitude: true } } } });
       if (!row) return null;
-      // MANUAL: entrega la tienda con sus repartidores; la orden no se ofrece a la red compartida.
-      return { id: row.id, status: 'ACTIVE', restaurantId: row.id, locationId: row.locations[0]?.id ?? null, slug: row.slug,
-        deliveryPolicy: 'MANUAL', delivery: deliveryEnabled
+      const locationId = row.locations[0]?.id ?? null;
+      const dispatch = await dispatchPolicy(row.id, locationId, tx);
+      return { id: row.id, status: 'ACTIVE', restaurantId: row.id, locationId, slug: row.slug,
+        ...dispatch, delivery: deliveryEnabled
           ? deliveryWithRadius(row.config, row.locations[0], []) : null };
     },
   };
@@ -455,7 +480,8 @@ function createMarketplaceV1Services({ prisma, env = process.env, now = () => ne
     : null;
   const { addressBook, merchantsRepo, buyerOrders, favorites, ...adapters } = createMarketplaceV1Adapters({ prisma, commissionBps: config.commissionBps,
     deliveryEnabled: config.delivery, maxDeliveryKm: Number(env.MARKETPLACE_MAX_DELIVERY_KM) || 5,
-    acceptsOnline: payments ? id => payments.acceptsOnline(id) : null, networkPresence, now });
+    acceptsOnline: payments ? id => payments.acceptsOnline(id) : null, networkPresence,
+    networkDispatch: env.MARKETPLACE_NETWORK_ENABLED === 'true', now });
   // La clave de los PIN sale del mismo env que la bandera; sin ella la orden responde 503.
   const activePinKeyId = env.MARKETPLACE_PIN_KEY_ID || 'v1';
   const pinSecrets = env.MARKETPLACE_PIN_SECRET ? { [activePinKeyId]: env.MARKETPLACE_PIN_SECRET } : {};

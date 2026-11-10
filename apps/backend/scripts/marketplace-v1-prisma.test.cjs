@@ -358,3 +358,29 @@ test('C5: una tarea de la red usa la presencia de la red y nunca los avisos del 
   const view = await off.read();
   assert.equal(view.courierLocation, null); assert.equal(view.isStale, true); assert.equal(off.pingCalls.length, 0);
 });
+
+// ── C7: política de despacho del comercio ───────────────────────────────────
+function withNetworkMerchant(prisma, row) {
+  prisma.marketplaceNetworkMerchant = { async findFirst(args) { prisma.calls.push(['marketplaceNetworkMerchant.findFirst', args]); return row; } };
+  return prisma;
+}
+
+test('C7: con la red encendida, la orden toma la política de red de la sucursal y se liga a su fila', async () => {
+  const prisma = withNetworkMerchant(fakePrisma(), { id: 'net-l1', payload: { deliveryPolicy: 'OWN_THEN_SHARED', fallbackSeconds: 45, maxDistanceKm: 6 } });
+  const { merchants } = createMarketplaceV1Adapters({ prisma, networkDispatch: true, now: () => NOW });
+  const { delivery, ...resolved } = await merchants.resolve('r1');
+  assert.deepEqual(resolved, { id: 'r1', status: 'ACTIVE', restaurantId: 'r1', locationId: 'l1', slug: 'tienda',
+    deliveryPolicy: 'OWN_THEN_SHARED', fallbackSeconds: 45, maxDistanceKm: 6, dispatchMerchantId: 'net-l1' });
+  assert.deepEqual(prisma.calls.find(c => c[0] === 'marketplaceNetworkMerchant.findFirst')[1].where, { restaurantId: 'r1', locationId: 'l1' });
+});
+
+test('C7: sin política de red explícita y válida, o con la red apagada, la orden es MANUAL', async () => {
+  for (const [row, networkDispatch] of [[null, true], [{ id: 'n', payload: {} }, true], [{ id: 'n', payload: { deliveryPolicy: 'MANUAL' } }, true],
+    [{ id: 'n', payload: { deliveryPolicy: 'SHARED_ONLY', maxDistanceKm: -3 } }, true], [{ id: 'n', payload: { deliveryPolicy: 'SHARED_ONLY' } }, false]]) {
+    const prisma = withNetworkMerchant(fakePrisma(), row);
+    const { merchants } = createMarketplaceV1Adapters({ prisma, networkDispatch, now: () => NOW });
+    const resolved = await merchants.resolve('r1');
+    assert.equal(resolved.deliveryPolicy, 'MANUAL'); assert.equal(resolved.dispatchMerchantId, undefined);
+    if (!networkDispatch) assert.equal(prisma.calls.some(c => c[0] === 'marketplaceNetworkMerchant.findFirst'), false);
+  }
+});
