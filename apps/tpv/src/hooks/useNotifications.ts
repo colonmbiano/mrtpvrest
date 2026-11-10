@@ -6,7 +6,7 @@
  * order:web-round (pedido QR sumado como ronda a la cuenta de su mesa)
  */
 "use client";
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { io, Socket } from "socket.io-client";
@@ -17,11 +17,15 @@ import { getToken } from "@/lib/token-vault";
 import {
   playNotificationSound,
   primeNotificationSound,
+  notificationSoundEnabled,
+  enableNotificationSound,
 } from "@/lib/notificationSound";
 import {
   ensureNotifPermission,
   fireLocalNotification,
 } from "@/lib/localNotifications";
+
+import { marketplacePendingSummary } from "@/lib/webOrders";
 
 // Etiqueta legible del método de pago para el cuerpo de la notificación.
 const PAY_LABEL: Record<string, string> = {
@@ -373,4 +377,38 @@ export function useNotifications(opts?: {
       socketRef.current = null;
     };
   }, [handleOrderNew, handleOrderKiosk, handleOrderUpdated, handleOrderPaid, handleWaiterCall, handleTablePending, handleWebRound]);
+}
+
+
+// El panel permanece montado aunque esté cerrado. El recordatorio sigue activo
+// hasta que el servidor deja de devolver pedidos por aceptar.
+export function useMarketplacePendingAlerts(orders: Parameters<typeof marketplacePendingSummary>[0]) {
+  const [now, setNow] = useState(Date.now);
+  const [soundReady, setSoundReady] = useState(false);
+  const summary = marketplacePendingSummary(orders, now);
+  const hasPending = summary.count > 0;
+
+  useEffect(() => {
+    if (!hasPending) return;
+    primeNotificationSound();
+    const remind = () => {
+      playNotificationSound();
+      setSoundReady(notificationSoundEnabled());
+    };
+    remind();
+    const alarm = window.setInterval(remind, 30_000);
+    const clock = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => {
+      window.clearInterval(alarm);
+      window.clearInterval(clock);
+    };
+  }, [hasPending]);
+
+  const activateSound = useCallback(async () => {
+    const enabled = await enableNotificationSound();
+    setSoundReady(enabled);
+    if (enabled) playNotificationSound();
+  }, []);
+
+  return { now, overdue: summary.overdue, needsSound: hasPending && !soundReady, activateSound };
 }

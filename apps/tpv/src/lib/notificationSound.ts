@@ -90,3 +90,18 @@ export function playNotificationSound(): void {
     }
   }
 }
+
+export function notificationSoundEnabled(): boolean {
+  return ctx?.state === "running";
+}
+
+export async function enableNotificationSound(): Promise<boolean> {
+  const context = getCtx();
+  if (!context) return false;
+  try {
+    await context.resume();
+    return context.state === "running";
+  } catch {
+    return false;
+  }
+}

@@ -2,7 +2,7 @@
 // pantalla principal (/pos/order-type) y el layout del menú. KIOSK queda fuera
 // porque tiene su propio flujo de notificación.
 
-type OrderLike = { source?: string | null; status?: string | null; paymentStatus?: string | null } | null | undefined;
+type OrderLike = { source?: string | null; status?: string | null; paymentStatus?: string | null; createdAt?: string | null } | null | undefined;
 
 export const ONLINE_SOURCES = new Set(["ONLINE", "STORE", "WHATSAPP", "MARKETPLACE"]);
 
@@ -35,4 +35,21 @@ export function chargeBlockedLabel(order: OrderLike): string | null {
   if (status === "PENDING_MERCHANT") return "Por aceptar";
   if (order?.paymentStatus === "PAID") return "Pagado en línea";
   return null;
+}
+
+
+// Minutos completos de espera. Un reloj desajustado o una fecha inválida
+// nunca produce un contador negativo ni una alarma falsa.
+export function waitingMinutes(order: OrderLike, now = Date.now()): number {
+  const created = Date.parse(order?.createdAt || "");
+  return Number.isFinite(created) ? Math.max(0, Math.floor((now - created) / 60_000)) : 0;
+}
+
+export function marketplacePendingSummary(orders: OrderLike[], now = Date.now()) {
+  const pending = orders.filter(order => isMarketplaceOrder(order) && order?.status === "PENDING_MERCHANT");
+  return {
+    count: pending.length,
+    overdue: pending.some(order => Number.isFinite(Date.parse(order?.createdAt || ""))
+      && now - Date.parse(order?.createdAt || "") > 5 * 60_000),
+  };
 }

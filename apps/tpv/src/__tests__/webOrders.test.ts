@@ -1,4 +1,4 @@
-import { ONLINE_SOURCES, chargeBlockedLabel, isMarketplaceOrder, itemsLocked, kitchenPrintReady, needsAcceptance } from "@/lib/webOrders";
+import { marketplacePendingSummary, waitingMinutes, ONLINE_SOURCES, chargeBlockedLabel, isMarketplaceOrder, itemsLocked, kitchenPrintReady, needsAcceptance } from "@/lib/webOrders";
 
 describe("pedidos web del TPV", () => {
   it("el marketplace es un canal web más, junto a la tienda y WhatsApp", () => {
@@ -46,5 +46,23 @@ describe("pedidos web del TPV", () => {
     expect(itemsLocked({ source: "MARKETPLACE", status: "CONFIRMED" })).toBe(true);
     expect(itemsLocked({ source: "ONLINE", status: "PENDING" })).toBe(false);
     expect(itemsLocked({ source: "TPV" })).toBe(false);
+  });
+});
+
+
+describe("espera de pedidos del Mercadito", () => {
+  const createdAt = "2026-11-10T12:00:00Z";
+  const order = { source: "MARKETPLACE", status: "PENDING_MERCHANT", createdAt };
+  const at = Date.parse(createdAt);
+  it("cuenta minutos completos y tolera fechas inválidas o futuras", () => {
+    expect(waitingMinutes(order, at + 119_999)).toBe(1);
+    expect(waitingMinutes(order, at - 1)).toBe(0);
+    expect(waitingMinutes({ ...order, createdAt: "bad" }, at)).toBe(0);
+  });
+  it("muestra el banner solo después de cinco minutos y mientras requiere aceptación", () => {
+    expect(marketplacePendingSummary([order], at + 300_000)).toEqual({ count: 1, overdue: false });
+    expect(marketplacePendingSummary([order], at + 300_001)).toEqual({ count: 1, overdue: true });
+    expect(marketplacePendingSummary([{ ...order, status: "CONFIRMED" }], at + 600_000)).toEqual({ count: 0, overdue: false });
+    expect(marketplacePendingSummary([{ ...order, source: "ONLINE" }], at + 600_000)).toEqual({ count: 0, overdue: false });
   });
 });
