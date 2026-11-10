@@ -342,7 +342,9 @@ test('default router without store adapters stays offline and returns controlled
 test('v1 tracking mounts before the legacy marketplace without starting the application', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8');
   const mount = source.indexOf("app.use('/api/marketplace/v1', require('./routes/marketplace-tracking-v1.routes')())");
-  assert.ok(mount > 0); assert.ok(mount < source.indexOf("app.use('/api/marketplace',"));
+  const legacy = source.indexOf("app.use('/api/marketplace', require('./routes/marketplace.routes')())");
+  assert.ok(mount >= 0);
+  assert.ok(mount < legacy);
 });
 
 // ── Mis pedidos: la cuenta dueña de la orden sigue su pedido sin el token de rastreo ──

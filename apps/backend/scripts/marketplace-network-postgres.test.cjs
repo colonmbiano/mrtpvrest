@@ -1,7 +1,7 @@
 'use strict';
 
 // Ejecución EXPLÍCITA contra el cluster desechable del plan. Nunca carga .env.
-// Preparar las migraciones y el cliente temporal antes; no se incluye en runner offline.
+// Requiere el esquema preparado y --disposable.
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
@@ -12,20 +12,7 @@ const { createNetworkPersistence, createNetworkOpsPorts, createNetworkCourierPor
 const { createMarketplaceOpsDispatchService } = require('../src/lib/marketplace-ops-dispatch-v1');
 const { createCouriersV1Service } = require('../src/lib/marketplace-couriers-v1');
 const { hashPin } = require('../src/lib/marketplace-dispatch');
-const { tenantGuard } = require('../../../packages/database/tenant-guard');
-
-function database() {
-  // El cliente generado fuera del workspace usa las dependencias ya instaladas
-  // del cliente del paquete; no instala ni cambia el cliente compartido.
-  process.env.NODE_PATH = path.dirname(path.dirname(path.dirname(require.resolve('@prisma/client/package.json', {paths:[path.join(ROOT,'packages/database')]}))));
-  require('node:module').Module._initPaths();
-  const { PrismaClient } = require(path.join(ROOT, '.marketplace-local/codex-g1/client'));
-  const { PrismaPg } = require(path.join(ROOT, 'packages/database/node_modules/@prisma/adapter-pg'));
-  const connectionString = 'postgresql://codex_test@127.0.0.1:55449/marketplace_codex_test';
-  const base = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
-  const prisma = base.$extends(tenantGuard({ mode: 'enforce' }));
-  return { base, prisma };
-}
+const { database } = require('./helpers/marketplace-postgres.cjs');
 
 // Este modo se ejecuta en otro proceso: no hereda mapas, engine ni cliente Prisma.
 async function verifyRestart({taskId, orderId, courierId, timestamp, parentPid}) {

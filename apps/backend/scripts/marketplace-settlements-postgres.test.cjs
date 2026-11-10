@@ -1,22 +1,16 @@
 'use strict';
 
-// Solo el cluster temporal de Codex. No lee .env ni acepta URLs externas.
+// Solo PostgreSQL desechable local o de CI. No lee .env ni acepta URLs externas.
 const assert = require('node:assert/strict');
-const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const ROOT = path.resolve(__dirname, '../../..');
 const { createMarketplaceSettlementsPrisma } = require('../src/lib/marketplace-settlements-prisma');
 const { buildOrderCaptureTransaction, recordLedgerTransaction } = require('../src/lib/marketplace-ledger');
-const { tenantGuard, runWithTenant } = require('../../../packages/database/tenant-guard');
+const { runWithTenant } = require('../../../packages/database/tenant-guard');
 const { createCommissionStatements } = require('../src/lib/marketplace-commissions');
+const { database } = require('./helpers/marketplace-postgres.cjs');
 
 async function run() {
-  process.env.NODE_PATH = path.dirname(path.dirname(path.dirname(require.resolve('@prisma/client/package.json', { paths: [path.join(ROOT, 'packages/database')] }))));
-  require('node:module').Module._initPaths();
-  const { PrismaClient } = require(path.join(ROOT, '.marketplace-local/codex-g1/client'));
-  const { PrismaPg } = require(path.join(ROOT, 'packages/database/node_modules/@prisma/adapter-pg'));
-  const base = new PrismaClient({ adapter: new PrismaPg({ connectionString: 'postgresql://codex_test@127.0.0.1:55449/marketplace_codex_test' }) });
-  const prisma = base.$extends(tenantGuard({ mode: 'enforce' }));
+  const { base, prisma } = database();
   const tag = 'fin_' + randomUUID().slice(0, 8);
   const actor = { accountId: 'finance-test', roles: ['SUPER_ADMIN'], isActive: true };
   const reason = 'Validacion financiera desechable';
@@ -238,7 +232,7 @@ async function run() {
   } finally { await base.$disconnect(); }
 }
 if (require.main === module) {
-  if (!process.argv.includes('--disposable')) { console.error('Requiere --disposable y cluster temporal 55449.'); process.exitCode = 2; }
+  if (!process.argv.includes('--disposable')) { console.error('Requiere --disposable y PostgreSQL de prueba.'); process.exitCode = 2; }
   else run().catch(error => { console.error(error); process.exitCode = 1; });
 }
 module.exports = { run };

@@ -77,7 +77,7 @@ un commit cuyo mensaje empiece con su ID (ej. `C1:`), o que exista el archivo nu
 
 | Orden | ID | Ola | Tarea | Espera a | Estado |
 | --- | --- | --- | --- | --- | --- |
-| 1 | X2 | 1 | Suites del marketplace en CI | — | Pendiente |
+| 1 | X2 | 1 | Suites del marketplace en CI | — | PR abierto |
 | 2 | X3 | 1 | Pedido legado detrás de bandera | X2 | Pendiente |
 | 3 | X4 | 1 | Cupón rechazado con mensaje | X2 | Pendiente |
 | 4 | X5 | 1 | Alarma y contador en el TPV | X2 | Pendiente |
