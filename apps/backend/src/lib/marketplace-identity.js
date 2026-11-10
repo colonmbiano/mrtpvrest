@@ -221,6 +221,29 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
     return { accepted: true };
   }
 
+  async function changePassword(accountId, currentPassword, password) {
+    if (typeof password !== 'string' || password.length < 12 || password.length > 128
+      || typeof currentPassword !== 'string' || currentPassword.length > 128) throw new IdentityError('INVALID_PASSWORD');
+    const account = await prisma.marketplaceAccount.findUnique({ where: { id: accountId } });
+    if (!account || account.disabledAt || !await bcrypt.compare(currentPassword, account.passwordHash)) {
+      throw new IdentityError('INVALID_CREDENTIALS', 401);
+    }
+    const passwordHash = await bcrypt.hash(password, 12);
+    const at = now();
+    return prisma.$transaction(async tx => {
+      const changed = await tx.marketplaceAccount.updateMany({
+        where: { id: accountId, passwordHash: account.passwordHash, disabledAt: null },
+        data: { passwordHash, passwordChangedAt: at },
+      });
+      if (changed.count !== 1) throw new IdentityError('INVALID_CREDENTIALS', 401);
+      await tx.marketplaceSession.updateMany({ where: { accountId, revokedAt: null }, data: { revokedAt: at } });
+      await tx.marketplaceAuthToken.updateMany({
+        where: { accountId, purpose: 'PASSWORD_RESET', consumedAt: null }, data: { consumedAt: at },
+      });
+      return { success: true };
+    });
+  }
+
   async function resetPassword(rawToken, password) {
     if (!validToken(rawToken) || typeof password !== 'string' || password.length < 12 || password.length > 128) {
       throw new IdentityError('INVALID_TOKEN');
@@ -236,7 +259,7 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
         where: { id: record.id, consumedAt: null, expiresAt: { gt: now() } }, data: { consumedAt: now() },
       });
       if (used.count !== 1) throw new IdentityError('INVALID_TOKEN');
-      await tx.marketplaceAccount.update({ where: { id: record.accountId }, data: { passwordHash } });
+      await tx.marketplaceAccount.update({ where: { id: record.accountId }, data: { passwordHash, passwordChangedAt: now() } });
       await tx.marketplaceSession.updateMany({
         where: { accountId: record.accountId, revokedAt: null }, data: { revokedAt: now() },
       });
@@ -321,7 +344,7 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
   }
 
   return { register, resendVerification, verifyEmail, login, authenticateCourier, currentSession, logout,
-    forgotPassword, resetPassword, applyAs, listApplications, reviewApplication };
+    forgotPassword, resetPassword, changePassword, applyAs, listApplications, reviewApplication };
 }
 
 module.exports = {

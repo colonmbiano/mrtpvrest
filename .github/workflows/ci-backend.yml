@@ -107,6 +107,9 @@ jobs:
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/mrtpvrest_test"
         run: |
           pnpm --filter @mrtpvrest/database run db:migrate
+          pnpm --filter @mrtpvrest/database exec prisma migrate dev --create-only --name marketplace_password_changed
+          node -e 'const fs=require("fs");const root="packages/database/prisma/migrations";const dir=fs.readdirSync(root).filter(x=>x.endsWith("_marketplace_password_changed")).sort().at(-1);console.log("X10_MIGRATION_PATH="+dir);console.log("X10_MIGRATION_SQL="+fs.readFileSync(root+"/"+dir+"/migration.sql").toString("base64"))'
+          pnpm --filter @mrtpvrest/database run db:migrate
           node --test tests/integration/table-reassignment.test.js tests/integration/tpv-cash-control.test.js
 
       - name: Configuración concurrente Marketplace en PostgreSQL
