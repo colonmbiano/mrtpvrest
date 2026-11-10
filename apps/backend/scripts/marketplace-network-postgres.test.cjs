@@ -95,8 +95,9 @@ async function run() {
     pass('registro, aprobación, presencia y reoferta tras expiración');
     const offers2=await p.run(r=>r.engine.offersForCourier(couriers[1]).filter(o=>o.taskId===first.id));
     const result=await Promise.allSettled([
-      persistence().run(r=>r.engine.acceptOffer({offerId:offers[0].id,courierId:couriers[0]})),
-      persistence().run(r=>r.engine.acceptOffer({offerId:offers2[0].id,courierId:couriers[1]})),
+      // Como la ruta HTTP (offerParam): la oferta nombrada se carga aunque el ganador ya la haya expirado.
+      persistence().run(r=>r.engine.acceptOffer({offerId:offers[0].id,courierId:couriers[0]}),{offerIds:[offers[0].id]}),
+      persistence().run(r=>r.engine.acceptOffer({offerId:offers2[0].id,courierId:couriers[1]}),{offerIds:[offers2[0].id]}),
     ]);
     assert.equal(result.filter(r=>r.status==='fulfilled').length,1);
     assert.equal(result.find(r=>r.status==='rejected').reason.statusCode,409);

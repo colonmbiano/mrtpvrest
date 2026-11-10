@@ -212,10 +212,12 @@ Solo aplica al Mercadito; los pedidos propios de la tienda no cambian.
 
 **Haz:** `CLAUDE.md` dice que no hay SQL crudo, pero hoy hay 11 `$queryRaw` y 1 `$queryRawUnsafe` en
 `apps/backend/src`. Lista cada uno en `docs/TENANCY.md` (archivo, propósito, cómo filtra por restaurante) y corrige
-la regla de `CLAUDE.md`. No cambies lógica. (El `$queryRawUnsafe` de `marketplace-network-prisma.js` lo cambia
-Claude en C6; solo documéntalo.)
+la regla de `CLAUDE.md`. No cambies lógica. C6 ya quitó el `$queryRawUnsafe`/`$executeRawUnsafe` de
+`marketplace-network-prisma.js`: ahí quedan tres consultas con plantilla (`pg_try_advisory_xact_lock`, el
+`FOR UPDATE` de las órdenes cargadas y el `UPDATE` por lotes de estado de ofertas); solo documéntalas, sin tocarlas.
 
-**Listo cuando:** la tabla de `docs/TENANCY.md` cubre las 12 consultas.
+**Listo cuando:** la tabla de `docs/TENANCY.md` cubre todas las consultas crudas que haya en `apps/backend/src`
+(búscalas con `grep -rn "\$queryRaw\|\$executeRaw" apps/backend/src`).
 
 ### X7 · Cancelar desde la cuenta y WhatsApp a la tienda  (espera a C2)
 

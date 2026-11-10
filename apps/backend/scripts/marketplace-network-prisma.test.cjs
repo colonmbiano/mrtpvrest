@@ -57,7 +57,9 @@ function fixture({ policy = 'SHARED_ONLY', status = 'READY' } = {}) {
       const actual = row?.[key];
       if (value && typeof value === 'object' && !(value instanceof Date)) {
         if ('isNot' in value) return actual !== value.isNot;
-        if ('is' in value) return actual != null && matches(actual, value.is);
+        if ('is' in value) return value.is === null ? actual == null : actual != null && matches(actual, value.is);
+        if ('notIn' in value) return !value.notIn.includes(actual);
+        if ('gt' in value) return actual > value.gt;
         if ('equals' in value) {
           const target = value.path ? value.path.reduce((v, k) => v?.[k], actual) : actual;
           return isDeepStrictEqual(target, value.equals);
@@ -73,9 +75,21 @@ function fixture({ policy = 'SHARED_ONLY', status = 'READY' } = {}) {
     for (const table of tables) {
       const find = where => [...db[table].values()].filter(row => matches(hydrate(db, table, row), where));
       tx[table] = {
-        findMany: async ({ where, take } = {}) => clone(find(where).slice(0, take).map(row => hydrate(db, table, row))),
+        findMany: async ({ where, take, orderBy } = {}) => {
+          const rows = find(where);
+          if (orderBy?.id) rows.sort((a, b) => (a.id < b.id ? -1 : 1) * (orderBy.id === 'desc' ? -1 : 1));
+          return clone(rows.slice(0, take).map(row => hydrate(db, table, row)));
+        },
         findFirst: async ({ where } = {}) => clone(find(where)[0] || null),
         findUnique: async ({ where }) => clone(find(where)[0] || null),
+        createMany: async ({ data }) => {
+          for (const row of data) {
+            const key = row.id || row.courierId;
+            if (db[table].has(key)) throw Object.assign(new Error('Duplicado'), { code: 'P2002' });
+            db[table].set(key, clone(row));
+          }
+          return { count: data.length };
+        },
         create: async ({ data }) => {
           const key = data.id || data.courierId;
           if (db[table].has(key)) throw Object.assign(new Error('Duplicado'), { code: 'P2002' });
@@ -94,8 +108,25 @@ function fixture({ policy = 'SHARED_ONLY', status = 'READY' } = {}) {
         },
       };
     }
-    tx.$executeRawUnsafe = async sql => { hooks.queries.push(sql); return 1; };
-    tx.$queryRawUnsafe = async sql => { hooks.queries.push(sql); return []; };
+    const sql = strings => strings.join('?');
+    tx.$executeRaw = async (strings, ...values) => {
+      const text = sql(strings); hooks.queries.push(text); hooks.values = values;
+      if (text.startsWith('UPDATE marketplace_network_offers')) {
+        if (hooks.conflictTable === 'marketplaceNetworkOffer') return 0;
+        const [status, , ids] = values; let n = 0;
+        for (const id of ids) { const row = db.marketplaceNetworkOffer.get(id); if (row) { row.status = status; row.payload = { ...row.payload, status }; n++; } }
+        return n;
+      }
+      return 1;
+    };
+    tx.$queryRaw = async (strings, ...values) => {
+      const text = sql(strings); hooks.queries.push(text);
+      if (text.includes('pg_try_advisory_xact_lock')) {
+        if (hooks.lockBusy > 0) { hooks.lockBusy--; return [{ locked: false }]; }
+        return [{ locked: true }];
+      }
+      hooks.lockedOrders = values[0]; return [];
+    };
     return tx;
   }
   const prisma = { $transaction: async work => {
@@ -127,7 +158,7 @@ test('importa política de red explícita y conserva pipeline y asignación desp
   assert.equal(f.pipeline().dispatch.task.currentAssignmentId, task.currentAssignmentId);
   assert.equal(f.pipeline().dispatch.assignment.id, task.currentAssignmentId);
   assert.equal(f.state().marketplaceNetworkAssignment.size, 1);
-  assert.ok(f.hooks.queries.some(q => q.includes('pg_advisory_xact_lock')));
+  assert.ok(f.hooks.queries.some(q => q.includes('pg_try_advisory_xact_lock')));
   assert.ok(f.hooks.queries.some(q => q.includes('FOR UPDATE')));
 });
 
@@ -227,4 +258,106 @@ test('HTTP PIN incorrecto confirma contador pero jamás anuncia entrega exitosa'
   assert.equal(res.statusCode, 400); assert.equal(res.payload.errorCode, 'INVALID_PIN'); assert.equal(res.sent, 1);
   assert.equal(f.task().pinAttempts.pickup.failures, 1);
   assert.equal(f.state().order.get('order1').status, 'READY');
+});
+
+// ── C6: solo lo vivo entra al motor ─────────────────────────────────────────
+async function deliver(f) {
+  await f.accept();
+  await f.persistence.run(r => r.engine.confirmPickup({ taskId: 'task1', courierId: 'courier1', pickupPin: '123456' }));
+  await f.persistence.run(r => r.engine.confirmDelivery({ taskId: 'task1', courierId: 'courier1', deliveryPin: '654321' }));
+  assert.equal(f.task().status, 'DELIVERED');
+}
+
+test('C6: una tarea entregada ya no se carga ni bloquea su orden; se carga si la petición la nombra', async () => {
+  const f = fixture(); await deliver(f);
+  f.hooks.lockedOrders = undefined;
+  const live = await f.persistence.run(async r => ({ tasks: [...r.store.tasks.keys()], orders: [...r.store.orders.keys()],
+    offers: r.store.offers.size, assignments: r.store.assignments.size }));
+  assert.deepEqual(live, { tasks: [], orders: [], offers: 0, assignments: 0 });
+  assert.equal(f.hooks.lockedOrders, undefined, 'sin órdenes vivas no hay FOR UPDATE');
+  const named = await f.persistence.run(r => r.engine.taskFor('task1'), { taskIds: ['task1'] });
+  assert.equal(named.status, 'DELIVERED');
+  assert.deepEqual(f.hooks.lockedOrders, ['order1']);
+  assert.match(f.hooks.queries.at(-1), /FOR UPDATE OF o/);
+});
+
+test('C6: Ops ve las terminadas desde la tabla, mezcladas por id con las vivas y con sus filtros', async () => {
+  const f = fixture(); await deliver(f);
+  const ops = createMarketplaceOpsDispatchService(createNetworkOpsPorts(f.persistence));
+  const admin = { id: 'super1', roles: ['SUPER_ADMIN'], isActive: true };
+  const delivered = await ops.listDispatch(admin, { status: 'DELIVERED' });
+  assert.deepEqual(delivered.items.map(t => [t.id, t.status]), [['task1', 'DELIVERED']]);
+  assert.equal((await ops.listDispatch(admin, {})).items.length, 1);
+  assert.equal((await ops.listDispatch(admin, { status: 'OFFERING' })).items.length, 0);
+  assert.equal((await ops.listDispatch(admin, { status: 'DELIVERED', merchantId: 'otro' })).items.length, 0);
+});
+
+test('C6: la presencia GPS escribe solo la fila del repartidor, sin el bloqueo de la red, y se liga a su tarea', async () => {
+  const f = fixture(); await f.accept();
+  const locks = f.hooks.queries.filter(q => q.includes('pg_try_advisory_xact_lock')).length;
+  const presence = await f.persistence.updatePresence('courier1', { isOnline: true, lat: 19.44, lng: -99.14, accuracy: 8 });
+  assert.equal(presence.lat, 19.44); assert.equal(presence.acceptingShared, true, 'conserva la preferencia previa');
+  assert.equal(f.hooks.queries.filter(q => q.includes('pg_try_advisory_xact_lock')).length, locks);
+  const row = f.state().marketplaceNetworkPresence.get('courier1');
+  assert.equal(row.taskId, 'task1'); assert.equal(row.orderId, 'order1'); assert.equal(row.assignmentId, f.task().currentAssignmentId);
+  assert.equal(row.payload.isOnline, true);
+  const other = await f.persistence.updatePresence('courier2', { isOnline: false });
+  assert.equal(other.lat, null); assert.equal(f.state().marketplaceNetworkPresence.get('courier2').taskId, null);
+  const blocked = f.state().marketplaceNetworkCourier.get('courier2'); blocked.verificationStatus = 'PENDING_VERIFICATION';
+  await assert.rejects(f.persistence.updatePresence('courier2', { isOnline: true, lat: 1, lng: 1 }), { code: 'COURIER_FORBIDDEN' });
+  // El motor lee la presencia nueva en la siguiente corrida.
+  const seen = await f.persistence.run(r => r.store.couriers.get('courier1').presence.lat);
+  assert.equal(seen, 19.44);
+});
+
+test('C6: la ruta de presencia usa el camino directo y valida como antes', async () => {
+  const f = fixture();
+  const { routes, response, req } = routeFixture(f.persistence);
+  const ok = response();
+  await routes.get('POST /couriers/me/presence')({ ...req, body: { isOnline: true, lat: 19.5, lng: -99.2 } }, ok);
+  assert.equal(ok.statusCode, 200); assert.equal(ok.payload.presence.lat, 19.5);
+  assert.equal(f.state().marketplaceNetworkPresence.get('courier1').payload.lat, 19.5);
+  const bad = response();
+  await routes.get('POST /couriers/me/presence')({ ...req, body: { isOnline: true, lat: 999, lng: 0 } }, bad);
+  assert.equal(bad.statusCode, 422); assert.equal(bad.payload.errorCode, 'INVALID_PRESENCE');
+  const spoof = response();
+  await routes.get('POST /couriers/me/presence')({ ...req, body: { isOnline: false, courierId: 'courier2' } }, spoof);
+  assert.equal(spoof.statusCode, 403);
+  const staff = response();
+  await routes.get('POST /couriers/me/presence')({ ...req, user: { ...req.user, role: 'ADMIN' }, body: { isOnline: false } }, staff);
+  assert.equal(staff.statusCode, 403);
+});
+
+test('C6: consultar una tarea ya entregada por HTTP sigue respondiendo', async () => {
+  const f = fixture(); await deliver(f);
+  const { routes, response, req } = routeFixture(f.persistence); const res = response();
+  await routes.get('GET /dispatch/tasks/:id')({ ...req, params: { id: 'task1' } }, res);
+  assert.equal(res.statusCode, 200); assert.equal(res.payload.status, 'DELIVERED');
+});
+
+test('C6: si el bloqueo de la red está tomado se suelta la transacción y se reintenta, sin ocupar la conexión', async () => {
+  const f = fixture(); f.hooks.lockBusy = 3;
+  const before = f.hooks.rollbacks;
+  const offers = await f.persistence.run(async r => { await f.persistence.tick(r); return r.engine.offersForCourier('courier1'); });
+  assert.equal(offers.length, 1);
+  assert.equal(f.hooks.rollbacks - before, 3, 'tres intentos ocupados se revierten');
+});
+
+test('C6: una ola guarda sus ofertas en lote, la expiración va en un UPDATE por lote y el GPS no reescribe repartidores', async () => {
+  const f = fixture();
+  await f.offer();
+  const offers = [...f.state().marketplaceNetworkOffer.values()];
+  assert.equal(offers.length, 2);
+  const courierVersion = f.state().marketplaceNetworkCourier.get('courier1').version;
+  assert.equal(f.state().marketplaceNetworkCourier.get('courier1').payload.presence, undefined, 'la presencia no se copia al repartidor');
+  await f.persistence.updatePresence('courier1', { isOnline: true, lat: 19.431, lng: -99.131 });
+  f.advance(31000);
+  await f.offer();
+  assert.equal(f.state().marketplaceNetworkCourier.get('courier1').version, courierVersion, 'un GPS nuevo no sube la versión del repartidor');
+  for (const old of offers) {
+    const row = f.state().marketplaceNetworkOffer.get(old.id);
+    assert.equal(row.status, 'EXPIRED'); assert.equal(row.payload.status, 'EXPIRED');
+  }
+  assert(f.hooks.queries.some(q => q.startsWith('UPDATE marketplace_network_offers')));
+  assert.equal([...f.state().marketplaceNetworkOffer.values()].filter(o => o.status === 'OFFERED').length, 2);
 });

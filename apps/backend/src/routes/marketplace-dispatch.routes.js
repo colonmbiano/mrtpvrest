@@ -51,7 +51,20 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, persi
         source: assignment.source, status: assignment.status } : null,
       readyAt: task.readyAt, pickedUpAt: task.pickedUpAt, deliveredAt: task.deliveredAt };
   }
-  function endpoint(method, paths, handler) {
+  // Presencia GPS validada igual que el handler en memoria.
+  function presenceInput(req) {
+    const input = body(req, ['courierId', 'isOnline', 'lat', 'lng', 'accuracy', 'acceptingShared']);
+    if (typeof input.isOnline !== 'boolean' || input.isOnline && !validCoordinates(input.lat, input.lng)
+      || input.accuracy !== undefined && (!Number.isFinite(input.accuracy) || input.accuracy < 0)
+      || input.acceptingShared !== undefined && typeof input.acceptingShared !== 'boolean') {
+      fail('Presencia invalida', 'INVALID_PRESENCE', 422);
+    }
+    return input;
+  }
+  // options.taskParam: req.params.id es una tarea; se carga aunque ya esté terminada (C6).
+  // options.offerParam: req.params.id es una oferta; se carga aunque ya no esté vigente (C6).
+  // options.presence: camino directo de presencia, sin el motor ni el bloqueo de la red (C6).
+  function endpoint(method, paths, handler, options = {}) {
     for (const path of Array.isArray(paths) ? paths : [paths]) router[method](path, (req, res, next) => {
       res.set('Cache-Control', 'no-store');
       let durable;
@@ -60,6 +73,13 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, persi
           actor(req);
           durable = persistence || require('../lib/marketplace-network-prisma').createNetworkPersistence({
             prisma: require('@mrtpvrest/database').prisma, now });
+          if (options.presence && typeof durable.updatePresence === 'function') {
+            const user = actor(req);
+            if (user.role !== 'DELIVERY') fail('Repartidor no autorizado', 'COURIER_FORBIDDEN');
+            const input = presenceInput(req);
+            if (input.courierId !== undefined && input.courierId !== user.id) fail('Identidad de repartidor incorrecta', 'COURIER_FORBIDDEN');
+            return res.json({ success: true, presence: await durable.updatePresence(user.id, input) });
+          }
           const reply = await durable.run(async runtime => {
             req.dispatchRuntime = runtime;
             // No cambiar la versión antes de una mutación CAS explícita.
@@ -69,7 +89,8 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, persi
               json(value) { this.payload=value; return this; } };
             await handler(req, out, runtime.engine, runtime.store, multiStopEnabled ? runtime.multiStop : null);
             return out;
-          });
+          }, options.taskParam && req.params?.id ? { taskIds: [req.params.id] }
+            : options.offerParam && req.params?.id ? { offerIds: [req.params.id] } : {});
           return res.status(reply.statusCode).json(reply.payload);
         } catch (error) { return failure(error); }
       }
@@ -143,19 +164,19 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, persi
     const input = body(req, ['expectedVersion']);
     const result = engine.requestShared({ taskId: task.id, ...input });
     return res.json({ success: true, task: view(result.task), idempotent: result.idempotent });
-  });
+  }, { taskParam: true });
   endpoint('post', '/dispatch/tasks/:id/assign-own', (req, res, engine, store, multiStop) => {
     const task = engine.taskFor(req.params.id); merchantAccess(req, engine.merchantFor(task));
     const input = body(req, ['courierId', 'expectedVersion']);
     if (typeof input.courierId !== 'string' || !input.courierId) fail('courierId requerido', 'INVALID_COURIER_ID', 422);
     const result = engine.assignOwn({ taskId: task.id, ...input });
     return res.json({ success: true, task: view(result.task) });
-  });
+  }, { taskParam: true });
   endpoint('post', '/dispatch/tasks/:id/start', (req, res, engine, store, multiStop) => {
     const task = engine.taskFor(req.params.id); merchantAccess(req, engine.merchantFor(task));
     const result = engine.startDispatch({ taskId: task.id, ...body(req, ['expectedVersion']) });
     return res.json({ success: true, task: view(result.task) });
-  });
+  }, { taskParam: true });
   endpoint('get', ['/dispatch/tasks/:id', '/tasks/:id'], (req, res, engine, store, multiStop) => {
     const task = engine.taskFor(req.params.id);
     if (req.user.role === 'DELIVERY') {
@@ -164,20 +185,15 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, persi
     } else merchantAccess(req, engine.merchantFor(task));
     engine.tick();
     return res.json(view(task));
-  });
+  }, { taskParam: true });
   endpoint('post', '/couriers/me/presence', (req, res, engine, store, multiStop) => {
     const courier = courierAccess(req);
-    const input = body(req, ['courierId', 'isOnline', 'lat', 'lng', 'accuracy', 'acceptingShared']);
-    if (typeof input.isOnline !== 'boolean' || input.isOnline && !validCoordinates(input.lat, input.lng)
-      || input.accuracy !== undefined && (!Number.isFinite(input.accuracy) || input.accuracy < 0)
-      || input.acceptingShared !== undefined && typeof input.acceptingShared !== 'boolean') {
-      fail('Presencia invalida', 'INVALID_PRESENCE', 422);
-    }
+    const input = presenceInput(req);
     courier.isOnline = input.isOnline;
     courier.presence = { lat: input.isOnline ? input.lat : null, lng: input.isOnline ? input.lng : null,
       accuracy: input.accuracy ?? 10, lastSeenAt: now(), acceptingShared: input.acceptingShared ?? courier.presence?.acceptingShared ?? false };
     return res.json({ success: true, presence: courier.presence });
-  });
+  }, { presence: true });
   endpoint('get', '/couriers/me/offers', (req, res, engine, store, multiStop) => {
     const courier = courierAccess(req);
     const offers = engine.offersForCourier(courier.id).map(offer => ({ id: offer.id, taskId: offer.taskId,
@@ -188,13 +204,13 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, persi
     const courier = courierAccess(req); body(req, ['courierId']);
     const { task, assignment } = engine.acceptOffer({ offerId: req.params.id, courierId: courier.id });
     return res.json({ success: true, taskId: task.id, assignment });
-  });
+  }, { offerParam: true });
   for (const kind of ['pickup', 'deliver']) endpoint('post', `/couriers/tasks/:id/${kind}`, (req, res, engine, store, multiStop) => {
     const courier = courierAccess(req);
     const input = body(req, ['courierId', kind === 'pickup' ? 'pickupPin' : 'deliveryPin', 'expectedVersion']);
     const result = engine[kind === 'pickup' ? 'confirmPickup' : 'confirmDelivery']({ ...input, taskId: req.params.id, courierId: courier.id });
     return res.json({ success: true, taskId: result.task.id, status: result.task.status, orderStatusUpdate: result.orderStatusUpdate });
-  });
+  }, { taskParam: true });
   if (multiStop) {
     // Only a platform-level human administrator may compose a group from
     // existing server-owned orders/tasks. No customer-controlled routes.
