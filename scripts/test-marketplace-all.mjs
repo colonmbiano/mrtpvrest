@@ -29,8 +29,13 @@ const TESTS = [
   { path: 'apps/backend/scripts/marketplace-network-pin.test.cjs', name: 'Backend: Intentos del PIN de red' },
   { path: 'apps/backend/scripts/marketplace-network-prisma.test.cjs', name: 'Backend: Persistencia de red y commit HTTP' },
   { path: 'apps/backend/scripts/marketplace-settlements-prisma.test.cjs', name: 'Backend: Persistencia financiera y recuperación' },
+  { path: 'apps/backend/scripts/marketplace-cancel.test.cjs', name: 'Backend: Cancelación con reembolso (C1)' },
+  { path: 'apps/backend/scripts/marketplace-pending.test.cjs', name: 'Backend: Pedidos sin aceptar a los 15 min (C2)' },
+  { path: 'apps/backend/scripts/marketplace-item-options.test.cjs', name: 'Backend: Variantes y extras (C4)' },
+  { path: 'apps/backend/scripts/marketplace-commissions.test.cjs', name: 'Backend: Estado de cuenta de comisiones (C5)' },
   { path: 'apps/delivery/scripts/marketplace-network-visibility.test.mjs', name: 'Delivery: Visibilidad de la red' },
   { path: 'apps/saas/scripts/marketplace-overview.test.mjs', name: 'SaaS: Métricas reales del marketplace' },
+  { path: 'apps/saas/scripts/marketplace-commissions.test.mjs', name: 'SaaS: Comisiones por cobrar (C5)' },
   // ── CLIENT (Tienda Online / Marketplace PWA) ──
   { path: 'apps/client/scripts/marketplace.test.mjs', name: 'Client: Catálogo Multi-Giro & Filtros' },
   { path: 'apps/client/scripts/marketplace-checkout.test.mjs', name: 'Client: Checkout Dividido & Escrow' },

@@ -332,6 +332,7 @@ model Restaurant {
   integrations     IntegrationConfig[]
   orders           Order[]
   driverPayouts     MarketplaceDriverPayout[]
+  marketplaceCommissionStatements MarketplaceCommissionStatement[]
   marketplaceMembership MarketplaceMerchantMembership?
   marketplaceQuotes MarketplaceQuote[]
   customers        Customer[]
@@ -4917,6 +4918,46 @@ model MarketplaceDriverPayout {
   @@index([restaurantId, driverId, requestedAt, id])
   @@index([driverId])
   @@map("marketplace_driver_payouts")
+}
+
+enum MarketplaceCommissionStatementStatus {
+  ISSUED
+  PAID
+}
+
+/// C5: estado de cuenta mensual de la comisión de pedidos del Mercadito pagados en efectivo.
+/// El efectivo lo cobra el comercio, así que la comisión queda como deuda con la plataforma; los
+/// pedidos en línea no entran (su comisión iría en el split de Mercado Pago, C3). El mes en curso
+/// se calcula en vivo y no se guarda; al emitirse, las líneas se congelan aquí con su hash.
+/// Montos en centavos enteros.
+model MarketplaceCommissionStatement {
+  id String @id @default(uuid())
+  restaurantId String
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  /// Mes calendario en America/Mexico_City, "YYYY-MM".
+  period String @db.Char(7)
+  periodStart DateTime @db.Timestamptz(3)
+  periodEnd DateTime @db.Timestamptz(3)
+  currency String @default("MXN") @db.Char(3)
+  status MarketplaceCommissionStatementStatus @default(ISSUED)
+  ordersCount Int
+  salesCents Int
+  commissionCents Int
+  /// [{ orderId, orderNumber, createdAt, subtotalCents, commissionBps, commissionCents }]
+  lines Json
+  linesHash String @db.Char(64)
+  issuedAt DateTime @default(now()) @db.Timestamptz(3)
+  issuedBy String
+  paidAt DateTime? @db.Timestamptz(3)
+  paidBy String?
+  paymentReference String? @db.VarChar(200)
+  paymentNote String? @db.VarChar(500)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([restaurantId, period])
+  @@index([period, status])
+  @@map("marketplace_commission_statements")
 }
 
 // Per-location overrides; never write the shared MenuItem promotional fields.

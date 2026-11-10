@@ -2,9 +2,10 @@
 
 const { SettlementsV1Error, createSettlementsV1Service } = require('../lib/marketplace-settlements-v1');
 const { StaffIdentityError, createStaffActorResolver } = require('../lib/marketplace-staff-identity');
+const { CommissionError, createCommissionStatements } = require('../lib/marketplace-commissions');
 
 function createMarketplaceSettlementsV1Router({ Router, service, resolveActor, staffOptions,
-  prisma, env = process.env, getGateway, publish } = {}) {
+  prisma, env = process.env, getGateway, publish, commissionService } = {}) {
   const router = (Router || require('express').Router)();
   const actorFor = resolveActor || createStaffActorResolver(staffOptions);
   let defaultService;
@@ -17,9 +18,15 @@ function createMarketplaceSettlementsV1Router({ Router, service, resolveActor, s
       prisma: prisma || require('@mrtpvrest/database').prisma, env, ...(getGateway ? { getGateway } : {}),
     }));
   };
+  // C5: comisiones de pedidos en efectivo. No dependen de Mercado Pago, así que no esperan a
+  // MARKETPLACE_FINANCE_ENABLED.
+  let defaultCommissions;
+  const commissions = () => commissionService
+    || (defaultCommissions ||= createCommissionStatements({ prisma: prisma || require('@mrtpvrest/database').prisma }));
   // Every route shares one error mapping. Internal details are never returned.
   function respond(res, error) {
-    if (error instanceof SettlementsV1Error || error instanceof StaffIdentityError) return res.status(error.statusCode).json({ error: error.message, errorCode: error.code });
+    if (error instanceof SettlementsV1Error || error instanceof StaffIdentityError || error instanceof CommissionError) return res.status(error.statusCode).json({ error: error.message, errorCode: error.code });
+    if (['P2002', 'P2034', 'P2028'].includes(error?.code)) return res.status(409).json({ error: 'El recurso cambió; actualiza la vista', errorCode: 'SETTLEMENTS_CONFLICT' });
     return res.status(503).json({ error: 'Liquidaciones temporalmente no disponibles', errorCode: 'SETTLEMENTS_UNAVAILABLE' });
   }
 
@@ -71,6 +78,22 @@ function createMarketplaceSettlementsV1Router({ Router, service, resolveActor, s
       return res.json({ refunds: refunds.items, events, publisherConfigured: Boolean(publish) });
     } catch (error) { return respond(res, error); }
   });
+
+  // ── C5: estado de cuenta mensual de comisiones (efectivo) ──
+  function commissionRoute(run) {
+    return async (req, res) => {
+      res.set('Cache-Control', 'no-store');
+      try {
+        const actor = (await actorFor(req)) ?? null;
+        return res.json(await run(commissions(), actor, req));
+      } catch (error) { return respond(res, error); }
+    };
+  }
+  router.get('/merchant/commissions', commissionRoute((svc, actor, req) => svc.merchantStatements(actor, req.query ?? {})));
+  router.get('/ops/commissions', commissionRoute((svc, actor, req) => svc.listPeriod(actor, req.query ?? {})));
+  router.get('/ops/commissions/:restaurantId', commissionRoute((svc, actor, req) => svc.merchantDetail(actor, req.params.restaurantId, req.query ?? {})));
+  router.post('/ops/commissions/:restaurantId/issue', commissionRoute((svc, actor, req) => svc.issue(actor, req.params.restaurantId, req.body ?? {})));
+  router.post('/ops/commissions/:restaurantId/pay', commissionRoute((svc, actor, req) => svc.markPaid(actor, req.params.restaurantId, req.body ?? {})));
 
   return router;
 }

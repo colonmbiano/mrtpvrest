@@ -3,6 +3,7 @@ import { useState, useEffect, type CSSProperties } from 'react';
 import api from '@/lib/api';
 import { AlertCircle } from 'lucide-react';
 import { DispatchAuditSection } from './DispatchAuditSection';
+import { CommissionStatementsSection } from './CommissionStatementsSection';
 import { MerchantApplicationsSection } from './MerchantApplicationsSection';
 import { CourierApplicationsSection } from './CourierApplicationsSection';
 import { MarketplaceSettingsSection } from './MarketplaceSettingsSection';
@@ -109,6 +110,8 @@ export default function MarketplacePage() {
         <CourierApplicationsSection />
 
         <DispatchAuditSection />
+
+        <CommissionStatementsSection />
 
         {/* Ledger Balance */}
         <div style={{ marginBottom: '32px' }}>

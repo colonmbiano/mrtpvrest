@@ -64,6 +64,7 @@ y entonces solo **llama** a sus funciones; no cambies su lógica.
 - `apps/backend/src/lib/marketplace-quote.js` y `marketplace-order-orchestrator.js` → excepto el cambio pequeño de X4
 - `apps/backend/src/lib/marketplace-network-prisma.js`, `marketplace-dispatch.js`, `routes/marketplace-dispatch.routes.js` (C6–C7, ola 3)
 - `apps/backend/src/lib/marketplace-driver-payouts.js` (C8)
+- `apps/backend/src/lib/marketplace-commissions.js` (C5) → X14 solo llama a `GET /api/marketplace/v1/merchant/commissions`
 
 ## 5. Orden de trabajo y estado
 
@@ -89,6 +90,7 @@ un commit cuyo mensaje empiece con su ID (ej. `C1:`), o que exista el archivo nu
 | 11 | X8 | 2 | Sucursal por cobertura | C4 | Pendiente |
 | 12 | X13 | 3 | Botón Verificar y documentos del repartidor | X2 | Pendiente |
 | 13 | X12 | 3 | Ofertas con zona y distancia | C6 | Pendiente |
+| 14 | X14 | 2 | Comisiones del comercio en el admin | C5 | Pendiente |
 
 Rutas de backend relativas a `apps/backend/src` salvo que se diga otra cosa.
 
@@ -251,6 +253,19 @@ Con una sola sucursal, el comportamiento no cambia.
    botón y dilo en el PR.
 
 **Listo cuando:** se puede verificar a un repartidor sin SQL ni `curl`.
+
+### X14 · Comisiones del comercio en el admin  (espera a C5)
+
+En `apps/admin`, una pantalla de solo lectura "Comisiones del Mercadito" dentro de la sección del Mercadito que ya
+existe. Llama `GET /api/marketplace/v1/merchant/commissions?period=AAAA-MM` (lo dejó C5; contrato en
+`docs/marketplace/comisiones-efectivo.md`) y muestra: selector de mes (últimos 12), totales del mes (pedidos
+entregados, ventas, comisión), estado (`OPEN` mes en curso, `TO_ISSUE` por emitir, `ISSUED` por pagar, `PAID` pagado
+con referencia), la tabla de líneas (folio, fecha, subtotal, comisión) y el historial. Si `pendingCount > 0`, aviso
+de pedidos sin cerrar. Usa los átomos de `components/warmtech` (`StatCard`, `StatusBadge`, `DataCard`) y
+`lib/format.ts` para pesos; el acento con `var(--brand-primary)`. No toques el backend: ni emitir ni pagar se hace
+desde el admin.
+
+**Listo cuando:** prueba del módulo que valida la respuesta y formatea; captura en navegador con datos simulados.
 
 ### X12 · Ofertas con zona y distancia  (espera a C6)
 
