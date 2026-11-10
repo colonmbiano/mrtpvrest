@@ -11,7 +11,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -112,6 +112,21 @@ const TESTS = [
   ].map(file => ({ path: `apps/backend/__tests__/${file}`, name: `Jest: ${file}`, runner: 'jest' })),
 ];
 
+// Incluye automáticamente nuevas suites backend. Las de PostgreSQL requieren
+// una BD desechable explícita para que el verificador local siga siendo offline.
+const backendScripts = 'apps/backend/scripts';
+const registeredPaths = new Set(TESTS.map(suite => suite.path));
+const withPostgres = process.env.MARKETPLACE_TEST_POSTGRES === '1';
+const postgresSuites = [];
+for (const file of readdirSync(resolve(ROOT, backendScripts)).sort()) {
+  if (!/^marketplace-.*\.test\.cjs$/.test(file)) continue;
+  const path = `${backendScripts}/${file}`;
+  if (registeredPaths.has(path)) continue;
+  const postgres = file.endsWith('-postgres.test.cjs');
+  if (postgres) postgresSuites.push(file);
+  if (!postgres || withPostgres) TESTS.push({ path, name: file, postgres });
+}
+
 const SCHEMA_PATHS = [
   'packages/database/prisma/schema.prisma',
   'apps/backend/prisma/schema.prisma'
@@ -128,7 +143,7 @@ function runSuite(suite) {
   try {
     const args = suite.runner === 'jest'
       ? [resolve(ROOT, 'apps/backend/node_modules/jest/bin/jest.js'), '--runInBand', '--no-cache', '--json', '--runTestsByPath', full]
-      : [full];
+      : suite.postgres ? [full, '--disposable'] : [full];
     const stdout = execFileSync(process.execPath, args, {
       cwd: suite.runner === 'jest' ? resolve(ROOT, 'apps/backend') : ROOT,
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000,
@@ -188,7 +203,8 @@ async function main() {
   }
 
   // ── FASE 3: Ejecución de las Suites ──
-  console.log(`\n[3/4] Ejecutando ${TESTS.length} suites locales con fixtures/mocks...\n`);
+  console.log(`\n[3/4] Ejecutando ${TESTS.length} suites...\n`);
+  console.log(`  PostgreSQL desechable: ${withPostgres ? 'habilitado' : 'omitido'} (${postgresSuites.join(', ')}).`);
   let passedSuites = 0;
   let failedSuites = 0;
   let totalTests = 0;
@@ -228,7 +244,7 @@ async function main() {
   console.log(`  Suites Fallidas:         ${failedSuites}`);
   console.log(`  Tiempo Total:            ${elapsed}s`);
   console.log(`  Estado de Schemas:       BYTE-IDENTICAL (SHA-256 verificado)`);
-  console.log(`  Alcance:                fixtures/mocks; no certifica aislamiento de red ni producción`);
+  console.log(`  Alcance:                fixtures/mocks${withPostgres ? ' + PostgreSQL desechable' : ''}`);
   console.log('='.repeat(80));
 
   if (failedSuites > 0) {

@@ -536,7 +536,8 @@ test('HTTP task privacy, missing IDs and scope checks fail closed', async () => 
 test('v1 and legacy mounts share a router and register before the unversioned marketplace', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8');
   const v1 = source.indexOf("app.use('/api/marketplace/v1', marketplaceDispatchRouter)");
-  assert.ok(v1 > 0);
+  const legacy = source.indexOf("app.use('/api/marketplace', require('./routes/marketplace.routes')())");
+  assert.ok(v1 >= 0);
   assert.ok(source.includes("app.use('/api/marketplace/dispatch', marketplaceDispatchRouter)"));
-  assert.ok(v1 < source.indexOf("app.use('/api/marketplace',"));
+  assert.ok(v1 < legacy);
 });

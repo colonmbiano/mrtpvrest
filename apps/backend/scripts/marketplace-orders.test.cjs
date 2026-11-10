@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { fixture, input, NOW } = require('./helpers/marketplace-orders-fixture.cjs');
+const { fixture, input, NOW, PIN_SECRET } = require('./helpers/marketplace-orders-fixture.cjs');
 const { createMarketplaceOrdersService } = require('../src/lib/marketplace-orders');
 const { createMarketplacePaymentGateway } = require('../src/lib/marketplace-payment-gateway');
 const { buildOrderCaptureTransaction, recordLedgerTransaction } = require('../src/lib/marketplace-ledger');
@@ -327,8 +327,8 @@ test('missing PIN configuration rolls creation back, and rotated keyrings can st
   const missing = fixture({ pinSecrets: {} });
   await assert.rejects(create(missing), { code: 'PIN_KEY_UNAVAILABLE' }); assert.equal(missing.state.order.length, 0);
   const f = fixture(); const order = await create(f, { paymentMethod: 'CASH' });
-  const rotated = createMarketplaceOrdersService({ storeSlugs: 'alpha', activePinKeyId: 'new',
-    pinSecrets: { test: 'offline-fixture-pin-key-with-at-least-32-bytes', new: 'another-offline-pin-secret-key-over-32-bytes' } });
+  const rotated = createMarketplaceOrdersService({ storeSlugs: 'alpha', now: () => new Date(NOW), activePinKeyId: 'new',
+    pinSecrets: { test: PIN_SECRET, new: 'another-offline-pin-secret-key-over-32-bytes' } });
   const status = await rotated.getMarketplaceOrderStatus({ orderId: order.id, trackingToken: order.trackingToken, prismaClient: f.prisma });
   assert.equal(status.deliveryPin, order.deliveryPin);
   const merchant = await rotated.getMarketplacePickupPin({ orderId: order.id, restaurantId: 'r1', prismaClient: f.prisma });

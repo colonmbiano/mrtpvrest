@@ -403,5 +403,7 @@ test('default mounted router is closed without configured identity and persisten
 test('Ops router mounts before the legacy marketplace without initializing the app', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8');
   const mount = source.indexOf("app.use('/api/marketplace/v1/ops', require('./routes/marketplace-ops-dispatch-v1.routes')())");
-  assert.ok(mount > 0); assert.ok(mount < source.indexOf("app.use('/api/marketplace',"));
+  const legacy = source.indexOf("app.use('/api/marketplace', require('./routes/marketplace.routes')())");
+  assert.ok(mount >= 0);
+  assert.ok(mount < legacy);
 });
