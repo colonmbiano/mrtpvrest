@@ -75,24 +75,25 @@ function assertSnapshot(quote) {
 }
 
 // Pure preparation port: returns JSON for persistence, never publishes into a
-// live dispatch store before commit. Only CASH can have an initial active offer.
-function prepareDispatch({ orderId, quote, merchant, paymentMethod, pickupPinHash, deliveryPinHash, at }) {
-  const policy = validateDeliveryPolicy({ deliveryPolicy: merchant.deliveryPolicy ?? 'SHARED_ONLY',
+// live dispatch store before commit.
+// C7: la tarea nace en WAITING_READY y SIN oferta, sea cual sea la política. Un pedido del
+// Mercadito primero lo acepta el comercio (PENDING_MERCHANT) y la red lo empieza a ofertar cuando
+// la caja lo marca LISTO (marketplace-network-prisma: la semilla y tick()). Antes nacía OFFERING
+// con una oferta que la red nunca leía y el comprador veía "buscando repartidor" sin que la tienda
+// hubiera aceptado. La tarea se liga a la fila de la red del comercio (dispatchMerchantId), que es
+// donde viven su política y sus afiliaciones; sin ella, al restaurante (MANUAL).
+function prepareDispatch({ orderId, quote, merchant, pickupPinHash, deliveryPinHash, at }) {
+  const policy = validateDeliveryPolicy({ deliveryPolicy: merchant.deliveryPolicy ?? 'MANUAL',
     fallbackSeconds: merchant.fallbackSeconds ?? 30, maxDistanceKm: merchant.maxDistanceKm ?? 10 });
   const result = createOffer({ orderId, restaurantId: merchant.restaurantId,
     payoutAmount: quote.priceSnapshot.courierPayoutCents / 100, pickupPinHash, deliveryPinHash, now: at });
-  const offering = paymentMethod === 'CASH' && policy.deliveryPolicy !== 'MANUAL';
   const source = policy.deliveryPolicy === 'SHARED_ONLY'
     || policy.deliveryPolicy === 'OWN_THEN_SHARED' && policy.fallbackSeconds === 0 ? 'SHARED' : 'OWN';
-  Object.assign(result.task, policy, { merchantId: merchant.id, locationId: merchant.locationId,
-    status: offering ? TASK_STATUS.OFFERING : TASK_STATUS.WAITING_READY,
-    dispatchMode: policy.deliveryPolicy === 'MANUAL' ? null : source, version: 0,
+  Object.assign(result.task, policy, { merchantId: merchant.dispatchMerchantId ?? merchant.id, locationId: merchant.locationId,
+    status: TASK_STATUS.WAITING_READY, dispatchMode: policy.deliveryPolicy === 'MANUAL' ? null : source, version: 0,
+    // C8: el repartidor se lleva el 100% del envío.
     payoutAmount: quote.priceSnapshot.courierPayoutCents / 100, currency: quote.currency });
-  if (offering) result.task.offeringStartedAt = at.toISOString();
-  // Own candidates are selected by dispatch once its transactional adapter loads
-  // affiliations/presence. An order request cannot supply courier identities.
-  if (!offering || source !== 'SHARED') result.offer = null;
-  else Object.assign(result.offer, { dispatchVersion: result.task.version, merchantId: merchant.id, restaurantId: merchant.restaurantId });
+  result.offer = null;
   return result;
 }
 
@@ -223,7 +224,7 @@ function createMarketplaceOrderOrchestrator({ quoteStore, prismaClient, merchant
           if (quote.fulfillment === 'DELIVERY') {
             const task = dispatch?.task; const offer = dispatch?.offer;
             check(dispatch?.task?.orderId === orderId && dispatch.task.restaurantId === merchant.restaurantId
-              && task.merchantId === merchant.id && task.locationId === merchant.locationId
+              && task.merchantId === (merchant.dispatchMerchantId ?? merchant.id) && task.locationId === merchant.locationId
               && text(dispatch.task.id) && [TASK_STATUS.WAITING_READY, TASK_STATUS.OFFERING].includes(dispatch.task.status)
               && (request.paymentMethod === 'CASH' || dispatch.task.status === TASK_STATUS.WAITING_READY)
               && !task.currentAssignmentId && !task.currentAssignment && !task.pickedUpAt
@@ -295,4 +296,4 @@ function createMarketplaceOrderOrchestrator({ quoteStore, prismaClient, merchant
   return { createOrder, codesForAccount };
 }
 
-module.exports = { MarketplaceOrderOrchestratorError, createMarketplaceOrderOrchestrator };
+module.exports = { MarketplaceOrderOrchestratorError, createMarketplaceOrderOrchestrator, prepareDispatch };

@@ -91,6 +91,7 @@ un commit cuyo mensaje empiece con su ID (ej. `C1:`), o que exista el archivo nu
 | 12 | X13 | 3 | Botón Verificar y documentos del repartidor | X2 | Pendiente |
 | 13 | X12 | 3 | Ofertas con zona y distancia | C6 | Pendiente |
 | 14 | X14 | 2 | Comisiones del comercio en el admin | C5 | Pendiente |
+| 15 | X15 | 3 | Textos de la política de despacho en el admin | C7 | Pendiente |
 
 Rutas de backend relativas a `apps/backend/src` salvo que se diga otra cosa.
 
@@ -268,6 +269,18 @@ de pedidos sin cerrar. Usa los átomos de `components/warmtech` (`StatCard`, `St
 desde el admin.
 
 **Listo cuando:** prueba del módulo que valida la respuesta y formatea; captura en navegador con datos simulados.
+
+### X15 · Textos de la política de despacho en el admin  (espera a C7)
+
+Desde C7 la política de la sucursal decide quién entrega los pedidos del Mercadito (`docs/marketplace/politica-red.md`).
+En `apps/admin/lib/marketplaceDeliveryPolicy.ts` y `components/admin/MarketplaceDeliveryPolicyCard.tsx`, cambia los
+textos para que el dueño entienda qué elige, sin tocar los valores:
+`MANUAL` → "Mis repartidores, desde la caja" (opción recomendada mientras no haya red), `OWN_ONLY` → "Mis repartidores
+con la app de la red", `SHARED_ONLY` → "Repartidores independientes de la red", `OWN_THEN_SHARED` → "Primero mis
+repartidores de la red; si nadie acepta, la red". Con una línea de ayuda debajo de cada opción. El estado inicial del
+editor (`initialPolicyState`) debe ser `MANUAL`, no `OWN_THEN_SHARED`. No toques el backend.
+
+**Listo cuando:** la prueba del módulo cubre los textos y el estado inicial; captura en navegador.
 
 ### X12 · Ofertas con zona y distancia  (espera a C6)
 

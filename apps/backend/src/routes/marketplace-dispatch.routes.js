@@ -102,8 +102,12 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, persi
         if (networkEnabled || persistence) return runDurable();
         // El adaptador de memoria existe únicamente para fixtures inyectados.
         if (!getStore) return res.status(503).json({ error: 'Red deshabilitada', errorCode: 'NETWORK_DISABLED' });
-        try { actor(req); req.dispatchRuntime={engine,store,multiStop}; return handler(req,res,engine,store,multiStop); }
-        catch (error) { return failure(error); }
+        try {
+          actor(req); req.dispatchRuntime={engine,store,multiStop};
+          const out = handler(req,res,engine,store,multiStop);
+          // Un handler asíncrono (p. ej. la lectura de política) no debe escapar al manejo de errores.
+          return out && typeof out.then === 'function' ? out.catch(failure) : out;
+        } catch (error) { return failure(error); }
       }
       if (!authenticate && networkEnabled) {
         const prisma=require('@mrtpvrest/database').prisma;
@@ -134,7 +138,26 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, persi
 
   // Private read for the active Admin branch. Never infer merchantId from a
   // restaurant id or pick the first merchant when a restaurant has branches.
-  endpoint('get', '/merchants/me/delivery-policy', (req, res, engine, store, multiStop) => {
+  // C7: la primera vez que un comercio aprobado del Mercadito abre su política de despacho, se
+  // registra su sucursal en la red con política MANUAL (sigue entregando con sus repartidores).
+  // Sin esto ningún pedido v1 podía tomar una política de red: la fila solo nacía con un pedido
+  // de red, y un pedido solo iba a la red si la fila existía. Pasar a la red lo decide el comercio
+  // después, con el PUT.
+  async function registerMerchant(req, store, restaurantId, locationId) {
+    const tx = req.dispatchRuntime?.tx;
+    if (!tx) return null;
+    const membership = await tx.marketplaceMerchantMembership.findFirst({ where: { restaurantId, status: 'APPROVED' }, select: { id: true } });
+    if (!membership) return null;
+    const locations = await tx.location.findMany({ where: { restaurantId, isActive: true, ...(locationId ? { id: locationId } : {}) },
+      select: { id: true }, take: 2 });
+    if (locations.length === 0) return null;
+    if (locations.length > 1) fail('Selecciona una sucursal para configurar el despacho', 'MERCHANT_LOCATION_REQUIRED', 409);
+    const id = locations[0].id;
+    const merchant = { id, restaurantId, locationId: id, deliveryPolicy: 'MANUAL', fallbackSeconds: 30, maxDistanceKm: 10 };
+    if (!store.merchants.has(id)) store.merchants.set(id, merchant);
+    return store.merchants.get(id);
+  }
+  endpoint('get', '/merchants/me/delivery-policy', async (req, res, engine, store, multiStop) => {
     const user = actor(req);
     if (!['OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) fail('Administrador requerido', 'MERCHANT_FORBIDDEN');
     const headers = req.headers || {};
@@ -148,6 +171,10 @@ function createMarketplaceDispatchRouter({ Router, getStore, authenticate, persi
     }
     const matches = [...store.merchants.values()].filter(merchant => merchant.restaurantId === restaurantId
       && (!locationId || merchant.locationId === locationId));
+    if (matches.length === 0) {
+      const registered = await registerMerchant(req, store, restaurantId, locationId);
+      if (registered) matches.push(registered);
+    }
     if (matches.length === 0) fail('Comercio no encontrado', 'MERCHANT_NOT_FOUND', 404);
     if (matches.length !== 1) fail('Selecciona una sucursal para configurar el despacho', 'MERCHANT_LOCATION_REQUIRED', 409);
     const merchant = matches[0]; merchantAccess(req, merchant);
