@@ -5,12 +5,14 @@
 //   2. Presencia + GPS → updateCourierPresence (conectarse a la red).
 //   3. Ofertas de varias tiendas → MarketplaceOffers (reusado del modo tienda).
 //   4. Tarea aceptada → PIN de recolección y de entrega.
+//   5. Mis ganancias (C8) → CourierWallet: 100% del envío y el saldo diario con cada comercio.
 import React, { useCallback, useEffect, useState } from 'react';
 import { Bike, LogOut, MapPin, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { C, S } from '@/lib/tokens';
 import { getCourierProfile, type CourierProfile } from '@/lib/courierSession';
 import { updateCourierPresence, confirmPickupPin, confirmDeliveryPin } from '@/lib/marketplaceDispatch';
 import { MarketplaceOffers } from '@/components/delivery/MarketplaceOffers';
+import { CourierWallet } from '@/components/delivery/CourierWallet';
 
 interface CourierHomeScreenProps {
   onLogout: () => void;
@@ -41,6 +43,7 @@ export function CourierHomeScreen({ onLogout }: CourierHomeScreenProps) {
   const [pin, setPin] = useState('');
   const [pinBusy, setPinBusy] = useState(false);
   const [pinError, setPinError] = useState('');
+  const [deliveries, setDeliveries] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true); setLoadError('');
@@ -99,7 +102,7 @@ export function CourierHomeScreen({ onLogout }: CourierHomeScreenProps) {
     if (result.success) {
       setPin('');
       if (stage === 'pickup') setStage('deliver');
-      else { setStage('done'); setTask(null); }
+      else { setStage('done'); setTask(null); setDeliveries(count => count + 1); }
     } else {
       setPinError(result.error || 'PIN incorrecto. Verifícalo e intenta de nuevo.');
     }
@@ -192,6 +195,8 @@ export function CourierHomeScreen({ onLogout }: CourierHomeScreenProps) {
                 <span style={{ fontSize: 13, color: C.textDim }}>Entrega confirmada. ¡Buen trabajo!</span>
               </div>
             )}
+
+            <CourierWallet refreshKey={deliveries} />
           </>
         )}
       </div>

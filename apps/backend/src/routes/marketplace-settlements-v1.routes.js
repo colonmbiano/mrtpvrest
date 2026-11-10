@@ -3,9 +3,10 @@
 const { SettlementsV1Error, createSettlementsV1Service } = require('../lib/marketplace-settlements-v1');
 const { StaffIdentityError, createStaffActorResolver } = require('../lib/marketplace-staff-identity');
 const { CommissionError, createCommissionStatements } = require('../lib/marketplace-commissions');
+const { CourierPayoutError, createCourierPayouts } = require('../lib/marketplace-courier-payouts');
 
 function createMarketplaceSettlementsV1Router({ Router, service, resolveActor, staffOptions,
-  prisma, env = process.env, getGateway, publish, commissionService } = {}) {
+  prisma, env = process.env, getGateway, publish, commissionService, payoutService } = {}) {
   const router = (Router || require('express').Router)();
   const actorFor = resolveActor || createStaffActorResolver(staffOptions);
   let defaultService;
@@ -25,7 +26,8 @@ function createMarketplaceSettlementsV1Router({ Router, service, resolveActor, s
     || (defaultCommissions ||= createCommissionStatements({ prisma: prisma || require('@mrtpvrest/database').prisma }));
   // Every route shares one error mapping. Internal details are never returned.
   function respond(res, error) {
-    if (error instanceof SettlementsV1Error || error instanceof StaffIdentityError || error instanceof CommissionError) return res.status(error.statusCode).json({ error: error.message, errorCode: error.code });
+    if (error instanceof SettlementsV1Error || error instanceof StaffIdentityError || error instanceof CommissionError
+      || error instanceof CourierPayoutError) return res.status(error.statusCode).json({ error: error.message, errorCode: error.code });
     if (['P2002', 'P2034', 'P2028'].includes(error?.code)) return res.status(409).json({ error: 'El recurso cambió; actualiza la vista', errorCode: 'SETTLEMENTS_CONFLICT' });
     return res.status(503).json({ error: 'Liquidaciones temporalmente no disponibles', errorCode: 'SETTLEMENTS_UNAVAILABLE' });
   }
@@ -94,6 +96,33 @@ function createMarketplaceSettlementsV1Router({ Router, service, resolveActor, s
   router.get('/ops/commissions/:restaurantId', commissionRoute((svc, actor, req) => svc.merchantDetail(actor, req.params.restaurantId, req.query ?? {})));
   router.post('/ops/commissions/:restaurantId/issue', commissionRoute((svc, actor, req) => svc.issue(actor, req.params.restaurantId, req.body ?? {})));
   router.post('/ops/commissions/:restaurantId/pay', commissionRoute((svc, actor, req) => svc.markPaid(actor, req.params.restaurantId, req.body ?? {})));
+
+  // ── C8: cortes diarios del repartidor independiente ──
+  let defaultPayouts;
+  const payouts = () => payoutService
+    || (defaultPayouts ||= createCourierPayouts({ prisma: prisma || require('@mrtpvrest/database').prisma }));
+  function payoutRoute(run) {
+    return async (req, res) => {
+      res.set('Cache-Control', 'no-store');
+      try {
+        const actor = (await actorFor(req)) ?? null;
+        return res.json(await run(payouts(), actor, req));
+      } catch (error) { return respond(res, error); }
+    };
+  }
+  router.get('/merchant/courier-payouts', payoutRoute((svc, actor, req) => svc.merchantDay(actor, req.query ?? {})));
+  router.post('/merchant/courier-payouts/:id/pay', payoutRoute((svc, actor, req) => svc.markPaid(actor, req.params.id, req.body ?? {})));
+  // Plataforma: emitir a mano un día ya terminado (el job lo hace cada madrugada).
+  router.post('/ops/courier-payouts/issue', payoutRoute(async (svc, actor, req) => {
+    if (!actor || !Array.isArray(actor.roles) || !actor.roles.includes('SUPER_ADMIN')) {
+      throw new CourierPayoutError('PAYOUTS_FORBIDDEN', 'Solo la plataforma emite cortes a mano', 403);
+    }
+    const body = req.body ?? {};
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'date')) {
+      throw new CourierPayoutError('INVALID_REQUEST', 'Parámetros inválidos', 400);
+    }
+    return svc.issueDay({ date: body.date, issuedBy: actor.accountId });
+  }));
 
   return router;
 }

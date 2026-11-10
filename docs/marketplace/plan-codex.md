@@ -65,6 +65,7 @@ y entonces solo **llama** a sus funciones; no cambies su lógica.
 - `apps/backend/src/lib/marketplace-network-prisma.js`, `marketplace-dispatch.js`, `routes/marketplace-dispatch.routes.js` (C6–C7, ola 3)
 - `apps/backend/src/lib/marketplace-driver-payouts.js` (C8)
 - `apps/backend/src/lib/marketplace-commissions.js` (C5) → X14 solo llama a `GET /api/marketplace/v1/merchant/commissions`
+- `apps/backend/src/lib/marketplace-courier-payouts.js` y `jobs/courierPayouts.job.js` (C8) → X16 solo llama a sus rutas
 
 ## 5. Orden de trabajo y estado
 
@@ -92,6 +93,7 @@ un commit cuyo mensaje empiece con su ID (ej. `C1:`), o que exista el archivo nu
 | 13 | X12 | 3 | Ofertas con zona y distancia | C6 | Pendiente |
 | 14 | X14 | 2 | Comisiones del comercio en el admin | C5 | Pendiente |
 | 15 | X15 | 3 | Textos de la política de despacho en el admin | C7 | Pendiente |
+| 16 | X16 | 3 | Pagos a repartidores en el admin | C8 | Pendiente |
 
 Rutas de backend relativas a `apps/backend/src` salvo que se diga otra cosa.
 
@@ -281,6 +283,22 @@ repartidores de la red; si nadie acepta, la red". Con una línea de ayuda debajo
 editor (`initialPolicyState`) debe ser `MANUAL`, no `OWN_THEN_SHARED`. No toques el backend.
 
 **Listo cuando:** la prueba del módulo cubre los textos y el estado inicial; captura en navegador.
+
+### X16 · Pagos a repartidores en el admin  (espera a C8)
+
+Desde C8 cada madrugada se emite el corte del día anterior de cada repartidor independiente con cada comercio
+(`docs/marketplace/pagos-repartidor.md`). Falta que el comercio lo vea y lo marque saldado. En `apps/admin`, pantalla
+"Pagos a repartidores" dentro de la sección del Mercadito:
+- `GET /api/marketplace/v1/merchant/courier-payouts?date=AAAA-MM-DD` (por defecto hoy; selector de los últimos 14
+  días). Por repartidor: nombre, entregas, ganó (100% del envío), efectivo que cobró, y la frase de quién paga:
+  `netCents > 0` → "Le pagas $X", `< 0` → "Te entrega $X en efectivo", `0` → "Sin saldo". Estado: `OPEN` (hoy, en
+  curso), `ISSUED` (por saldar), `PAID` (saldado, con referencia). Detalle con las líneas (folio, efectivo/en línea,
+  envío).
+- Botón "Marcar saldado" solo en `ISSUED`: pide referencia (3–200) y nota opcional y llama
+  `POST /api/marketplace/v1/merchant/courier-payouts/:id/pay` `{ reference, note? }`. 409 `ALREADY_PAID` → refrescar.
+Usa los átomos de `components/warmtech` y `lib/format.ts`; acento con `var(--brand-primary)`. No toques el backend.
+
+**Listo cuando:** prueba del módulo (validar respuesta, textos, pago) y captura en navegador con datos simulados.
 
 ### X12 · Ofertas con zona y distancia  (espera a C6)
 

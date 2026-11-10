@@ -333,6 +333,7 @@ model Restaurant {
   orders           Order[]
   driverPayouts     MarketplaceDriverPayout[]
   marketplaceCommissionStatements MarketplaceCommissionStatement[]
+  marketplaceCourierPayouts MarketplaceCourierPayout[]
   marketplaceMembership MarketplaceMerchantMembership?
   marketplaceQuotes MarketplaceQuote[]
   customers        Customer[]
@@ -4958,6 +4959,53 @@ model MarketplaceCommissionStatement {
   @@unique([restaurantId, period])
   @@index([period, status])
   @@map("marketplace_commission_statements")
+}
+
+enum MarketplaceCourierPayoutStatus {
+  ISSUED
+  PAID
+}
+
+/// C8: corte diario de un repartidor INDEPENDIENTE de la red con un comercio. El repartidor se lleva
+/// el 100% del envío de cada pedido entregado. En efectivo cobra el total al cliente, se queda su envío
+/// y le debe al comercio el resto; en línea el dinero entra al comercio, que le debe el envío.
+/// netCents = onlineEarningsCents - cashToMerchantCents: > 0 el comercio le paga, < 0 él entrega
+/// efectivo al comercio. Un job lo emite cada madrugada por el día anterior (CDMX) y el comercio lo
+/// marca pagado; los envíos en línea ya liquidados en el libro bajan COURIER_PAYABLE al pagarse.
+model MarketplaceCourierPayout {
+  id String @id @default(uuid())
+  restaurantId String
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  /// MarketplaceNetworkCourier.id (sin FK: la red guarda repartidores en su propia tabla global).
+  courierId String
+  /// Día local CDMX "YYYY-MM-DD" de la entrega.
+  businessDate String @db.Char(10)
+  dayStart DateTime @db.Timestamptz(3)
+  dayEnd DateTime @db.Timestamptz(3)
+  currency String @default("MXN") @db.Char(3)
+  status MarketplaceCourierPayoutStatus @default(ISSUED)
+  deliveriesCount Int
+  earningsCents Int
+  cashCollectedCents Int
+  cashToMerchantCents Int
+  onlineEarningsCents Int
+  netCents Int
+  /// [{ orderId, orderNumber, deliveredAt, paymentMethod, totalCents, earningsCents, cashCollectedCents, cashToMerchantCents, onlineEarningsCents }]
+  lines Json
+  linesHash String @db.Char(64)
+  issuedAt DateTime @default(now()) @db.Timestamptz(3)
+  issuedBy String
+  paidAt DateTime? @db.Timestamptz(3)
+  paidBy String?
+  paymentReference String? @db.VarChar(200)
+  paymentNote String? @db.VarChar(500)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([restaurantId, courierId, businessDate])
+  @@index([courierId, businessDate])
+  @@index([businessDate, status])
+  @@map("marketplace_courier_payouts")
 }
 
 // Per-location overrides; never write the shared MenuItem promotional fields.

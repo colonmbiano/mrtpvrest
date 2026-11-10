@@ -26,7 +26,6 @@
 
 const { createHash } = require('node:crypto');
 
-const TIME_ZONE = 'America/Mexico_City';
 const PERIOD = /^(\d{4})-(0[1-9]|1[0-2])$/;
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const FIRST_YEAR = 2024;
@@ -45,32 +44,8 @@ class CommissionError extends Error {
 }
 function check(ok, code, message, status = 422) { if (!ok) throw new CommissionError(code, message, status); }
 
-// ── calendario ───────────────────────────────────────────────────────────────
-const formatter = new Intl.DateTimeFormat('en-US', { timeZone: TIME_ZONE, hourCycle: 'h23', year: 'numeric',
-  month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-function localParts(ms) {
-  return Object.fromEntries(formatter.formatToParts(new Date(ms)).map(part => [part.type, part.value]));
-}
-function offsetMs(ms) {
-  const p = localParts(ms);
-  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(ms / 1000) * 1000;
-}
-// Medianoche local del día 1: dos pasadas cubren un cambio de horario (hoy CDMX no tiene).
-function localMonthStart(year, month) {
-  const guess = Date.UTC(year, month - 1, 1);
-  const first = guess - offsetMs(guess);
-  return new Date(guess - offsetMs(first));
-}
-function periodOf(date) {
-  const p = localParts(date.getTime());
-  return `${p.year}-${p.month}`;
-}
-function periodRange(period) {
-  const [, y, m] = PERIOD.exec(period);
-  const year = Number(y); const month = Number(m);
-  return { start: localMonthStart(year, month),
-    end: month === 12 ? localMonthStart(year + 1, 1) : localMonthStart(year, month + 1) };
-}
+// ── calendario (lib/mx-calendar.js) ─────────────────────────────────────────
+const { TIME_ZONE, monthOf: periodOf, monthRange: periodRange } = require('./mx-calendar');
 function parsePeriod(value, today) {
   if (value === undefined || value === null || value === '') return periodOf(today);
   check(typeof value === 'string' && PERIOD.test(value) && Number(value.slice(0, 4)) >= FIRST_YEAR,

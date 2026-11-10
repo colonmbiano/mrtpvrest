@@ -44,6 +44,7 @@ const TESTS = [
   // ── DELIVERY (App de Repartidores) ──
   { path: 'apps/delivery/scripts/delivery-dispatch.test.mjs', name: 'Delivery: Despacho & Flujo de Orden' },
   { path: 'apps/delivery/scripts/delivery-evidence.test.mjs', name: 'Delivery: Evidencia (Foto + Firma Digital)' },
+  { path: 'apps/delivery/scripts/courier-wallet.test.mjs', name: 'Delivery: Billetera del repartidor (C8)' },
   { path: 'apps/delivery/scripts/driver-balance.test.mjs', name: 'Delivery: Saldo, Ganancias & Propinas' },
   { path: 'apps/delivery/scripts/driver-payouts.test.mjs', name: 'Delivery: Solicitud de Retiros por CLABE' },
 
