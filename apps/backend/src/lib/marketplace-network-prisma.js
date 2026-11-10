@@ -157,6 +157,8 @@ function createNetworkPersistence({ prisma, now = () => new Date() } = {}) {
       if (task.currentAssignmentId) task.currentAssignment = store.assignments.get(task.currentAssignmentId) || null;
       if (['CANCELLED', 'REFUNDED', 'DELIVERED'].includes(order.status) && !TERMINAL_TASKS.includes(task.status)) {
         task.status = order.status === 'DELIVERED' ? 'DELIVERED' : 'CANCELLED';
+        // C8: entregado desde la caja también lleva fecha, para el corte diario del repartidor.
+        if (order.status === 'DELIVERED' && !task.deliveredAt) task.deliveredAt = now().toISOString();
         if (task.currentAssignment?.status === 'ACTIVE') task.currentAssignment.status = order.status === 'DELIVERED' ? 'COMPLETED' : 'CANCELLED';
         for (const offer of store.offers.values()) if (offer.taskId===id && offer.status==='OFFERED') offer.status='EXPIRED';
       }

@@ -79,6 +79,7 @@ function startBackgroundTasks(policy, io, { startRevalidationSweep, loadJob = re
   loadJob('../jobs/demoExpiry.job').startDemoExpiryJob();
   loadJob('../jobs/staleTableOrders.job').startStaleTableOrdersJob(io);
   loadJob('../jobs/marketplacePending.job').startMarketplacePendingJob(io);
+  loadJob('../jobs/courierPayouts.job').startCourierPayoutsJob();
 }
 
 module.exports = { resolveRuntimePolicy, createCorsOriginCheck, createSocketAdmission, startBackgroundTasks };

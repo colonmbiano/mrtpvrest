@@ -6,7 +6,7 @@ const { CourierV1Error, createCouriersV1Service } = require('../lib/marketplace-
 // solo los fixtures inyectados tienen actor; nunca se crea una identidad implícita.
 const noActor = () => null;
 
-function createMarketplaceCouriersV1Router({ Router, service, resolveActor } = {}) {
+function createMarketplaceCouriersV1Router({ Router, service, resolveActor, payoutService } = {}) {
   const router = (Router || require('express').Router)();
   let defaultService;
   let defaultResolver;
@@ -36,6 +36,11 @@ function createMarketplaceCouriersV1Router({ Router, service, resolveActor } = {
   router.post('/couriers/apply', handle((svc, actor, req) => svc.apply(actor, req.body), 201));
   router.get('/couriers/me/profile', handle((svc, actor) => svc.profile(actor), 200));
   router.get('/couriers/me/affiliations', handle((svc, actor) => svc.affiliations(actor), 200));
+  // C8: billetera del repartidor independiente (hoy en vivo + cortes de los últimos días).
+  let defaultPayouts;
+  const payouts = () => payoutService || (defaultPayouts ||= require('../lib/marketplace-courier-payouts')
+    .createCourierPayouts({ prisma: require('@mrtpvrest/database').prisma }));
+  router.get('/couriers/me/wallet', handle((svc, actor, req) => payouts().wallet(actor, req.query ?? {}), 200));
   router.post('/merchants/:id/couriers/affiliate', handle((svc, actor, req) => svc.affiliate(actor, req.params.id, req.body), 201));
   router.delete('/merchants/:id/couriers/affiliate/:courierId',
     handle((svc, actor, req) => svc.revoke(actor, req.params.id, req.params.courierId), 200));
