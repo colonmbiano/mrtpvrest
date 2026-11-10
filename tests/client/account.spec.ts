@@ -484,3 +484,28 @@ test('app: en iPhone, Mi cuenta explica cómo agregarla a inicio; ya instalada n
   await expect(page.getByRole('region', { name: 'Avisos de tus pedidos' })).toContainText('Los avisos funcionan');
   await expect(install).toHaveCount(0);
 });
+
+test('cancela un pedido por aceptar con confirmación y ofrece WhatsApp del comercio', async ({ page }, info) => {
+  const email = newEmail(info.project.name);
+  await signUp(page, email);
+  await verify(page, email);
+  await logIn(page, email);
+  let cancelled = false;
+  await page.route(API + '/api/marketplace/v1/orders?*', route => route.fulfill({ json: {
+    orders: [{ orderId: 'pending-1', orderNumber: '9001', status: cancelled ? 'CANCELLED' : 'PENDING_MERCHANT',
+      total: '100.00', currency: 'MXN', fulfillment: 'PICKUP', placedAt: new Date().toISOString(),
+      merchant: { name: 'Comercio prueba', slug: 'comercio', phone: '527221234567' }, items: [] }], nextBefore: null,
+  } }));
+  await page.route(API + '/api/marketplace/v1/orders/pending-1/cancel', route => {
+    expect(route.request().method()).toBe('POST');
+    cancelled = true;
+    return route.fulfill({ json: { id: 'pending-1', status: 'CANCELLED' } });
+  });
+  await page.goto('/cuenta/pedidos');
+  await expect(page.getByRole('link', { name: 'WhatsApp de la tienda' })).toHaveAttribute('href', 'https://wa.me/527221234567');
+  await page.getByRole('button', { name: 'Cancelar pedido', exact: true }).click();
+  expect(cancelled).toBe(false);
+  await page.getByRole('button', { name: 'Confirmar cancelación' }).click();
+  await expect(page.getByText('Cancelado', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cancelar pedido', exact: true })).toHaveCount(0);
+});

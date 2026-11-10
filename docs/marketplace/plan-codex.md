@@ -86,7 +86,7 @@ un commit cuyo mensaje empiece con su ID (ej. `C1:`), o que exista el archivo nu
 | 7 | X9 | 2 | Límite de intentos en Redis | X2 | Pendiente |
 | 8 | X10 | 2 | Tokens del repartidor | X2 | Pendiente |
 | 9 | X11 | 2 | Regla de SQL crudo | X2 | Pendiente |
-| 10 | X7 | 2 | Cancelar desde la cuenta y WhatsApp a la tienda | C2 | Pendiente |
+| 10 | X7 | 2 | Cancelar desde la cuenta y WhatsApp a la tienda | C2 | PR abierto |
 | 11 | X8 | 2 | Sucursal por cobertura | C4 | Pendiente |
 | 12 | X13 | 3 | Botón Verificar y documentos del repartidor | X2 | Pendiente |
 | 13 | X12 | 3 | Ofertas con zona y distancia | C6 | Pendiente |

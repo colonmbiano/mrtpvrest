@@ -333,7 +333,7 @@ export async function fetchV1Stores(
 
 // Referencia del comercio para el checkout v1: el id cuando la API lo expone; si no, el slug
 // (el cotizador acepta merchantSlug). Null cuando la tienda no es de marketplace.
-export type MarketplaceMerchantRef = { merchantId: string | null; slug: string };
+export type MarketplaceMerchantRef = { merchantId: string | null; slug: string; phone?: string };
 
 export async function fetchMerchantRef(
   apiUrl: string | null,
@@ -350,7 +350,8 @@ export async function fetchMerchantRef(
     if (!res.ok) return null;
     const json: unknown = await res.json();
     if (!isRecord(json) || json.slug !== slug || typeof json.name !== 'string') return null;
-    return { merchantId: typeof json.id === 'string' && json.id.length > 0 ? json.id : null, slug };
+    return { merchantId: typeof json.id === 'string' && json.id.length > 0 ? json.id : null, slug,
+      ...(typeof json.phone === 'string' && /^[1-9]\d{7,14}$/.test(json.phone) ? { phone: json.phone } : {}) };
   } catch {
     return null;
   }

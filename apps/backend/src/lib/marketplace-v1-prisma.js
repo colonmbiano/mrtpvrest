@@ -19,6 +19,7 @@
 // Pago en línea (lib/marketplace-v1-payments.js), aparte: MARKETPLACE_V1_ONLINE_PAYMENTS_ENABLED=true
 // y MARKETPLACE_MP_NOTIFICATION_URL (https, el webhook v1); sin ellos ONLINE se rechaza (409).
 
+const { toWhatsappNumber } = require('@mrtpvrest/config/phone');
 const { computeOpenState } = require('../utils/storeHours');
 const { activePromoPrice, APPROVED_MERCHANT } = require('./marketplace-catalog');
 const { createQuoteService } = require('./marketplace-quote');
@@ -188,7 +189,7 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
   // Directorio y catálogo públicos v1 (lib/marketplace-merchants-v1.js; la vista ahí es una lista
   // blanca). Mismos comercios que cotizan: aprobados, activos y con el módulo.
   const MERCHANT_SELECT = { id: true, slug: true, name: true, logoUrl: true,
-    config: { select: { ...CONFIG_SELECT, address: true, originLat: true, originLng: true, deliveryMode: true } },
+    config: { select: { ...CONFIG_SELECT, whatsappNumber: true, phone: true, countryCode: true, address: true, originLat: true, originLng: true, deliveryMode: true } },
     ...(deliveryEnabled ? { deliveryZones: ZONES_SELECT } : {}) };
   function publicMerchant(row, at) {
     const config = row.config || null;
@@ -203,6 +204,7 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
         ? (row.deliveryZones || []).map(zone => ({ id: zone.id, name: zone.name, feeCents: cents(Number(zone.fee)), active: zone.active,
           polygon: zone.polygon })) : [],
       businessHours,
+      phone: toWhatsappNumber(config?.whatsappNumber || config?.phone, config?.countryCode) || null,
       // El origen del envío de la tienda es su punto de recogida público.
       pickup: Number.isFinite(config?.originLat) && Number.isFinite(config?.originLng)
         ? { address: config.address || null, lat: config.originLat, lng: config.originLng } : null,
@@ -380,7 +382,7 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
         where: { accountId, orderId: { not: null }, ...(before ? { consumedAt: { lt: before } } : {}) },
         orderBy: [{ consumedAt: 'desc' }, { id: 'desc' }], take: limit + 1,
         select: { orderId: true, consumedAt: true, fulfillment: true, currency: true, itemsSnapshot: true,
-          merchant: { select: { name: true, slug: true } } } });
+          merchant: { select: { name: true, slug: true, config: { select: { whatsappNumber: true, phone: true, countryCode: true } } } } } });
       const page = quotes.slice(0, limit);
       const rows = page.length ? await prisma.order.findMany({
         where: { id: { in: page.map(q => q.orderId) }, source: 'MARKETPLACE' },
@@ -392,7 +394,9 @@ function createMarketplaceV1Adapters({ prisma, commissionBps = null, deliveryEna
           orderId: order.id, orderNumber: order.orderNumber == null ? null : String(order.orderNumber),
           status: order.status, paymentStatus: order.paymentStatus, total: Number(order.total).toFixed(2),
           currency: q.currency, fulfillment: q.fulfillment, placedAt: new Date(q.consumedAt || order.createdAt).toISOString(),
-          merchant: { name: q.merchant?.name ?? '', slug: q.merchant?.slug ?? null },
+          merchant: { name: q.merchant?.name ?? '', slug: q.merchant?.slug ?? null,
+            ...(toWhatsappNumber(q.merchant?.config?.whatsappNumber || q.merchant?.config?.phone, q.merchant?.config?.countryCode)
+              ? { phone: toWhatsappNumber(q.merchant?.config?.whatsappNumber || q.merchant?.config?.phone, q.merchant?.config?.countryCode) } : {}) },
           items: (Array.isArray(q.itemsSnapshot) ? q.itemsSnapshot : [])
             .map(line => ({ menuItemId: line.menuItemId, name: line.name, quantity: line.quantity })),
         };
