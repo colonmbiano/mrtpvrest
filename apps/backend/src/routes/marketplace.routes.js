@@ -2,7 +2,7 @@
 
 const { InvalidQuery, createCatalog, createPrismaCatalogAdapter } = require('../lib/marketplace-catalog');
 
-function createMarketplaceRouter({ Router, getAdapter, storeSlugs = process.env.MARKETPLACE_STORE_SLUGS || '',
+function createMarketplaceRouter({ Router, getAdapter, env = process.env, storeSlugs = process.env.MARKETPLACE_STORE_SLUGS || '',
   // Directorio por aprobación (tabla marketplace_merchant_memberships). Apagado
   // por defecto: activarlo solo después de aplicar su migración.
   directoryApproved = process.env.MARKETPLACE_DIRECTORY_APPROVED === 'true',
@@ -43,6 +43,9 @@ function createMarketplaceRouter({ Router, getAdapter, storeSlugs = process.env.
   }
   router.post('/orders', async (req, res) => {
     res.set('Cache-Control', 'no-store');
+    if (env.MARKETPLACE_LEGACY_ORDERS_ENABLED !== 'true') {
+      return res.status(404).json({ errorCode: 'LEGACY_ORDERS_DISABLED' });
+    }
     if (!require('../lib/marketplace-owner-settings').ordersAllowed()) {
       return res.status(503).json({ error: 'Los pedidos nuevos están pausados', errorCode: 'ORDERS_PAUSED' });
     }
