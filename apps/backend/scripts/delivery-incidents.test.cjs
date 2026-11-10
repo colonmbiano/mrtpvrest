@@ -347,6 +347,7 @@ function storeDelivered(f, overrides = {}) {
     dispatch: { task: { orderId: 'o1', restaurantId: 'r1', deliveryPolicy: 'MANUAL', status: 'WAITING_READY', currentAssignment: null } } },
   ...overrides });
   const service = createDeliveryIncidentsService({ now: () => new Date(NOW), logger: { warn() {} },
+    recordDeliveryOverride: async (req, order, reason) => { f.calls.push({ method: 'deliveryOverride', actorId: req.user.id, orderId: order.id, reason }); },
     storeDeliveryPin: createStoreDeliveryPin({ config: { mode: 'off', secret: null, misconfigured: false } }) });
   return (body, extra = {}) => service.updateStatus({ ...f.args, driverId: 'd1', body, ...extra });
 }
@@ -388,7 +389,16 @@ test('marketplace entregado por la tienda: pagado en línea no se cobra y por ac
 
 test('marketplace entregado por la tienda: el personal conserva su override y sin verificador no se cierra', async () => {
   const f = setup(); const status = storeDelivered(f);
-  assert.equal((await status({ status: 'DELIVERED', paymentMethod: 'CASH' }, { actor: OWNER })).order.status, 'DELIVERED');
+  for (const reason of [undefined, 'no', 'x'.repeat(201)]) {
+    await assert.rejects(status({ status: 'DELIVERED', paymentMethod: 'CASH', reason }, { actor: OWNER }), { code: 'DELIVERY_REASON_REQUIRED', statusCode: 422 });
+  }
+  assert.equal(f.state.order[0].status, 'ON_THE_WAY');
+  assert.equal((await status({ status: 'DELIVERED', paymentMethod: 'CASH', reason: 'Cliente sin teléfono' }, { actor: OWNER })).order.status, 'DELIVERED');
+  assert.deepEqual(f.calls.filter(row => row.method === 'deliveryOverride'), [
+    { method: 'deliveryOverride', actorId: OWNER.id, orderId: 'o1', reason: 'Cliente sin teléfono' },
+  ]);
+  await status({ status: 'DELIVERED' }, { actor: OWNER });
+  assert.equal(f.calls.filter(row => row.method === 'deliveryOverride').length, 1);
   const bare = setup(); storeDelivered(bare);
   await assert.rejects(bare.status({ status: 'DELIVERED', deliveryPin: MARKETPLACE_PIN }), { code: 'DELIVERY_PIN_UNAVAILABLE' });
   assert.equal(bare.state.order[0].status, 'ON_THE_WAY');

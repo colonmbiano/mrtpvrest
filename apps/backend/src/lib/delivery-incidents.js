@@ -1,5 +1,6 @@
 'use strict';
 
+const marketplaceDeliveryOverride = require('./marketplace-delivery-override');
 const { createHash } = require('node:crypto');
 const { NOT_DISPATCHABLE, PIPELINE_SELECT, storeDeliveredMarketplace, networkMarketplace } = require('./marketplace-store-delivery');
 
@@ -111,7 +112,7 @@ function receipt(row) { return { success: true, incidentId: row.id, loggedAt: ro
 // `consumePaidOrder(tx, orderId, restaurantId, options)`: descuenta el inventario
 // de un pedido al quedar pagado, en la misma transacción (services/order-inventory).
 function createDeliveryIncidentsService({ now = () => new Date(), logger = console, storeDeliveryPin = null,
-  consumePaidOrder = null } = {}) {
+  consumePaidOrder = null, recordDeliveryOverride = marketplaceDeliveryOverride.recordOverride } = {}) {
   async function logIncident({ orderId, body, idempotencyKey, actor, restaurantId, prismaClient, io }) {
     const scope = actorScope({ actor, restaurantId }); id(orderId);
     check(object(body) && (!body.orderId || body.orderId === orderId), 'ORDER_ID_MISMATCH', 'Pedido invalido');
@@ -175,7 +176,7 @@ function createDeliveryIncidentsService({ now = () => new Date(), logger = conso
     }, { ...TX, isolationLevel: 'RepeatableRead' });
   }
 
-  async function updateStatus({ orderId, driverId, body, actor, restaurantId, prismaClient }) {
+  async function updateStatus({ orderId, driverId, body, actor, restaurantId, prismaClient, auditRequest }) {
     const scope = actorScope({ actor, restaurantId }); id(orderId); id(driverId);
     check(object(body) && ['ON_THE_WAY', 'DELIVERED'].includes(body.status), 'INVALID_STATUS', 'Estado no permitido');
     const { status, paymentMethod } = body;
@@ -198,6 +199,7 @@ function createDeliveryIncidentsService({ now = () => new Date(), logger = conso
       // marketplace que entrega la tienda siguen el flujo propio, con el PIN del comprador.
       const marketplace = networkMarketplace(existing);
       const byStore = storeDeliveredMarketplace(existing);
+      const deliveryReason = byStore ? marketplaceDeliveryOverride.overrideReason(existing, status, actor, body.reason) : null;
       check(!marketplace || (existing.status === 'DELIVERED' && status === 'DELIVERED' && !paymentMethod),
         'PIN_CONFIRMATION_REQUIRED', 'Confirma la entrega Marketplace mediante PIN antes de adjuntar evidencia', 409);
       if (byStore && existing.status !== 'DELIVERED') {
@@ -251,6 +253,11 @@ function createDeliveryIncidentsService({ now = () => new Date(), logger = conso
         }
         const updated = await tx.order.updateMany({ where: { id: orderId, restaurantId: scope, status: existing.status }, data });
         check(updated.count === 1, 'ORDER_CONFLICT', 'El pedido cambio; reintenta', 409);
+        if (deliveryReason) {
+          await recordDeliveryOverride(auditRequest || {
+            user: actor, restaurantId: scope, locationId: existing.locationId, restaurant: existing.restaurant,
+          }, existing, deliveryReason, tx);
+        }
         await tx.orderStatusHistory.create({ data: { orderId, status,
           note: JSON.stringify({ actorId: actor.id, courierId: driverId, evidenceId: evidenceReceipt?.id ?? null }) } });
         // Cobrado al entregar (tarjeta/transferencia confirmada): el inventario se

@@ -1,3 +1,4 @@
+const marketplaceDeliveryOverride = require('../lib/marketplace-delivery-override');
 const { isSoldByWeight, resolveSaleWeight, weightDisplayName } = require('../../../../packages/config/weight-sale');
 const { validateQuantityGroups, compactQuantityModifiers, modifierSnapshotKey } = require('../lib/quantity-modifiers');
 require('dotenv').config();
@@ -1971,6 +1972,7 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
         return res.json(merged);
       }
     }
+    const deliveryReason = marketplaceDeliveryOverride.overrideReason(existing, status, req.user, req.body.reason);
     const updateData = { status, ...(resolvesTable ? { awaitingTableConfirmation: false } : {}) };
     // Reserva del reembolso de un pedido del Mercadito pagado en línea (misma TX que la cancelación).
     let refundReservation = null;
@@ -1995,6 +1997,13 @@ router.put('/:id/status', authenticate, requireTenantAccess, validateBody(update
             ...(refundReservation ? { refundId: refundReservation.id, refundCents: refundReservation.amountCents } : {}) },
         }, tx);
         return cancelled;
+      }) : deliveryReason ? await cashTransaction(prisma, async tx => {
+        const changed = await tx.order.updateMany({
+          where: { id: existing.id, restaurantId, status: existing.status }, data: updateData,
+        });
+        if (changed.count !== 1) throw controlError('El pedido cambió. Actualiza e intenta de nuevo.', 'ORDER_CONFLICT', 409);
+        await marketplaceDeliveryOverride.recordOverride(req, existing, deliveryReason, tx);
+        return tx.order.findFirst({ where: { id: existing.id, restaurantId } });
       }) : await prisma.order.update({ where: { id: existing.id }, data: updateData });
     // Después del commit: Mercado Pago. Si falla, la reserva queda PENDING y se recupera después.
     const refund = await marketplaceCancellation.completeRefund(refundReservation);

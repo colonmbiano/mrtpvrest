@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   X,
   Globe,
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { isMarketplaceOrder, needsAcceptance, waitingMinutes } from "@/lib/webOrders";
 
+import api from "@/lib/api";
 import { useMarketplacePendingAlerts } from "@/hooks/useNotifications";
 
 // Shape reducido de un pedido web que consume el panel. Lo arma el layout a
@@ -111,6 +112,23 @@ export default function WebOrdersPanel({
   rejectingId,
   hideMoney,
 }: Props) {
+  const [overrideOrder, setOverrideOrder] = useState<WebOrder | null>(null);
+  const [reason, setReason] = useState("");
+  const [delivering, setDelivering] = useState(false);
+  const [deliveryError, setDeliveryError] = useState("");
+  const deliverWithoutPin = async () => {
+    if (!overrideOrder || delivering || reason.trim().length < 5 || reason.trim().length > 200) return;
+    setDelivering(true);
+    setDeliveryError("");
+    try {
+      await api.put(`/api/orders/${overrideOrder.id}/status`, { status: "DELIVERED", reason: reason.trim() });
+      setOverrideOrder(null);
+    } catch {
+      setDeliveryError("No se pudo confirmar la entrega. Actualiza el pedido e intenta de nuevo.");
+    } finally {
+      setDelivering(false);
+    }
+  };
   const { now, overdue, needsSound, activateSound } = useMarketplacePendingAlerts(orders);
   // Separa pendientes (requieren que el cajero los acepte) del resto en curso.
   const { pending, inProgress } = useMemo(() => {
@@ -242,6 +260,9 @@ export default function WebOrdersPanel({
                   order={o}
                   now={now}
                   hideMoney={hideMoney}
+                  onDeliver={isMarketplaceOrder(o) && o.status === "READY" ? () => {
+                    setOverrideOrder(o); setReason(""); setDeliveryError("");
+                  } : undefined}
                   onShowDetail={() => onShowDetail(o.id)}
                 />
               ))}
@@ -249,6 +270,24 @@ export default function WebOrdersPanel({
           )}
         </div>
       </aside>
+      {overrideOrder && <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/70 p-4">
+        <section role="dialog" aria-modal="true" aria-labelledby="delivery-override-title"
+          className="w-full max-w-md rounded-2xl bg-[#17212b] p-5 text-white">
+          <h2 id="delivery-override-title" className="font-bold">Entrega sin código · {overrideOrder.orderNumber}</h2>
+          <label className="mt-4 block text-sm">Motivo de la entrega sin código
+            <textarea required minLength={5} maxLength={200} value={reason} onChange={event => setReason(event.target.value)}
+              className="mt-2 min-h-24 w-full rounded-xl bg-black/25 p-3" />
+          </label>
+          {deliveryError && <p role="alert" className="mt-2 text-red-300">{deliveryError}</p>}
+          <div className="mt-4 flex gap-3">
+            <button type="button" disabled={delivering} onClick={() => setOverrideOrder(null)} className="min-h-12 flex-1 rounded-xl border border-white/20">Volver</button>
+            <button type="button" disabled={delivering || reason.trim().length < 5}
+              onClick={deliverWithoutPin} className="min-h-12 flex-1 rounded-xl bg-amber-400 font-bold text-black disabled:opacity-50">
+              {delivering ? "Confirmando…" : "Confirmar entrega"}
+            </button>
+          </div>
+        </section>
+      </div>}
     </div>
   );
 }
@@ -291,6 +330,7 @@ function WebOrderCard({
   onAccept,
   onReject,
   onShowDetail,
+  onDeliver,
 }: {
   order: WebOrder;
   now: number;
@@ -300,6 +340,7 @@ function WebOrderCard({
   onAccept?: () => void;
   onReject?: () => void;
   onShowDetail: () => void;
+  onDeliver?: () => void;
 }) {
   const isPending = needsAcceptance(order);
   const fromMarketplace = isMarketplaceOrder(order);
@@ -421,6 +462,10 @@ function WebOrderCard({
         >
           <Eye size={16} /> Ver detalle
         </button>
+        {onDeliver && <button type="button" onClick={onDeliver}
+          className="min-h-11 rounded-xl border border-amber-400/40 px-3 text-sm font-bold text-amber-200">
+          Entregar sin código
+        </button>}
         {isPending && (fromMarketplace || awaitingTable) && onReject && (
           <button
             onClick={onReject}

@@ -1,6 +1,8 @@
 import "@testing-library/jest-dom";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import api from "@/lib/api";
+jest.mock("@/lib/api", () => ({ __esModule: true, default: { put: jest.fn().mockResolvedValue({ data: {} }) } }));
 import WebOrdersPanel, { type WebOrder } from "@/components/pos/WebOrdersPanel";
 
 const base: WebOrder = {
@@ -56,4 +58,18 @@ test("muestra minutos de espera, banner rojo y activación de sonido del Mercadi
   expect(screen.getByText("6 min esperando")).toBeInTheDocument();
   expect(screen.getByRole("alert")).toHaveTextContent("más de 5 minutos");
   expect(screen.getByRole("button", { name: "Activar sonido" })).toBeInTheDocument();
+});
+
+
+test("pide un motivo antes de confirmar una entrega sin código", async () => {
+  const user = userEvent.setup();
+  render(<WebOrdersPanel isOpen onClose={jest.fn()} onShowDetail={jest.fn()} onAccept={jest.fn()}
+    orders={[{ ...base, source: "MARKETPLACE", status: "READY" }]} />);
+  await user.click(screen.getByRole("button", { name: "Entregar sin código" }));
+  expect(screen.getByRole("button", { name: "Confirmar entrega" })).toBeDisabled();
+  await user.type(screen.getByLabelText("Motivo de la entrega sin código"), "Cliente perdió el código");
+  await user.click(screen.getByRole("button", { name: "Confirmar entrega" }));
+  expect(api.put).toHaveBeenCalledWith("/api/orders/web-1/status", {
+    status: "DELIVERED", reason: "Cliente perdió el código",
+  });
 });
