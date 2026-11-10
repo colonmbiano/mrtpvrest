@@ -16,7 +16,9 @@ import {
   XCircle,
   AlertTriangle,
 } from "lucide-react";
-import { isMarketplaceOrder, needsAcceptance } from "@/lib/webOrders";
+import { isMarketplaceOrder, needsAcceptance, waitingMinutes } from "@/lib/webOrders";
+
+import { useMarketplacePendingAlerts } from "@/hooks/useNotifications";
 
 // Shape reducido de un pedido web que consume el panel. Lo arma el layout a
 // partir de openOrders filtrado por los orígenes web (lib/webOrders).
@@ -109,6 +111,7 @@ export default function WebOrdersPanel({
   rejectingId,
   hideMoney,
 }: Props) {
+  const { now, overdue, needsSound, activateSound } = useMarketplacePendingAlerts(orders);
   // Separa pendientes (requieren que el cajero los acepte) del resto en curso.
   const { pending, inProgress } = useMemo(() => {
     const pending: WebOrder[] = [];
@@ -183,6 +186,18 @@ export default function WebOrdersPanel({
           </button>
         </div>
 
+        {overdue && (
+          <div role="alert" className="relative z-10 bg-red-600 p-4 font-bold text-white">
+            Hay pedidos del Mercadito esperando más de 5 minutos. Acéptalos o recházalos.
+          </div>
+        )}
+        {needsSound && (
+          <button type="button" onClick={activateSound}
+            className="relative z-10 min-h-12 bg-amber-400 p-3 font-bold text-black">
+            Activar sonido
+          </button>
+        )}
+
         {/* LISTA */}
         <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide p-4 space-y-5">
           {orders.length === 0 && (
@@ -207,6 +222,7 @@ export default function WebOrdersPanel({
                 <WebOrderCard
                   key={o.id}
                   order={o}
+                  now={now}
                   hideMoney={hideMoney}
                   accepting={acceptingId === o.id}
                   rejecting={rejectingId === o.id}
@@ -224,6 +240,7 @@ export default function WebOrdersPanel({
                 <WebOrderCard
                   key={o.id}
                   order={o}
+                  now={now}
                   hideMoney={hideMoney}
                   onShowDetail={() => onShowDetail(o.id)}
                 />
@@ -267,6 +284,7 @@ function Section({
 
 function WebOrderCard({
   order,
+  now,
   hideMoney,
   accepting,
   rejecting,
@@ -275,6 +293,7 @@ function WebOrderCard({
   onShowDetail,
 }: {
   order: WebOrder;
+  now: number;
   hideMoney?: boolean;
   accepting?: boolean;
   rejecting?: boolean;
@@ -367,7 +386,9 @@ function WebOrderCard({
           {order.itemsCount === 1 ? "" : "s"}
         </span>
         <span className="flex items-center gap-1">
-          <Clock size={12} /> {timeAgo(order.createdAt)}
+          <Clock size={12} /> {fromMarketplace && order.status === "PENDING_MERCHANT"
+            ? `${waitingMinutes(order, now)} min esperando`
+            : timeAgo(order.createdAt)}
         </span>
         {!isPending && STATUS_LABEL[order.status] && (
           <span className="text-[var(--brand)] font-bold">

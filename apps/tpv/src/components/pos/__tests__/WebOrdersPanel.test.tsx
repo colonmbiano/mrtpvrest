@@ -48,3 +48,12 @@ describe("WebOrdersPanel · mesa por confirmar", () => {
     expect(screen.getByRole("button", { name: /Aceptar/ })).toBeInTheDocument();
   });
 });
+
+test("muestra minutos de espera, banner rojo y activación de sonido del Mercadito", () => {
+  render(<WebOrdersPanel isOpen onClose={jest.fn()} onShowDetail={jest.fn()} onAccept={jest.fn()}
+    orders={[{ ...base, source: "MARKETPLACE", status: "PENDING_MERCHANT",
+      createdAt: new Date(Date.now() - 6 * 60_000).toISOString() }]} />);
+  expect(screen.getByText("6 min esperando")).toBeInTheDocument();
+  expect(screen.getByRole("alert")).toHaveTextContent("más de 5 minutos");
+  expect(screen.getByRole("button", { name: "Activar sonido" })).toBeInTheDocument();
+});
