@@ -22,7 +22,7 @@
 3. **Multi-tenancy:** Siempre filtrar consultas por `restaurantId`. El guard de Prisma (`packages/database/tenant-guard.js`, ver `docs/TENANCY.md`) corre en **ENFORCE** en producción — pero el filtro explícito sigue siendo la práctica esperada. Implicaciones:
    - Lookups de identidad legítimamente cross-tenant (login por email, refresh, resolver al actor) van en `runWithBypass(...)` — sin eso, enforce los rompe (SUPER_ADMIN tiene `restaurantId` null). Patrón de referencia: `auth.middleware.js`.
    - Modelo nuevo con columna `restaurantId` → agregarlo a `SCOPED_MODELS` (el test `tenant-guard.test.js` falla si se te olvida; no lo ignores).
-   - El SQL crudo (`$queryRaw`) NO pasa por el guard. Hoy hay cero raw queries en el backend; si agregas una, filtra por tenant a mano.
+   - El SQL crudo (`$queryRaw`, `$executeRaw` y variantes Unsafe) no pasa por el guard. Mantén parámetros enlazados y alcance explícito de restaurante. Los accesos globales requieren autorización y un contexto global deliberado. Registra cada llamada en `docs/TENANCY.md` y actualiza su prueba de inventario. Las llamadas Unsafe existentes están inventariadas y no autorizan nuevos SQL interpolados.
 4. **Resiliencia:** Manejar errores 429/500 con respuestas controladas 503.
 
 ## Reglas de seguridad e integridad (post-auditoría 2026-06)

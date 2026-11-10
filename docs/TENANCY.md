@@ -79,3 +79,28 @@ const all = await runWithBypass(() => prisma.order.findMany());
   `restaurantId` al `where` de `findUnique`/`update`/`delete`. En `enforce`, un
   `update`/`delete` sobre un id de otro tenant lanza `P2025` (record not found),
   que es justo el comportamiento seguro: **no muta nada**.
+
+
+## Inventario de SQL crudo del backend
+
+El inventario actual contiene diez llamadas queryRaw, una queryRawUnsafe y dos escrituras o bloqueos executeRaw. La referencia a queryRaw en vault.routes.js es un comentario. El total ejecutable de lecturas es once. El plan señalaba doce lecturas. El conteo ejecutable actual es once.
+
+Las consultas etiquetadas enlazan parámetros. Ninguna de estas APIs recibe el filtro automático de la extensión de Prisma.
+
+| Archivo | API | Propósito | Alcance y autorización |
+| --- | --- | --- | --- |
+| `apps/backend/src/lib/delivery-incidents.js` | `$queryRaw` | Bloquear pedido antes de modificar entrega o incidencia | Filtra id y restaurantId resuelto y valida el repartidor o el personal dentro de la transacción. |
+| `apps/backend/src/jobs/locationPromos.job.js` | `$queryRaw` | Bloqueo compartido de sucursal para la promoción periódica | Filtra id, restaurantId de la sucursal descubierta e isActive. |
+| `apps/backend/src/lib/marketplace-settlements-prisma.js` | `$queryRaw` | Bloquear el restaurante durante la operación financiera | Usa id del restaurante obtenido del pedido y valida acceso del actor. |
+| `apps/backend/src/lib/marketplace-settlements-prisma.js` | `$queryRaw` | Bloquear el pedido de la operación financiera | Filtra id y restaurantId del alcance resuelto antes de leer y escribir el ledger. |
+| `apps/backend/src/lib/marketplace-orders.js` | `$queryRaw` | Bloquear pedido legado para transiciones | Filtra id, restaurantId de su pipeline y source MARKETPLACE. |
+| `apps/backend/src/lib/marketplace-orders.js` | `$queryRaw` | Serializar creación y replays por comercio | Bloquea id del restaurante activo, resuelto por slug publicado y política de tenant. |
+| `apps/backend/src/lib/marketplace-network-prisma.js` | `$queryRawUnsafe` | Bloquear las órdenes cargadas por la red compartida | SQL constante global, sin parámetros del cliente ni filtro de restaurante. Carga limitada a 5001 órdenes con política de red y autorización en los puertos del servicio. C6 sustituye este alcance global. |
+| `apps/backend/src/lib/marketplace-driver-payouts.js` | `$queryRaw` | Bloquear el restaurante antes de reservar un retiro | Filtra id del restaurante activo y revalida identidad y acceso a ese restaurante. |
+| `apps/backend/src/lib/saas-marketplace.js` | `$queryRaw` | Métricas globales de pedidos y GMV | Excepción global de SuperAdmin en bypass explícito. Une pipelines por orderId y restaurantId, excluye demos y valida moneda y comercios resultantes. |
+| `apps/backend/src/lib/promo-adapter-prisma.js` | `$queryRaw` | Bloqueo compartido de sucursal en el adaptador | Filtra id, restaurantId resuelto e isActive. |
+| `apps/backend/src/lib/promo-adapter-prisma.js` | `$queryRaw` | Bloqueo compartido de producto antes de aplicar promoción | Filtra id y restaurantId validado y vuelve a leer elegibilidad dentro de la transacción. |
+| `apps/backend/src/lib/pin-attempts.js` | `$executeRaw` | Incremento atómico de intentos de PIN | Inserta restaurantId y orderId enlazados y usa su clave compuesta en ON CONFLICT. |
+| `apps/backend/src/lib/marketplace-network-prisma.js` | `$executeRawUnsafe` | Exclusión mutua del coordinador de red | SQL constante de advisory lock global. No recibe datos del cliente. C6 reemplaza la coordinación global. |
+
+La prueba marketplace-raw-sql-doc.test.cjs compara las llamadas ejecutables con estas filas. Una llamada nueva requiere documentar su propósito y alcance en este inventario.
