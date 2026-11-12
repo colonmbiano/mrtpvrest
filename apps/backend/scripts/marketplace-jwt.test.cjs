@@ -6,7 +6,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const jwt = require('jsonwebtoken');
-const { ISSUER, CONTEXTS, dedicatedSecret, storeSecret, signMarketplaceToken } = require('../src/lib/marketplace-jwt');
+const { ISSUER, CONTEXTS, dedicatedSecret, storeSecret, signMarketplaceToken, verifyMarketplaceToken } = require('../src/lib/marketplace-jwt');
 const { createBuyerAccountResolver } = require('../src/lib/marketplace-buyer-identity');
 const { createStaffActorResolver } = require('../src/lib/marketplace-staff-identity');
 
@@ -100,4 +100,15 @@ test('vencido o de otro emisor: rechazado', async () => {
   const otherIssuer = jwt.sign({ userId: 'mp-c1', role: 'CUSTOMER', exp: SECONDS + 600 }, BUYER,
     { issuer: 'otro', audience: CONTEXTS.buyer.audience });
   await assert.rejects(buyer()(bearer(otherIssuer)), invalid('INVALID_BUYER_IDENTITY'));
+});
+
+
+test('courier dedicado funciona con STORE_JWT=false y conserva precisión de emisión', t => {
+  t.mock.method(Date, 'now', () => SECONDS * 1000 + 123);
+  const COURIER = 'c'.repeat(48);
+  const env = { ...ENV, MARKETPLACE_ACCEPT_STORE_JWT: 'false', MARKETPLACE_COURIER_JWT_SECRET: COURIER };
+  const token = signMarketplaceToken('courier', { accountId: 'a1', role: 'COURIER' }, { env });
+  const options = { marketplaceSecret: COURIER, storeSecret: storeSecret(env), clockTimestamp: SECONDS + 1 };
+  assert.equal(verifyMarketplaceToken('courier', token, options).iat, SECONDS + 0.123);
+  assert.throws(() => verifyMarketplaceToken('courier', jwt.sign({ accountId: 'a1', role: 'COURIER' }, STORE), options));
 });

@@ -26,6 +26,12 @@ function fixture() {
       assert.ok(a); Object.assign(a, data); return a;
     },
   };
+  prisma.marketplaceAccount.updateMany = async ({ where, data }) => {
+    const rows = accounts.filter(row => Object.entries(where).every(([key, value]) =>
+      value === null ? row[key] == null : row[key] === value));
+    rows.forEach(row => Object.assign(row, data));
+    return { count: rows.length };
+  };
   prisma.marketplaceApplication = {
     findUnique: async ({ where }) => {
       if (where.id) {
@@ -67,7 +73,9 @@ function fixture() {
     updateMany: async ({ where, data }) => {
       let count = 0;
       for (const t of tokens) {
-        if (t.id !== where.id || t.consumedAt !== null || t.expiresAt <= where.expiresAt.gt) continue;
+        if (where.id && t.id !== where.id || t.consumedAt !== null) continue;
+        if (where.accountId && t.accountId !== where.accountId || where.purpose && t.purpose !== where.purpose) continue;
+        if (where.expiresAt && t.expiresAt <= where.expiresAt.gt) continue;
         Object.assign(t, data); count++;
       }
       return { count };
@@ -270,6 +278,7 @@ test('reset tokens are one-time, revoke all sessions and never reveal unknown em
   await x.service.forgotPassword(buyer.email);
   const reset=extractToken(x.emails[1].html);
   await x.service.resetPassword(reset,'Nueva frase segura 2026!');
+  assert(x.accounts[0].passwordChangedAt instanceof Date);
   await failCode(()=>x.service.currentSession(oldSession),'UNAUTHENTICATED');
   await failCode(()=>x.service.resetPassword(reset,'Otra frase segura 2026!'),'INVALID_TOKEN');
   const session=await x.service.login({email:buyer.email,password:'Nueva frase segura 2026!'});
@@ -458,4 +467,20 @@ test('token endpoint: no buyer profile, no buyer token; a missing key fails clos
   const unavailable = await request(noKey).post(path + '/token').set('Cookie', cookie).set('Origin', origin);
   assert.equal(unavailable.status, 503); assert.equal(unavailable.body.code, 'IDENTITY_UNAVAILABLE');
   assert.ok(!JSON.stringify(unavailable.body).includes('e'.repeat(48)));
+});
+
+
+test('changing a password revokes sessions and reset links and stamps the account', async () => {
+  const x = fixture();
+  await x.service.register(buyer);
+  x.accounts[0].emailVerifiedAt = new Date();
+  x.accounts[0].applications[0].status = 'APPROVED';
+  const session = await x.service.login(buyer);
+  await x.service.forgotPassword(buyer.email);
+  await x.service.changePassword(x.accounts[0].id, buyer.password, 'Nueva frase de prueba segura 2026');
+  assert(x.accounts[0].passwordChangedAt instanceof Date);
+  await failCode(() => x.service.currentSession(session.token), 'UNAUTHENTICATED');
+  assert(x.tokens.filter(t => t.purpose === 'PASSWORD_RESET').every(t => t.consumedAt));
+  await failCode(() => x.service.login(buyer), 'INVALID_CREDENTIALS');
+  assert((await x.service.login({ ...buyer, password: 'Nueva frase de prueba segura 2026' })).token);
 });
