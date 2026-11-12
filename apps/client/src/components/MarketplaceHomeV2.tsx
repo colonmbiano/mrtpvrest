@@ -246,6 +246,10 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
           <div><strong className="font-display text-lg text-[#176f3d]">Mercadito <span className="text-[#f15a24]">Colorines</span></strong><p className="mt-2">Todo lo que necesitas, más cerca de ti.</p></div>
           <div><h3 className="font-bold text-[#243b30]">Explorar</h3><a className={'mt-2 block w-fit ' + link} href="#tiendas">Tiendas</a><a className={'mt-2 block w-fit ' + link} href="#productos">Productos</a><Link className={'mt-2 block w-fit ' + link} href="/registro">Registro de usuarios</Link></div>
           <div><h3 className="font-bold text-[#243b30]">Compra con claridad</h3><p className="mt-2">Los precios, métodos de pago y condiciones de entrega se confirman en cada tienda.</p></div>
+          <div className="flex gap-5 sm:col-span-3">
+            <Link href="/privacidad" className={link}>Aviso de privacidad</Link>
+            <Link href="/terminos" className={link}>Términos</Link>
+          </div>
         </footer>
       </main>
 

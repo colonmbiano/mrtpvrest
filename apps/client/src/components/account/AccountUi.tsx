@@ -30,6 +30,10 @@ export function AccountShell({ title, subtitle, children }: { title: string; sub
       {subtitle && <div className="mt-2 text-sm leading-relaxed text-[#617567]">{subtitle}</div>}
       <div className="mt-6 rounded-3xl border border-[#e0e9e1] bg-white p-5 shadow-[0_15px_45px_rgba(22,65,35,.05)] sm:p-7">{children}</div>
     </main>
+    <footer className="mx-auto mt-8 flex max-w-md justify-center gap-5 text-sm text-[#546b5c]">
+      <Link href="/privacidad" className={outline}>Aviso de privacidad</Link>
+      <Link href="/terminos" className={outline}>Términos</Link>
+    </footer>
   </div>;
 }
 
@@ -132,4 +136,13 @@ export function Turnstile({ onToken, resetSignal }: { onToken: (token: string) =
 
 export function captchaReady(token: string): boolean {
   return !TURNSTILE_SITE_KEY || token.length > 0;
+}
+
+
+export function TermsAcceptance({ checked, onChange }: { checked: boolean; onChange: (value: boolean) => void }) {
+  return <label className="flex items-start gap-3 text-sm leading-relaxed">
+    <input type="checkbox" required checked={checked} onChange={event => onChange(event.target.checked)}
+      className="mt-1 size-5 shrink-0" />
+    <span>Acepto el <Link href="/privacidad" target="_blank" className={textLink}>aviso de privacidad</Link> y los <Link href="/terminos" target="_blank" className={textLink}>términos</Link>.</span>
+  </label>;
 }

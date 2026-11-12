@@ -10,7 +10,7 @@ import { COURIER_APP_URL } from '@/lib/marketplaceAppLinks';
 import { MailCheck } from 'lucide-react';
 import { normalizeRegistrationDraft, validateRegistrationDraft, EMPTY_REGISTRATION_DRAFT } from '@/lib/marketplace-registration';
 import { checkPassword, PASSWORD_MIN, registerCourier } from '@/lib/marketplaceAccount';
-import { AccountShell, captchaReady, Notice, primaryButton, SelectField, TextField, textLink, Turnstile } from './AccountUi';
+import { TermsAcceptance, AccountShell, captchaReady, Notice, primaryButton, SelectField, TextField, textLink, Turnstile } from './AccountUi';
 
 const VEHICLE_OPTIONS = [
   { value: 'MOTO', label: '🏍️ Motocicleta' },
@@ -32,6 +32,7 @@ export default function CourierSignup() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [captcha, setCaptcha] = useState('');
   const [resetCaptcha, setResetCaptcha] = useState(0);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [sending, setSending] = useState(false);
   const [serverError, setServerError] = useState('');
   const [sentTo, setSentTo] = useState('');
@@ -51,11 +52,12 @@ export default function CourierSignup() {
     if (passwordProblem) problems[form.password.length < PASSWORD_MIN || form.password.length > 128 ? 'password' : 'confirm'] = passwordProblem;
     setErrors(problems);
     if (Object.keys(problems).length) return;
+    if (!termsAccepted) { setServerError('Acepta el aviso de privacidad y los términos.'); return; }
     if (!captchaReady(captcha)) { setServerError('Completa la verificación de seguridad.'); return; }
     const clean = normalizeRegistrationDraft(draft);
     setSending(true);
     const result = await registerCourier({ fullName: clean.name, email: clean.email, phone: clean.phone, city: clean.city,
-      password: form.password, vehicle: form.vehicle, network: form.network, turnstileToken: captcha || undefined });
+      password: form.password, termsAccepted, vehicle: form.vehicle, network: form.network, turnstileToken: captcha || undefined });
     setSending(false);
     setResetCaptcha(n => n + 1);
     if (result === true) { setSentTo(clean.email); setForm(old => ({ ...old, password: '', confirm: '' })); }
@@ -94,9 +96,10 @@ export default function CourierSignup() {
         error={errors.password} autoComplete="new-password" maxLength={128} hint={`Al menos ${PASSWORD_MIN} caracteres. Una frase es fácil de recordar.`} />
       <TextField id="confirm" label="Confirma tu contraseña" type="password" value={form.confirm} onChange={v => update('confirm', v)}
         error={errors.confirm} autoComplete="new-password" maxLength={128} />
+      <TermsAcceptance checked={termsAccepted} onChange={setTermsAccepted} />
       <Turnstile onToken={setCaptcha} resetSignal={resetCaptcha} />
       {serverError && <Notice tone="error">{serverError}</Notice>}
-      <button type="submit" disabled={sending} className={primaryButton}>{sending ? 'Creando tu cuenta…' : 'Crear cuenta de repartidor'}</button>
+      <button type="submit" disabled={sending || !termsAccepted} className={primaryButton}>{sending ? 'Creando tu cuenta…' : 'Crear cuenta de repartidor'}</button>
       {Object.keys(errors).length > 0 && <p className="text-sm font-semibold text-red-700" role="status">Corrige los campos marcados para continuar.</p>}
     </form>
   </AccountShell>;

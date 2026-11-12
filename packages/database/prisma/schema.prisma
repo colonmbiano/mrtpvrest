@@ -5089,6 +5089,7 @@ model MarketplaceAccount {
   phone           String    @db.VarChar(20)
   city            String    @db.VarChar(120)
   passwordHash    String
+  termsAcceptedAt DateTime? @db.Timestamptz(3)
   emailVerifiedAt DateTime? @db.Timestamptz(3)
   disabledAt      DateTime? @db.Timestamptz(3)
   createdAt       DateTime  @default(now()) @db.Timestamptz(3)
