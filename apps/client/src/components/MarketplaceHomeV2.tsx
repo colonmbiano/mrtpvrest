@@ -80,7 +80,9 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
 
       <header className="relative z-20 border-b border-[#e8eeeb] bg-white">
         <div className="mx-auto max-w-[1380px] px-4 sm:px-6">
-          <div className="flex min-h-20 flex-wrap items-center justify-between gap-3 py-3 md:flex-nowrap md:py-0 lg:gap-6">
+          {/* El buscador va en la fila del logo solo desde xl: con menos ancho no cabe
+              junto al logo y los accesos (se aplastaba), y baja a su propia fila. */}
+          <div className="flex min-h-20 flex-wrap items-center justify-between gap-3 py-3 xl:flex-nowrap xl:gap-6 xl:py-0">
             <Link href="/" aria-label="Mercadito Colorines, inicio" className={'flex shrink-0 items-center gap-2 ' + focus}>
               <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#e9f4e9] text-2xl shadow-sm" aria-hidden="true">🛍️</span>
               <span className="flex flex-col leading-none">
@@ -89,8 +91,10 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
               </span>
             </Link>
 
-            <div className="hidden min-w-0 flex-1 items-center gap-3 md:flex">
-              <a href="#tiendas" className={'flex shrink-0 items-center gap-1 rounded-xl border border-[#edf0eb] px-3 py-3 text-xs font-bold text-[#435a52] lg:text-sm ' + focus}>
+            <div className="hidden min-w-0 flex-1 items-center gap-3 xl:flex">
+              {/* Mismo destino que «Tiendas» de los accesos: se muestra uno u otro, para
+                  no quitarle ancho al buscador. */}
+              <a href="#tiendas" className={'hidden shrink-0 items-center gap-1 rounded-xl border border-[#edf0eb] px-3 py-3 text-sm font-bold text-[#435a52] 2xl:flex ' + focus}>
                 <MapPin className="h-4 w-4 text-[#f05c25]" aria-hidden="true" />
                 Tiendas locales
               </a>
@@ -99,7 +103,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
 
             <nav aria-label="Accesos principales" className="flex items-center gap-2 sm:gap-5">
               {!readOnly && !isolated && <InstallAppButton className={'inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-[#d5e6da] px-3 py-2 text-sm font-bold text-[#176c42] hover:bg-[#f0faf2] disabled:opacity-60 ' + focus} />}
-              <a href="#tiendas" className={'hidden items-center gap-2 text-sm font-semibold text-[#374e45] hover:text-[#e65320] lg:flex ' + focus}>
+              <a href="#tiendas" className={'hidden items-center gap-2 text-sm font-semibold text-[#374e45] hover:text-[#e65320] lg:flex 2xl:hidden ' + focus}>
                 <Store className="h-5 w-5" aria-hidden="true" /> Tiendas
               </a>
               <a href="#productos" className={'hidden items-center gap-2 text-sm font-semibold text-[#374e45] hover:text-[#e65320] sm:flex ' + focus}>
@@ -115,7 +119,7 @@ export default function MarketplaceHomeV2({ state, stores, products, isolated, p
             </nav>
           </div>
 
-          <div className="pb-3 md:hidden">
+          <div className="pb-3 xl:hidden">
             <SearchForm state={state} inputId="search-mobile" />
           </div>
 

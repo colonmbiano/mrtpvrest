@@ -9,6 +9,9 @@ este proyecto solo lo configura (`app/build.gradle` y `AndroidManifest.xml`).
 ## Requisitos
 
 - **JDK 17 o 21.** El JDK de Android Studio puede ser el 25, y Gradle 8.14 no corre con él.
+  Se elige con `JAVA_HOME` o con `org.gradle.java.home=<ruta del JDK>` en el
+  `gradle.properties` del usuario (`~/.gradle/gradle.properties`). No va en el
+  `gradle.properties` del repo, porque la ruta cambia en cada máquina y en el CI.
 - **Android SDK 36.** Se toma de `ANDROID_HOME` o de `sdk.dir` en `local.properties`.
 
 ## Compilar
