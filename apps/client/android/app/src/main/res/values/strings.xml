@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- La URL, el host y los Digital Asset Links salen de marketplaceUrl (app/build.gradle). -->
 <resources>
-    <string name="appName">MRTPVREST</string>
+    <string name="appName">Mercadito Colorines</string>
 </resources>
