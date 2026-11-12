@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const IGNORED_SUBDOMAINS = new Set([
   'www', 'api', 'admin', 'localhost', '127',
   'tpv', 'app', 'pos', 'kds', 'kiosk', 'client', 'delivery', 'landing', 'saas', 'cdn',
+  'mercaditocolorines',
 ]);
 
 const tenantMiddleware = async (req, res, next) => {
@@ -62,7 +63,8 @@ const tenantMiddleware = async (req, res, next) => {
     '/api/saas',
     '/api/ai',
     '/api/billing',
-    '/api/workspaces'
+    '/api/workspaces',
+    '/api/notifications/vapid-public-key'
   ];
 
   if (globalPaths.some(p => req.path.startsWith(p))) return next();

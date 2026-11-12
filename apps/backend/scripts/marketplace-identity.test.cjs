@@ -227,6 +227,39 @@ test('login session only in hash, logout revoked and cannot authenticate again',
   await failCode(()=>x.service.login({email:buyer.email,password:'wrong'}),'INVALID_CREDENTIALS');
 });
 
+test('verified store owner (User ADMIN) can log into marketplace identity and gets BUYER + MERCHANT profiles', async () => {
+  const bcrypt = require('bcryptjs');
+  const x = fixture();
+  const storePasswordHash = await bcrypt.hash('MiTiendaSegura2026!', 10);
+  x.prisma.user = {
+    findUnique: async ({ where }) => where.email === 'tienda@ejemplo.mx' ? {
+      id: 'u1',
+      email: 'tienda@ejemplo.mx',
+      name: 'Eduardo Tienda',
+      phone: '7293356220',
+      role: 'ADMIN',
+      isActive: true,
+      passwordHash: storePasswordHash,
+      tenant: { id: 't1', name: 'Master Burguer', emailVerifiedAt: new Date() },
+      restaurant: { id: 'r1', name: 'Master Burguer', businessType: 'RESTAURANT' },
+    } : null,
+  };
+  x.prisma.marketplaceAccount.create = async ({ data }) => {
+    const rawApps = Array.isArray(data.applications?.create) ? data.applications.create : [data.applications.create];
+    const a = { id: 'a99', ...data, applications: [] };
+    delete a.applications;
+    a.applications = rawApps.map((app, idx) => ({ id: 'pa' + idx, accountId: 'a99', ...app }));
+    x.accounts.push(a);
+    x.applications.push(...a.applications);
+    return a;
+  };
+  const { token, account } = await x.service.login({ email: '  Tienda@Ejemplo.mx ', password: 'MiTiendaSegura2026!' });
+  assert.ok(token);
+  assert.equal(account.email, 'tienda@ejemplo.mx');
+  assert.equal(account.emailVerified, true);
+  assert.deepEqual(account.profiles.map(p => p.role).sort(), ['BUYER', 'MERCHANT']);
+});
+
 test('reset tokens are one-time, revoke all sessions and never reveal unknown emails', async () => {
   const x=fixture();
   await x.service.register(buyer);

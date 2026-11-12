@@ -32,13 +32,21 @@ const generateTokens = (userId, restaurantId, role, tenantId = null) => {
 // LOGIN GLOBAL (SaaS)
 router.post('/login', loginLimiter, async (req, res) => {
   try {
-    const { email, password } = req.body
-    if (!email || !password) return res.status(400).json({ error: 'Email y contrasena requeridos' })
+    const rawEmail = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+    const { password } = req.body
+    if (!rawEmail || !password) return res.status(400).json({ error: 'Email y contrasena requeridos' })
 
-    const user = await runWithBypass(() => prisma.user.findUnique({
-      where: { email },
-      include: { restaurant: true, tenant: true } // Traemos info de restaurante y tenant
-    }))
+    const user = await runWithBypass(async () => {
+      const exact = await prisma.user.findUnique({
+        where: { email: rawEmail },
+        include: { restaurant: true, tenant: true } // Traemos info de restaurante y tenant
+      })
+      if (exact) return exact
+      return prisma.user.findFirst({
+        where: { email: { equals: rawEmail, mode: 'insensitive' } },
+        include: { restaurant: true, tenant: true }
+      })
+    })
 
     if (!user || !user.isActive) return res.status(401).json({ error: 'Credenciales incorrectas o cuenta inactiva' })
 
@@ -157,6 +165,9 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
     return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' })
   }
 
+  const phone = require('../lib/registration-phone').registrationPhone(req.body.phone)
+  if (!phone) return res.status(400).json({ error: 'Ingresa un WhatsApp válido; para otros países incluye + y lada.', code: 'INVALID_PHONE' })
+
   // Anti-bot capa 1: CAPTCHA (Cloudflare Turnstile). Solo se exige si
   // TURNSTILE_SECRET_KEY está configurada; si no, se omite (dev/test). Cierra
   // el vector que metió ~72 tenants basura en un día vía script automatizado.
@@ -265,6 +276,7 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
           isActive: true,
           config: {
             create: {
+              phone,
               estimatedDelivery: 40,
               isOpen:            true,
               pointsPerTen:      1,
@@ -310,6 +322,7 @@ router.post(['/register-tenant', '/register'], registerLimiter, async (req, res)
         data: {
           tenantId:     t.id,
           restaurantId: r.id,
+          phone,
           name:         ownerName,
           email:        email.toLowerCase(),
           passwordHash,

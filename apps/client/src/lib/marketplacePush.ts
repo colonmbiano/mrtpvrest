@@ -64,9 +64,15 @@ export async function enablePush(apiUrl: string | null, fetchImpl: FetchLike = f
   if (!reg) return { ok: false, message: 'Los avisos funcionan en la app publicada o instalada.' };
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') return { ok: false, message: 'Permite las notificaciones en tu navegador para recibir avisos.' };
+  const token = await getBuyerToken({ apiUrl, fetchImpl });
+  if (!token) return { ok: false, message: 'Inicia sesión para activar los avisos.' };
   let key: string | null = null;
   try {
-    const res = await fetchImpl(`${apiUrl}/api/notifications/vapid-public-key`, { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+    const res = await fetchImpl(`${apiUrl}/api/notifications/vapid-public-key`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(8000),
+    });
     const json = await res.json().catch(() => null) as { key?: unknown } | null;
     key = typeof json?.key === 'string' && json.key ? json.key : null;
   } catch { key = null; }

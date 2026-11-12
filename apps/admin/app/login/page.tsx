@@ -55,7 +55,7 @@ export default function LoginPage() {
     localStorage.removeItem("locationId");
 
     try {
-      const { data } = await api.post("/api/auth/login", { email, password });
+      const { data } = await api.post("/api/auth/login", { email: email.trim().toLowerCase(), password });
       localStorage.setItem("accessToken", data.accessToken);
       // "Mantener sesión iniciada" → refresh en localStorage (persiste ~30 días).
       // Sin marcar → sessionStorage (la sesión se cierra al cerrar el navegador).

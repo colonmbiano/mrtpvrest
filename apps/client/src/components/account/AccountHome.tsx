@@ -6,8 +6,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Heart, LogOut, MapPin, ShoppingBag, UserRound } from 'lucide-react';
+import { ChevronRight, Heart, LogOut, MapPin, ShoppingBag, Store, UserRound } from 'lucide-react';
 import { getMarketplaceApiUrl } from '@/lib/config';
+import { BUSINESS_LOGIN_URL } from '@/lib/marketplaceAppLinks';
 import { fetchCurrentAccount, getBuyerToken, logout, type MarketplaceAccount } from '@/lib/marketplaceAccount';
 import { listFavorites, setFavorite, type FavoriteStore } from '@/lib/marketplaceFavorites';
 import { disablePush } from '@/lib/marketplacePush';
@@ -83,6 +84,8 @@ export default function AccountHome() {
   }
   if (!account) return <AccountShell title="Mi cuenta"><p role="status" className="text-sm text-[#617567]">Cargando tu cuenta…</p></AccountShell>;
 
+  const isMerchant = account.profiles.some(p => p.role === 'MERCHANT');
+
   return <AccountShell title="Mi cuenta">
     <section aria-labelledby="account-data" className="flex items-start gap-3">
       <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#e6f4e8]"><UserRound className="h-6 w-6 text-[#187445]" aria-hidden="true" /></span>
@@ -92,7 +95,14 @@ export default function AccountHome() {
       </div>
     </section>
 
-    <Link href="/cuenta/pedidos" className={'mt-6 flex items-center justify-between gap-3 rounded-2xl border border-[#e4ebe5] px-4 py-3.5 hover:bg-[#f5f9f5] ' + outline}>
+    {isMerchant && (
+      <a href={BUSINESS_LOGIN_URL} className={'mt-6 flex items-center justify-between gap-3 rounded-2xl border border-[#b0d7bf] bg-[#f0faf2] px-4 py-3.5 hover:bg-[#e4f5e8] ' + outline}>
+        <span className="flex items-center gap-2 text-base font-extrabold text-[#176c42]"><Store className="h-5 w-5 text-[#187445]" aria-hidden="true" /> Panel de mi negocio</span>
+        <ChevronRight className="h-5 w-5 text-[#187445]" aria-hidden="true" />
+      </a>
+    )}
+
+    <Link href="/cuenta/pedidos" className={'mt-4 flex items-center justify-between gap-3 rounded-2xl border border-[#e4ebe5] px-4 py-3.5 hover:bg-[#f5f9f5] ' + outline}>
       <span className="flex items-center gap-2 text-base font-extrabold text-[#23362b]"><ShoppingBag className="h-5 w-5 text-[#e65b27]" aria-hidden="true" /> Mis pedidos</span>
       <ChevronRight className="h-5 w-5 text-[#7e9182]" aria-hidden="true" />
     </Link>

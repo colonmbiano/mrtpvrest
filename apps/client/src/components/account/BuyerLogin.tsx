@@ -6,7 +6,7 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { COURIER_APP_URL } from '@/lib/marketplaceAppLinks';
+import { BUSINESS_LOGIN_URL, COURIER_APP_URL } from '@/lib/marketplaceAppLinks';
 import { forgotPassword, login, resendVerification, safeNextPath } from '@/lib/marketplaceAccount';
 import { AccountShell, captchaReady, Notice, primaryButton, TextField, textLink, Turnstile } from './AccountUi';
 
@@ -39,6 +39,10 @@ export default function BuyerLogin({ initialMode, next }: { initialMode: LoginMo
       setPassword('');
       if (result.profiles.some(p => p.role === 'COURIER') && !result.profiles.some(p => p.role === 'BUYER')) {
         window.location.assign(COURIER_APP_URL);
+        return;
+      }
+      if (result.profiles.some(p => p.role === 'MERCHANT') && !result.profiles.some(p => p.role === 'BUYER')) {
+        window.location.assign(BUSINESS_LOGIN_URL);
         return;
       }
       router.replace(safeNextPath(next));
@@ -78,6 +82,7 @@ export default function BuyerLogin({ initialMode, next }: { initialMode: LoginMo
       {mode !== 'login' && <p><button type="button" onClick={() => switchTo('login')} className={textLink}>Volver a entrar</button></p>}
       {mode !== 'forgot' && <p>¿Olvidaste tu contraseña? <button type="button" onClick={() => switchTo('forgot')} className={textLink}>Recupérala</button></p>}
       {mode !== 'resend' && <p>¿No verificaste tu correo? <button type="button" onClick={() => switchTo('resend')} className={textLink}>Pide otro enlace</button></p>}
+      <p>¿Administras una tienda? <a href={BUSINESS_LOGIN_URL} className={textLink}>Entrar al panel de negocios</a></p>
     </div>
   </AccountShell>;
 }

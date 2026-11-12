@@ -149,17 +149,99 @@ function createMarketplaceIdentityService({ prisma, sendEmail, publicOrigin, now
     });
   }
 
+  async function findStoreUser(address) {
+    if (!prisma.user) return null;
+    let u = typeof prisma.user.findUnique === 'function'
+      ? await prisma.user.findUnique({ where: { email: address }, include: { tenant: true, restaurant: true } })
+      : null;
+    if (!u && typeof prisma.user.findFirst === 'function') {
+      u = await prisma.user.findFirst({
+        where: { email: { equals: address, mode: 'insensitive' } },
+        include: { tenant: true, restaurant: true },
+      });
+    }
+    if (!u || u.isActive === false || !['ADMIN', 'MANAGER', 'SUPER_ADMIN'].includes(u.role)) return null;
+    if (u.role !== 'SUPER_ADMIN' && u.tenant && !u.tenant.emailVerifiedAt) return null;
+    return u;
+  }
+
+  async function syncStoreAccount(address, storeUser, existingAccount) {
+    const cleanPhone = phone(storeUser.phone || storeUser.tenant?.whatsappNumber || '').replace(/^\+52/, '');
+    const validPhone = /^[0-9]{10}$/.test(cleanPhone) ? cleanPhone : '0000000000';
+    const rawType = storeUser.restaurant?.businessType || storeUser.tenant?.businessType;
+    const bType = BUSINESS_TYPES.has(rawType) ? rawType : 'RESTAURANT';
+    const bName = trimmed(storeUser.restaurant?.name || storeUser.tenant?.name || storeUser.name || 'Mi Negocio', 120) || 'Mi Negocio';
+    const verifiedAt = storeUser.tenant?.emailVerifiedAt || now();
+
+    if (!existingAccount) {
+      try {
+        return await prisma.marketplaceAccount.create({
+          data: {
+            email: address,
+            fullName: trimmed(storeUser.name || bName, 120) || 'Propietario',
+            phone: validPhone,
+            city: 'Local',
+            passwordHash: storeUser.passwordHash,
+            emailVerifiedAt: verifiedAt,
+            applications: {
+              create: [
+                { role: 'BUYER', status: 'APPROVED' },
+                { role: 'MERCHANT', status: 'APPROVED', businessName: bName, businessType: bType, deliveryMode: 'BOTH' },
+              ],
+            },
+          },
+          include: { applications: { select: { role: true, status: true } } },
+        });
+      } catch (e) {
+        if (e.code !== 'P2002') throw e;
+        existingAccount = await prisma.marketplaceAccount.findUnique({
+          where: { email: address }, include: { applications: { select: { role: true, status: true } } },
+        });
+      }
+    }
+
+    if (!existingAccount) return null;
+    await prisma.marketplaceAccount.update({
+      where: { id: existingAccount.id },
+      data: {
+        passwordHash: storeUser.passwordHash,
+        emailVerifiedAt: existingAccount.emailVerifiedAt || verifiedAt,
+      },
+    });
+    const roles = new Set((existingAccount.applications || []).map(a => a.role));
+    if (!roles.has('BUYER')) {
+      await prisma.marketplaceApplication.create({
+        data: { accountId: existingAccount.id, role: 'BUYER', status: 'APPROVED' },
+      }).catch(() => {});
+    }
+    if (!roles.has('MERCHANT')) {
+      await prisma.marketplaceApplication.create({
+        data: { accountId: existingAccount.id, role: 'MERCHANT', status: 'APPROVED', businessName: bName, businessType: bType, deliveryMode: 'BOTH' },
+      }).catch(() => {});
+    }
+    return prisma.marketplaceAccount.findUnique({
+      where: { id: existingAccount.id }, include: { applications: { select: { role: true, status: true } } },
+    });
+  }
+
   async function login(input) {
     const address = email(input?.email);
     if (!EMAIL.test(address) || typeof input?.password !== 'string' || input.password.length > 128) {
       throw new IdentityError('INVALID_CREDENTIALS', 401);
     }
-    const account = await prisma.marketplaceAccount.findUnique({
+    let account = await prisma.marketplaceAccount.findUnique({
       where: { email: address }, include: { applications: { select: { role: true, status: true } } },
     });
     // Keep a comparable bcrypt work factor for non-existent accounts.
     const fallbackHash = '$2a$12$QpZXirB5mzV9gZjERmBUd.9NxTfXMq.o2Ti7suIzauq/td0BqCM9e';
-    const valid = await bcrypt.compare(input.password, account?.passwordHash || fallbackHash);
+    let valid = await bcrypt.compare(input.password, account?.passwordHash || fallbackHash);
+    if ((!account || !valid || !account.emailVerifiedAt) && !account?.disabledAt) {
+      const storeUser = await findStoreUser(address);
+      if (storeUser && await bcrypt.compare(input.password, storeUser.passwordHash)) {
+        account = await syncStoreAccount(address, storeUser, account);
+        valid = Boolean(account);
+      }
+    }
     if (!account || !valid || !account.emailVerifiedAt || account.disabledAt) {
       throw new IdentityError('INVALID_CREDENTIALS', 401);
     }
