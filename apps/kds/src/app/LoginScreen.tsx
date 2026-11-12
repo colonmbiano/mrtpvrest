@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
-import { Lock, Building2, ArrowRight, ChevronLeft, Layers, LogOut } from "lucide-react";
-import api from "@/lib/api";
-import KioskUnlockModal from "@/components/KioskUnlockModal";
+import { Lock, Building2, ArrowRight, ChevronLeft, Layers } from "lucide-react";
+import { linkingApi as api } from "@/lib/api";
+import { linkKdsDevice } from "@/lib/link-device";
 
 // Estaciones soportadas por el KDS. Mismo enum que el TPV/admin para
 // que los pedidos lleguen filtrados consistentemente.
@@ -29,11 +29,12 @@ interface Restaurant {
 
 interface LoginScreenProps {
   onSuccess: () => void;
+  onCancel?: () => void;
 }
 
 type Step = "login" | "location" | "stations";
 
-export default function LoginScreen({ onSuccess }: LoginScreenProps) {
+export default function LoginScreen({ onSuccess, onCancel }: LoginScreenProps) {
   const [step, setStep] = useState<Step>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,7 +44,6 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
   const [authToken, setAuthToken] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showUnlock, setShowUnlock] = useState(false);
 
   // Modo de operación de esta pantalla KDS.
   const [stationMode, setStationMode] = useState<StationMode>("central");
@@ -62,12 +62,6 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
       const userRestaurantId: string | null = loginRes.user?.restaurantId || null;
       setAuthToken(token);
 
-      // Persistimos el restaurantId del JWT lo antes posible para que el
-      // interceptor de api.ts ponga el header x-restaurant-id.
-      if (userRestaurantId) {
-        localStorage.setItem("restaurantId", userRestaurantId);
-      }
-
       // Headers para garantizar resolución de tenant en el backend cuando
       // todavía no hay restaurantId en localStorage (primer login).
       const tenantHeaders: Record<string, string> = {
@@ -78,7 +72,6 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
       const restRes = await api.get("/api/admin/config", { headers: tenantHeaders });
       const resolvedRestId: string | null = userRestaurantId || restRes.data?.id || null;
       if (resolvedRestId) {
-        localStorage.setItem("restaurantId", resolvedRestId);
         tenantHeaders["x-restaurant-id"] = resolvedRestId;
       }
 
@@ -127,28 +120,15 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
       : selectedStations;
 
     try {
-      const { data: dev } = await api.post(
-        "/api/devices/create",
-        {
-          locationId: pickedLocation.id,
-          deviceType: "KDS",
-          restaurantId: restaurant.id,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            "x-restaurant-id": restaurant.id,
-            "x-location-id":   pickedLocation.id,
-          },
-        },
-      );
-
-      const { data: auth } = await api.post("/api/devices/auth", { deviceToken: dev.deviceToken });
+      const { device: dev, auth } = await linkKdsDevice({
+        authToken, restaurantId: restaurant.id, locationId: pickedLocation.id,
+      });
 
       localStorage.setItem("accessToken",  auth.accessToken);
       localStorage.setItem("deviceToken",  dev.deviceToken);
       localStorage.setItem("deviceId",     dev.deviceId);
       localStorage.setItem("restaurantId", restaurant.id);
+      localStorage.setItem("restaurantName", restaurant.name);
       localStorage.setItem("locationId",   pickedLocation.id);
       localStorage.setItem("locationName", pickedLocation.name);
       // Persistimos la configuración de estaciones — el KdsScreen la lee
@@ -158,22 +138,14 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
 
       onSuccess();
     } catch (err) {
-      const e = err as { response?: { data?: { error?: string } } };
-      setError(e.response?.data?.error || "Error vinculando dispositivo");
+      const e = err as { message?: string; response?: { data?: { error?: string } } };
+      setError(e.response?.data?.error || e.message || "Error vinculando dispositivo");
       setLoading(false);
     }
   };
 
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center p-6 overflow-hidden bg-[#0a0a0c]">
-      <button
-        type="button"
-        onClick={() => setShowUnlock(true)}
-        className="fixed right-4 bottom-4 z-20 w-12 h-12 rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 text-white/45 active:scale-95"
-        aria-label="Desbloquear tablet"
-      >
-        <LogOut size={18} />
-      </button>
       {/* Ambient glow */}
       <div
         aria-hidden
@@ -186,7 +158,14 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
         style={{ background: "radial-gradient(circle, rgba(136,214,108,0.10) 0%, transparent 70%)" }}
       />
 
-      <div className="relative z-10 w-full max-w-md rounded-3xl p-8 bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.4)]">
+      <div className={`relative z-10 w-full ${step === "login" ? "max-w-md" : "max-w-2xl"} max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.4)]`}>
+        {onCancel && <div className="mb-5 border-b border-white/15 pb-4">
+          <button type="button" onClick={onCancel} disabled={loading}
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-white/20 px-4 text-sm font-bold text-white disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-amber-300">
+            <ChevronLeft size={18} /> Volver a la tienda actual
+          </button>
+          {step === "login" && <p className="mt-3 text-sm text-white/80">Inicia sesión con la cuenta de la tienda que quieres usar. La vinculación actual se conserva hasta completar el cambio.</p>}
+        </div>}
         {step === "login" ? (
           <form onSubmit={handleLogin} className="flex flex-col gap-5">
             <div className="flex flex-col items-center text-center gap-3 mb-2">
@@ -255,7 +234,7 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
                 <span className="text-[10px] font-black tracking-[0.3em] uppercase text-[#ffb84d]">KDS · Sucursal</span>
                 <h1 className="text-2xl font-black text-white tracking-tight mt-1">Elige sucursal</h1>
                 <p className="text-xs font-medium text-white/55 mt-1">
-                  El KDS se vinculará a esta sucursal de forma permanente.
+                  Puedes cambiar de tienda o sucursal desde el KDS cuando lo necesites.
                 </p>
               </div>
             </div>
@@ -303,7 +282,7 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
                 <span className="text-[10px] font-black tracking-[0.3em] uppercase text-[#ffb84d]">KDS · Estaciones</span>
                 <h1 className="text-2xl font-black text-white tracking-tight mt-1">¿Qué muestra esta pantalla?</h1>
                 <p className="text-xs font-medium text-white/55 mt-1">
-                  Define si esta tablet es una cocina central o una estación específica.
+                  {restaurant?.name} · {pickedLocation?.name}. Elige todas las estaciones o una estación específica.
                 </p>
               </div>
             </div>
@@ -382,7 +361,6 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
           </div>
         )}
       </div>
-      {showUnlock && <KioskUnlockModal onClose={() => setShowUnlock(false)} />}
     </div>
   );
 }

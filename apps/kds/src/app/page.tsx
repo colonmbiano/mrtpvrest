@@ -8,6 +8,7 @@ export default function HomePage() {
   // Auth determinada por presencia de accessToken válido en localStorage.
   // KDS app independiente: una sola pantalla — login o KDS.
   const [hasSession, setHasSession] = useState<boolean | null>(null);
+  const [changingStore, setChangingStore] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -24,9 +25,12 @@ export default function HomePage() {
     );
   }
 
-  if (!hasSession) {
-    return <LoginScreen onSuccess={() => setHasSession(true)} />;
+  if (!hasSession || changingStore) {
+    return <LoginScreen
+      onSuccess={() => { setHasSession(true); setChangingStore(false); }}
+      onCancel={hasSession ? () => setChangingStore(false) : undefined}
+    />;
   }
 
-  return <KdsScreen />;
+  return <KdsScreen onChangeStore={() => setChangingStore(true)} />;
 }

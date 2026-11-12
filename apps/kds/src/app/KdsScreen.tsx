@@ -1,47 +1,44 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import {
   Info, Wifi, WifiOff, Server, ServerOff,
   X, Check, ListChecks, Bike, Utensils, ShoppingBag,
-  Trophy, RefreshCcw, LogOut, Radio, Trash2,
-  Clock3, UserRound, Settings2, PlugZap, Router, Store,
+  Trophy, RefreshCcw, Radio, Trash2,
+  Clock3, UserRound, Settings2, PlugZap, Router, Store, ChevronLeft, ChevronRight, ChevronsDown,
+  BarChart3, PackageCheck, MessageSquare, Send,
 } from "lucide-react";
 import { io, type Socket } from "socket.io-client";
 import api, { getApiUrl } from "@/lib/api";
 import NumpadPIN from "@/components/NumpadPIN";
-import KioskUnlockModal from "@/components/KioskUnlockModal";
+import OrderHistory from "@/components/OrderHistory";
 import { startTcpListener, stopTcpListener, listenForData } from "@/lib/tcpListener";
-import { parseEscPosTickets, type ParsedTicketItem } from "@/lib/escpos-parser";
+import { parseEscPosTickets } from "@/lib/escpos-parser";
+import { readLocalTickets, writeLocalTickets, type LocalKitchenTicket as TcpTicket } from "@/lib/local-tickets";
+import { boardColumns, boardRange } from "@/lib/kitchen-board";
+import { buildProductionSummary, type SummaryItem } from "@/lib/production-summary";
+import {
+  buildStationOrdersView,
+  mergeServerAndTcpOrders,
+  normalizeOrderNumber,
+  readLanFirstState,
+  writeLanFirstState,
+  type LanFirstState,
+  type OfflineKdsMutation,
+} from "@/lib/lan-first";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────
 
 type StationCode = "KITCHEN" | "BAR" | "GRILL" | "FRYER";
-type TabKey = "orders" | "tasks" | "tcp";
+type TabKey = "orders" | "summary" | "packing" | "history" | "tasks" | "tcp";
 type TicketSize = "compact" | "normal" | "large";
 type ReceiveMode = "socket" | "tcp" | "both";
 
-/**
- * Comanda recibida vía TCP (ESC/POS) desde el TPV actuando como
- * impresora térmica. KDS escucha en port 9100; cada payload se
- * convierte en un card. Estado solo en memoria — los tickets TCP son
- * efímeros como una comanda en papel.
- */
-interface TcpTicket {
-  id: string;
-  receivedAt: number;
-  from: string;
-  lines: string[];
-  items: ParsedTicketItem[];
-  headerLines: string[];
-  isKitchen: boolean;
-  isReceipt: boolean;
-  orderNumber: string | null;
-  tableLabel: string | null;
-}
-
 interface KdsOrderItem {
   id: string;
+  menuItemId: string;
+  comboName?: string;
+  routingFallback?: boolean;
   menuItemName: string;
   name?: string | null;
   menuItem?: { name?: string | null } | null;
@@ -49,9 +46,12 @@ interface KdsOrderItem {
   done: boolean;
   notes?: string | null;
   station?: string | null;
+  areaLabel?: string | null;
+  syncStations?: StationCode[];
   seatNumber?: number | null;
   course?: string | null;
   modifiers?: Array<{ id: string; name: string; priceAdd?: number | null }>;
+  comboSelections?: Array<{ optionMenuItemId?: string; name?: string }>;
 }
 
 interface KdsOrder {
@@ -63,9 +63,47 @@ interface KdsOrder {
   /** Canal del pedido (TPV, ONLINE, WHATSAPP, MARKETPLACE…). */
   source?: string | null;
   createdAt: string;
+  sentToKitchenAt?: string;
   notes?: string | null;
   items: KdsOrderItem[];
   allDone?: boolean;
+  preparationComplete?: boolean;
+  stationStates?: Array<{ station: StationCode; done: boolean }>;
+  isLocalTcp?: boolean;
+  tcpTicketId?: string;
+}
+
+interface PackingCheck {
+  key: string;
+  checked: boolean;
+}
+
+interface PackingOrderItem {
+  id: string;
+  name: string;
+  quantity: number;
+  notes?: string | null;
+}
+
+interface PackingOrder {
+  id: string;
+  orderNumber: string;
+  orderType: "DINE_IN" | "TAKEOUT" | "DELIVERY";
+  customerName?: string | null;
+  deliveryAddress?: string | null;
+  paymentStatus?: string | null;
+  createdAt?: string;
+  items: PackingOrderItem[];
+  checks: PackingCheck[];
+}
+
+interface KdsMessageItem {
+  id: string;
+  orderId: string;
+  station: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
 }
 
 interface KdsTask {
@@ -90,6 +128,21 @@ const STATIONS: Array<{ value: StationCode; label: string; color: string }> = [
   { value: "BAR",     label: "Barra",    color: "#3b82f6" },
   { value: "GRILL",   label: "Plancha",  color: "#f59e0b" },
   { value: "FRYER",   label: "Freidora", color: "#f97316" },
+];
+
+const PACKING_CHECK_LABELS: Record<string, string> = {
+  DRINKS_COMPLETE: "Bebidas completas",
+  SAUCES_PACKED: "Salsas aparte",
+  TICKET_PRINTED: "Ticket impreso",
+  ADDRESS_CONFIRMED: "Dirección confirmada",
+  PAYMENT_CONFIRMED: "Pago confirmado",
+};
+
+const QUICK_MESSAGES = [
+  "Falta ingrediente para preparar",
+  "Tiempo extra de cocción (+10 min)",
+  "Duda en nota del pedido · favor de confirmar",
+  "Pedido listo en barra para recoger",
 ];
 
 // Lee la config persistida en LoginScreen — qué estaciones vigila este
@@ -193,7 +246,7 @@ function writeKdsDisplayConfig(config: KdsDisplayConfig): void {
   localStorage.setItem(KDS_CONFIG_KEY, JSON.stringify(config));
 }
 
-export default function KdsScreen() {
+export default function KdsScreen({ onChangeStore }: { onChangeStore: () => void }) {
   const [tab, setTab]               = useState<TabKey>("orders");
   // Estaciones que esta pantalla vigila (config del LoginScreen).
   // visibleStations es el subset de STATIONS que coincide con kdsStations.
@@ -203,10 +256,30 @@ export default function KdsScreen() {
     () => allowedStations[0] ?? "KITCHEN",
   );
 
-  const [orders, setOrders]         = useState<KdsOrder[]>([]);
+  const [stationMap, setStationMap] = useState<Partial<Record<StationCode, KdsOrder[]>>>({});
+  const orders = useMemo(() => buildStationOrdersView(stationMap, station), [stationMap, station]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [now, setNow]               = useState<number>(Date.now());
   const prevIds                     = useRef<string[]>([]);
+  const fetchSequence = useRef(0);
+  const currentStation = useRef(station);
+  currentStation.current = station;
+  const busyOrders = useRef(new Set<string>());
+  const [pendingOrders, setPendingOrders] = useState<string[]>([]);
+  const [actionError, setActionError] = useState("");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+
+  // Empaque (PACKING)
+  const [packingOrders, setPackingOrders] = useState<PackingOrder[]>([]);
+  const [loadingPacking, setLoadingPacking] = useState(false);
+  const busyPackingOrders = useRef(new Set<string>());
+  const [pendingPackingOrders, setPendingPackingOrders] = useState<string[]>([]);
+  const packingSequence = useRef(0);
+
+  // Mensajes de cocina (KdsMessage)
+  const [unreadMessages, setUnreadMessages] = useState<KdsMessageItem[]>([]);
+  const [messageModalOrder, setMessageModalOrder] = useState<KdsOrder | null>(null);
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   const [tasks, setTasks]           = useState<KdsTask[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -219,16 +292,67 @@ export default function KdsScreen() {
   const [serverOk, setServerOk]     = useState<boolean>(true);
   const [showInfo, setShowInfo]     = useState<boolean>(false);
   const [showConfig, setShowConfig] = useState<boolean>(false);
-  const [showLogout, setShowLogout] = useState<boolean>(false);
   const [displayConfig, setDisplayConfig] = useState<KdsDisplayConfig>(() => readKdsDisplayConfig());
   const [socketConnected, setSocketConnected] = useState<boolean>(false);
   const socketRef = useRef<Socket | null>(null);
 
-  // Tickets recibidos por TCP (KDS-as-printer). Estado efímero.
+  // Bandeja local durable: archivar no cambia el pedido del servidor.
   const [tcpTickets, setTcpTickets] = useState<TcpTicket[]>([]);
+  const [tcpRestored, setTcpRestored] = useState(false);
+  const [tcpStorageError, setTcpStorageError] = useState("");
+  const tcpStorageBlocked = useRef(false);
+  const [showTcpHistory, setShowTcpHistory] = useState(false);
   const [tcpListening, setTcpListening] = useState<boolean>(false);
   const tcpEnabled = displayConfig.receiveMode === "tcp" || displayConfig.receiveMode === "both";
   const serverEnabled = displayConfig.receiveMode === "socket" || displayConfig.receiveMode === "both";
+
+  // Estado LAN-First (optimistic UI 0ms + cola de mutaciones offline + deduplicación TCP/Cloud)
+  const [lanState, setLanState] = useState<LanFirstState>(() =>
+    typeof window !== "undefined" ? readLanFirstState(localStorage) : {
+      itemOverrides: {},
+      orderNumItemOverrides: {},
+      finalizedOrderIds: [],
+      finalizedOrderNumbers: [],
+      mutationQueue: [],
+    },
+  );
+  const flushingLanRef = useRef(false);
+
+  const updateLanState = useCallback((updater: (prev: LanFirstState) => LanFirstState) => {
+    setLanState((prev) => {
+      const next = updater(prev);
+      if (typeof window !== "undefined") {
+        writeLanFirstState(localStorage, next);
+      }
+      return next;
+    });
+  }, []);
+
+  const boardOrders = useMemo(
+    () => mergeServerAndTcpOrders(orders, tcpTickets, station, lanState, tcpEnabled),
+    [orders, tcpTickets, station, lanState, tcpEnabled],
+  );
+
+  const productionSummary = useMemo(() => buildProductionSummary(boardOrders), [boardOrders]);
+  const totalSummaryPending = useMemo(
+    () => productionSummary.reduce((sum, item) => sum + item.qtyPending, 0),
+    [productionSummary],
+  );
+
+  useEffect(() => {
+    try { setTcpTickets(readLocalTickets(localStorage)); }
+    catch {
+      tcpStorageBlocked.current = true;
+      setTcpStorageError("No se pudo recuperar el respaldo local. Se conservó sin sobrescribirlo; las nuevas comandas estarán solo en memoria hasta revisar esta tablet.");
+    }
+    setTcpRestored(true);
+  }, []);
+
+  useEffect(() => {
+    if (!tcpRestored || tcpStorageBlocked.current) return;
+    try { writeLocalTickets(localStorage, tcpTickets); setTcpStorageError(""); }
+    catch { setTcpStorageError("Las comandas locales están solo en memoria: no hay espacio para respaldarlas. No reinicies esta tablet."); }
+  }, [tcpRestored, tcpTickets]);
 
   const updateDisplayConfig = useCallback((patch: Partial<KdsDisplayConfig>) => {
     setDisplayConfig((current) => {
@@ -242,16 +366,16 @@ export default function KdsScreen() {
   // modal abierto en vez de no hacer nada o salir de la app. Como los
   // modales son estado de React y no rutas, empujamos una entrada al
   // historial al abrir y la consumimos con popstate.
-  const anyOverlayOpen = showConfig || showInfo || showLogout || !!taskPinFor;
+  const anyOverlayOpen = showConfig || showInfo || !!taskPinFor || !!messageModalOrder;
   useEffect(() => {
     if (!anyOverlayOpen) return;
 
     const closeOverlays = () => {
       setShowConfig(false);
       setShowInfo(false);
-      setShowLogout(false);
       setTaskPinFor(null);
       setTaskPinError("");
+      setMessageModalOrder(null);
     };
 
     window.history.pushState({ kdsOverlay: true }, "");
@@ -278,8 +402,9 @@ export default function KdsScreen() {
   // Arranca el TCP listener en port 9100 al montar; al desmontar (o
   // logout) lo detiene. listenForData mantiene una sola subscripción
   // viva — `parseEscPos` traduce el binario a líneas legibles y
-  // pusheamos el ticket al tope de la lista.
+  // agregamos la comanda al final para no mover el trabajo que ya se está leyendo.
   useEffect(() => {
+    if (!tcpRestored) return;
     if (!tcpEnabled) {
       setTcpListening(false);
       stopTcpListener().catch(() => { /* noop */ });
@@ -309,7 +434,10 @@ export default function KdsScreen() {
             orderNumber: parsed.orderNumber,
             tableLabel: parsed.tableLabel,
           }));
-          setTcpTickets((curr) => [...newTickets, ...curr].slice(0, 50));
+          if (newTickets.some((t) => !t.isReceipt && t.items.length > 0)) {
+            playBeep();
+          }
+          setTcpTickets((curr) => [...curr, ...newTickets]);
         });
       } catch {
         // Plugin no disponible (web build) o port ocupado: el KDS sigue
@@ -323,7 +451,41 @@ export default function KdsScreen() {
       setTcpListening(false);
       stopTcpListener().catch(() => { /* noop */ });
     };
-  }, [tcpEnabled]);
+  }, [tcpEnabled, tcpRestored]);
+
+  const flushLanMutations = useCallback(async () => {
+    if (flushingLanRef.current || typeof window === "undefined" || !navigator.onLine) return;
+    const current = readLanFirstState(localStorage);
+    if (current.mutationQueue.length === 0) return;
+
+    flushingLanRef.current = true;
+    const remaining: OfflineKdsMutation[] = [];
+    try {
+      for (const mut of current.mutationQueue) {
+        try {
+          if (mut.type === "ITEM_DONE") {
+            await api.put(`/api/kds/item/${encodeURIComponent(mut.itemId)}/done`, {
+              station: mut.station,
+              orderId: mut.orderId,
+              done: mut.done,
+            });
+          } else if (mut.type === "ORDER_READY") {
+            await api.put(`/api/kds/order/${mut.orderId}/ready`, {});
+          }
+        } catch (err: unknown) {
+          const status = (err as { response?: { status?: number } })?.response?.status;
+          // Si es error de red o 5xx, conservar en cola para reintentar luego.
+          // Si es 404/409 (el pedido ya avanzó en servidor), descartar de la cola.
+          if (!status || status >= 500) {
+            remaining.push(mut);
+          }
+        }
+      }
+      updateLanState((prev) => ({ ...prev, mutationQueue: remaining }));
+    } finally {
+      flushingLanRef.current = false;
+    }
+  }, [updateLanState]);
 
   // Network listeners
   useEffect(() => {
@@ -332,7 +494,10 @@ export default function KdsScreen() {
     updateOnline();
     window.addEventListener("online", updateOnline);
     window.addEventListener("offline", updateOnline);
-    const onOnline = () => { flushPendingLogs().catch(() => {}); };
+    const onOnline = () => {
+      flushPendingLogs().catch(() => {});
+      flushLanMutations().catch(() => {});
+    };
     window.addEventListener("online", onOnline);
     setPendingCount(readPendingLogs().length);
     return () => {
@@ -340,7 +505,7 @@ export default function KdsScreen() {
       window.removeEventListener("offline", updateOnline);
       window.removeEventListener("online", onOnline);
     };
-  }, []);
+  }, [flushLanMutations]);
 
   // Reloj urgencias
   useEffect(() => {
@@ -348,42 +513,142 @@ export default function KdsScreen() {
     return () => clearInterval(t);
   }, []);
 
+  const fetchPackingOrders = useCallback(async () => {
+    if (!serverEnabled) {
+      setPackingOrders([]);
+      setLoadingPacking(false);
+      return;
+    }
+    const sequence = ++packingSequence.current;
+    try {
+      const { data } = await api.get<PackingOrder[]>("/api/kds/packing/orders");
+      if (sequence !== packingSequence.current) return;
+      setPackingOrders(Array.isArray(data) ? data : []);
+    } catch {
+      /* conservar último estado de empaque */
+    } finally {
+      if (sequence === packingSequence.current) setLoadingPacking(false);
+    }
+  }, [serverEnabled]);
+
+  const fetchUnreadMessages = useCallback(async () => {
+    if (!serverEnabled) {
+      setUnreadMessages([]);
+      return;
+    }
+    try {
+      const { data } = await api.get<KdsMessageItem[]>("/api/kds/messages/unread");
+      if (Array.isArray(data)) setUnreadMessages(data);
+    } catch {
+      /* opcional: algunos tests o mocks pueden no exponer este endpoint */
+    }
+  }, [serverEnabled]);
+
   // Polling órdenes
   const fetchOrders = useCallback(async () => {
     if (!serverEnabled) {
-      setOrders([]);
+      setStationMap({});
       setLoadingOrders(false);
       prevIds.current = [];
       return;
     }
+    void flushLanMutations();
+    const sequence = ++fetchSequence.current;
     try {
-      const { data } = await api.get<KdsOrder[]>(`/api/kds/orders/${station}`);
+      const safeGet = (st: StationCode) =>
+        api.get<KdsOrder[]>(`/api/kds/orders/${st}`).then((r) => (Array.isArray(r.data) ? r.data : []));
+
+      const [kitchenData, fryerData] = await Promise.all([
+        safeGet("KITCHEN"),
+        safeGet("FRYER").catch(() => [] as KdsOrder[]),
+      ]);
+
+      const nextMap: Partial<Record<StationCode, KdsOrder[]>> = {
+        KITCHEN: kitchenData,
+        FRYER: fryerData,
+      };
+
+      if (currentStation.current === "BAR") {
+        nextMap.BAR = await safeGet("BAR").catch(() => [] as KdsOrder[]);
+      }
+
+      if (sequence !== fetchSequence.current) return;
       setServerOk(true);
-      const newIds = data.map((o) => o.id);
+      setLastUpdatedAt(Date.now());
+
+      const unifiedData = buildStationOrdersView(nextMap, "KITCHEN");
+      const newIds = unifiedData.map((o) => o.id);
       if (prevIds.current.length > 0 && newIds.some((id) => !prevIds.current.includes(id))) {
         playBeep();
       }
       prevIds.current = newIds;
-      setOrders(data);
+      setStationMap((prev) => ({ ...prev, ...nextMap }));
+
+      // Limpiar overrides de ítems que ya coinciden con el servidor y no tienen mutaciones pendientes
+      updateLanState((prev) => {
+        if (prev.mutationQueue.length > 0) return prev;
+        const activeIds = new Set(unifiedData.map((o) => o.id));
+        const activeNums = new Set(unifiedData.map((o) => normalizeOrderNumber(o.orderNumber)).filter(Boolean));
+        const nextItemOverrides = { ...prev.itemOverrides };
+        for (const order of unifiedData) {
+          for (const item of order.items) {
+            const directKey = `${order.id}::${item.id}`;
+            const stationKey = `${order.id}::${item.station || "KITCHEN"}::${item.id}`;
+            if (nextItemOverrides[directKey] === item.done) delete nextItemOverrides[directKey];
+            if (nextItemOverrides[stationKey] === item.done) delete nextItemOverrides[stationKey];
+          }
+        }
+        return {
+          ...prev,
+          itemOverrides: nextItemOverrides,
+          // Conservar finalizedOrderIds solo mientras el pedido siga apareciendo en el poll activo
+          finalizedOrderIds: prev.finalizedOrderIds.filter((id) => activeIds.has(id) || id.startsWith("tcp-order:")),
+          finalizedOrderNumbers: prev.finalizedOrderNumbers.filter((num) => activeNums.has(num)),
+        };
+      });
     } catch {
-      setServerOk(false);
+      if (sequence === fetchSequence.current) setServerOk(false);
     } finally {
-      setLoadingOrders(false);
+      if (sequence === fetchSequence.current) setLoadingOrders(false);
     }
-  }, [serverEnabled, station]);
+  }, [flushLanMutations, serverEnabled, updateLanState]);
+
+  const refreshAllKdsData = useCallback(() => {
+    void fetchOrders();
+    void fetchPackingOrders();
+    void fetchUnreadMessages();
+  }, [fetchOrders, fetchPackingOrders, fetchUnreadMessages]);
 
   useEffect(() => {
     if (!serverEnabled) {
       setLoadingOrders(false);
-      setOrders([]);
+      setStationMap({});
+      setPackingOrders([]);
+      setUnreadMessages([]);
       prevIds.current = [];
       return;
     }
-    setLoadingOrders(true);
     fetchOrders();
-    const t = setInterval(fetchOrders, displayConfig.receiveMode === "socket" ? 30_000 : 12_000);
-    return () => clearInterval(t);
-  }, [displayConfig.receiveMode, fetchOrders, serverEnabled]);
+    fetchPackingOrders();
+    fetchUnreadMessages();
+    const t = setInterval(() => {
+      fetchOrders();
+      fetchPackingOrders();
+      fetchUnreadMessages();
+    }, displayConfig.receiveMode === "socket" ? 30_000 : 12_000);
+    return () => {
+      ++fetchSequence.current;
+      ++packingSequence.current;
+      clearInterval(t);
+    };
+  }, [displayConfig.receiveMode, fetchOrders, fetchPackingOrders, fetchUnreadMessages, serverEnabled]);
+
+  useEffect(() => {
+    if (tab === "packing" && serverEnabled) {
+      setLoadingPacking(true);
+      void fetchPackingOrders();
+    }
+  }, [tab, serverEnabled, fetchPackingOrders]);
 
   useEffect(() => {
     if (!serverEnabled || typeof window === "undefined") {
@@ -417,28 +682,30 @@ export default function KdsScreen() {
         socket.emit("join:location:admin", locationId);
         socket.emit("join:location:kitchen", locationId);
       }
-      fetchOrders();
+      refreshAllKdsData();
     });
     socket.on("disconnect", () => setSocketConnected(false));
     socket.on("connect_error", () => setSocketConnected(false));
-    socket.on("order:new", fetchOrders);
-    socket.on("new:order", fetchOrders);
-    socket.on("order:updated", fetchOrders);
-    socket.on("order:paid", fetchOrders);
+    socket.on("order:new", refreshAllKdsData);
+    socket.on("new:order", refreshAllKdsData);
+    socket.on("order:updated", refreshAllKdsData);
+    socket.on("order:paid", refreshAllKdsData);
+    socket.on("kds:updated", refreshAllKdsData);
 
     return () => {
       socket.off("connect");
       socket.off("disconnect");
       socket.off("connect_error");
-      socket.off("order:new", fetchOrders);
-      socket.off("new:order", fetchOrders);
-      socket.off("order:updated", fetchOrders);
-      socket.off("order:paid", fetchOrders);
+      socket.off("order:new", refreshAllKdsData);
+      socket.off("new:order", refreshAllKdsData);
+      socket.off("order:updated", refreshAllKdsData);
+      socket.off("order:paid", refreshAllKdsData);
+      socket.off("kds:updated", refreshAllKdsData);
       socket.disconnect();
       if (socketRef.current === socket) socketRef.current = null;
       setSocketConnected(false);
     };
-  }, [fetchOrders, serverEnabled]);
+  }, [refreshAllKdsData, serverEnabled]);
 
   // Polling tareas
   const fetchTasks = useCallback(async () => {
@@ -458,23 +725,235 @@ export default function KdsScreen() {
     fetchTasks();
   }, [tab, fetchTasks]);
 
-  // Acciones orden
+  // Acciones orden (LAN-First: respuesta optimista en 0ms + sincronización/cola en segundo plano)
   async function toggleItem(orderId: string, itemId: string, done: boolean) {
-    try {
-      await api.put(`/api/kds/item/${itemId}/done`, { station, orderId, done: !done });
-      setOrders((prev) => prev.map((o) => {
-        if (o.id !== orderId) return o;
-        const items = o.items.map((i) => (i.id === itemId ? { ...i, done: !done } : i));
-        return { ...o, items, allDone: items.every((i) => i.done) };
+    const nextDone = !done;
+    const targetOrder = boardOrders.find((o) => o.id === orderId);
+    const targetItem = targetOrder?.items.find((i) => i.id === itemId);
+    const targetStations: StationCode[] = targetItem?.syncStations?.length
+      ? targetItem.syncStations
+      : [(targetItem?.station as StationCode) || station];
+
+    const normNum = normalizeOrderNumber(targetOrder?.orderNumber);
+    const itemIndex = targetOrder ? targetOrder.items.findIndex((i) => i.id === itemId) : -1;
+    const directKey = `${orderId}::${itemId}`;
+    const numKey = normNum && itemIndex >= 0 ? `${normNum}::${itemIndex}` : "";
+
+    setActionError("");
+    updateLanState((prev) => {
+      const nextOverrides: Record<string, boolean> = {
+        ...prev.itemOverrides,
+        [directKey]: nextDone,
+        [`${orderId}::${station}::${itemId}`]: nextDone,
+      };
+      for (const st of targetStations) {
+        nextOverrides[`${orderId}::${st}::${itemId}`] = nextDone;
+      }
+      return {
+        ...prev,
+        itemOverrides: nextOverrides,
+        orderNumItemOverrides: numKey
+          ? { ...prev.orderNumItemOverrides, [numKey]: nextDone }
+          : prev.orderNumItemOverrides,
+      };
+    });
+
+    // Si es una comanda recibida por TCP que aún no tiene ID de servidor,
+    // el estado queda persistido en local y se transfiere por #orderNumber.
+    if (targetOrder?.isLocalTcp || orderId.startsWith("tcp-order:")) {
+      return;
+    }
+
+    const enqueueStationMutations = () => {
+      const nowTs = Date.now();
+      const newMutations: OfflineKdsMutation[] = targetStations.map((st, idx) => ({
+        id: `mut-${nowTs}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+        type: "ITEM_DONE",
+        orderId,
+        orderNumber: targetOrder?.orderNumber,
+        station: st,
+        itemId,
+        done: nextDone,
+        createdAt: nowTs,
       }));
-    } catch { /* polling corrige */ }
+      updateLanState((prev) => ({
+        ...prev,
+        mutationQueue: [...prev.mutationQueue, ...newMutations],
+      }));
+    };
+
+    if (!navigator.onLine) {
+      enqueueStationMutations();
+      return;
+    }
+
+    ++fetchSequence.current;
+    try {
+      await Promise.all(
+        targetStations.map((st) =>
+          api.put(`/api/kds/item/${encodeURIComponent(itemId)}/done`, {
+            station: st,
+            orderId,
+            done: nextDone,
+          }),
+        ),
+      );
+      await fetchOrders();
+      void fetchPackingOrders();
+    } catch (error: unknown) {
+      const response = error as { response?: { status?: number; data?: { error?: string } } };
+      const status = response.response?.status;
+      if (!status || status >= 500) {
+        enqueueStationMutations();
+      } else {
+        updateLanState((prev) => {
+          const nextOverrides = { ...prev.itemOverrides };
+          delete nextOverrides[directKey];
+          delete nextOverrides[`${orderId}::${station}::${itemId}`];
+          for (const st of targetStations) {
+            delete nextOverrides[`${orderId}::${st}::${itemId}`];
+          }
+          return { ...prev, itemOverrides: nextOverrides };
+        });
+        setActionError(response.response?.data?.error || "No se guardó la confirmación. Comprueba la conexión y vuelve a intentar.");
+        await fetchOrders();
+      }
+    }
   }
 
   async function finalizeOrder(orderId: string) {
+    if (busyOrders.current.has(orderId)) return;
+    const targetOrder = boardOrders.find((o) => o.id === orderId);
+    if (!targetOrder || !isOrderReadyToFinalize(targetOrder)) return;
+
+    const normNum = normalizeOrderNumber(targetOrder.orderNumber);
+    setActionError("");
+
+    // Ocultar en 0ms del tablero principal y archivar ticket TCP equivalente si existe
+    updateLanState((prev) => ({
+      ...prev,
+      finalizedOrderIds: prev.finalizedOrderIds.includes(orderId)
+        ? prev.finalizedOrderIds
+        : [...prev.finalizedOrderIds, orderId],
+      finalizedOrderNumbers:
+        normNum && !prev.finalizedOrderNumbers.includes(normNum)
+          ? [...prev.finalizedOrderNumbers, normNum]
+          : prev.finalizedOrderNumbers,
+    }));
+
+    if (targetOrder.tcpTicketId || normNum) {
+      setTcpTickets((curr) =>
+        curr.map((t) =>
+          t.id === targetOrder.tcpTicketId || (normNum && normalizeOrderNumber(t.orderNumber) === normNum)
+            ? { ...t, archivedAt: t.archivedAt || Date.now() }
+            : t,
+        ),
+      );
+    }
+
+    if (targetOrder.isLocalTcp || orderId.startsWith("tcp-order:")) {
+      return;
+    }
+
+    if (!navigator.onLine) {
+      updateLanState((prev) => ({
+        ...prev,
+        mutationQueue: [
+          ...prev.mutationQueue,
+          {
+            id: `mut-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: "ORDER_READY",
+            orderId,
+            orderNumber: targetOrder.orderNumber,
+            createdAt: Date.now(),
+          },
+        ],
+      }));
+      return;
+    }
+
+    busyOrders.current.add(orderId);
+    setPendingOrders([...busyOrders.current]);
+    ++fetchSequence.current;
     try {
       await api.put(`/api/kds/order/${orderId}/ready`, {});
-      setOrders((prev) => prev.filter((o) => o.id !== orderId));
-    } catch { /* polling corrige */ }
+      await fetchOrders();
+      void fetchPackingOrders();
+    } catch (error: unknown) {
+      const response = error as { response?: { status?: number; data?: { error?: string } } };
+      const status = response.response?.status;
+      if (!status || status >= 500) {
+        updateLanState((prev) => ({
+          ...prev,
+          mutationQueue: [
+            ...prev.mutationQueue,
+            {
+              id: `mut-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              type: "ORDER_READY",
+              orderId,
+              orderNumber: targetOrder.orderNumber,
+              createdAt: Date.now(),
+            },
+          ],
+        }));
+      } else {
+        updateLanState((prev) => ({
+          ...prev,
+          finalizedOrderIds: prev.finalizedOrderIds.filter((id) => id !== orderId),
+          finalizedOrderNumbers: prev.finalizedOrderNumbers.filter((n) => n !== normNum),
+        }));
+        setActionError(response.response?.data?.error || "No se pudo confirmar la preparación del pedido.");
+        await fetchOrders();
+      }
+    } finally {
+      busyOrders.current.delete(orderId);
+      setPendingOrders([...busyOrders.current]);
+    }
+  }
+
+  async function togglePackingCheck(orderId: string, checkKey: string, checked: boolean) {
+    if (busyPackingOrders.current.has(orderId)) return;
+    busyPackingOrders.current.add(orderId);
+    setPendingPackingOrders([...busyPackingOrders.current]);
+    setActionError("");
+    ++packingSequence.current;
+    try {
+      await api.put(`/api/kds/packing/${orderId}/check`, { checkKey, checked });
+      await fetchPackingOrders();
+    } catch (error: unknown) {
+      const response = error as { response?: { data?: { error?: string } } };
+      setActionError(response.response?.data?.error || "No se guardó la verificación de empaque. Vuelve a intentar.");
+      await fetchPackingOrders();
+    } finally {
+      busyPackingOrders.current.delete(orderId);
+      setPendingPackingOrders([...busyPackingOrders.current]);
+    }
+  }
+
+  async function handleSendOrderMessage(orderId: string, message: string) {
+    const trimmed = message.trim();
+    if (!trimmed || sendingMessage) return;
+    setSendingMessage(true);
+    setActionError("");
+    try {
+      await api.post("/api/kds/message", { orderId, station, message: trimmed });
+      setMessageModalOrder(null);
+      await fetchUnreadMessages();
+    } catch (error: unknown) {
+      const response = error as { response?: { data?: { error?: string } } };
+      setActionError(response.response?.data?.error || "No se pudo enviar el aviso del pedido.");
+    } finally {
+      setSendingMessage(false);
+    }
+  }
+
+  async function handleMarkMessageRead(messageId: string) {
+    try {
+      await api.put(`/api/kds/messages/${encodeURIComponent(messageId)}/read`, {});
+      setUnreadMessages((curr) => curr.filter((m) => m.id !== messageId));
+    } catch {
+      /* ignorar fallo transitorio */
+    }
   }
 
   async function handleTaskPinSubmit(pin: string) {
@@ -526,40 +1005,84 @@ export default function KdsScreen() {
   }
 
   const locationName = typeof window !== "undefined" ? localStorage.getItem("locationName") || "" : "";
+  const restaurantName = typeof window !== "undefined" ? localStorage.getItem("restaurantName")?.trim() || "" : "";
+  const changeStore = () => {
+    if (busyOrders.current.size || busyPackingOrders.current.size || readPendingLogs().length) {
+      setActionError("Espera a que terminen las acciones pendientes y sincroniza las tareas desde Tareas antes de cambiar de tienda.");
+      return;
+    }
+    if (tcpStorageBlocked.current || tcpStorageError) {
+      setActionError("No se puede cambiar de tienda mientras haya un problema con el respaldo de las comandas locales. Revisa el aviso antes de continuar.");
+      return;
+    }
+    onChangeStore();
+  };
+
+  const stationSelectorNode = (
+    <nav aria-label="Estaciones de cocina" className="flex items-center gap-1 overflow-x-auto">
+      {visibleStations.map((s) => (
+        <button
+          key={s.value}
+          type="button"
+          aria-pressed={s.value === station}
+          onClick={() => setStation(s.value)}
+          className="px-3 min-h-[38px] rounded-xl text-xs font-bold whitespace-nowrap focus-visible:outline-2 focus-visible:outline-white"
+          style={{
+            background: s.value === station ? s.color : "rgba(255,255,255,0.05)",
+            color: s.value === station ? "#0a0a0c" : "rgba(255,255,255,0.8)",
+          }}
+        >
+          {s.label}
+        </button>
+      ))}
+    </nav>
+  );
 
   return (
-    <div className="relative min-h-screen w-full bg-[#0c0c0e] text-white overflow-hidden">
+    <div className="relative h-[100dvh] w-full flex flex-col bg-[#0c0c0e] text-white overflow-hidden">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-60 -right-40 w-[700px] h-[700px] rounded-full blur-[120px] opacity-40"
         style={{ background: "radial-gradient(circle, rgba(255,184,77,0.18) 0%, transparent 70%)" }}
       />
 
-      {/* HEADER */}
-      <header className="relative z-10 flex items-center justify-between gap-4 px-5 py-4 bg-white/5 backdrop-blur-md border-b border-white/10 flex-wrap">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[10px] font-black tracking-[0.25em] text-white/40">KDS</span>
-          <span className="text-base font-black text-white tracking-tight truncate">
-            {locationName || "Estación de cocina"}
-          </span>
-        </div>
+      {/* HEADER EN 1 SOLA LÍNEA COMPACTA */}
+      <header className="relative z-10 shrink-0 flex items-center justify-between gap-2 px-2.5 py-1.5 bg-white/5 border-b border-white/10">
+        <button type="button" onClick={changeStore} aria-label="Cambiar tienda o sucursal"
+          title={`${restaurantName} · ${locationName}`}
+          className="shrink-0 flex min-h-[38px] items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-2.5 py-1 text-left focus-visible:outline-2 focus-visible:outline-amber-300">
+          <Store size={16} className="shrink-0 text-[#ffb84d]" />
+          <span className="min-w-0 leading-tight"><span className="block max-w-36 truncate text-xs font-bold">{restaurantName || locationName || "Estación de cocina"}</span>
+            <span className="block max-w-36 truncate text-[10px] font-semibold text-[#ffb84d]">{restaurantName && `${locationName} · `}Cambiar</span></span>
+        </button>
 
-        <div className="flex items-center gap-2">
+        <nav aria-label="Vistas del KDS" className="flex-1 min-w-0 flex items-center justify-center gap-1 overflow-x-auto">
           <TabPill active={tab === "orders"} onClick={() => setTab("orders")}>
-            <Utensils size={14} /> Pedidos
-            {orders.length > 0 && <Counter value={orders.length} />}
+            <Utensils size={13} /> En cocina
+            {boardOrders.length > 0 && <Counter value={boardOrders.length} />}
+          </TabPill>
+          <TabPill active={tab === "summary"} onClick={() => setTab("summary")}>
+            <BarChart3 size={13} /> Consolidado
+            {totalSummaryPending > 0 && <Counter value={totalSummaryPending} />}
+          </TabPill>
+          <TabPill active={tab === "packing"} onClick={() => setTab("packing")}>
+            <PackageCheck size={13} /> Empaque
+            {packingOrders.length > 0 && <Counter value={packingOrders.length} tone="warn" />}
+          </TabPill>
+          <TabPill active={tab === "history"} onClick={() => setTab("history")}>
+            <Clock3 size={13} /> Historial
           </TabPill>
           <TabPill active={tab === "tasks"} onClick={() => setTab("tasks")}>
-            <ListChecks size={14} /> Tareas
+            <ListChecks size={13} /> Tareas
             {pendingCount > 0 && <Counter value={pendingCount} tone="warn" />}
           </TabPill>
           <TabPill active={tab === "tcp"} onClick={() => setTab("tcp")}>
-            <Radio size={14} /> TCP
-            {tcpTickets.length > 0 && <Counter value={tcpTickets.length} />}
+            <Radio size={13} /> Red local
+            {tcpTickets.some((ticket) => !ticket.archivedAt) && <Counter value={tcpTickets.filter((ticket) => !ticket.archivedAt).length} />}
           </TabPill>
-        </div>
+        </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="shrink-0 flex items-center gap-1.5">
           <SourceIndicator
             mode={displayConfig.receiveMode}
             socketConnected={socketConnected}
@@ -570,75 +1093,60 @@ export default function KdsScreen() {
             type="button"
             onClick={() => setShowConfig(true)}
             aria-label="Configuracion KDS"
-            className="w-11 h-11 min-h-[44px] rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 transition-transform"
+            className="w-9 h-9 min-h-[38px] rounded-xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 transition-transform"
           >
-            <Settings2 size={18} />
+            <Settings2 size={16} />
           </button>
           <button
             type="button"
             onClick={() => setShowInfo(true)}
             aria-label="Info"
-            className="w-11 h-11 min-h-[44px] rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 transition-transform"
+            className="w-9 h-9 min-h-[38px] rounded-xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 transition-transform"
           >
-            <Info size={18} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowLogout(true)}
-            aria-label="Cerrar sesión"
-            className="w-11 h-11 min-h-[44px] rounded-2xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 transition-transform text-red-400"
-          >
-            <LogOut size={18} />
+            <Info size={16} />
           </button>
         </div>
       </header>
 
-      {/* Sub-header estación — visible solo cuando hay 2+ estaciones
-          configuradas. Si esta pantalla es de una sola estación
-          (config del LoginScreen) ocultamos los tabs y mostramos el
-          rótulo fijo. */}
-      {tab === "orders" && visibleStations.length > 1 && (
-        <div className="relative z-10 flex items-center gap-2 px-5 py-3 border-b border-white/5 overflow-x-auto">
-          {visibleStations.map((s) => {
-            const active = s.value === station;
-            return (
-              <button
-                key={s.value}
-                type="button"
-                onClick={() => setStation(s.value)}
-                className="px-4 py-2 min-h-[44px] rounded-2xl text-xs font-black tracking-wider uppercase whitespace-nowrap active:scale-95 transition-transform"
-                style={{
-                  background: active ? s.color : "rgba(255,255,255,0.05)",
-                  color:      active ? "#0a0a0c" : "rgba(255,255,255,0.55)",
-                  border:     active ? `1px solid ${s.color}` : "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                {s.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-      {tab === "orders" && visibleStations.length === 1 && (
-        <div className="relative z-10 flex items-center gap-3 px-5 py-3 border-b border-white/5">
-          <span
-            className="inline-block w-3 h-3 rounded-full"
-            style={{ background: visibleStations[0]!.color }}
-          />
-          <span className="text-xs font-black uppercase tracking-[0.2em] text-white/85">
-            {visibleStations[0]!.label}
-          </span>
-          <span className="text-[10px] font-bold text-white/40">
-            · estación dedicada
-          </span>
-        </div>
-      )}
-
-      <main className="relative z-10 p-5">
+      <main className={`relative z-10 flex-1 min-h-0 flex flex-col gap-1.5 px-2.5 py-2 ${tab === "orders" ? "overflow-hidden" : "overflow-y-auto"}`}>
+        {actionError && <p role="alert" className="shrink-0 rounded-xl bg-red-500/15 p-2 text-sm text-red-200">{actionError}</p>}
+        {tcpStorageError && <p role="alert" className="shrink-0 rounded-xl bg-amber-400/15 p-2 text-sm text-amber-200">{tcpStorageError}</p>}
+        {unreadMessages[0] && (
+          <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <MessageSquare size={15} className="shrink-0 text-[#ffb84d]" />
+              <span className="font-bold text-amber-100 truncate">
+                [{STATIONS.find((s) => s.value === unreadMessages[0]?.station)?.label || unreadMessages[0]?.station}] {unreadMessages[0]?.message}
+              </span>
+              {unreadMessages.length > 1 && (
+                <span className="shrink-0 rounded-full bg-amber-400/20 px-2 py-0.5 text-[10px] font-black text-[#ffb84d]">
+                  +{unreadMessages.length - 1} más
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const msg = unreadMessages[0];
+                if (msg) void handleMarkMessageRead(msg.id);
+              }}
+              className="shrink-0 rounded-lg bg-[#ffb84d] px-2.5 py-1 text-[11px] font-black text-[#0a0a0c] active:scale-95"
+            >
+              Enterado
+            </button>
+          </div>
+        )}
         {tab === "orders" ? (
           <OrdersGrid
-            loading={loadingOrders}
-            orders={orders}
+            key={station}
+            stationControls={stationSelectorNode}
+            syncStatus={serverEnabled ? <p role="status" className={`text-xs ${serverOk ? "text-white/75" : "text-red-200"}`}>
+            {lastUpdatedAt ? `Actualizado ${new Date(lastUpdatedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}` : "Conectando con el servidor…"}
+            {!serverOk && " · Modo local-first activo"}
+            {lanState.mutationQueue.length > 0 && ` · ${lanState.mutationQueue.length} cambio(s) en cola local`}
+          </p> : <p role="status" className="text-xs text-[#ffb84d]">Modo Red Local TCP 9100 activo</p>}
+            loading={loadingOrders && boardOrders.length === 0}
+            orders={boardOrders}
             now={now}
             ticketSize={displayConfig.ticketSize}
             receiveMode={displayConfig.receiveMode}
@@ -646,8 +1154,28 @@ export default function KdsScreen() {
             urgentMinutes={displayConfig.urgentMinutes}
             onToggleItem={toggleItem}
             onFinalize={finalizeOrder}
+            onMessageOrder={(order) => setMessageModalOrder(order)}
+            pendingOrders={pendingOrders}
+            onHistory={() => setTab("history")}
           />
-        ) : tab === "tasks" ? (
+        ) : tab === "summary" ? (
+          <ProductionSummaryView
+            station={station}
+            stationControls={stationSelectorNode}
+            loading={loadingOrders}
+            summary={productionSummary}
+            totalPending={totalSummaryPending}
+            onBackToOrders={() => setTab("orders")}
+          />
+        ) : tab === "packing" ? (
+          <PackingOrdersView
+            orders={packingOrders}
+            loading={loadingPacking}
+            pendingOrders={pendingPackingOrders}
+            onToggleCheck={togglePackingCheck}
+            onRefresh={() => void fetchPackingOrders()}
+          />
+        ) : tab === "history" ? <OrderHistory /> : tab === "tasks" ? (
           <TasksList
             loading={loadingTasks}
             tasks={tasks}
@@ -658,11 +1186,14 @@ export default function KdsScreen() {
           />
         ) : (
           <TcpTicketsView
-            tickets={tcpTickets}
+            tickets={tcpTickets.filter((ticket) => showTcpHistory ? !!ticket.archivedAt : !ticket.archivedAt)}
             listening={tcpListening}
             enabled={tcpEnabled}
-            onDismiss={(id) => setTcpTickets((curr) => curr.filter((t) => t.id !== id))}
-            onClear={() => setTcpTickets([])}
+            history={showTcpHistory}
+            onToggleHistory={() => setShowTcpHistory((current) => !current)}
+            onDismiss={(id) => setTcpTickets((curr) => curr.map((ticket) => ticket.id === id
+              ? { ...ticket, archivedAt: ticket.archivedAt ? undefined : Date.now() } : ticket))}
+            onClear={() => setTcpTickets((curr) => curr.map((ticket) => ticket.archivedAt ? ticket : { ...ticket, archivedAt: Date.now() }))}
           />
         )}
       </main>
@@ -674,6 +1205,16 @@ export default function KdsScreen() {
           offline={!online}
           onCancel={() => { setTaskPinFor(null); setTaskPinError(""); }}
           onSubmit={handleTaskPinSubmit}
+        />
+      )}
+
+      {messageModalOrder && (
+        <OrderMessageModal
+          order={messageModalOrder}
+          stationLabel={STATIONS.find((s) => s.value === station)?.label || station}
+          sending={sendingMessage}
+          onCancel={() => setMessageModalOrder(null)}
+          onSubmit={(msg) => void handleSendOrderMessage(messageModalOrder.id, msg)}
         />
       )}
 
@@ -691,9 +1232,6 @@ export default function KdsScreen() {
         />
       )}
 
-      {showLogout && (
-        <KioskUnlockModal onClose={() => setShowLogout(false)} />
-      )}
     </div>
   );
 }
@@ -705,7 +1243,8 @@ function TabPill({ active, onClick, children }: { active: boolean; onClick: () =
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] rounded-2xl text-xs font-black tracking-wider active:scale-95 transition-transform"
+      aria-pressed={active}
+      className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 min-h-[38px] rounded-xl text-xs font-bold focus-visible:outline-2 focus-visible:outline-amber-300 active:scale-95 transition-transform"
       style={{
         background: active ? "#ffb84d" : "rgba(255,255,255,0.05)",
         color:      active ? "#0a0a0c" : "rgba(255,255,255,0.85)",
@@ -741,10 +1280,10 @@ function SourceIndicator({
   const socketOn = mode === "socket" || mode === "both";
   const tcpOn = mode === "tcp" || mode === "both";
   const ok = (!socketOn || socketConnected) && (!tcpOn || tcpListening);
-  const label = mode === "both" ? "SOCKET+TCP" : mode === "socket" ? "SOCKET" : "TCP";
+  const label = mode === "both" ? "Servidor + red local" : mode === "socket" ? "Servidor" : "Red local";
   return (
     <div
-      className="hidden md:inline-flex items-center gap-2 px-3 py-2 rounded-full text-[10px] font-black tracking-widest uppercase"
+      className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase"
       style={{
         background: ok ? "rgba(255,184,77,0.12)" : "rgba(255,255,255,0.06)",
         border: ok ? "1px solid rgba(255,184,77,0.30)" : "1px solid rgba(255,255,255,0.10)",
@@ -762,7 +1301,7 @@ function NetIndicator({ online, serverOk }: { online: boolean; serverOk: boolean
   const ok = online && serverOk;
   return (
     <div
-      className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-[10px] font-black tracking-widest uppercase"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase"
       style={{
         background: ok ? "rgba(136,214,108,0.12)" : "rgba(255,92,51,0.12)",
         border:     ok ? "1px solid rgba(136,214,108,0.35)" : "1px solid rgba(255,92,51,0.35)",
@@ -774,12 +1313,6 @@ function NetIndicator({ online, serverOk }: { online: boolean; serverOk: boolean
       {ok ? "EN LÍNEA" : online ? "SIN SERVER" : "OFFLINE"}
     </div>
   );
-}
-
-function ticketGridMin(size: TicketSize): number {
-  if (size === "compact") return 210;
-  if (size === "large") return 400;
-  return 280;
 }
 
 function ticketSizeStyles(size: TicketSize): {
@@ -795,46 +1328,48 @@ function ticketSizeStyles(size: TicketSize): {
 } {
   if (size === "compact") {
     return {
-      card: "p-3 gap-2.5",
-      item: "p-2 min-h-[52px] gap-2",
-      qty: "w-10 text-base",
-      check: "w-7 h-7 rounded-lg",
-      icon: "w-9 h-9 rounded-xl",
-      meta: "text-[10px] px-2 py-1",
-      action: "min-h-[48px] py-2.5 text-xs rounded-xl",
+      card: "p-2 gap-1.5",
+      item: "px-2 py-1.5 min-h-[36px] gap-2",
+      qty: "text-sm",
+      check: "w-5 h-5 rounded-md",
+      icon: "w-6 h-6 rounded-lg",
+      meta: "text-[10px] px-1.5 py-0.5",
+      action: "min-h-[38px] py-1.5 text-xs rounded-xl",
       orderNumber: "text-lg",
       itemName: "text-[14px]",
     };
   }
   if (size === "large") {
     return {
-      card: "p-5 gap-4",
-      item: "p-3.5 min-h-[82px] gap-3",
-      qty: "w-14 text-2xl",
-      check: "w-10 h-10 rounded-xl",
-      icon: "w-12 h-12 rounded-2xl",
-      meta: "text-xs px-2.5 py-1.5",
-      action: "min-h-[60px] py-3.5 text-sm rounded-2xl",
+      card: "p-2.5 gap-2",
+      item: "px-2.5 py-2 min-h-[48px] gap-2",
+      qty: "text-lg",
+      check: "w-7 h-7 rounded-lg",
+      icon: "w-8 h-8 rounded-xl",
+      meta: "text-xs px-2 py-0.5",
+      action: "min-h-[44px] py-2 text-sm rounded-xl",
       orderNumber: "text-2xl",
-      itemName: "text-[21px]",
+      itemName: "text-[18px]",
     };
   }
   return {
-    card: "p-4 gap-3",
-    item: "p-2.5 min-h-[64px] gap-2.5",
-    qty: "w-12 text-xl",
-    check: "w-8 h-8 rounded-lg",
-    icon: "w-10 h-10 rounded-xl",
-    meta: "text-[11px] px-2 py-1",
-    action: "min-h-[52px] py-3 text-xs rounded-xl",
+    card: "p-2.5 gap-1.5",
+    item: "px-2.5 py-1.5 min-h-[40px] gap-2",
+    qty: "text-base",
+    check: "w-6 h-6 rounded-md",
+    icon: "w-6 h-6 rounded-lg",
+    meta: "text-[10px] px-1.5 py-0.5",
+    action: "min-h-[40px] py-1.5 text-xs rounded-xl",
     orderNumber: "text-xl",
-    itemName: "text-[17px]",
+    itemName: "text-[15px]",
   };
 }
 
 function OrdersGrid({
-  loading, orders, now, ticketSize, receiveMode, delayedMinutes, urgentMinutes, onToggleItem, onFinalize,
+  loading, orders, now, ticketSize, receiveMode, delayedMinutes, urgentMinutes, onToggleItem, onFinalize, onMessageOrder, pendingOrders, onHistory, stationControls, syncStatus,
 }: {
+  stationControls: React.ReactNode;
+  syncStatus: React.ReactNode;
   loading: boolean;
   orders: KdsOrder[];
   now: number;
@@ -844,47 +1379,83 @@ function OrdersGrid({
   urgentMinutes: number;
   onToggleItem: (orderId: string, itemId: string, done: boolean) => void;
   onFinalize: (orderId: string) => void;
+  onMessageOrder: (order: KdsOrder) => void;
+  pendingOrders: string[];
+  onHistory: () => void;
 }) {
-  if (receiveMode === "tcp") {
-    return (
-      <div className="max-w-xl mx-auto rounded-3xl bg-white/5 border border-white/10 p-8 text-center">
-        <Router size={28} className="mx-auto text-[#ffb84d] mb-3" />
-        <p className="text-lg font-black text-white mb-1">Modo TCP local activo</p>
-        <p className="text-sm font-medium text-white/45">
-          Las comandas entran por la IP local de esta tablet. Revisalas en la pestana TCP.
-        </p>
+  const boardRef = useRef<HTMLElement>(null);
+  const [columns, setColumns] = useState(3);
+  const [anchor, setAnchor] = useState<{ id: string; index: number } | null>(null);
+  useEffect(() => {
+    const element = boardRef.current;
+    if (!element) return;
+    const measure = () => setColumns(boardColumns(element.clientWidth, ticketSize));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ticketSize]);
+  // Si hay 1 o 2 pedidos activos, expandir a 2 columnas anchas para aprovechar la pantalla
+  const displayColumns = orders.length > 0 && orders.length <= 2 ? Math.min(columns, 2) : columns;
+  const range = boardRange(orders.map(order => order.id), anchor, displayColumns);
+  const goTo = (index: number) => {
+    const order = orders[index];
+    if (order) setAnchor({ id: order.id, index });
+  };
+  return <section ref={boardRef} aria-label="Cola de cocina" className="flex flex-1 min-h-0 flex-col gap-1.5">
+    <div className="shrink-0 flex flex-wrap items-center justify-between gap-2">
+      {stationControls}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {!!orders.length && !loading && <p role="status" className="text-xs font-semibold text-white/85">Pedidos <span className="font-bold text-white">{range.start + 1}–{range.end}</span> de {orders.length}</p>}
+          {syncStatus}
+        </div>
+        {!!orders.length && !loading && orders.length > displayColumns && <div className="flex items-center gap-1.5">
+          <button type="button" aria-label="Pedidos anteriores" disabled={range.start === 0} onClick={() => goTo(Math.max(0, range.start - displayColumns))}
+            className="inline-flex min-h-[38px] items-center gap-1 rounded-xl border border-white/20 px-2.5 text-xs font-bold disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-amber-300"><ChevronLeft size={16} /> Anteriores</button>
+          <button type="button" aria-label="Pedidos siguientes" disabled={range.end >= orders.length} onClick={() => goTo(range.end)}
+            className="inline-flex min-h-[38px] items-center gap-1 rounded-xl border border-white/20 px-2.5 text-xs font-bold disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-amber-300">Siguientes <ChevronRight size={16} /></button>
+        </div>}
       </div>
-    );
-  }
-  if (loading) {
-    return <p className="text-white/40 text-center py-12 text-sm font-bold">Cargando pedidos…</p>;
-  }
-  if (orders.length === 0) {
-    return <p className="text-white/40 text-center py-16 text-sm font-bold">🎉 Sin pedidos pendientes en esta estación</p>;
-  }
-  return (
-    <div
-      className="grid gap-3 items-start"
-      style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${ticketGridMin(ticketSize)}px, 1fr))` }}
-    >
-      {orders.map((order) => (
-        <OrderCard
-          key={order.id}
-          order={order}
-          now={now}
-          ticketSize={ticketSize}
-          delayedMinutes={delayedMinutes}
-          urgentMinutes={urgentMinutes}
-          onToggleItem={onToggleItem}
-          onFinalize={onFinalize}
-        />
-      ))}
     </div>
-  );
+    {receiveMode === "tcp" && !orders.length ? <div className="m-auto max-w-xl rounded-2xl border border-white/15 bg-white/5 p-6 text-center">
+      <Router size={28} className="mx-auto mb-3 text-[#ffb84d]" />
+      <p className="text-lg font-bold">Recepción por red local (TCP 9100)</p>
+      <p className="mt-2 text-sm text-white/80">En cuanto llegue una comanda por red local aparecerá automáticamente en esta pantalla y en la pestaña Red local.</p>
+    </div> : loading ? <p role="status" className="m-auto text-sm text-white/80">Cargando pedidos…</p>
+    : !orders.length ? <div className="m-auto max-w-xl rounded-2xl border border-white/15 bg-white/5 p-6 text-center">
+      <p className="text-lg font-bold">Sin trabajo pendiente en esta estación</p>
+      <p className="mt-2 text-sm text-white/80">Los pedidos por aceptar, listos, entregados y cancelados se pueden consultar en el historial.</p>
+      <button type="button" onClick={onHistory} className="mt-4 min-h-[44px] rounded-xl bg-[#ffb84d] px-5 font-bold text-black">Ver historial</button>
+    </div> : <>
+      <div className="grid flex-1 min-h-0 gap-2.5" style={{ gridTemplateColumns: `repeat(${displayColumns}, minmax(0, 1fr))` }}>
+        {orders.slice(range.start, range.end).map(order => <OrderCard key={order.id} order={order} now={now} ticketSize={ticketSize}
+          delayedMinutes={delayedMinutes} urgentMinutes={urgentMinutes} onToggleItem={onToggleItem}
+          onFinalize={onFinalize} onMessage={() => onMessageOrder(order)} pending={pendingOrders.includes(order.id)} />)}
+      </div>
+    </>}
+  </section>;
 }
 
+function isOrderReadyToFinalize(order: KdsOrder): boolean {
+  const allItemsDone = order.items.length > 0 && order.items.every((i) => i.done);
+  return typeof order.preparationComplete === "boolean" ? order.preparationComplete : allItemsDone;
+}
+
+const ORDER_TYPE_LABELS: Record<KdsOrder["orderType"], string> = {
+  DINE_IN: "Salón",
+  TAKEOUT: "Para llevar",
+  DELIVERY: "Domicilio",
+};
+
+const STATION_SECTION_STYLES: Record<string, { color: string; bg: string; border: string }> = {
+  Plancha: { color: "#FFB84D", bg: "rgba(255,184,77,0.12)", border: "rgba(255,184,77,0.32)" },
+  Freidora: { color: "#88D66C", bg: "rgba(136,214,108,0.12)", border: "rgba(136,214,108,0.32)" },
+  Barra: { color: "#6CD6FF", bg: "rgba(108,214,255,0.12)", border: "rgba(108,214,255,0.32)" },
+};
+
 function OrderCard({
-  order, now, ticketSize, delayedMinutes, urgentMinutes, onToggleItem, onFinalize,
+  order, now, ticketSize, delayedMinutes, urgentMinutes, onToggleItem, onFinalize, onMessage, pending,
 }: {
   order: KdsOrder;
   now: number;
@@ -893,19 +1464,19 @@ function OrderCard({
   urgentMinutes: number;
   onToggleItem: (orderId: string, itemId: string, done: boolean) => void;
   onFinalize: (orderId: string) => void;
+  onMessage: () => void;
+  pending: boolean;
 }) {
-  const mins = minutesElapsed(order.createdAt, now);
+  const mins = minutesElapsed(order.sentToKitchenAt || order.createdAt, now);
   const u    = urgencyOf(mins, delayedMinutes, urgentMinutes);
   const allDone = order.items.length > 0 && order.items.every((i) => i.done);
-  // Antepone "Mesa" solo si el valor no lo trae ya (el backend manda table.name,
-  // que suele venir como "Mesa 4"), evitando el duplicado "Mesa Mesa 4".
+  const canFinalize = isOrderReadyToFinalize(order);
+  const doneCount = order.items.filter((item) => item.done).length;
   const mesaLabel = order.tableNumber
     ? (/^mesa\b/i.test(order.tableNumber.trim())
         ? order.tableNumber.trim()
         : `Mesa ${order.tableNumber.trim()}`)
     : "";
-  // El cliente solo es "real" si no repite la mesa (ni su etiqueta ni el valor crudo);
-  // en DINE_IN sin nombre el customerName puede venir como la propia mesa ("Mesa 4").
   const custName = order.customerName?.trim() ?? "";
   const isRealCustomer =
     !!custName &&
@@ -916,124 +1487,532 @@ function OrderCard({
     : (custName || "Cliente");
   const totalItems = order.items.reduce((sum, item) => sum + item.quantity, 0);
   const size = ticketSizeStyles(ticketSize);
+  const itemsRef = useRef<HTMLDivElement>(null);
+  const [hasOverflow, setHasOverflow] = useState(false);
+  useEffect(() => {
+    const element = itemsRef.current;
+    if (!element) return;
+    const check = () => setHasOverflow(element.scrollHeight > element.clientHeight + 2);
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    if (element.firstElementChild) observer.observe(element.firstElementChild);
+    check();
+    return () => observer.disconnect();
+  }, [order.id, order.items.length, ticketSize]);
+
+  // Agrupar ítems por estación cuando se visualiza desde Cocina General
+  const hasAreaLabels = order.items.some((i) => Boolean(i.areaLabel));
+  const itemGroups = useMemo(() => {
+    if (!hasAreaLabels) {
+      return [{ label: "", items: order.items }];
+    }
+    const orderPriority = ["Plancha", "Freidora", "Barra"];
+    const buckets = new Map<string, KdsOrderItem[]>();
+    for (const item of order.items) {
+      const key = item.areaLabel || "Cocina";
+      const list = buckets.get(key) || [];
+      list.push(item);
+      buckets.set(key, list);
+    }
+    return Array.from(buckets.entries())
+      .sort(([a], [b]) => {
+        const idxA = orderPriority.indexOf(a);
+        const idxB = orderPriority.indexOf(b);
+        return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
+      })
+      .map(([label, items]) => ({ label, items }));
+  }, [hasAreaLabels, order.items]);
+
+  const renderItemRow = (item: KdsOrderItem) => (
+    <li key={item.id}>
+      <button
+        type="button"
+        onClick={() => onToggleItem(order.id, item.id, item.done)}
+        disabled={pending}
+        aria-pressed={item.done}
+        aria-label={`${item.quantity} × ${displayItemName(item)} · ${item.done ? "marcado" : "pendiente"}`}
+        className={`w-full flex items-center justify-between rounded-xl text-left focus-visible:outline-2 focus-visible:outline-amber-300 active:scale-[0.99] transition-colors ${size.item}`}
+        style={{
+          background: item.done ? "rgba(136,214,108,0.11)" : "rgba(255,255,255,0.055)",
+          border: "2px solid",
+          borderColor: item.done ? "rgba(136,214,108,0.40)" : "rgba(255,255,255,0.09)",
+        }}
+      >
+        <span className="flex-1 min-w-0">
+          <span className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+            <span
+              className={`leading-snug font-black tracking-tight break-words ${size.itemName}`}
+              style={{
+                color: item.done ? "rgba(255,255,255,0.65)" : "white",
+                textDecoration: item.done ? "line-through" : "none",
+              }}
+            >
+              <span className={`mr-1 font-black text-[#ffb84d] ${size.qty}`}>{item.quantity}×</span>{displayItemName(item)}
+            </span>
+            {(item.comboName || item.routingFallback || item.course || item.seatNumber || !!item.modifiers?.length) && (
+              <span className="inline-flex flex-wrap items-center gap-1">
+                {item.comboName && <ItemMeta className={size.meta}>Combo: {item.comboName}</ItemMeta>}
+                {item.routingFallback && <ItemMeta className={size.meta}>Sin ruta</ItemMeta>}
+                {item.course && <ItemMeta className={size.meta}>{item.course}</ItemMeta>}
+                {item.seatNumber && <ItemMeta className={size.meta}>Comensal {item.seatNumber}</ItemMeta>}
+                {(item.modifiers || []).map((mod) => (
+                  <ItemMeta key={mod.id} className={size.meta}>+ {mod.name}</ItemMeta>
+                ))}
+              </span>
+            )}
+          </span>
+          {item.notes && (
+            <span className="block mt-0.5 text-[12px] leading-tight font-semibold text-amber-200">
+              {item.notes}
+            </span>
+          )}
+        </span>
+        <span
+          className={`${size.check} flex items-center justify-center flex-shrink-0`}
+          style={{
+            background: item.done ? "#88D66C" : "transparent",
+            border: "2px solid",
+            borderColor: item.done ? "#88D66C" : "rgba(255,255,255,0.45)",
+          }}
+        >
+          {item.done && <Check size={15} className="text-[#0c0c0e]" strokeWidth={3} />}
+        </span>
+      </button>
+    </li>
+  );
 
   return (
     <article
-      className={`rounded-3xl flex flex-col bg-[#16171a] border ${size.card}`}
+      aria-label={`Pedido ${order.orderNumber}`}
+      className={`h-full min-h-0 overflow-hidden rounded-2xl flex flex-col bg-[#16171a] border ${size.card}`}
       style={{
-        borderColor: allDone ? "rgba(136,214,108,0.4)" : `${u.color}80`,
+        borderColor: allDone ? "rgba(136,214,108,0.45)" : `${u.color}80`,
         boxShadow: allDone
-          ? "0 0 30px rgba(136,214,108,0.15)"
-          : `0 12px 30px rgba(0,0,0,0.35), 0 0 24px ${u.bg}`,
+          ? "0 0 24px rgba(136,214,108,0.15)"
+          : `0 10px 24px rgba(0,0,0,0.35), 0 0 20px ${u.bg}`,
       }}
     >
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0">
-          <span className={`inline-flex items-center justify-center flex-shrink-0 ${size.icon}`}
-                style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.85)" }}>
+      {/* ENCABEZADO COMPACTO EN 1 SOLA FRANJA */}
+      <header className="shrink-0 flex items-center justify-between gap-2 pb-1 border-b border-white/10">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className={`font-black tracking-tight text-white shrink-0 ${size.orderNumber}`}>
+            #{order.orderNumber || order.id.slice(-6)}
+          </span>
+          <span
+            className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold"
+            style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.9)" }}
+          >
             {ORDER_TYPE_ICONS[order.orderType]}
+            <span>{mesaLabel || ORDER_TYPE_LABELS[order.orderType]}</span>
           </span>
-          <div className="min-w-0">
-            <span className="block text-[11px] font-black uppercase tracking-[0.24em] text-white/35">Pedido</span>
-            <span className={`block font-black tracking-tight text-white truncate ${size.orderNumber}`}>
-              {order.orderNumber || order.id.slice(-6)}
+          {order.isLocalTcp && (
+            <span className="shrink-0 rounded-md border border-[#ffb84d]/40 bg-[#ffb84d]/15 px-1.5 py-0.5 text-[10px] font-black tracking-wider text-[#ffb84d]">
+              LAN
             </span>
-          </div>
-        </div>
-        <div className="flex flex-col items-end gap-2 flex-shrink-0">
-          <span className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-black tracking-widest"
-                style={{ background: u.bg, color: u.color }}>
-            <Clock3 size={13} /> {u.label} · {mins}m
+          )}
+          <span title={orderLabel} className="min-w-0 flex-1 inline-flex items-center gap-1 text-xs font-semibold text-white/80 truncate">
+            <UserRound size={12} className="shrink-0 text-white/60" />
+            <span className="truncate">{orderLabel}</span>
           </span>
-          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
-            {totalItems} pieza{totalItems === 1 ? "" : "s"}
+          <span className="shrink-0 rounded-md bg-white/5 px-1.5 py-0.5 text-[11px] font-bold text-[#ffb84d]">
+            {totalItems} pzas.
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {!order.isLocalTcp && (
+            <button
+              type="button"
+              onClick={onMessage}
+              aria-label={`Enviar aviso del pedido ${order.orderNumber}`}
+              title="Enviar aviso a caja"
+              className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 border border-white/10 text-white/75 hover:text-[#ffb84d] active:scale-95"
+            >
+              <MessageSquare size={13} />
+            </button>
+          )}
+          <span className="inline-flex items-center gap-1 px-2 h-7 rounded-lg text-[11px] font-bold"
+                style={{ background: u.bg, color: u.color }}>
+            <Clock3 size={12} /> {u.label} · {mins}m
           </span>
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.07] border border-white/10 text-[12px] font-black text-white/80">
-          <UserRound size={13} /> {orderLabel}
-        </span>
-        {/* Llega a cocina solo después de que el comercio lo aceptó en el TPV. */}
-        {order.source?.toUpperCase() === "MARKETPLACE" && (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-400/12 border border-amber-400/25 text-[11px] font-black uppercase tracking-wider text-amber-300">
-            <Store size={13} /> Marketplace
-          </span>
-        )}
-        {order.notes && (
-          <span className="px-3 py-1.5 rounded-full bg-amber-400/12 border border-amber-400/20 text-[11px] font-bold text-amber-200">
-            {order.notes}
-          </span>
-        )}
+      <div ref={itemsRef} role="region" aria-label={`Productos del pedido ${order.orderNumber}`} tabIndex={0}
+        className="kds-ticket-items flex-1 min-h-0 overflow-y-auto focus-visible:outline-2 focus-visible:outline-amber-300">
+        <div className="space-y-1.5 pr-0.5">
+          {(order.source?.toUpperCase() === "MARKETPLACE" || order.notes) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {order.source?.toUpperCase() === "MARKETPLACE" && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-400/12 border border-amber-400/25 text-[11px] font-bold text-amber-200">
+                  <Store size={12} /> Mercadito
+                </span>
+              )}
+              {order.notes && (
+                <span className="px-2 py-0.5 rounded-lg bg-amber-400/12 border border-amber-400/20 text-[11px] leading-snug font-semibold text-amber-200">
+                  {order.notes}
+                </span>
+              )}
+            </div>
+          )}
+
+          {itemGroups.map((group) => {
+            const stStyle = STATION_SECTION_STYLES[group.label] || {
+              color: "#FFB84D",
+              bg: "rgba(255,184,77,0.10)",
+              border: "rgba(255,184,77,0.28)",
+            };
+            const groupDone = group.items.filter((i) => i.done).length;
+            return (
+              <div key={group.label || "default"} className="space-y-1">
+                {group.label && (
+                  <div
+                    className="flex items-center justify-between px-2.5 py-1 rounded-lg text-[11px] font-black uppercase tracking-wider"
+                    style={{
+                      background: stStyle.bg,
+                      border: `1px solid ${stStyle.border}`,
+                      color: stStyle.color,
+                    }}
+                  >
+                    <span>{group.label}</span>
+                    <span className="text-[10px] font-bold opacity-90">
+                      {groupDone}/{group.items.length} listos
+                    </span>
+                  </div>
+                )}
+                <ul className="flex flex-col gap-1.5">
+                  {group.items.map(renderItemRow)}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      <ul className="flex flex-col gap-2.5">
-        {order.items.map((item) => (
-          <li key={item.id}>
-            <button
-              type="button"
-              onClick={() => onToggleItem(order.id, item.id, item.done)}
-              className={`w-full flex items-stretch rounded-xl text-left active:scale-[0.99] transition-transform ${size.item}`}
-              style={{
-                background: item.done ? "rgba(136,214,108,0.11)" : "rgba(255,255,255,0.065)",
-                border:     item.done ? "1px solid rgba(136,214,108,0.34)" : "1px solid rgba(255,255,255,0.10)",
-              }}
-            >
-              <span
-                className={`${size.check} flex items-center justify-center flex-shrink-0 self-center`}
-                style={{
-                  background: item.done ? "#88D66C" : "transparent",
-                  border:     item.done ? "none" : "2px solid rgba(255,255,255,0.36)",
-                }}
-              >
-                {item.done && <Check size={20} className="text-[#0c0c0e]" strokeWidth={3} />}
-              </span>
-              <span className={`rounded-xl flex items-center justify-center bg-black/25 border border-white/10 font-black text-[#ffb84d] flex-shrink-0 ${size.qty}`}>
-                {item.quantity}x
-              </span>
-              <span className="flex-1 min-w-0 py-0.5">
-                <span
-                  className={`block leading-tight font-black tracking-tight break-words ${size.itemName}`}
-                  style={{
-                    color: item.done ? "rgba(255,255,255,0.48)" : "white",
-                    textDecoration: item.done ? "line-through" : "none",
-                  }}
-                >
-                  {displayItemName(item)}
-                </span>
-                <span className="mt-2 flex flex-wrap gap-1.5">
-                  {item.course && <ItemMeta className={size.meta}>{item.course}</ItemMeta>}
-                  {item.seatNumber && <ItemMeta className={size.meta}>Comensal {item.seatNumber}</ItemMeta>}
-                  {(item.modifiers || []).map((mod) => (
-                    <ItemMeta key={mod.id} className={size.meta}>+ {mod.name}</ItemMeta>
-                  ))}
-                </span>
-                {item.notes && (
-                  <span className="block mt-2 text-[12px] leading-snug font-bold text-amber-200">
-                    {item.notes}
-                  </span>
-                )}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      {!!order.stationStates?.length && (
+        <p className="shrink-0 text-[11px] text-white/80">
+          {order.stationStates.map((state) => `${STATIONS.find((s) => s.value === state.station)?.label || state.station}: ${state.done ? "lista" : "pendiente"}`).join(" · ")}
+        </p>
+      )}
 
-      <button
-        type="button"
-        onClick={() => onFinalize(order.id)}
-        className={`mt-auto w-full font-black tracking-wider uppercase active:scale-95 transition-transform ${size.action}`}
-        style={{
-          background: allDone ? "#88D66C" : "rgba(255,255,255,0.05)",
-          color:      allDone ? "#0a0a0c" : "rgba(255,255,255,0.55)",
-          border:     allDone ? "none" : "1px dashed rgba(255,255,255,0.15)",
-          boxShadow:  allDone ? "0 12px 30px rgba(136,214,108,0.30)" : "none",
-        }}
-      >
-        {allDone ? "Finalizar pedido" : "Marca productos para finalizar"}
-      </button>
+      <footer className="shrink-0 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onFinalize(order.id)}
+          disabled={pending || !canFinalize}
+          aria-busy={pending}
+          className={`flex-1 font-bold focus-visible:outline-2 focus-visible:outline-amber-300 active:scale-95 transition-transform ${size.action}`}
+          style={{
+            background: allDone ? "#88D66C" : "rgba(255,255,255,0.05)",
+            color:      allDone ? "#0a0a0c" : "rgba(255,255,255,0.70)",
+            border:     allDone ? "2px solid #88D66C" : "2px dashed rgba(255,255,255,0.16)",
+            boxShadow:  allDone ? "0 8px 20px rgba(136,214,108,0.28)" : "none",
+          }}
+        >
+          {pending
+            ? "Guardando…"
+            : canFinalize
+              ? `✓ Confirmar preparación (${doneCount}/${order.items.length})`
+              : allDone
+                ? "Estación lista · esperando otras áreas"
+                : `${doneCount}/${order.items.length} marcados · Toca los productos al terminar`}
+        </button>
+        {hasOverflow && (
+          <span className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-400/15 text-[11px] font-bold text-[#ffcf83]">
+            <ChevronsDown size={13} /> Más
+          </span>
+        )}
+      </footer>
     </article>
+  );
+}
+
+function ProductionSummaryView({
+  station,
+  stationControls,
+  loading,
+  summary,
+  totalPending,
+  onBackToOrders,
+}: {
+  station: StationCode;
+  stationControls: React.ReactNode;
+  loading: boolean;
+  summary: SummaryItem[];
+  totalPending: number;
+  onBackToOrders: () => void;
+}) {
+  const stationLabel = STATIONS.find((s) => s.value === station)?.label || station;
+
+  return (
+    <section aria-label="Consolidado de producción" className="flex flex-col gap-4 max-w-6xl w-full mx-auto">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-xl font-black text-white">
+            <BarChart3 size={22} className="text-[#ffb84d]" /> Consolidado de producción · {stationLabel}
+          </h1>
+          <p className="text-xs font-medium text-white/60 mt-1">
+            Suma en tiempo real de unidades pendientes por producto y variante de preparación en esta estación.
+          </p>
+        </div>
+        {stationControls}
+      </div>
+
+      {loading ? (
+        <p role="status" className="py-12 text-center text-sm text-white/70">Calculando consolidado…</p>
+      ) : summary.length === 0 ? (
+        <div className="rounded-2xl border border-white/15 bg-white/5 p-8 text-center">
+          <p className="text-lg font-bold text-white">Nada pendiente por producir en {stationLabel}</p>
+          <p className="mt-1 text-sm text-white/70">Todos los productos asignados a esta estación ya fueron marcados o no hay pedidos activos.</p>
+          <button
+            type="button"
+            onClick={onBackToOrders}
+            className="mt-4 min-h-[44px] rounded-xl bg-[#ffb84d] px-5 text-sm font-black text-[#0a0a0c]"
+          >
+            Volver a comandas
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between rounded-2xl border border-[#ffb84d]/30 bg-[#ffb84d]/10 px-4 py-3">
+            <span className="text-xs font-black uppercase tracking-widest text-[#ffb84d]">
+              Total en línea de producción ({stationLabel})
+            </span>
+            <span className="text-lg font-black text-white">{totalPending} pzas pendientes</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {summary.map((item) => (
+              <div
+                key={item.key}
+                className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[#16171a] p-4 shadow-[0_10px_25px_rgba(0,0,0,0.3)]"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-base font-black text-white leading-snug break-words">{item.name}</p>
+                  {item.instructions.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {item.instructions.map((inst, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center rounded-lg border border-amber-400/25 bg-amber-400/12 px-2 py-0.5 text-xs font-bold text-amber-200"
+                        >
+                          {inst}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <span className="shrink-0 inline-flex items-center justify-center min-w-[52px] h-[52px] px-3 rounded-2xl bg-[#88D66C]/15 border border-[#88D66C]/35 text-2xl font-black text-[#88D66C] tabular-nums">
+                  {item.qtyPending}×
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function PackingOrdersView({
+  orders,
+  loading,
+  pendingOrders,
+  onToggleCheck,
+  onRefresh,
+}: {
+  orders: PackingOrder[];
+  loading: boolean;
+  pendingOrders: string[];
+  onToggleCheck: (orderId: string, checkKey: string, checked: boolean) => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <section aria-label="Empaque de pedidos" className="flex flex-col gap-4 max-w-6xl w-full mx-auto">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-xl font-black text-white">
+            <PackageCheck size={22} className="text-[#ffb84d]" /> Estación de Empaque
+          </h1>
+          <p className="text-xs font-medium text-white/60 mt-1">
+            Verifica bebidas, salsas, ticket y datos de entrega. Al completar todos los puntos el pedido avanza automáticamente a LISTO.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 text-xs font-black uppercase tracking-wider text-white active:scale-95"
+        >
+          <RefreshCcw size={15} /> Actualizar
+        </button>
+      </div>
+
+      {loading && orders.length === 0 ? (
+        <p role="status" className="py-12 text-center text-sm text-white/70">Cargando pedidos en empaque…</p>
+      ) : orders.length === 0 ? (
+        <div className="rounded-2xl border border-white/15 bg-white/5 p-8 text-center">
+          <PackageCheck size={32} className="mx-auto mb-3 text-white/40" />
+          <p className="text-lg font-bold text-white">Sin pedidos pendientes en empaque</p>
+          <p className="mt-1 text-sm text-white/70">
+            Cuando la cocina termine un pedido para llevar o a domicilio (con etapa de empaque activa), aparecerá aquí para su verificación final.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {orders.map((order) => {
+            const busy = pendingOrders.includes(order.id);
+            const completedChecks = order.checks.filter((c) => c.checked).length;
+            const typeLabel =
+              order.orderType === "DELIVERY" ? "A domicilio" : order.orderType === "TAKEOUT" ? "Para llevar" : "En mesa";
+            return (
+              <article
+                key={order.id}
+                aria-label={`Empaque pedido ${order.orderNumber}`}
+                className="flex flex-col gap-3 rounded-2xl border border-white/15 bg-[#16171a] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.35)]"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-xl font-black text-white">#{order.orderNumber}</span>
+                    <p className="text-xs font-bold text-[#ffb84d] mt-0.5">
+                      {typeLabel}
+                      {order.customerName ? ` · ${order.customerName}` : ""}
+                    </p>
+                  </div>
+                  <span className="rounded-lg bg-white/5 border border-white/10 px-2.5 py-1 text-[11px] font-bold text-white/75">
+                    {completedChecks}/{order.checks.length} checks
+                  </span>
+                </div>
+
+                {order.deliveryAddress && (
+                  <p className="rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs font-semibold text-white/80">
+                    📍 {order.deliveryAddress}
+                  </p>
+                )}
+
+                <div className="rounded-xl bg-black/25 border border-white/5 p-3 space-y-1">
+                  {order.items.map((it) => (
+                    <div key={it.id} className="text-sm font-bold text-white/90">
+                      <span className="text-[#ffb84d] font-black mr-1.5">{it.quantity}×</span>
+                      {it.name}
+                      {it.notes && <span className="block text-xs font-semibold text-amber-200 ml-5">Nota: {it.notes}</span>}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-col gap-2 mt-auto">
+                  {order.checks.map((c) => (
+                    <button
+                      key={c.key}
+                      type="button"
+                      disabled={busy}
+                      aria-pressed={c.checked}
+                      onClick={() => onToggleCheck(order.id, c.key, !c.checked)}
+                      className="flex min-h-[48px] items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-left text-xs font-black transition-transform active:scale-[0.99] disabled:opacity-50"
+                      style={{
+                        background: c.checked ? "rgba(136,214,108,0.14)" : "rgba(255,255,255,0.05)",
+                        border: c.checked ? "1px solid rgba(136,214,108,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                        color: c.checked ? "#88D66C" : "rgba(255,255,255,0.9)",
+                      }}
+                    >
+                      <span>{PACKING_CHECK_LABELS[c.key] || c.key}</span>
+                      <span
+                        className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
+                        style={{
+                          background: c.checked ? "#88D66C" : "transparent",
+                          border: c.checked ? "none" : "2px solid rgba(255,255,255,0.45)",
+                        }}
+                      >
+                        {c.checked && <Check size={15} className="text-[#0c0c0e]" strokeWidth={3} />}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function OrderMessageModal({
+  order,
+  stationLabel,
+  sending,
+  onCancel,
+  onSubmit,
+}: {
+  order: KdsOrder;
+  stationLabel: string;
+  sending: boolean;
+  onCancel: () => void;
+  onSubmit: (message: string) => void;
+}) {
+  const [text, setText] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a0a0c]/80 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-3xl p-6 bg-[#16171a] border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.5)]">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <span className="text-[10px] font-black tracking-[0.25em] uppercase text-[#ffb84d]">
+              AVISO DE COCINA · {stationLabel}
+            </span>
+            <h3 className="text-xl font-black text-white tracking-tight mt-1">
+              Pedido #{order.orderNumber || order.id.slice(-6)}
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Cerrar"
+            className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-2 mb-4">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">Mensajes rápidos</p>
+          {QUICK_MESSAGES.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              disabled={sending}
+              onClick={() => onSubmit(preset)}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-left text-xs font-bold text-white/90 hover:border-[#ffb84d]/50 active:scale-[0.99]"
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (text.trim()) onSubmit(text);
+          }}
+          className="flex flex-col gap-3"
+        >
+          <input
+            type="text"
+            maxLength={500}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Escribe un mensaje personalizado…"
+            className="h-12 w-full rounded-xl border border-white/15 bg-black/30 px-3.5 text-sm text-white outline-none focus:border-[#ffb84d]"
+          />
+          <button
+            type="submit"
+            disabled={sending || !text.trim()}
+            className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-[#ffb84d] px-4 text-xs font-black uppercase tracking-widest text-[#0a0a0c] disabled:opacity-40 active:scale-95"
+          >
+            <Send size={14} /> {sending ? "Enviando…" : "Enviar aviso"}
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -1489,35 +2468,6 @@ function getLocalIp(): Promise<string | null> {
   });
 }
 
-function LogoutModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a0a0c]/80 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.5)]">
-        <h3 className="text-xl font-black text-white tracking-tight mb-2">Cerrar sesión</h3>
-        <p className="text-sm font-medium text-white/55 mb-5">
-          Vas a desvincular esta tablet del KDS. Necesitarás iniciar sesión de nuevo como ADMIN para volver a operar.
-        </p>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex-1 min-h-[56px] py-3 rounded-2xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-widest text-xs active:scale-95 transition-transform"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="flex-[2] min-h-[56px] py-3 rounded-2xl bg-red-500 text-white font-black uppercase tracking-widest text-xs active:scale-95 transition-transform"
-          >
-            Cerrar sesión
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <li className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-white/5 border border-white/5">
@@ -1548,13 +2498,15 @@ function playBeep(): void {
 // ── TCP Tickets view (KDS-as-printer) ─────────────────────────────────────
 
 function TcpTicketsView({
-  tickets, listening, enabled, onDismiss, onClear,
+  tickets, listening, enabled, onDismiss, onClear, history, onToggleHistory,
 }: {
   tickets: TcpTicket[];
   listening: boolean;
   enabled: boolean;
   onDismiss: (id: string) => void;
   onClear: () => void;
+  history: boolean;
+  onToggleHistory: () => void;
 }) {
   if (!enabled) {
     return (
@@ -1592,23 +2544,28 @@ function TcpTicketsView({
             </p>
           </div>
         </div>
-        {tickets.length > 0 && (
+        <button type="button" onClick={onToggleHistory} className="min-h-[44px] rounded-xl border border-white/15 px-4 text-sm font-bold">
+          {history ? "Ver pendientes" : "Historial local"}
+        </button>
+        {!history && tickets.length > 0 && (
           <button
             type="button"
             onClick={onClear}
             className="inline-flex items-center gap-2 px-4 h-10 rounded-2xl bg-white/5 border border-white/10 text-xs font-black uppercase tracking-widest text-white/85 active:scale-95"
           >
-            <Trash2 size={14} /> Limpiar
+            <Trash2 size={14} /> Archivar todas
           </button>
         )}
       </div>
+
+      <p className="text-sm text-amber-200/90">Comandas de red local: archivar o recuperar solo cambia esta pantalla; no confirma preparación ni entrega al servidor.</p>
 
       {tickets.length === 0 ? (
         <div className="rounded-3xl bg-white/5 border border-white/10 p-12 text-center">
           <div className="w-14 h-14 mx-auto rounded-2xl bg-white/5 flex items-center justify-center mb-4 text-white/40">
             <Radio size={24} />
           </div>
-          <p className="text-sm font-black text-white/85 mb-1">Sin comandas todavía</p>
+          <p className="text-sm font-black text-white/85 mb-1">{history ? "Sin comandas archivadas" : "Sin comandas pendientes"}</p>
           <p className="text-xs font-medium text-white/40 max-w-sm mx-auto">
             Configura esta tablet como impresora térmica en el TPV usando la
             IP local que aparece en Diagnóstico (Info) y port 9100. Cada
@@ -1658,9 +2615,9 @@ function TcpTicketCard({ ticket, onDismiss }: { ticket: TcpTicket; onDismiss: ()
           type="button"
           onClick={onDismiss}
           className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/5 border border-white/10 active:scale-95 text-white/55"
-          aria-label="Marcar como completado"
+          aria-label={ticket.archivedAt ? "Recuperar comanda local" : "Archivar comanda local"}
         >
-          <Check size={16} />
+          {ticket.archivedAt ? <RefreshCcw size={16} /> : <Check size={16} />}
         </button>
       </div>
 

@@ -1,6 +1,18 @@
 import { buildProductionSummary } from "../production-summary";
 
 describe("buildProductionSummary", () => {
+  test("separa instrucciones de preparación y une modificadores equivalentes", () => {
+    const summary = buildProductionSummary([{ items: [
+      { menuItemId: "burger", quantity: 1, notes: "Sin cebolla" },
+      { menuItemId: "burger", quantity: 2, notes: "Normal" },
+      { menuItemId: "burger", quantity: 1, modifiers: [{ name: "Extra queso" }, { name: "Sin salsa" }] },
+      { menuItemId: "burger", quantity: 2, modifiers: [{ name: "Sin salsa" }, { name: "Extra queso" }] },
+    ] }]);
+    expect(summary).toHaveLength(3);
+    expect(new Set(summary.map((row) => row.key)).size).toBe(3);
+    expect(summary.find((row) => row.instructions.includes("Sin cebolla"))?.qtyPending).toBe(1);
+    expect(summary.find((row) => row.instructions.includes("Extra queso"))?.qtyPending).toBe(3);
+  });
   test("suma cantidades PENDIENTES por menuItemId y excluye las done", () => {
     const summary = buildProductionSummary([
       { items: [
@@ -48,7 +60,7 @@ describe("buildProductionSummary", () => {
         { menuItemId: "b", quantity: 5 },
       ] },
     ]);
-    expect(summary[0].menuItemId).toBe("b");
+    expect(summary[0]?.menuItemId).toBe("b");
   });
 
   test("tolera entradas vacías o inválidas", () => {

@@ -48,8 +48,6 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode appVersion.code
         versionName appVersion.name
-        def kioskExitPin = project.findProperty("KDS_KIOSK_PIN") ?: System.getenv("KDS_KIOSK_PIN") ?: "2580"
-        buildConfigField "String", "KIOSK_EXIT_PIN", "\"${kioskExitPin}\""
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

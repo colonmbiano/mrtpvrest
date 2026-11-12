@@ -1,9 +1,9 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 
 // Vista de EMPAQUE: pedidos en estado PACKING + checklist de verificación. Al
-// completar los 5 checks el backend avanza la orden a READY. Reusa el token del
+// completar los checks aplicables el backend avanza a READY. Reusa el token del
 // KDS (localStorage), así que el operador debe haber entrado por la pantalla
 // principal antes. Autocontenida para no tocar el KdsScreen.
 
@@ -11,7 +11,7 @@ type Check = { key: string; checked: boolean };
 type PackItem = { id: string; name: string; quantity: number; notes?: string | null };
 type PackOrder = {
   id: string;
-  orderNumber: number;
+  orderNumber: string;
   orderType: string;
   customerName?: string | null;
   deliveryAddress?: string | null;
@@ -32,37 +32,47 @@ export default function PackingPage() {
   const [orders, setOrders] = useState<PackOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const busyOrders = useRef(new Set<string>());
+  const [pendingOrders, setPendingOrders] = useState<string[]>([]);
+  const requestSequence = useRef(0);
 
   const fetchOrders = useCallback(async () => {
+    const sequence = ++requestSequence.current;
     try {
       const { data } = await api.get<PackOrder[]>("/api/kds/packing/orders");
+      if (sequence !== requestSequence.current) return;
       setOrders(Array.isArray(data) ? data : []);
       setError("");
     } catch (e: any) {
+      if (sequence !== requestSequence.current) return;
       setError(e?.response?.data?.error || "No se pudo cargar empaque");
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchOrders();
     const t = setInterval(fetchOrders, 10_000);
-    return () => clearInterval(t);
+    return () => { ++requestSequence.current; clearInterval(t); };
   }, [fetchOrders]);
 
   async function toggleCheck(orderId: string, checkKey: string, next: boolean) {
-    // Optimista.
-    setOrders((prev) => prev.map((o) =>
-      o.id === orderId ? { ...o, checks: o.checks.map((c) => c.key === checkKey ? { ...c, checked: next } : c) } : o));
+    if (busyOrders.current.has(orderId)) return;
+    busyOrders.current.add(orderId);
+    setPendingOrders([...busyOrders.current]);
+    setError("");
+    ++requestSequence.current;
     try {
-      const { data } = await api.put(`/api/kds/packing/${orderId}/check`, { checkKey, checked: next });
-      if (data?.advanced) {
-        // La orden salió de empaque (pasó a READY): quitarla de la lista.
-        setOrders((prev) => prev.filter((o) => o.id !== orderId));
-      }
-    } catch {
-      fetchOrders(); // revertir desde el server
+      await api.put(`/api/kds/packing/${orderId}/check`, { checkKey, checked: next });
+      await fetchOrders();
+    } catch (error: unknown) {
+      await fetchOrders();
+      const response = error as { response?: { data?: { error?: string } } };
+      setError(response.response?.data?.error || "No se guardó la verificación. Vuelve a intentar.");
+    } finally {
+      busyOrders.current.delete(orderId);
+      setPendingOrders([...busyOrders.current]);
     }
   }
 
@@ -99,6 +109,8 @@ export default function PackingPage() {
                   <button
                     key={c.key}
                     onClick={() => toggleCheck(o.id, c.key, !c.checked)}
+                    disabled={pendingOrders.includes(o.id)}
+                    aria-pressed={c.checked}
                     style={{
                       display: "flex", alignItems: "center", gap: 10, textAlign: "left",
                       background: c.checked ? "#103024" : "#161d26",

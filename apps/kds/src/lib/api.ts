@@ -49,7 +49,15 @@ export function getApiUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL;
 }
 
-const api = axios.create();
+const api = axios.create({ timeout: 15_000 });
+
+// La vinculación usa credenciales nuevas y encabezados explícitos. Nunca
+// hereda la cuenta de cocina que todavía está vinculada a esta tablet.
+export const linkingApi = axios.create({ timeout: 15_000 });
+linkingApi.interceptors.request.use((config) => {
+  config.baseURL = getApiUrl();
+  return config;
+});
 
 api.interceptors.request.use((config) => {
   config.baseURL = getApiUrl();

@@ -19,3 +19,12 @@ html, body {
 input, textarea {
   user-select: text;
 }
+
+.kds-ticket-items {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #737378 #252529;
+}
+.kds-ticket-items::-webkit-scrollbar { width: 6px; }
+.kds-ticket-items::-webkit-scrollbar-thumb { background: #737378; border-radius: 8px; }
+.kds-ticket-items::-webkit-scrollbar-track { background: #252529; }

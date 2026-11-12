@@ -1,14 +1,13 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { buildProductionSummary, SummaryItem } from "@/lib/production-summary";
 
 // Consolidado de producción por estación: "12 Papas, 8 Burgers pendientes".
-// Fase 1: 100% cliente (deriva de los pedidos polleados de una estación). El
-// desglose de combos por componente queda para Fase 2 (el payload de
-// /orders/:station no trae los componentes del combo). Autocontenida.
+// Deriva de los trabajos de una estación; el servidor ya separa los
+// componentes de combos y el resumen conserva variantes de preparación.
 
-const STATIONS = ["KITCHEN", "GRILL", "FRYER", "BAR"];
+const STATIONS = ["KITCHEN", "GRILL", "FRYER", "BAR"] as const;
 const STATION_LABEL: Record<string, string> = {
   KITCHEN: "Cocina", GRILL: "Plancha", FRYER: "Freidora", BAR: "Barra/Bebidas",
 };
@@ -19,23 +18,30 @@ export default function ConsolidadoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const fetchSummary = useCallback(async (st: string) => {
-    try {
-      const { data } = await api.get(`/api/kds/orders/${st}`);
-      setSummary(buildProductionSummary(Array.isArray(data) ? data : []));
-      setError("");
-    } catch (e: any) {
-      setError(e?.response?.data?.error || "No se pudo cargar el consolidado");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchSummary(station);
-    const t = setInterval(() => fetchSummary(station), 12_000);
-    return () => clearInterval(t);
-  }, [station, fetchSummary]);
+    let active = true;
+    let sequence = 0;
+    setLoading(true);
+    setSummary([]);
+    const fetchSummary = async () => {
+      const request = ++sequence;
+      try {
+        const { data } = await api.get(`/api/kds/orders/${station}`);
+        if (!active || sequence !== request) return;
+        setSummary(buildProductionSummary(Array.isArray(data) ? data : []));
+        setError("");
+      } catch (error: unknown) {
+        if (!active || sequence !== request) return;
+        const response = error as { response?: { data?: { error?: string } } };
+        setError(response.response?.data?.error || "No se pudo cargar el consolidado");
+      } finally {
+        if (active && sequence === request) setLoading(false);
+      }
+    };
+    void fetchSummary();
+    const t = setInterval(fetchSummary, 12_000);
+    return () => { active = false; clearInterval(t); };
+  }, [station]);
 
   const totalPending = summary.reduce((s, i) => s + i.qtyPending, 0);
 
@@ -71,8 +77,10 @@ export default function ConsolidadoPage() {
           <p style={{ color: "#7c8aa0", marginBottom: 10, fontSize: 13 }}>{totalPending} piezas pendientes</p>
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
             {summary.map((s) => (
-              <div key={s.menuItemId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#11161d", border: "1px solid #232c38", borderRadius: 14, padding: "14px 16px" }}>
-                <span style={{ fontWeight: 700, fontSize: 15 }}>{s.name}</span>
+              <div key={s.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#11161d", border: "1px solid #232c38", borderRadius: 14, padding: "14px 16px" }}>
+                <span style={{ fontWeight: 700, fontSize: 15 }}>{s.name}
+                  {s.instructions.length > 0 && <span style={{ display: "block", color: "#fbbf24", fontSize: 13 }}>{s.instructions.join(" · ")}</span>}
+                </span>
                 <span style={{ fontWeight: 900, fontSize: 26, color: "#34d399" }}>{s.qtyPending}</span>
               </div>
             ))}
