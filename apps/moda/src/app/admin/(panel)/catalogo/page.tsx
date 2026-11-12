@@ -16,7 +16,8 @@ import {
   type Giro, type SkuAttrKey,
 } from "@/lib/giro";
 import { setGiro as cacheGiro } from "@/lib/tenant";
-import { parseCatalogCsv, templateCsv, IMPORT_BATCH_SIZE, type ImportRow, type ParseError } from "@/lib/csv-import";
+import { parseCatalogCsv, TEMPLATE_FILE, TEMPLATE_PATH, IMPORT_BATCH_SIZE, type ImportRow, type ParseError } from "@/lib/csv-import";
+import { PUBLIC_WEB_URL } from "@/lib/config";
 
 type ImportSummary = { productsCreated: number; skusCreated: number; skusUpdated: number; errors: { row: number; sku?: string; message: string }[] };
 
@@ -193,12 +194,17 @@ export default function CatalogoPage() {
   }
 
   function downloadTemplate() {
-    const blob = new Blob([templateCsv()], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
+    // En el APK (Capacitor) el WebView no guarda archivos: se abre la plantilla
+    // hospedada en el sitio web y Capacitor la manda al navegador del sistema,
+    // que es quien la descarga. En web/escritorio basta un enlace de descarga.
+    const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    if (cap?.isNativePlatform?.()) {
+      window.location.href = `${PUBLIC_WEB_URL}${TEMPLATE_PATH}`;
+      return;
+    }
     const a = document.createElement("a");
-    a.href = url; a.download = "plantilla-catalogo.csv";
+    a.href = TEMPLATE_PATH; a.download = TEMPLATE_FILE;
     document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
   }
 
   function openEdit(s: RetailSku) { setEditSku(s); setEditForm({ price: String(s.price ?? ""), cost: String(s.cost ?? ""), barcode: s.barcode || "", isActive: s.isActive }); setModal("edit"); }

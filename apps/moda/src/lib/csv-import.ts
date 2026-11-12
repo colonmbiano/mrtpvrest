@@ -153,13 +153,11 @@ export function parseCatalogCsv(text: string): ParseResult {
   return { rows, errors, headerWarnings };
 }
 
-/** CSV de plantilla con encabezados y dos filas de ejemplo. */
-export function templateCsv(): string {
-  const header = COLUMNS.join(",");
-  const ej1 = ["Camisa Oxford", "Camisas", "Zara", "CAM-OXF-M-AZ", "7501234567890", "299.00", "150.00", "M", "Azul", "Algodón", "", "PZA", "", "P1-A2", ""];
-  const ej2 = ["Tornillo 1/4 x 2", "Tornillería", "Truper", "TOR-14-2", "", "2.50", "1.10", '1/4"', "", "Acero", "Estándar", "CAJA", "100", "A3-B1", "PROV-44"];
-  const esc = (v: string) => (v.includes(",") || v.includes('"') ? '"' + v.replace(/"/g, '""') + '"' : v);
-  return [header, ej1.map(esc).join(","), ej2.map(esc).join(",")].join("\n") + "\n";
-}
+// Plantilla (encabezados + dos filas de ejemplo): es un archivo estático en
+// public/, no se genera en el cliente. Así la misma URL sirve para la descarga en
+// web y para abrirla desde el APK, donde el WebView no puede guardar un Blob. Si
+// cambian las COLUMNS, actualizar también ese archivo.
+export const TEMPLATE_FILE = "plantilla-catalogo.csv";
+export const TEMPLATE_PATH = `/${TEMPLATE_FILE}`;
 
 export const IMPORT_BATCH_SIZE = 500;
