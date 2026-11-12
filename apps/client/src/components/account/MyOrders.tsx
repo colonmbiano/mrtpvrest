@@ -14,7 +14,7 @@ import { cartShareUrl } from '@/lib/cartLink';
 import type { CartLine } from '@/lib/cartStore';
 import { fetchCurrentAccount } from '@/lib/marketplaceAccount';
 import {
-  fetchOrderCodes, FINAL_ORDER_STATUSES, listMyOrders, ORDER_STATUS_LABEL, type BuyerOrder,
+  cancelMyOrder, canCancelOrder, storeWhatsAppUrl, fetchOrderCodes, FINAL_ORDER_STATUSES, listMyOrders, ORDER_STATUS_LABEL, type BuyerOrder,
 } from '@/lib/marketplaceOrders';
 import MarketplaceTrackingModal from '@/components/MarketplaceTrackingModal';
 import { AccountShell, Notice, secondaryButton, textLink } from './AccountUi';
@@ -54,6 +54,8 @@ export default function MyOrders() {
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [cancelling, setCancelling] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [tracked, setTracked] = useState<Tracked | null>(null);
 
@@ -79,6 +81,16 @@ export default function MyOrders() {
     if ('ok' in result) { setError(result.message); return; }
     setOrders(old => [...(old ?? []), ...result.orders]);
     setNextBefore(result.nextBefore);
+  };
+
+  const cancel = async (orderId: string) => {
+    if (cancelling) return;
+    setCancelling(orderId);
+    const result = await cancelMyOrder(orderId, { apiUrl });
+    setCancelling(null);
+    if ('ok' in result) { setError(result.message); return; }
+    setCancelTarget(null);
+    await load();
   };
 
   const follow = async (order: BuyerOrder) => {
@@ -125,12 +137,21 @@ export default function MyOrders() {
                 className={secondaryButton + ' gap-1'}>
                 <Bike className="h-4 w-4" aria-hidden="true" /> {opening === order.orderId ? 'Abriendo…' : 'Seguir pedido'} <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </button>}
+              {canCancelOrder(order.status) && <button type="button" className={secondaryButton}
+                disabled={cancelling !== null} onClick={() => setCancelTarget(order.orderId)}>Cancelar pedido</button>}
+              {storeWhatsAppUrl(order.merchant.phone) && <a href={storeWhatsAppUrl(order.merchant.phone)!}
+                target="_blank" rel="noopener noreferrer" className={secondaryButton}>WhatsApp de la tienda</a>}
               {/* Documento completo: la tienda arma el carrito al cargar (CartDeepLinkLoader). */}
               {!active && reorderUrl(order) && <a href={reorderUrl(order)!} className={secondaryButton + ' gap-1'}>
                 <RotateCcw className="h-4 w-4" aria-hidden="true" /> Volver a pedir
               </a>}
             </span>
           </div>
+          {cancelTarget === order.orderId && <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm">
+            <p>¿Quieres cancelar este pedido?</p>
+            <button type="button" disabled={cancelling !== null} onClick={() => cancel(order.orderId)} className={secondaryButton + ' mt-2 mr-2'}>Confirmar cancelación</button>
+            <button type="button" disabled={cancelling !== null} onClick={() => setCancelTarget(null)} className={secondaryButton}>Volver</button>
+          </div>}
         </li>;
       })}
     </ul>}
@@ -139,6 +160,6 @@ export default function MyOrders() {
     </button>}
     {tracked && <MarketplaceTrackingModal orderId={tracked.order.orderId} orderNumber={tracked.order.orderNumber ?? undefined}
       fulfillment={tracked.order.fulfillment} pickupPin={tracked.pickupPin} deliveryPin={tracked.deliveryPin}
-      apiUrl={apiUrl} primary={ACCENT} onClose={() => { setTracked(null); load(); }} />}
+      merchantPhone={tracked.order.merchant.phone} apiUrl={apiUrl} primary={ACCENT} onClose={() => { setTracked(null); load(); }} />}
   </AccountShell>;
 }

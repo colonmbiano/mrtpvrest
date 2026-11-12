@@ -786,3 +786,12 @@ test('C4: la cotización envía variante y modificadores, nunca complementos ni 
     lines: [cartLine({ variantId: 'doble', modifierIds: ['queso', 'tocino'], price: 999 })] });
   assert.deepEqual(body.items, [{ menuItemId: 'burger', quantity: 2, variantId: 'doble', modifierIds: ['queso', 'tocino'] }]);
 });
+
+test('cancelación solo por aceptar y enlaces WhatsApp limitados a teléfonos públicos válidos', async () => {
+  const { canCancelOrder, storeWhatsAppUrl } = await import('../src/lib/marketplaceOrders.ts');
+  assert.equal(canCancelOrder('PENDING_PAYMENT'), true);
+  assert.equal(canCancelOrder('PENDING_MERCHANT'), true);
+  for (const status of ['CONFIRMED', 'DELIVERED', 'CANCELLED']) assert.equal(canCancelOrder(status), false);
+  assert.equal(storeWhatsAppUrl('527221234567'), 'https://wa.me/527221234567');
+  for (const phone of [null, '', 'javascript:alert(1)', '123']) assert.equal(storeWhatsAppUrl(phone), null);
+});
