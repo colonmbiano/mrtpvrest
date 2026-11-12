@@ -278,8 +278,12 @@ export default function CatalogoPage() {
         <span className="inline-flex h-10 items-center gap-2 rounded-xl border bg-[var(--surf-1)] px-3 text-[13px] font-semibold text-[var(--tx-mut)]" style={{ borderColor: "var(--bd-1)" }}><Filter size={15} /> Filtros</span>
         <Select value={categoryFilter} onChange={setCategoryFilter} label="Categoría" options={[{ v: "all", t: "Todas" }, ...categories.map((c) => ({ v: c, t: c }))]} />
         <Select value={stockFilter} onChange={setStockFilter} label="Estado de stock" options={[{ v: "all", t: "Todos" }, { v: "disponible", t: "Disponible" }, { v: "stock_bajo", t: "Stock bajo" }, { v: "sin_stock", t: "Sin stock" }]} />
-        <button type="button" onClick={() => { setImp(null); setImpResult(null); setModal("import"); }} className="ml-auto inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-[13px] font-bold text-[var(--tx-hi)]" style={{ borderColor: "var(--bd-1)" }}><Upload size={16} /> Importar CSV</button>
-        <button type="button" onClick={() => { setForm({ ...emptyProduct }); setMode("new"); setExistingId(""); setModal("product"); }} className="inline-flex h-10 items-center gap-2 rounded-xl px-4 text-[13px] font-bold text-white" style={{ background: "var(--brand-primary)" }}><PackagePlus size={16} /> Nuevo producto</button>
+        {/* Las dos acciones van en un grupo: si no caben junto a los filtros, bajan
+            juntas y alineadas a la derecha, en vez de dejar un botón huérfano. */}
+        <div className="ml-auto flex items-center gap-2">
+          <button type="button" onClick={() => { setImp(null); setImpResult(null); setModal("import"); }} className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-xl border px-4 text-[13px] font-bold text-[var(--tx-hi)]" style={{ borderColor: "var(--bd-1)" }}><Upload size={16} /> Importar CSV</button>
+          <button type="button" onClick={() => { setForm({ ...emptyProduct }); setMode("new"); setExistingId(""); setModal("product"); }} className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-xl px-4 text-[13px] font-bold text-white" style={{ background: "var(--brand-primary)" }}><PackagePlus size={16} /> Nuevo producto</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
