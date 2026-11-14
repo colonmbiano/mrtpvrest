@@ -3,6 +3,7 @@
 // No application, environment loader or database import: dependencies are injected.
 // The two helpers below are pure (no DB/env) and shared with /api/store/info and
 // /api/store/menu, so the catalog shows the same open state and promo windows.
+const { publicStoreLogoUrl } = require('./public-store-logo');
 const { computeOpenState } = require('../utils/storeHours');
 const { itemPromoWindowOpen } = require('./promo-window');
 const SLUG = /^[a-z0-9-]{1,100}$/;
@@ -188,9 +189,13 @@ function createCatalog({ getAdapter, storeSlugs = '', includeApproved = false })
     const { rows, total } = await (kind === 'stores' ? adapter.listStores : adapter.listProducts)({
       ...query, slugs, ...(includeApproved ? { includeApproved: true } : {}) });
     // Project again at the public boundary, even if an injected adapter returns extra fields.
+    // Store logos: an https URL is published as is. The admin ("Mi marca") stores the
+    // logo as a base64 data URL, which is never published inline; it is served as an
+    // image by GET /api/store/logo and the catalog links to that.
+    const storeLogo = row => publicImage(row.logoUrl) || publicStoreLogoUrl(row.logoUrl, row.slug);
     const items = rows.map(row => kind === 'stores'
       ? { slug: row.slug, name: row.name, businessType: row.businessType,
-        ...(publicImage(row.logoUrl) ? { logoUrl: publicImage(row.logoUrl) } : {}),
+        ...(storeLogo(row) ? { logoUrl: storeLogo(row) } : {}),
         isOpen: row.isOpen === true, closedMessage: row.closedMessage ?? null,
         estimatedDelivery: row.estimatedDelivery ?? null, deliveryFee: row.deliveryFee ?? null,
         freeDeliveryFrom: row.freeDeliveryFrom ?? null, minOrderAmount: row.minOrderAmount ?? null }
