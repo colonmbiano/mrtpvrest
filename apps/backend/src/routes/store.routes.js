@@ -42,6 +42,7 @@ const { addLoyaltyPoints, genLoyaltyQr, getTier, normalizeLoyaltyPhone } = requi
 const { isMilestoneEnabled, processCustomerMilestone } = require('../services/loyalty-milestone.service');
 const { runOrderDictationSmart } = require('../services/order-dictation.service');
 const { createStoreDeliveryPin } = require('../lib/store-delivery-pin');
+const { decodeStoreLogo } = require('../lib/public-store-logo');
 // PIN de entrega de pedidos propios a domicilio (STORE_DELIVERY_PIN_MODE): el
 // comprador lo recibe al crear el pedido y en su historial; el repartidor lo pide.
 const storeDeliveryPin = createStoreDeliveryPin();
@@ -240,6 +241,29 @@ async function resolveStore(req, res) {
     return null;
   }
 }
+
+// ── GET /api/store/logo ──────────────────────────────────────────────────────
+// El logo se guarda como data URL en base64 (admin "Mi marca"). Aquí se sirve
+// como imagen para quien necesita una URL https: el catálogo del marketplace
+// (lib/marketplace-catalog.js) enlaza a esta ruta. Solo PNG/JPEG/WebP válidos;
+// el logo ya es público vía /api/store/info, así que no expone nada nuevo.
+router.get('/logo', async (req, res) => {
+  try {
+    const store = await resolveStore(req, res);
+    if (!store) return;
+    const image = decodeStoreLogo(store.restaurant.logoUrl);
+    if (!image) return res.status(404).end();
+    res.set('Content-Type', image.contentType);
+    res.set('X-Content-Type-Options', 'nosniff');
+    // helmet() pone CORP same-origin por defecto; el logo se incrusta desde otro
+    // origen (el sitio del marketplace), así que esta respuesta lo abre.
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.set('Cache-Control', 'public, max-age=300');
+    return res.send(image.bytes);
+  } catch {
+    return res.status(503).json({ error: 'Logo no disponible.' });
+  }
+});
 
 // ── GET /api/store/info ──────────────────────────────────────────────────────
 router.get('/info', async (req, res) => {

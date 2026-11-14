@@ -171,6 +171,19 @@ test('only safe https public photos are projected for stores and products', asyn
   assert.equal(products.items[1].imageUrl, undefined);
 });
 
+test('a store logo saved as a base64 data URL is published as a link to /api/store/logo', async () => {
+  const { prisma, stores } = fixtures();
+  const png = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('logo')]).toString('base64');
+  stores[0].logoUrl = `data:image/png;base64,${png}`;
+  stores[1].logoUrl = 'data:image/svg+xml;base64,PHN2Zy8+';
+  const catalog = createCatalog({ storeSlugs: 'alpha,beta', getAdapter: () => createPrismaCatalogAdapter(prisma) });
+  const shop = await catalog.listStores({});
+  // The data URL itself never leaves the server: only the https link does.
+  assert.equal(shop.items[0].logoUrl, 'https://api.mrtpvrest.com/api/store/logo?r=alpha');
+  assert.equal(shop.items[1].logoUrl, undefined);
+  assert.ok(!JSON.stringify(shop).includes('base64'));
+});
+
 test('store pagination counts after filters and uses id to break tied names', async () => {
   const { catalog } = catalogFixture();
   assert.equal((await catalog.listStores({ pageSize: '1' })).items[0].slug, 'alpha');

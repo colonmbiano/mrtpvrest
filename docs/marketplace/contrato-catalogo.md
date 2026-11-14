@@ -37,6 +37,12 @@ GET `/api/marketplace/stores?q=&businessType=&page=1&pageSize=12`
 - StoreSummary: `{ slug, name, businessType }`. No necesita id/tenantId, contactos
   ni imagenes externas para esta primera entrega. El cliente construye enlace
   relativo `/${encodeURIComponent(slug)}` y valida slug de un solo segmento.
+- `logoUrl` (opcional): solo una URL https. Si el logo de la tienda ya es una URL
+  https se publica tal cual; si esta guardado como data URL en base64 (asi lo sube
+  el admin en "Mi marca"), se publica el enlace `GET /api/store/logo?r=<slug>`, que
+  lo sirve como imagen (solo PNG/JPEG/WebP validos). El data URL nunca viaja en el
+  catalogo. La base del enlace es `PUBLIC_API_URL` (por defecto
+  `https://api.mrtpvrest.com`); el sitio debe permitir ese origen en `img-src`.
 
 GET `/api/marketplace/products?q=&store=&page=1&pageSize=12`
 
