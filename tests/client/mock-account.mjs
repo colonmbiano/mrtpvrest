@@ -72,6 +72,7 @@ const server = createServer(async (req, res) => {
   if (path === id + '/register' && req.method === 'POST') {
     const b = await body(req);
     const email = String(b.email || '').trim().toLowerCase();
+    if (b.termsAccepted !== true) return send(res, 422, { code: 'TERMS_ACCEPTANCE_REQUIRED' });
     if (b.role !== 'BUYER' || !email.includes('@') || String(b.password || '').length < 12) return send(res, 400, { error: 'INVALID_SIGNUP', code: 'INVALID_SIGNUP' });
     if (!accounts.has(email)) {
       const accountId = 'acc-' + (accounts.size + 1);

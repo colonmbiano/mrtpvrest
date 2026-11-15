@@ -25,6 +25,7 @@ async function signUp(page: Page, email: string) {
   await page.getByLabel('Ciudad o localidad').fill('Valle de Bravo');
   await page.getByLabel('Contraseña', { exact: true }).fill(PASSWORD);
   await page.getByLabel('Confirma tu contraseña').fill(PASSWORD);
+  await page.getByRole('checkbox', { name: /Acepto el aviso de privacidad/ }).check();
   await page.getByRole('button', { name: 'Crear cuenta' }).click();
   await expect(page.getByRole('heading', { name: 'Revisa tu correo' })).toBeVisible();
 }
@@ -76,6 +77,7 @@ test('el registro valida datos y contraseñas antes de enviar', async ({ page })
   await page.getByLabel('Ciudad o localidad').fill('Valle de Bravo');
   await page.getByLabel('Contraseña', { exact: true }).fill('corta');
   await page.getByLabel('Confirma tu contraseña').fill('corta');
+  await page.getByRole('checkbox', { name: /Acepto el aviso de privacidad/ }).check();
   await page.getByRole('button', { name: 'Crear cuenta' }).click();
   await expect(page.getByText('Ingresa un correo electrónico válido.')).toBeVisible();
   await expect(page.getByText('Usa un teléfono de México de 10 dígitos.')).toBeVisible();
@@ -85,6 +87,7 @@ test('el registro valida datos y contraseñas antes de enviar', async ({ page })
   await page.getByLabel('Teléfono').fill('7221234567');
   await page.getByLabel('Contraseña', { exact: true }).fill(PASSWORD);
   await page.getByLabel('Confirma tu contraseña').fill(PASSWORD + ' distinta');
+  await page.getByRole('checkbox', { name: /Acepto el aviso de privacidad/ }).check();
   await page.getByRole('button', { name: 'Crear cuenta' }).click();
   await expect(page.getByText('Las contraseñas no coinciden.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Crea tu cuenta de cliente' })).toBeVisible();
@@ -483,4 +486,16 @@ test('app: en iPhone, Mi cuenta explica cómo agregarla a inicio; ya instalada n
   await page.reload();
   await expect(page.getByRole('region', { name: 'Avisos de tus pedidos' })).toContainText('Los avisos funcionan');
   await expect(install).toHaveCount(0);
+});
+
+
+test('la aceptación inicia desmarcada y los documentos señalan la revisión pendiente', async ({ page }) => {
+  await page.goto('/registro?tipo=cliente');
+  await expect(page.getByRole('button', { name: 'Crear cuenta' })).toBeDisabled();
+  await expect(page.getByRole('checkbox', { name: /Acepto el aviso de privacidad/ })).not.toBeChecked();
+  for (const route of ['/privacidad', '/terminos']) {
+    await page.goto(route);
+    await expect(page.getByText('Documento en revisión')).toBeVisible();
+    await expect(page.getByText(/\[RESPONSABLE\]/)).toBeVisible();
+  }
 });

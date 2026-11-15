@@ -18,6 +18,7 @@ export const PASSWORD_MAX = 128;
 // Mensajes por código del backend. Los de registro y recuperación son genéricos a
 // propósito: el servidor no revela si un correo existe.
 const MESSAGES: Record<string, string> = {
+  TERMS_ACCEPTANCE_REQUIRED: 'Acepta el aviso de privacidad y los términos para continuar.',
   INVALID_SIGNUP: 'Revisa tus datos: nombre, correo, teléfono de 10 dígitos, localidad y una contraseña de 12 a 128 caracteres.',
   INVALID_CREDENTIALS: 'Correo o contraseña incorrectos, o tu correo aún no está verificado.',
   INVALID_EMAIL: 'Escribe un correo electrónico válido.',
@@ -79,7 +80,7 @@ async function identityRequest(path: string, init: { method: 'GET' | 'POST'; bod
 
 type Options = { apiUrl?: string | null; fetchImpl?: FetchLike };
 
-export type SignupInput = { fullName: string; email: string; phone: string; city: string; password: string; turnstileToken?: string };
+export type SignupInput = { fullName: string; email: string; phone: string; city: string; password: string; termsAccepted: boolean; turnstileToken?: string };
 
 // Respuesta genérica a propósito (202): no confirma si el correo ya tenía cuenta.
 export async function registerBuyer(input: SignupInput, options?: Options): Promise<true | AccountFailure> {
