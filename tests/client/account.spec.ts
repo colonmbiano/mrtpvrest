@@ -452,13 +452,17 @@ test('app: cuando el navegador permite instalarla, la portada y Mi cuenta lo ofr
   await verify(page, email);
   await logIn(page, email);
   const install = page.getByRole('region', { name: 'Instala la app' });
-  // Sin el aviso del navegador (y fuera de iPhone) la sección no aparece.
+  const installButton = install.getByRole('button', { name: 'Instalar app' });
   await expect(page.getByRole('region', { name: 'Avisos de tus pedidos' })).toContainText('Los avisos funcionan');
-  await expect(install).toHaveCount(0);
-  await offerInstall(page, install.getByRole('button', { name: 'Instalar app' }));
-  await install.getByRole('button', { name: 'Instalar app' }).click();
+  // Sin el aviso del navegador (y fuera de iPhone) la sección explica cómo
+  // instalarla desde el menú del navegador, sin botón.
+  await expect(install).toContainText('Instalar aplicación');
+  await expect(installButton).toHaveCount(0);
+  await offerInstall(page, installButton);
+  await installButton.click();
   await expect.poll(() => installPrompts(page)).toBe(1);
-  await expect(install).toHaveCount(0);
+  // El aviso del navegador sirve una sola vez: el botón ya no se ofrece.
+  await expect(installButton).toHaveCount(0);
 });
 
 test('app: en iPhone, Mi cuenta explica cómo agregarla a inicio; ya instalada no insiste', async ({ page }, info) => {
