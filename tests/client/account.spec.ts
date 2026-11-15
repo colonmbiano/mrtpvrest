@@ -63,7 +63,9 @@ test('registro, verificación, entrada, direcciones y salida', async ({ page }, 
   await expect(page.getByText('Calle Pino 22, La Peña')).toBeVisible();
 
   await page.getByRole('button', { name: 'Cerrar sesión' }).click();
-  await expect(page).toHaveURL(/\/$/);
+  // Margen extra: en la primera prueba de la corrida, `next dev` compila la portada
+  // al vuelo al salir y la espera por defecto (5 s) no siempre alcanza.
+  await expect(page).toHaveURL(/\/$/, { timeout: 20_000 });
   await page.goto('/cuenta');
   await expect(page).toHaveURL(/\/cuenta\/entrar\?next=%2Fcuenta|\/cuenta\/entrar\?next=\/cuenta/);
 });
