@@ -32,12 +32,13 @@ test.describe('KDS (Kitchen Display System)', () => {
     await expect(page.getByText(/qué muestra esta pantalla/i)).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: /vincular pantalla/i }).click();
 
-    // KdsScreen montado: validamos el chrome del tablero (tab "Pedidos"),
-    // NO el estado vacío. La cocina puede tener comandas si el spec 07
-    // (meseros → envía a cocina) ya corrió contra el mismo restaurante
-    // sembrado; "sin pedidos pendientes" sería frágil por ese cruce.
+    // KdsScreen montado: validamos el chrome del tablero (pestaña "En cocina"
+    // de las vistas del KDS; antes del rediseño se llamaba "Pedidos"), NO el
+    // estado vacío. La cocina puede tener comandas si el spec 07 (meseros →
+    // envía a cocina) ya corrió contra el mismo restaurante sembrado; "sin
+    // pedidos pendientes" sería frágil por ese cruce.
     await expect(
-      page.getByRole('button', { name: /pedidos/i }).first()
+      page.getByRole('navigation', { name: 'Vistas del KDS' }).getByRole('button', { name: /en cocina/i })
     ).toBeVisible({ timeout: 20_000 });
 
     // No unhandled React/JS errors should have fired

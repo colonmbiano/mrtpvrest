@@ -100,7 +100,9 @@ const server = createServer(async (req, res) => {
     if (!link || link.purpose !== 'verify') return send(res, 400, { error: 'INVALID_TOKEN', code: 'INVALID_TOKEN' });
     links.delete(b.token);
     accounts.get(link.email).verified = true;
-    return send(res, 200, { verified: true });
+    // Igual que el backend real (marketplace-identity.verifyEmail): devuelve los roles
+    // de la cuenta. Este simulador solo da de alta compradores.
+    return send(res, 200, { verified: true, roles: ['BUYER'] });
   }
   if ((path === id + '/resend-verification' || path === id + '/password/forgot') && req.method === 'POST') {
     const b = await body(req);
