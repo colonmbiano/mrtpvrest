@@ -100,6 +100,28 @@ function isPermanentReplayError(err: any): boolean {
   );
 }
 
+// ¿El backend quedó INALCANZABLE (no respondió)? → cortar el pase y abrir el
+// circuito: no hay nada que ganar reintentando las demás ahora.
+//   ERR_NETWORK / ECONNABORTED / sin response / BACKEND_UNAVAILABLE
+// Un 5xx CON response NO entra aquí: el servidor sí respondió (p.ej. timeout de
+// transacción P2028), así que es un fallo de ESA orden, no del backend.
+function isTrueConnectivityError(err: any): boolean {
+  if (!err) return false;
+  if (err.code === BACKEND_UNAVAILABLE) return true;
+  if (err.code === 'ERR_NETWORK' || err.code === 'ECONNABORTED') return true;
+  return !err.response;
+}
+
+// Clave de ORDEN de una tx, para bloquear por-orden (no toda la cola). Una
+// creación se agrupa por su id de orden local (`local-order-<txId>`), que es el
+// mismo que referencian sus rondas/pagos encolados; el resto, por el id de la
+// ruta (`orders/<id>/...`), local o de servidor.
+function txOrderKey(t: OfflineTransaction): string | null {
+  const path = t.data?.path ?? '';
+  if (/\/orders\/tpv$/.test(path)) return `${LOCAL_ORDER_PREFIX}${t.id}`;
+  return orderIdFromPath(path);
+}
+
 function genTxId(type: TransactionType) {
   return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -470,6 +492,13 @@ export async function syncOfflineQueue(opts?: { force?: boolean }) {
     // que conocer "tipos offline" — es el mismo POST /api/orders/tpv
     // que se hubiera hecho online. Idempotencia depende del backend
     // (TODO: cliente debería mandar Idempotency-Key con tx.id).
+    // Órdenes con un fallo transitorio (5xx) en ESTE pase: sus tx subsecuentes
+    // se posponen para no, p.ej., cobrar una orden sin su ronda previa. Es
+    // por-orden: las demás órdenes independientes siguen drenando. Se reevalúa
+    // en cada pase (no persiste), así que un fallo transitorio se reintenta al
+    // próximo tick.
+    const blockedOrders = new Set<string>();
+
     for (const transaction of unsyncedTransactions) {
       // Latido: avisa al watchdog que el pase sigue avanzando. Va aquí y no
       // fuera del loop para que una cola larga no se auto-desbloquee.
@@ -481,6 +510,11 @@ export async function syncOfflineQueue(opts?: { force?: boolean }) {
           );
           break;
         }
+
+        // Una orden anterior de ESTE pase falló (5xx): no mandamos sus tx
+        // subsecuentes (rondas/pagos) para no romper la causalidad por-cuenta.
+        const orderKey = txOrderKey(transaction);
+        if (orderKey && blockedOrders.has(orderKey)) continue;
 
         // Gate de orden para el CIERRE de turno: el corte se calcula en el
         // servidor leyendo las órdenes ya en la BD. Si todavía hay cualquier
@@ -575,12 +609,27 @@ export async function syncOfflineQueue(opts?: { force?: boolean }) {
           // con las ventas independientes. Sus propios hijos (rondas/pagos) se
           // auto-saltan por el guard de serverId de arriba.
           continue;
-        } else {
+        } else if (isTrueConnectivityError(err)) {
+          // Backend INALCANZABLE (no respondió): abrir el circuito y cortar el
+          // pase. Reintentar las demás ahora no sirve — no hay red/servidor.
           console.error(`Failed to sync transaction ${transaction.id}:`, err);
-          if (isNetworkError(err)) markBackendUnavailable();
-          // FIFO estricto: si falla un predecesor no adelantamos una ronda,
-          // pago o cierre posterior. El próximo tick parte de este mismo tx.
+          markBackendUnavailable();
           break;
+        } else {
+          // El servidor SÍ respondió con 5xx (p.ej. timeout de transacción
+          // P2028 en un cobro grande): el backend está vivo, pero ESTA orden
+          // falló. Antes un break aquí congelaba TODA la cola (bloqueo
+          // head-of-line): la orden #X que siempre da 500 impedía sincronizar
+          // órdenes independientes. Ahora se bloquea SOLO esa orden (y sus tx
+          // subsecuentes) este pase, y las demás siguen drenando. Se reintenta
+          // al próximo tick (ya sin congelar nada). No se abre el circuito: el
+          // backend responde, así que no hay por qué posponer a las otras.
+          const key = txOrderKey(transaction);
+          if (key) blockedOrders.add(key);
+          console.error(
+            `Tx ${transaction.id} (orden ${key}) devolvió ${err?.response?.status}; se pospone esa orden, el resto de la cola continúa.`,
+          );
+          continue;
         }
       }
     }

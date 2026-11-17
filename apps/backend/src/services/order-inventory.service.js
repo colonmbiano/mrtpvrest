@@ -183,6 +183,12 @@ async function applyInventory(prisma, orderItems, orderId, restaurantId, locatio
     // vivo) para no re-leer el stock por ingrediente dentro de la transacción.
     const movements = [];
     const runningStock = new Map(); // ingredientId → saldo en vivo
+    // Necesidad TOTAL por insumo único de TODA la orden: un solo
+    // ingredient.updateMany por insumo tras el loop (antes: uno por cada par
+    // ítem×insumo — ~250 UPDATE secuenciales que reventaban el timeout de 30s).
+    const orderNeed = new Map(); // ingredientId → { ingredient, needed }
+    // Snapshot de costo por ítem; se persiste batcheado (updateMany agrupado).
+    const snapshotByItem = [];   // { id, costSnapshot, recipeIdSnap }
     for (const { item: oi, flatItems, recipeIdSnap, isPackagingProduct } of lines) {
 
       // DINE_IN consumes food, including sauces, but no disposable supplies.
@@ -226,18 +232,14 @@ async function applyInventory(prisma, orderItems, orderId, restaurantId, locatio
         const unitCost = Number(ingredient.cost || 0);
         cmvUnitario += qtyPerUnit * unitCost; // CMV por 1 unidad del MenuItem
 
-        // 1. Decremento de stock atómico/condicional (igual que antes).
-        const changed = await prisma.ingredient.updateMany({
-          where: { id: ingredient.id, restaurantId,
-            ...(cfg?.blockOnInsufficientStock && !options.confirmedExternalPayment && needed > 0 ? { stock: { gte: needed } } : {}),
-          },
-          data: { stock: { decrement: needed } },
-        });
-        if (!changed.count) throw Object.assign(new Error(`Sin stock suficiente de ${ingredient.name}`), { status: 409 });
+        // Acumular la necesidad del insumo a nivel de TODA la orden: el
+        // decremento real se hace UNA vez por insumo tras el loop (no por línea).
+        const acc = orderNeed.get(ingredient.id);
+        if (acc) acc.needed += needed;
+        else orderNeed.set(ingredient.id, { ingredient, needed });
 
-        // 2. StockMovement — balanceAfter desde el saldo en vivo en memoria (el
-        // decremento ya es atómico arriba; balanceAfter es cache/auditoría). Se
-        // acumula y se inserta en bloque tras el loop.
+        // StockMovement por ítem (auditoría) — balanceAfter con saldo en vivo en
+        // memoria. Se acumula y se inserta en bloque tras el loop.
         if (!runningStock.has(ingredient.id)) runningStock.set(ingredient.id, Number(ingredient.stock || 0));
         const newStock = runningStock.get(ingredient.id) - needed;
         runningStock.set(ingredient.id, newStock);
@@ -256,21 +258,38 @@ async function applyInventory(prisma, orderItems, orderId, restaurantId, locatio
 
       }
 
-      // 4. Snapshot de costo en el OrderItem. Inmutable.
-      {
-        await prisma.orderItem.update({
-          where: { id: oi.id },
-          data: {
-            costSnapshot: Number(cmvUnitario.toFixed(4)),
-            recipeIdSnap,
-          },
-        });
-      }
+      // Snapshot de costo por ítem (se persiste batcheado tras el loop).
+      snapshotByItem.push({ id: oi.id, costSnapshot: Number(cmvUnitario.toFixed(4)), recipeIdSnap });
     }
 
-    // Inserción en bloque de todos los movimientos de la orden (antes: un insert
-    // por ingrediente-ítem secuencial dentro de la transacción).
+    // 1. Decremento de stock: UN updateMany por insumo único de la orden,
+    // ordenado por id para un orden de locking estable (evita deadlocks entre
+    // cobros concurrentes). El gate condicional usa la necesidad TOTAL.
+    for (const [, { ingredient, needed }] of [...orderNeed].sort(([a], [b]) => a.localeCompare(b))) {
+      const changed = await prisma.ingredient.updateMany({
+        where: { id: ingredient.id, restaurantId,
+          ...(cfg?.blockOnInsufficientStock && !options.confirmedExternalPayment && needed > 0 ? { stock: { gte: needed } } : {}),
+        },
+        data: { stock: { decrement: needed } },
+      });
+      if (!changed.count) throw Object.assign(new Error(`Sin stock suficiente de ${ingredient.name}`), { status: 409 });
+    }
+
+    // 2. Inserción en bloque de todos los movimientos (createMany = 1 query).
     if (movements.length) await prisma.stockMovement.createMany({ data: movements });
+
+    // 3. Snapshots de costo: agrupar ítems con el mismo (costSnapshot, recipeIdSnap)
+    // en un updateMany (antes: un UPDATE por ítem, 40 secuenciales en #6665).
+    const snapGroups = new Map();
+    for (const s of snapshotByItem) {
+      const key = `${s.costSnapshot}|${s.recipeIdSnap ?? ''}`;
+      const g = snapGroups.get(key);
+      if (g) g.ids.push(s.id);
+      else snapGroups.set(key, { costSnapshot: s.costSnapshot, recipeIdSnap: s.recipeIdSnap, ids: [s.id] });
+    }
+    for (const { costSnapshot, recipeIdSnap, ids } of snapGroups.values()) {
+      await prisma.orderItem.updateMany({ where: { id: { in: ids } }, data: { costSnapshot, recipeIdSnap } });
+    }
   } catch (e) {
     throw e;
   }

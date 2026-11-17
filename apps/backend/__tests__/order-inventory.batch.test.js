@@ -47,7 +47,7 @@ function makeTx() {
       findMany: jest.fn().mockResolvedValue([]),
     },
     stockMovement: { create: jest.fn(), createMany: jest.fn().mockResolvedValue({ count: 3 }) },
-    orderItem: { update: jest.fn().mockResolvedValue({}) },
+    orderItem: { update: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
   };
 }
 
@@ -95,14 +95,22 @@ describe('consumePaidOrder — escrituras batcheadas', () => {
     }
   });
 
-  it('decrementa cada ingrediente (updateMany) y guarda costSnapshot por ítem', async () => {
+  it('decrementa cada insumo ÚNICO de la orden una sola vez (updateMany agrupado)', async () => {
     const tx = makeTx();
     await consumePaidOrder(tx, 'ord1', 'r1');
-    // ING1 en oiA (x2) y oiB (x1) → 2 decrementos; ING2 en oiA → 1. Total 3.
-    expect(tx.ingredient.updateMany).toHaveBeenCalledTimes(3);
-    const byItem = Object.fromEntries(tx.orderItem.update.mock.calls.map(([a]) => [a.where.id, a.data.costSnapshot]));
-    expect(byItem.oiA).toBeCloseTo(60); // 100g×0.5 + 50g×0.2
-    expect(byItem.oiB).toBeCloseTo(50); // 100g×0.5
+    // ING1 lo piden oiA (x2=200g) y oiB (x1=100g) y ING2 solo oiA (x2=100g):
+    // un updateMany por insumo ÚNICO = 2 (antes: uno por par ítem×insumo = 3).
+    expect(tx.ingredient.updateMany).toHaveBeenCalledTimes(2);
+    const decByIng = Object.fromEntries(
+      tx.ingredient.updateMany.mock.calls.map(([a]) => [a.where.id, a.data.stock.decrement]));
+    expect(decByIng.ING1).toBeCloseTo(300); // 200 (oiA) + 100 (oiB)
+    expect(decByIng.ING2).toBeCloseTo(100); // oiA
+    // nunca el update por-ítem viejo; snapshots batcheados por updateMany.
+    expect(tx.orderItem.update).not.toHaveBeenCalled();
+    const snapById = Object.fromEntries(tx.orderItem.updateMany.mock.calls
+      .map(([a]) => [a.where.id.in.join(','), a.data.costSnapshot]));
+    expect(snapById.oiA).toBeCloseTo(60); // 100g×0.5 + 50g×0.2
+    expect(snapById.oiB).toBeCloseTo(50); // 100g×0.5
   });
 
   it('no consume una orden ya cobrada sin ítems pendientes', async () => {

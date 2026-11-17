@@ -213,7 +213,12 @@ const useOfflineStore = create<OfflineState>()(
       partialize: (state) => ({ queue: state.queue, orders: state.orders, lastSync: state.lastSync }),
       merge: (persisted, current) => {
         const state = { ...current, ...(persisted as Partial<OfflineState>) };
-        return { ...state, orders: reconcileLocalOrderQueue(state.orders, state.queue), syncInProgress: false };
+        // Poda de legacy: versiones viejas marcaban synced:true en vez de quitar
+        // la tx de la cola. Esas ya están aplicadas en el servidor y solo inflan
+        // el blob de IndexedDB — se descartan al rehidratar. (El flujo actual ya
+        // las elimina en markSynced; esto limpia lo que dejaron las viejas.)
+        const queue = (state.queue ?? []).filter((t) => !t.synced);
+        return { ...state, queue, orders: reconcileLocalOrderQueue(state.orders, queue), syncInProgress: false };
       },
     }
   )

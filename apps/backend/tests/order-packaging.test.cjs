@@ -40,6 +40,13 @@ function fixture(orderType = 'TAKEOUT') {
     orderItem: {
       findMany: async ({ where }) => state.items.filter(i => matches(i, where)).map(i => ({ ...i })),
       update: async ({ where, data }) => mutate(state.items.find(i => matches(i, where)), data),
+      // costSnapshot batcheado: un updateMany por grupo de ítems (where id in [...]).
+      updateMany: async ({ where, data }) => {
+        const ids = where?.id?.in ?? (where?.id ? [where.id] : []);
+        let count = 0;
+        for (const it of state.items) if (ids.includes(it.id)) { mutate(it, data); count++; }
+        return { count };
+      },
     },
     ingredient: {
       findMany: async ({ where }) => state.ingredients.filter(i => matches(i, where)).map(i => ({ ...i })),

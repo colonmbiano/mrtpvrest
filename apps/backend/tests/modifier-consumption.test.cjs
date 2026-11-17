@@ -58,7 +58,7 @@ function fixture() {
       create: async ({ data }) => state.movements.push(data),
       createMany: async ({ data }) => { state.movements.push(...data); return { count: data.length }; },
     },
-    orderItem: { update: async ({ data }) => Object.assign(state.item, data) },
+    orderItem: { update: async ({ data }) => Object.assign(state.item, data), updateMany: async ({ data }) => (Object.assign(state.item, data), { count: 1 }) },
     order: {
       updateMany: async () => ({ count: 1 }),
       findFirst: async () => ({ id: 'o', restaurantId: 'r', locationId: 'l', orderType: 'DINE_IN',

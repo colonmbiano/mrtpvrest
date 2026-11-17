@@ -986,4 +986,47 @@ describe("syncOfflineQueue — replay rechazado con 4xx definitivo", () => {
     expect(useOfflineStore.getState().getFailedTransactions().map((t) => t.id)).toEqual(["bad-1"]);
     expect(useOfflineStore.getState().getUnsyncedTransactions()).toHaveLength(0);
   });
+
+  // Regresión del bloqueo head-of-line: un 500 (backend VIVO, p.ej. timeout de
+  // transacción P2028 en un cobro grande) NO debe congelar la cola entera. Antes
+  // un break + circuito abierto hacían que la orden #X que siempre da 500
+  // impidiera sincronizar órdenes independientes detrás.
+  it("un 500 en una orden NO congela a otra orden independiente", async () => {
+    enqueue("order", "/api/orders/OID/items", "x-round", 1000); // orden X → 500
+    enqueue("order", "/api/orders/tpv", "y-create", 2000);      // orden Y, independiente
+    mockApi.post.mockImplementation((path: string) =>
+      path === "/api/orders/OID/items"
+        ? Promise.reject({ response: { status: 500, data: {} } })
+        : Promise.resolve({ data: { id: "server-y", total: 20 } }),
+    );
+
+    await syncOfflineQueue();
+
+    const posted = mockApi.post.mock.calls.map((c) => c[0]);
+    expect(posted).toContain("/api/orders/tpv");          // Y SÍ se sincronizó
+    // X sigue en cola para reintentar el próximo tick (no se congela como failed).
+    expect(useOfflineStore.getState().getUnsyncedTransactions().map((t) => t.id)).toContain("x-round");
+    expect(useOfflineStore.getState().getFailedTransactions()).toHaveLength(0);
+  });
+
+  it("un 500 bloquea las tx SUBSECUENTES de la MISMA orden ese pase", async () => {
+    enqueue("order", "/api/orders/OID/items", "x-round1", 1000); // X → 500
+    enqueue("order", "/api/orders/OID/items", "x-round2", 2000); // X subsecuente: NO debe enviarse
+    enqueue("order", "/api/orders/tpv", "z-create", 3000);       // Z independiente: SÍ
+    mockApi.post.mockImplementation((path: string) =>
+      path === "/api/orders/OID/items"
+        ? Promise.reject({ response: { status: 500, data: {} } })
+        : Promise.resolve({ data: { id: "server-z", total: 20 } }),
+    );
+
+    await syncOfflineQueue();
+
+    const itemsCalls = mockApi.post.mock.calls.filter((c) => c[0] === "/api/orders/OID/items").length;
+    expect(itemsCalls).toBe(1); // solo x-round1; x-round2 se saltó (misma orden bloqueada)
+    expect(mockApi.post.mock.calls.map((c) => c[0])).toContain("/api/orders/tpv"); // Z sí
+    // Ambas de X siguen pendientes para el próximo tick; ninguna congelada.
+    expect(useOfflineStore.getState().getUnsyncedTransactions().map((t) => t.id).sort())
+      .toEqual(["x-round1", "x-round2"]);
+    expect(useOfflineStore.getState().getFailedTransactions()).toHaveLength(0);
+  });
 });
