@@ -5,7 +5,6 @@ import { useTicketStore } from "@/store/ticketStore";
 import { useActiveOrderStore } from "@/store/activeOrderStore";
 import OrderTypeSelector from "@/components/pos/OrderTypeSelector";
 import type { ExtendedOrderType, OpenAccount } from "@/components/pos/OrderTypeSelector";
-import OrdersDrawer, { type DrawerOrder } from "@/components/pos/OrdersDrawer";
 import TablePickerModal, { type TableLite } from "@/components/pos/TablePickerModal";
 import PurchasesExpensesModal from "@/components/pos/PurchasesExpensesModal";
 import NotificationsPanel from "@/components/pos/NotificationsPanel";
@@ -39,7 +38,6 @@ import { requestControlText } from "@/lib/request-control-text";
 import api from "@/lib/api";
 import { getLocalOrders, loadOpenOrders, loadOrder, mergeLocalPaidOrders, waitForOfflineHydration } from "@/lib/order-repository";
 import { ONLINE_SOURCES, chargeBlockedLabel, isMarketplaceOrder, itemsLocked, kitchenPrintReady, needsAcceptance } from "@/lib/webOrders";
-import { ORDER_TYPE_BADGE } from "@/lib/orderTypes";
 import { toast } from "sonner";
 
 /**
@@ -73,18 +71,6 @@ const ORDER_TYPE_OF = (t: unknown): ExtendedOrderType =>
 // Orígenes que cuentan como "pedido web" (tienda en línea / WhatsApp /
 // marketplace): lib/webOrders, igual que el layout del menú. Se marcan con
 // color distinto en la lista.
-
-// Etiqueta de tipo y "hace X" para el shape DrawerOrder del cajón (igual que
-// el layout del menú). Fuente única: lib/orderTypes.
-const ORDER_TYPE_LABEL = ORDER_TYPE_BADGE;
-function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  const m = Math.max(0, Math.floor(ms / 60000));
-  if (m < 1) return "ahora";
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60);
-  return `${h}h`;
-}
 
 export default function OrderTypePage() {
   const router = useRouter();
@@ -129,8 +115,6 @@ export default function OrderTypePage() {
   const [showDrivers, setShowDrivers] = useState(false);
   const [acceptingWebId, setAcceptingWebId] = useState<string | null>(null);
   const [rejectingWebId, setRejectingWebId] = useState<string | null>(null);
-  // Cajón completo de tickets (juntar / repartidor / cocina) + config modal.
-  const [showOrders, setShowOrders] = useState(false);
   const [deliveryDrivers, setDeliveryDrivers] = useState<
     { id: string; name: string; isAvailable?: boolean }[]
   >([]);
@@ -213,20 +197,6 @@ export default function OrderTypePage() {
     const id = setInterval(fetchOpenOrders, 30000);
     return () => { cancelled = true; clearInterval(id); };
   }, [fetchOpenOrders, fetchDeliveryDrivers]);
-
-  // Al abrir el cajón, refrescamos órdenes y cargamos repartidores (para el
-  // selector de asignación). La carga de "Cobradas" ya la dispara el efecto por
-  // ordersMode (misma pestaña que la lista inline).
-  useEffect(() => {
-    if (!showOrders) return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      fetchOpenOrders();
-      fetchDeliveryDrivers();
-    });
-    return () => { cancelled = true; };
-  }, [showOrders, fetchOpenOrders, fetchDeliveryDrivers]);
 
   // Al entrar a la pestaña "Cobradas" se carga el último mes (no se pollea:
   // es histórico, basta refrescar al cambiar de pestaña).
@@ -746,18 +716,6 @@ export default function OrderTypePage() {
     [],
   );
 
-  // Detalle / cobro desde el cajón reusan el flujo de la lista (navegan al
-  // catálogo). La reimpresión imprime directo (sin navegar ni reactivar).
-  const handleDrawerShowDetail = (o: DrawerOrder) => {
-    setShowOrders(false);
-    enterAccount(o.id, null);
-  };
-  const handleDrawerConfirmPayment = (o: DrawerOrder) => {
-    setShowOrders(false);
-    handleChargeAccount(o.id);
-  };
-  const handleDrawerReprint = (o: DrawerOrder) => reprintReceiptById(o.id);
-
   // Juntar cuentas: POST /api/orders/:source/merge/:target por cada origen.
   const handleMergeOpenOrders = useCallback(
     async (
@@ -822,80 +780,6 @@ export default function OrderTypePage() {
     },
     [deliveryDrivers, fetchOpenOrders],
   );
-
-  // Enviar (reimprimir) a cocina la comanda de los seleccionados, sin abrirlos.
-  const handleSendOrdersToKitchen = async (ordersToSend: { id: string }[]) => {
-    const t = toast.loading(`Enviando ${ordersToSend.length} a cocina...`);
-    let sent = 0;
-    let failed = 0;
-    for (const o of ordersToSend) {
-      try {
-        let full: any = null;
-        try {
-          const { data } = await api.get(`/api/orders/${o.id}`);
-          full = data;
-        } catch {
-          full = null;
-        }
-        const items = orderItemsToTicketItems(full?.items || []);
-        if (items.length === 0) { failed += 1; continue; }
-        const res = await printKitchenTickets(printers, {
-          orderNumber: full.orderNumber || String(full.id).slice(-6).toUpperCase(),
-          orderType: full.orderType || null,
-          tableNumber: full.table?.name || full.tableNumber || null,
-          customerName: full.customerName || full.user?.name || null,
-          items,
-          isReprint: true,
-          config: kitchenConfig ?? undefined,
-        });
-        if (res.ok > 0) sent += 1;
-        else failed += 1;
-      } catch {
-        failed += 1;
-      }
-    }
-    if (failed === 0) {
-      toast.success(
-        `${sent} comanda${sent === 1 ? "" : "s"} enviada${sent === 1 ? "" : "s"} a cocina`,
-        { id: t },
-      );
-    } else {
-      toast.warning(
-        `${sent} enviada${sent === 1 ? "" : "s"} - ${failed} fallaron`,
-        { id: t },
-      );
-    }
-  };
-
-  // Shape DrawerOrder para el cajón (abiertas y cobradas), igual que el menú.
-  const drawerOrders: DrawerOrder[] = openOrders.map((o: any) => ({
-    id: o.id,
-    orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
-    customerName:
-      o.ticketName || o.customerName || o.user?.name || "Público general",
-    type: ORDER_TYPE_LABEL[o.orderType] || o.orderType || "ORDEN",
-    status: o.status,
-    total: Number(o.total ?? 0),
-    time: timeAgo(o.createdAt),
-    createdAt: o.createdAt,
-    itemsCount: Array.isArray(o.items) ? o.items.length : 0,
-    driver: o.deliveryDriverName || undefined,
-    needsDriver: o.orderType === "DELIVERY" && !o.deliveryDriverId,
-    chargeBlocked: chargeBlockedLabel(o),
-    itemsLocked: itemsLocked(o),
-  }));
-  const drawerPaidOrders: DrawerOrder[] = paidOrders.map((p) => ({
-    id: p.id,
-    orderNumber: p.orderNumber,
-    customerName: p.customerName,
-    type: ORDER_TYPE_LABEL[p.orderType || ""] || p.orderType || "ORDEN",
-    status: "PAID",
-    total: p.total,
-    time: timeAgo(p.paidAt || p.createdAt || new Date().toISOString()),
-    createdAt: p.paidAt || p.createdAt || undefined,
-    itemsCount: 0,
-    paymentMethod: p.paymentMethod,
-  }));
 
   const handlePickType = (type: ExtendedOrderType) => {
     // RETOMAR VENTA SIN TERMINAR (auto-resume). Si el ticket activo ya trae
@@ -1073,7 +957,6 @@ export default function OrderTypePage() {
         onWebOrders={() => setShowWebOrders(true)}
         onDrivers={() => setShowDrivers(true)}
         onNotifs={() => setShowNotifs(true)}
-        onManageTickets={() => setShowOrders(true)}
         onConfigMenu={goGeneral}
         onSwitchEmployee={handleLogout}
         canMerge={canMergeOpenOrders && !hideMoney}
@@ -1127,35 +1010,6 @@ export default function OrderTypePage() {
         onClose={() => setShowDrivers(false)}
         accent="#E0A22A"
         currentRole={currentEmployee?.role}
-      />
-
-      {/* CAJÓN COMPLETO DE TICKETS — toggle Abiertas/Cobradas + multiselección
-          para juntar cuentas, asignar repartidor y enviar a cocina. */}
-      <OrdersDrawer
-        isOpen={showOrders}
-        onClose={() => {
-          setShowOrders(false);
-          setOrdersMode("open");
-        }}
-        mode={ordersMode}
-        onModeChange={setOrdersMode}
-        paidLoading={paidLoading}
-        orders={ordersMode === "paid" ? drawerPaidOrders : drawerOrders}
-        onShowDetail={handleDrawerShowDetail}
-        onConfirmPayment={handleDrawerConfirmPayment}
-        onReprintOrder={handleDrawerReprint}
-        hideMoney={hideMoney || ordersMode === "paid"}
-        canMergeOrders={canMergeOpenOrders && !hideMoney && ordersMode === "open"}
-        onMergeOrders={handleMergeOpenOrders}
-        canAssignDriver={canMergeOpenOrders && !hideMoney && ordersMode === "open"}
-        drivers={deliveryDrivers}
-        onAssignDriver={handleAssignDriverToOrders}
-        canSendToKitchen={ordersMode === "open"}
-        onSendToKitchen={handleSendOrdersToKitchen}
-        canCorrectPaymentMethod={canCorrectPayment && ordersMode === "paid"}
-        onCorrectPaymentMethod={handleCorrectPaymentMethod}
-        canRefund={canCorrectPayment && ordersMode === "paid"}
-        onRefund={handleRefund}
       />
 
     </div>

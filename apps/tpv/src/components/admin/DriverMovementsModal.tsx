@@ -674,15 +674,34 @@ export default function DriverMovementsModal({ driver, onClose, onRefresh, accen
                         </div>
                         <div className="min-w-0">
                           <div className="text-xs font-bold text-white truncate">{m.description || m.category}</div>
-                          {m.type === "EXPENSE" && <div className="mt-1 space-y-1 text-xs">
-                            {m.photoUrl ? <a href={m.photoUrl} target="_blank" rel="noreferrer" className="underline">Ver comprobante</a>
-                              : m.receiptStatus === "EXCEPTION" ? <span>Sin comprobante, excepción autorizada: {m.receiptReason}</span>
-                                : <span className="text-amber-400">Comprobante pendiente</span>}
-                            <label className="block cursor-pointer underline">Adjuntar foto
-                              <input aria-label={`Comprobante de ${m.description || m.category}`} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only"
-                                onChange={(e) => { const photo = e.target.files?.[0]; if (photo) void saveReceipt(m.id, photo); e.target.value = ""; }} />
-                            </label>
-                            {canCut && !m.photoUrl && m.receiptStatus !== "EXCEPTION" && <button type="button" className="underline" onClick={() => void saveReceipt(m.id)}>Justificar excepción</button>}
+                          {m.type === "EXPENSE" && <div className="mt-1 space-y-1.5 text-xs">
+                            {m.photoUrl ? (
+                              // Con comprobante: miniatura clicable al original.
+                              <a href={m.photoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 group">
+                                <img src={m.photoUrl} alt={`Comprobante de ${m.description || m.category}`}
+                                  className="h-10 w-10 rounded-lg object-cover border border-[var(--border)]" />
+                                <span className="underline text-white/70 group-hover:text-white">Ver comprobante</span>
+                              </a>
+                            ) : m.receiptStatus === "EXCEPTION" ? (
+                              // Excepción aprobada: etiqueta distintiva verde con el motivo.
+                              <span className="inline-flex items-start gap-1 rounded-md px-2 py-1 font-semibold border"
+                                style={{ color: "var(--success)", background: "color-mix(in srgb, var(--success) 12%, transparent)", borderColor: "color-mix(in srgb, var(--success) 25%, transparent)" }}>
+                                ✓ Excepción autorizada{m.receiptReason ? `: ${m.receiptReason}` : ""}
+                              </span>
+                            ) : (
+                              // Pendiente: alerta ámbar.
+                              <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-semibold text-amber-400 border border-amber-400/25 bg-amber-400/10">
+                                ⚠ Comprobante pendiente
+                              </span>
+                            )}
+                            <div className="flex flex-wrap items-center gap-3">
+                              <label className="cursor-pointer underline text-white/60 hover:text-white">
+                                {m.photoUrl ? "Cambiar foto" : "Adjuntar foto"}
+                                <input aria-label={`Comprobante de ${m.description || m.category}`} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only"
+                                  onChange={(e) => { const photo = e.target.files?.[0]; if (photo) void saveReceipt(m.id, photo); e.target.value = ""; }} />
+                              </label>
+                              {canCut && !m.photoUrl && m.receiptStatus !== "EXCEPTION" && <button type="button" className="font-semibold underline text-amber-400 hover:text-amber-300" onClick={() => void saveReceipt(m.id)}>Justificar excepción</button>}
+                            </div>
                           </div>}
                           <div className="text-[10px] text-[var(--text-secondary)]">{new Date(m.createdAt).toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" })}</div>
                         </div>

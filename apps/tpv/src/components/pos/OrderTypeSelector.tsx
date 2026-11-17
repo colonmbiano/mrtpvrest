@@ -21,6 +21,7 @@ import {
   Pencil,
   Phone,
   Receipt,
+  Search,
   Settings,
   ShoppingBag,
   ShoppingCart,
@@ -126,10 +127,6 @@ interface OrderTypeSelectorProps {
   onDrivers?: () => void;
   /** Abre el panel de notificaciones. */
   onNotifs?: () => void;
-  /** Abre el cajón completo de tickets (juntar / asignar repartidor / cocina /
-   *  multiselección + Abiertas/Cobradas). Si se pasa, se muestra el botón
-   *  "Gestionar tickets" en la sección de cuentas. */
-  onManageTickets?: () => void;
   /** Abre el modal de configuración (tema / modo / bloquear terminal). */
   onConfigMenu?: () => void;
   /** "Cambiar empleado" — cierra sesión y manda al PIN (1 toque). */
@@ -296,7 +293,6 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   onWebOrders,
   onDrivers,
   onNotifs,
-  onManageTickets,
   onConfigMenu,
   onSwitchEmployee,
   canMerge = false,
@@ -321,7 +317,13 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [filter, setFilter] = useState<"ALL" | OrderType>("ALL");
   const [payFilter, setPayFilter] = useState("Todos");
+  // Búsqueda rápida por texto (cliente, folio, mesa o teléfono) sobre la lista
+  // de cuentas — misma utilidad que tenía el cajón flotante (OrdersDrawer).
+  const [search, setSearch] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
+  // Contenedor desplazable de la lista: el acceso "Abiertos" la enfoca in-situ
+  // (en vez de abrir un cajón flotante encima) para roles que no pueden juntar.
+  const listRef = useRef<HTMLDivElement>(null);
 
   // Selección múltiple para juntar cuentas / asignar repartidor SIN abrir un
   // cajón aparte (todo en esta pantalla principal). La PRIMERA seleccionada es
@@ -413,15 +415,18 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
     [allowedTypes],
   );
 
-  const visibleAccounts = useMemo(
-    () =>
-      openAccounts.filter(
-        (a) =>
-          (filter === "ALL" || a.rawType === filter) &&
-          (!paidMode || matchesPayFilter(a, payFilter)),
-      ),
-    [openAccounts, filter, paidMode, payFilter],
-  );
+  const visibleAccounts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return openAccounts.filter(
+      (a) =>
+        (filter === "ALL" || a.rawType === filter) &&
+        (!paidMode || matchesPayFilter(a, payFilter)) &&
+        (q === "" ||
+          [a.customerName, a.orderNumber, a.tableName, a.phone].some(
+            (v) => v && String(v).toLowerCase().includes(q),
+          )),
+    );
+  }, [openAccounts, filter, paidMode, payFilter, search]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -485,11 +490,16 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
     if (action === "settings") onConfigMenu?.();
     if (action === "config") onConfig?.();
     if (action === "tickets") {
-      // "Abiertos" trae a esta pantalla (ya estamos aquí) y entra al modo
-      // selección para juntar / asignar repartidor in-situ. Si el rol no puede
-      // seleccionar, cae al cajón completo (fallback).
-      if (canSelect) setSelectMode(true);
-      else onManageTickets?.();
+      // "Abiertos" ya vive en esta pantalla (panel derecho). Si el rol puede
+      // juntar / asignar repartidor, entra al modo selección in-situ; si no,
+      // simplemente enfoca la lista de cuentas abiertas (sin abrir ningún cajón
+      // flotante encima — eso ahora solo existe dentro de /pos/menu).
+      if (canSelect) {
+        setSelectMode(true);
+      } else {
+        onModeChange?.("open");
+        listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     }
     if (action === "switch") onSwitchEmployee?.();
   };
@@ -503,7 +513,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
     if (shortcut.action === "expenses") return Boolean(onExpenses);
     if (shortcut.action === "settings") return Boolean(onConfigMenu);
     if (shortcut.action === "config") return Boolean(onConfig);
-    if (shortcut.action === "tickets") return canSelect || Boolean(onManageTickets);
+    if (shortcut.action === "tickets") return true;
     if (shortcut.action === "switch") return Boolean(onSwitchEmployee);
     return false;
   });
@@ -661,6 +671,23 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
               </div>
             )}
 
+            {/* Búsqueda rápida por texto — cliente, folio, mesa o teléfono. */}
+            <div className="relative">
+              <Search
+                size={15}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/30"
+                strokeWidth={2.5}
+              />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por cliente, folio, mesa…"
+                aria-label="Buscar cuenta por cliente, folio, mesa o teléfono"
+                className="h-11 w-full rounded-xl border border-white/10 bg-white/5 pl-9 pr-3 text-[13px] text-white outline-none transition-colors placeholder:text-white/30 focus:border-[var(--brand)]"
+              />
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p
                 className="text-[10px] font-semibold uppercase tracking-[0.14em]"
@@ -740,7 +767,7 @@ const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
             )}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hide">
+          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-hide">
             {paidMode && paidLoading && openAccounts.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center opacity-50">
                 <Loader2 size={36} className="animate-spin text-white/40" />
