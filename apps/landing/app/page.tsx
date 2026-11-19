@@ -412,6 +412,7 @@ export default function HomePage() {
               <a href={APKS.kiosko}>Descargar Kiosko</a>
               <a href={APKS.kds}>Descargar KDS</a>
               <a href={APKS.delivery}>Descargar Delivery</a>
+              <a href={APKS.meserosLite}>Descargar Meseros Lite</a>
             </div>
             <div className={styles.footerCol}>
               <h4>Empresa</h4>

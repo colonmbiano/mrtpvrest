@@ -1,0 +1,67 @@
+{
+  "publishedDate": "2026-11-18",
+  "timezone": "America/Mexico_City",
+  "sourceCommit": "1fb11d7a347fa3c2a29a7a6dd225da4e177c34a5",
+  "buildCommit": "fcd02de626edadce7af0433e917f8e0399c91252",
+  "buildRuns": [
+    44438396863,
+    44438400579
+  ],
+  "apps": [
+    {
+      "app": "tpv",
+      "file": "mrtpvrest-tpv.apk",
+      "package": "com.mrtpvrest.tpv",
+      "version": "0.2.515",
+      "versionCode": 515,
+      "previousVersionCode": 1,
+      "size": 9457891,
+      "sha256": "45cdf7b910ed8b79f6d3b64027eeb6ac7a6b6511e55e711fe26b7c0e76cf85e0",
+      "signerSha256": "87e8f4c44f88e5c76d4c8e38cf9c77764f8d6c99a669cb890045d33f58135ed7"
+    },
+    {
+      "app": "kds",
+      "file": "mrtpvrest-kds.apk",
+      "package": "com.mrtpvrest.kds",
+      "version": "0.1.46",
+      "versionCode": 46,
+      "previousVersionCode": 1,
+      "size": 3481895,
+      "sha256": "0d76d307a4236e7c7c5035ce8915f6a63ad24b28bcc40778e9102fe0ac527cf3",
+      "signerSha256": "87e8f4c44f88e5c76d4c8e38cf9c77764f8d6c99a669cb890045d33f58135ed7"
+    },
+    {
+      "app": "kiosk",
+      "file": "mrtpvrest-kiosko.apk",
+      "package": "com.mrtpvrest.kiosk",
+      "version": "1.2",
+      "versionCode": 3,
+      "previousVersionCode": 2,
+      "size": 3468252,
+      "sha256": "203c77823611deca2d0a8c9874a65bc0f58012acd75e18bc9aa555a35d5ed88a",
+      "signerSha256": "87e8f4c44f88e5c76d4c8e38cf9c77764f8d6c99a669cb890045d33f58135ed7"
+    },
+    {
+      "app": "delivery",
+      "file": "mrtpvrest-delivery.apk",
+      "package": "com.mrtpvrest.delivery",
+      "version": "0.1.85",
+      "versionCode": 85,
+      "previousVersionCode": 1,
+      "size": 6443242,
+      "sha256": "06c756952d68a04551394825fe91badf885fc012ca23fc819aa29732144a1246",
+      "signerSha256": "87e8f4c44f88e5c76d4c8e38cf9c77764f8d6c99a669cb890045d33f58135ed7"
+    },
+    {
+      "app": "meseros-lite",
+      "file": "mrtpvrest-meseros-lite.apk",
+      "package": "com.mrtpvrest.meseroslite",
+      "version": "0.1.26",
+      "versionCode": 26,
+      "previousVersionCode": 1,
+      "size": 5926546,
+      "sha256": "5a34170d91c1f219b89ae854efd4663ab9c5f26f6808aabd98fbdb2b39a1be02",
+      "signerSha256": "87e8f4c44f88e5c76d4c8e38cf9c77764f8d6c99a669cb890045d33f58135ed7"
+    }
+  ]
+}

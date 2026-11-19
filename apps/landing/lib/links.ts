@@ -23,8 +23,9 @@ export const APKS = {
 // agrega la URL aquí SOLO cuando el .apk release firmado esté en public/apks; si no,
 // DownloadButton degrada a "Solicitar acceso" (sin enlaces muertos).
 // Las 5 apps tienen pipeline de release firmado en CI (assembleRelease + keystore):
-//   TPV                              → build-android-apk-release.yml  (run 28215708538)
-//   KDS/Delivery/Meseros Lite/Kiosk  → build-android-apks-release.yml (run 28216454498)
+//   TPV                              → build-android-apk-release.yml  (run 44438396863)
+//   KDS/Delivery/Meseros Lite/Kiosk  → build-android-apks-release.yml (run 44438400579)
+// Versiones, huellas SHA-256 y procedencia: public/downloads.json.
 export const READY_APKS: string[] = [
   APKS.tpv,
   APKS.kds,

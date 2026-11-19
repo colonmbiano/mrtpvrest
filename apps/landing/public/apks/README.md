@@ -16,6 +16,15 @@ Los nombres deben coincidir **exactamente** con `apps/landing/lib/links.ts` (`AP
 
 ## Estado del pipeline de release
 
+La publicación del 18 de noviembre de 2026 se construye desde el último código
+publicado de las aplicaciones, con la misma firma que los instaladores anteriores.
+El manifiesto público `/downloads.json` registra versiones, SHA-256 y compilaciones
+de origen. Meseros Lite también aparece en los enlaces de descarga del sitio.
+
+Los workflows descargan el historial completo para calcular versiones crecientes
+y usan `platform-tools` al preparar el SDK. El cálculo de versión usa
+`providers.exec`, compatible con Gradle 9.
+
 Los `.apk` deben ser builds **release firmados**, no debug. Las 5 apps ya tienen
 pipeline de release firmado en CI (`assembleRelease` + keystore de GitHub Secrets,
 con verificación de firma v2/v3):
