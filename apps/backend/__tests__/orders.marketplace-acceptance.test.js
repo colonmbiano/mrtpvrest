@@ -96,6 +96,19 @@ describe('GET /api/orders/admin?scope=active', () => {
     expect(statuses).toContain('PENDING_MERCHANT');
     expect(statuses).not.toContain('PENDING_PAYMENT');
   });
+
+  it('filtra por texto (q), rango de fechas (from/to) y estado de pago en búsqueda histórica', async () => {
+    prisma.order.findMany.mockResolvedValue([]);
+    const res = await request(makeApp()).get(
+      '/api/orders/admin?scope=history&q=Perusi&from=2026-10-18&to=2026-11-18&paymentStatus=PAID&paymentMethod=TRANSFER'
+    );
+    expect(res.status).toBe(200);
+    const callArg = prisma.order.findMany.mock.calls[0][0];
+    expect(callArg.where.paymentStatus).toBe('PAID');
+    expect(callArg.where.paymentMethod).toEqual({ in: ['TRANSFER', 'SPEI'] });
+    expect(Array.isArray(callArg.where.AND)).toBe(true);
+    expect(callArg.where.AND.length).toBe(2);
+  });
 });
 
 describe('PUT /api/orders/:id/status', () => {

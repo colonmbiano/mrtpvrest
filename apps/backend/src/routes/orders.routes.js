@@ -83,11 +83,42 @@ function appendVariantNotes(notes, variants) {
 // resolveVariantSelection vive ahora en ../lib/money (puro y testeado).
 
 
+const CDMX_OFFSET = '-06:00';
+
+function parseDateBoundary(raw, isEnd = false) {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const iso = `${trimmed}T${isEnd ? '23:59:59.999' : '00:00:00.000'}${CDMX_OFFSET}`;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(trimmed);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+const PAYMENT_METHOD_GROUPS = {
+  CASH: ['CASH', 'CASH_ON_DELIVERY'],
+  TRANSFER: ['TRANSFER', 'SPEI'],
+  CARD: ['CARD', 'CARD_PRESENT', 'TERMINAL', 'CLIP', 'MP_POINT', 'DEBIT', 'CREDIT'],
+  ONLINE: ['ONLINE', 'MERCADOPAGO', 'STRIPE', 'CONEKTA'],
+};
+
 // ── GET /admin — Pedidos del restaurante (filtra por sucursal si llega) ──
 // locationId es OPCIONAL: si se envía via x-location-id/header se filtra,
 // si no, retorna todas las órdenes del restaurante. Antes devolvíamos 400
 // si faltaba, lo que tumbaba el panel para restaurantes con una sola
 // sucursal o admin sin selector activo.
+//
+// Soporta filtros históricos server-side (para buscador de tickets en TPV y Admin):
+//   - q: texto libre (cliente, ticketName, #orden, teléfono, notas o nombre de platillo)
+//   - from / to: YYYY-MM-DD (interpretado en zona CDMX -06:00) o ISO timestamp
+//   - dateField: 'paidAt' | 'createdAt' | 'both'
+//   - paymentStatus: 'PAID' | 'PENDING' | 'REFUNDED' | 'ALL'
+//   - paymentMethod: 'CASH' | 'TRANSFER' | 'CARD' | 'ONLINE' | 'ALL'
+//   - orderStatus: estado específico o 'ALL'
+//   - includeItems: '1' para forzar carga de items en scope=paid
 router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SUPER_ADMIN', 'CASHIER', 'MANAGER', 'OWNER'), async (req, res) => {
   try {
     const restaurantId = req.restaurantId || req.user?.restaurantId;
@@ -104,9 +135,23 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
     // PENDING_MERCHANT: pedidos del marketplace que el comercio debe aceptar.
     const ACTIVE_ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING', 'OPEN', 'ON_THE_WAY', 'PENDING_MERCHANT'];
     const isPaidScope = req.query.scope === 'paid';
+    const isHistoryScope = req.query.scope === 'history';
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const fromDate = parseDateBoundary(req.query.from, false);
+    const toDate = parseDateBoundary(req.query.to, true);
+    const hasCustomFilter = Boolean(
+      q ||
+      fromDate ||
+      toDate ||
+      req.query.paymentStatus ||
+      req.query.paymentMethod ||
+      req.query.orderStatus ||
+      isHistoryScope
+    );
+
     if (req.query.scope === 'active' || req.query.status === 'active') {
       where.status = { in: ACTIVE_ORDER_STATUSES };
-    } else if (isPaidScope) {
+    } else if (isPaidScope && !hasCustomFilter) {
       // `?scope=paid`: tickets ya cobrados del último mes para la pestaña
       // "Cobradas" del TPV. Ventana rodante de 31 días por `paidAt`; si la orden
       // no tiene `paidAt` (datos viejos previos a esa columna) caemos a
@@ -119,16 +164,100 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
         { paidAt: { gte: cutoff } },
         { AND: [{ paidAt: null }, { createdAt: { gte: cutoff } }] },
       ];
+    } else if (isPaidScope || hasCustomFilter) {
+      const andClauses = [];
+      const payStatus = req.query.paymentStatus
+        ? String(req.query.paymentStatus).toUpperCase()
+        : (isPaidScope ? 'PAID' : null);
+
+      if (payStatus && payStatus !== 'ALL') {
+        where.paymentStatus = payStatus;
+      }
+
+      const ordStatus = req.query.orderStatus ? String(req.query.orderStatus).toUpperCase() : null;
+      if (ordStatus && ordStatus !== 'ALL') {
+        where.status = ordStatus;
+      } else if (payStatus === 'PENDING' && req.query.includeCancelled !== '1') {
+        where.status = { not: 'CANCELLED' };
+      }
+
+      const payMethod = req.query.paymentMethod ? String(req.query.paymentMethod).toUpperCase() : null;
+      if (payMethod && payMethod !== 'ALL') {
+        const group = PAYMENT_METHOD_GROUPS[payMethod];
+        where.paymentMethod = group ? { in: group } : payMethod;
+      }
+
+      if (fromDate || toDate) {
+        const range = {};
+        if (fromDate) range.gte = fromDate;
+        if (toDate) range.lte = toDate;
+        const dateField = req.query.dateField || (payStatus === 'PAID' ? 'paidAt' : 'both');
+        if (dateField === 'createdAt') {
+          andClauses.push({ createdAt: range });
+        } else if (dateField === 'paidAt') {
+          andClauses.push({
+            OR: [
+              { paidAt: range },
+              { AND: [{ paidAt: null }, { createdAt: range }] },
+            ],
+          });
+        } else {
+          andClauses.push({
+            OR: [
+              { paidAt: range },
+              { createdAt: range },
+            ],
+          });
+        }
+      } else if (isPaidScope && !q) {
+        const PAID_WINDOW_DAYS = 31;
+        const cutoff = new Date(Date.now() - PAID_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+        andClauses.push({
+          OR: [
+            { paidAt: { gte: cutoff } },
+            { AND: [{ paidAt: null }, { createdAt: { gte: cutoff } }] },
+          ],
+        });
+      }
+
+      if (q) {
+        const cleanQ = q.replace(/^#/, '');
+        andClauses.push({
+          OR: [
+            { customerName: { contains: q, mode: 'insensitive' } },
+            { ticketName: { contains: q, mode: 'insensitive' } },
+            { orderNumber: { contains: cleanQ, mode: 'insensitive' } },
+            { customerPhone: { contains: q, mode: 'insensitive' } },
+            { notes: { contains: q, mode: 'insensitive' } },
+            { items: { some: { name: { contains: q, mode: 'insensitive' } } } },
+          ],
+        });
+      }
+
+      if (andClauses.length === 1) {
+        Object.assign(where, andClauses[0]);
+      } else if (andClauses.length > 1) {
+        where.AND = andClauses;
+      }
     }
+
+    const lightPayload = isPaidScope && req.query.includeItems !== '1';
+    const requestedLimit = Number(req.query.limit);
+    const takeLimit = Number.isFinite(requestedLimit) && requestedLimit > 0
+      ? Math.min(requestedLimit, 2000)
+      : (hasCustomFilter ? 1000 : (isPaidScope ? 500 : 200));
 
     const orders = await prisma.order.findMany({
       where,
-      orderBy: isPaidScope
+      orderBy: (isPaidScope || req.query.paymentStatus === 'PAID')
         ? [{ paidAt: 'desc' }, { createdAt: 'desc' }]
         : { createdAt: 'desc' },
-      take: isPaidScope ? 500 : 200,
-      include: isPaidScope
-        ? { user: { select: { name: true, phone: true } } }
+      take: takeLimit,
+      include: lightPayload
+        ? {
+            user: { select: { name: true, phone: true } },
+            _count: { select: { items: true } },
+          }
         : {
             user: { select: { name: true, phone: true } },
             items: { include: { menuItem: { select: { name: true, categoryId: true } } } },

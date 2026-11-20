@@ -1,17 +1,20 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   X,
   Receipt,
   Search,
   Bike,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   CheckCircle2,
   Circle,
   ListChecks,
   Merge,
   Loader2,
   Clock,
+  Calendar,
   ChefHat,
   Zap,
   Pencil,
@@ -26,6 +29,16 @@ import {
 import OrderPackagingPanel from "./OrderPackagingPanel";
 import { hapticMedium } from "@/lib/haptics";
 import { PAY_FILTERS, matchesPayFilter } from "@/lib/paid-order-filters";
+import api from "@/lib/api";
+
+export interface DrawerOrderItem {
+  id?: string;
+  name: string;
+  quantity: number;
+  price: number;
+  subtotal: number;
+  notes?: string | null;
+}
 
 export interface DrawerOrder {
   id: string;
@@ -38,7 +51,10 @@ export interface DrawerOrder {
   /** ISO de creación (o de cobro en modo "Cobradas") para mostrar hora +
    *  fecha exactas en el tile. */
   createdAt?: string;
+  /** En modo "Cobradas", fecha original del pedido cuando difiere de paidAt. */
+  orderedAt?: string;
   itemsCount: number;
+  items?: DrawerOrderItem[];
   driver?: string;
   needsDriver?: boolean;
   /** Nombre del empleado (cajero/mesero) que tomó el pedido. Undefined en
@@ -134,13 +150,22 @@ const CORRECTION_METHODS: {
 // Etiqueta legible del método de pago para el chip del tile en modo "Cobradas".
 const PAY_METHOD_LABEL: Record<string, string> = {
   CASH: "Efectivo",
+  CASH_ON_DELIVERY: "Efectivo",
   CARD: "Tarjeta",
+  CARD_PRESENT: "Tarjeta",
   TRANSFER: "Transfer.",
+  SPEI: "Transfer.",
   ONLINE: "En línea",
   MIXED: "Mixto",
 };
 const payMethodLabel = (m?: string | null): string =>
   m ? PAY_METHOD_LABEL[m] || m : "Pagado";
+
+const ORDER_TYPE_LABEL: Record<string, string> = {
+  DINE_IN: "MESA",
+  TAKEOUT: "LLEVAR",
+  DELIVERY: "DOMICILIO",
+};
 
 const FILTERS = ["Todos", "Mesa", "Llevar", "Domicilio"] as const;
 type FilterKey = (typeof FILTERS)[number];
@@ -153,6 +178,62 @@ const SORTS = [
   { key: "name", label: "Nombre" },
 ] as const;
 type SortKey = (typeof SORTS)[number]["key"];
+
+type DatePresetKey = "31d" | "today" | "7d" | "thisMonth" | "lastMonth" | "custom";
+
+const DATE_PRESETS: { key: DatePresetKey; label: string }[] = [
+  { key: "31d", label: "Últ. 31 días" },
+  { key: "today", label: "Hoy" },
+  { key: "7d", label: "7 días" },
+  { key: "thisMonth", label: "Este mes" },
+  { key: "lastMonth", label: "Mes pasado" },
+  { key: "custom", label: "Fechas…" },
+];
+
+function toYmdCdmx(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Mexico_City",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const y = parts.find((p) => p.type === "year")?.value || "2026";
+  const m = parts.find((p) => p.type === "month")?.value || "01";
+  const d = parts.find((p) => p.type === "day")?.value || "01";
+  return `${y}-${m}-${d}`;
+}
+
+function computePresetRange(preset: DatePresetKey): { from: string; to: string } {
+  const now = new Date();
+  const todayStr = toYmdCdmx(now);
+  if (preset === "today") {
+    return { from: todayStr, to: todayStr };
+  }
+  if (preset === "7d") {
+    const start = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+    return { from: toYmdCdmx(start), to: todayStr };
+  }
+  if (preset === "thisMonth") {
+    const [y, m] = todayStr.split("-");
+    return { from: `${y}-${m}-01`, to: todayStr };
+  }
+  if (preset === "lastMonth") {
+    const [yStr, mStr] = todayStr.split("-");
+    let y = Number(yStr);
+    let m = Number(mStr) - 1;
+    if (m < 1) {
+      m = 12;
+      y -= 1;
+    }
+    const mm = String(m).padStart(2, "0");
+    const lastDay = new Date(y, m, 0).getDate();
+    return {
+      from: `${y}-${mm}-01`,
+      to: `${y}-${mm}-${String(lastDay).padStart(2, "0")}`,
+    };
+  }
+  return { from: "", to: "" };
+}
 
 const matchesFilter = (order: DrawerOrder, filter: FilterKey): boolean => {
   if (filter === "Todos") return true;
@@ -191,6 +272,40 @@ const formatDateTime = (iso?: string): string => {
   });
 };
 
+function mapRawOrderToDrawer(o: any): DrawerOrder {
+  const rawItems: any[] = Array.isArray(o.items) ? o.items : [];
+  const mappedItems: DrawerOrderItem[] = rawItems.map((it: any) => {
+    const qty = Number(it.quantity ?? 1);
+    const price = Number(it.unitPrice ?? it.price ?? 0);
+    const subtotal = Number(it.subtotal ?? qty * price);
+    return {
+      id: it.id ? String(it.id) : undefined,
+      name: it.name || it.menuItem?.name || "Producto",
+      quantity: qty,
+      price,
+      subtotal,
+      notes: it.notes || null,
+    };
+  });
+  return {
+    id: String(o.id),
+    orderNumber: o.orderNumber || `#${String(o.id).slice(-6).toUpperCase()}`,
+    customerName:
+      o.ticketName || o.customerName || o.user?.name || "Público general",
+    type: ORDER_TYPE_LABEL[o.orderType || ""] || o.orderType || "ORDEN",
+    status: o.paymentStatus === "PAID" ? "PAID" : (o.status || "PAID"),
+    total: Number(o.total ?? 0),
+    time: "",
+    createdAt: o.paidAt || o.createdAt || undefined,
+    orderedAt: o.createdAt || undefined,
+    itemsCount: mappedItems.length || Number(o._count?.items ?? 0),
+    items: mappedItems.length > 0 ? mappedItems : undefined,
+    driver: o.deliveryDriverName || undefined,
+    takenBy: o.createdByName || undefined,
+    paymentMethod: o.paymentMethod || null,
+  };
+}
+
 const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   isOpen,
   onClose,
@@ -220,6 +335,15 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   const [payFilter, setPayFilter] = useState<string>("Todos");
   const [sortKey, setSortKey] = useState<SortKey>("default");
   const [search, setSearch] = useState("");
+  const [datePreset, setDatePreset] = useState<DatePresetKey>("31d");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [remotePaidOrders, setRemotePaidOrders] = useState<DrawerOrder[] | null>(null);
+  const [remoteSearching, setRemoteSearching] = useState(false);
+  const [expandedDetailId, setExpandedDetailId] = useState<string | null>(null);
+  const [detailItemsById, setDetailItemsById] = useState<Record<string, DrawerOrderItem[]>>({});
+  const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
+
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showMergeConfirm, setShowMergeConfirm] = useState(false);
@@ -247,18 +371,140 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
   const canSelect =
     !paidMode && (canMergeOrders || canAssignDriver || canSendToKitchen);
 
+  // Al elegir un preset de fecha en "Cobradas", actualiza dateFrom y dateTo.
+  const handleSelectDatePreset = (preset: DatePresetKey) => {
+    setDatePreset(preset);
+    if (preset === "31d") {
+      setDateFrom("");
+      setDateTo("");
+      return;
+    }
+    if (preset === "custom") {
+      if (!dateFrom && !dateTo) {
+        const range = computePresetRange("thisMonth");
+        setDateFrom(range.from);
+        setDateTo(range.to);
+      }
+      return;
+    }
+    const range = computePresetRange(preset);
+    setDateFrom(range.from);
+    setDateTo(range.to);
+  };
+
+  // Búsqueda histórica server-side cuando el usuario escribe un término o
+  // selecciona un rango de fechas en la pestaña "Cobradas". Permite encontrar
+  // tickets más allá del tope de las 500 órdenes del cache local.
+  const hasServerQuery =
+    paidMode && (search.trim().length >= 2 || Boolean(dateFrom) || Boolean(dateTo));
+
+  useEffect(() => {
+    if (!isOpen || !hasServerQuery) {
+      setRemotePaidOrders(null);
+      setRemoteSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setRemoteSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams();
+        params.set("scope", "paid");
+        params.set("includeItems", "1");
+        if (search.trim()) params.set("q", search.trim());
+        if (dateFrom) params.set("from", dateFrom);
+        if (dateTo) params.set("to", dateTo);
+        const { data } = await api.get(`/api/orders/admin?${params.toString()}`);
+        if (cancelled) return;
+        if (Array.isArray(data)) {
+          setRemotePaidOrders(data.map(mapRawOrderToDrawer));
+        } else {
+          setRemotePaidOrders(null);
+        }
+      } catch {
+        // Fallback silencioso a la lista local en modo offline o tests unitarios.
+        if (!cancelled) setRemotePaidOrders(null);
+      } finally {
+        if (!cancelled) setRemoteSearching(false);
+      }
+    }, 260);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isOpen, hasServerQuery, search, dateFrom, dateTo]);
+
+  // Carga bajo demanda de los platillos de un ticket cobrado al expandir "Detalle".
+  const togglePaidDetail = async (order: DrawerOrder) => {
+    if (expandedDetailId === order.id) {
+      setExpandedDetailId(null);
+      return;
+    }
+    setExpandedDetailId(order.id);
+    if (order.items && order.items.length > 0) return;
+    if (detailItemsById[order.id]) return;
+    setLoadingDetailId(order.id);
+    try {
+      const { data } = await api.get(`/api/orders/${order.id}`);
+      const rawItems: any[] = Array.isArray(data?.items) ? data.items : [];
+      const mapped: DrawerOrderItem[] = rawItems.map((it: any) => {
+        const qty = Number(it.quantity ?? 1);
+        const price = Number(it.unitPrice ?? it.price ?? 0);
+        const subtotal = Number(it.subtotal ?? qty * price);
+        return {
+          id: it.id ? String(it.id) : undefined,
+          name: it.name || it.menuItem?.name || "Producto",
+          quantity: qty,
+          price,
+          subtotal,
+          notes: it.notes || null,
+        };
+      });
+      setDetailItemsById((prev) => ({ ...prev, [order.id]: mapped }));
+    } catch {
+      // Sin conexión no bloquea la vista.
+    } finally {
+      setLoadingDetailId((cur) => (cur === order.id ? null : cur));
+    }
+  };
+
+  const baseOrders = useMemo(() => {
+    if (paidMode && remotePaidOrders !== null) {
+      return remotePaidOrders;
+    }
+    return orders;
+  }, [paidMode, remotePaidOrders, orders]);
+
   const visibleOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const filtered = orders
+    const fromBound =
+      paidMode && dateFrom ? new Date(`${dateFrom}T00:00:00.000-06:00`).getTime() : null;
+    const toBound =
+      paidMode && dateTo ? new Date(`${dateTo}T23:59:59.999-06:00`).getTime() : null;
+
+    const filtered = baseOrders
       .filter((o) => matchesFilter(o, activeFilter))
       // El filtro por método de pago solo aplica en "Cobradas".
       .filter((o) => (paidMode ? matchesPayFilter(o, payFilter) : true))
       .filter((o) => {
+        if (!fromBound && !toBound) return true;
+        if (!o.createdAt) return true;
+        const ts = new Date(o.createdAt).getTime();
+        if (Number.isNaN(ts)) return true;
+        if (fromBound && ts < fromBound) return false;
+        if (toBound && ts > toBound) return false;
+        return true;
+      })
+      .filter((o) => {
         if (!q) return true;
-        return (
+        const matchesHeader =
           o.customerName?.toLowerCase().includes(q) ||
-          o.orderNumber?.toLowerCase().includes(q)
-        );
+          o.orderNumber?.toLowerCase().includes(q);
+        if (matchesHeader) return true;
+        if (o.items && o.items.some((it) => it.name.toLowerCase().includes(q))) {
+          return true;
+        }
+        return false;
       });
     if (sortKey === "amount") {
       filtered.sort((a, b) => b.total - a.total);
@@ -270,7 +516,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
       );
     }
     return filtered;
-  }, [orders, activeFilter, payFilter, paidMode, search, sortKey]);
+  }, [baseOrders, activeFilter, payFilter, paidMode, search, sortKey, dateFrom, dateTo]);
 
   // Total monetario de lo que está visible (útil al filtrar cobrados por método
   // o tipo: "cuánto entró por transferencia en mesas", etc.).
@@ -440,7 +686,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
             </span>
             <span className="text-[16px] font-semibold text-white truncate leading-none">
               {paidMode
-                ? `${orders.length} cobrado${orders.length === 1 ? "" : "s"} · último mes`
+                ? `${visibleOrders.length} cobrado${visibleOrders.length === 1 ? "" : "s"} · $${visibleTotal.toFixed(2)}`
                 : selectionMode
                   ? `${selectedOrders.length} seleccionada${selectedOrders.length === 1 ? "" : "s"}`
                   : `${orders.length} en curso${
@@ -473,7 +719,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
         </div>
 
         {/* FILTERS & SEARCH */}
-        <div className="relative z-10 p-4 border-b border-white/5 space-y-3 shrink-0">
+        <div className="relative z-10 p-4 border-b border-white/5 space-y-2.5 shrink-0">
           {/* TOGGLE Abiertas / Cobradas */}
           {onModeChange && !selectionMode && (
             <div className="flex gap-2 p-1 rounded-2xl bg-white/5 border border-white/10">
@@ -502,14 +748,14 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
             </div>
           )}
 
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
             {FILTERS.map((f) => {
               const isActive = activeFilter === f;
               return (
                 <button
                   key={f}
                   onClick={() => setActiveFilter(f)}
-                  className={`shrink-0 h-11 min-h-[44px] px-5 rounded-2xl text-[11px] font-semibold uppercase tracking-[0.15em] whitespace-nowrap active:scale-95 transition-all border ${
+                  className={`shrink-0 h-10 min-h-[40px] px-5 rounded-2xl text-[11px] font-semibold uppercase tracking-[0.15em] whitespace-nowrap active:scale-95 transition-all border ${
                     isActive
                       ? "bg-[var(--brand)] text-[var(--brand-fg)] border-[var(--brand)] shadow-[0_5px_20px_var(--brand-glow)]"
                       : "bg-white/5 text-white/60 border-white/10"
@@ -535,7 +781,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                       key={p.key}
                       type="button"
                       onClick={() => setPayFilter(p.key)}
-                      className={`shrink-0 h-9 px-4 rounded-xl text-[10px] font-semibold uppercase tracking-[0.12em] whitespace-nowrap active:scale-95 transition-all border ${
+                      className={`shrink-0 h-8 px-3.5 rounded-xl text-[10px] font-semibold uppercase tracking-[0.12em] whitespace-nowrap active:scale-95 transition-all border ${
                         isActive
                           ? "bg-[#88D66C]/20 text-[#88D66C] border-[#88D66C]/40"
                           : "bg-white/5 text-white/45 border-white/10"
@@ -549,6 +795,81 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
             </div>
           )}
 
+          {/* FILTRO POR FECHA DE COBRO — solo en "Cobradas" */}
+          {paidMode && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-white/30 shrink-0 inline-flex items-center gap-1">
+                  <Calendar size={11} /> Fecha
+                </span>
+                <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+                  {DATE_PRESETS.map((preset) => {
+                    const isActive = datePreset === preset.key;
+                    return (
+                      <button
+                        key={preset.key}
+                        type="button"
+                        onClick={() => handleSelectDatePreset(preset.key)}
+                        className={`shrink-0 h-8 px-3 rounded-xl text-[10px] font-semibold uppercase tracking-[0.1em] whitespace-nowrap active:scale-95 transition-all border ${
+                          isActive
+                            ? "bg-white/15 text-white border-white/30"
+                            : "bg-white/5 text-white/45 border-white/10"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {(datePreset === "custom" || dateFrom || dateTo) && (
+                <div className="flex items-center gap-2 bg-white/[0.03] border border-white/10 rounded-xl p-2">
+                  <div className="flex-1 flex items-center gap-1.5">
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/40">
+                      Del
+                    </span>
+                    <input
+                      type="date"
+                      aria-label="Fecha desde"
+                      value={dateFrom}
+                      onChange={(e) => {
+                        setDatePreset("custom");
+                        setDateFrom(e.target.value);
+                      }}
+                      className="w-full h-8 rounded-lg bg-black/40 border border-white/10 px-2 text-[11px] text-white focus:outline-none focus:border-[#88D66C]"
+                    />
+                  </div>
+                  <div className="flex-1 flex items-center gap-1.5">
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/40">
+                      Al
+                    </span>
+                    <input
+                      type="date"
+                      aria-label="Fecha hasta"
+                      value={dateTo}
+                      onChange={(e) => {
+                        setDatePreset("custom");
+                        setDateTo(e.target.value);
+                      }}
+                      className="w-full h-8 rounded-lg bg-black/40 border border-white/10 px-2 text-[11px] text-white focus:outline-none focus:border-[#88D66C]"
+                    />
+                  </div>
+                  {(dateFrom || dateTo) && (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectDatePreset("31d")}
+                      title="Limpiar fechas"
+                      className="h-8 px-2.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-semibold text-white/60 active:scale-95"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="relative">
             <Search
               className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40"
@@ -557,9 +878,28 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por cliente o #orden..."
-              className="w-full h-12 min-h-[48px] bg-white/5 border border-white/10 rounded-2xl pl-11 pr-4 text-[13px] text-white focus:outline-none focus:border-[var(--brand)] transition-colors placeholder:text-white/30"
+              placeholder={
+                paidMode
+                  ? "Buscar cliente (ej. Perusi, Richard), #ticket o platillo..."
+                  : "Buscar por cliente o #orden..."
+              }
+              className="w-full h-11 min-h-[44px] bg-white/5 border border-white/10 rounded-2xl pl-11 pr-9 text-[13px] text-white focus:outline-none focus:border-[var(--brand)] transition-colors placeholder:text-white/30"
             />
+            {remoteSearching ? (
+              <Loader2
+                size={15}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#88D66C] animate-spin"
+              />
+            ) : search ? (
+              <button
+                type="button"
+                aria-label="Limpiar búsqueda"
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
+              >
+                <X size={15} />
+              </button>
+            ) : null}
           </div>
 
           {/* ORDENAR */}
@@ -575,7 +915,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                     key={s.key}
                     type="button"
                     onClick={() => setSortKey(s.key)}
-                    className={`shrink-0 h-9 px-4 rounded-xl text-[10px] font-semibold uppercase tracking-[0.12em] whitespace-nowrap active:scale-95 transition-all border ${
+                    className={`shrink-0 h-8 px-3.5 rounded-xl text-[10px] font-semibold uppercase tracking-[0.12em] whitespace-nowrap active:scale-95 transition-all border ${
                       isActive
                         ? "bg-white/15 text-white border-white/25"
                         : "bg-white/5 text-white/45 border-white/10"
@@ -589,13 +929,13 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
           </div>
         </div>
 
-        {/* TILE GRID — 2 cols touch */}
+        {/* TILE GRID */}
         <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide p-3">
-          {paidMode && paidLoading && orders.length === 0 ? (
+          {paidMode && (paidLoading || remoteSearching) && visibleOrders.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center opacity-50 gap-4 py-16">
               <Loader2 size={40} className="text-white/40 animate-spin" />
               <p className="text-[12px] font-bold tracking-widest uppercase text-white/40">
-                Cargando cobrados…
+                Buscando tickets cobrados…
               </p>
             </div>
           ) : visibleOrders.length === 0 ? (
@@ -607,7 +947,7 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
               )}
               <p className="text-[12px] font-bold tracking-widest uppercase text-white/40">
                 {paidMode
-                  ? orders.length === 0
+                  ? baseOrders.length === 0 && !search && !dateFrom && !dateTo
                     ? "Sin tickets cobrados este mes"
                     : "Sin coincidencias"
                   : orders.length === 0
@@ -621,6 +961,8 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                 const tone = toneFor(order.status);
                 const selectedIndex = selectedIds.indexOf(order.id);
                 const isSelected = selectedIndex >= 0;
+                const isDetailOpen = expandedDetailId === order.id;
+                const resolvedItems = order.items || detailItemsById[order.id];
                 return (
                   <div
                     key={order.id}
@@ -646,107 +988,142 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                         ? `${isSelected ? "Quitar" : "Seleccionar"} ticket de ${order.customerName}`
                         : `Ticket de ${order.customerName} por $${order.total.toFixed(2)}`
                     }
-                    className={`relative px-3.5 py-2 rounded-xl border bg-white/5 backdrop-blur-md text-left flex flex-col gap-1.5 active:scale-[0.99] transition-all overflow-hidden ${
+                    className={`relative px-3.5 py-2.5 rounded-xl border bg-white/5 backdrop-blur-md text-left flex flex-col gap-2 active:scale-[0.99] transition-all overflow-hidden ${
                       isSelected
                         ? "border-[var(--brand)] bg-[var(--brand-soft)] shadow-[inset_0_0_0_1px_var(--brand-glow)]"
                         : tone.ring
                     }`}
                   >
                     <div className="flex items-center gap-3 w-full">
-                    {selectionMode ? (
-                      isSelected ? (
-                        <CheckCircle2
-                          size={21}
-                          className="shrink-0 text-[var(--brand)]"
-                          strokeWidth={2.5}
-                        />
-                      ) : (
-                        <Circle size={21} className="shrink-0 text-white/30" />
-                      )
-                    ) : (
-                      <span
-                        className={`shrink-0 w-2.5 h-2.5 rounded-full ${tone.dot}`}
-                        aria-label={order.status}
-                      />
-                    )}
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <h3 className="text-[15px] font-semibold text-white truncate leading-tight">
-                          {order.customerName}
-                        </h3>
-                        {isSelected && canMergeOrders && (
-                          <span className="shrink-0 text-[8px] font-semibold uppercase tracking-[0.12em] text-[var(--brand)]">
-                            {selectedIndex === 0 ? "Cuenta final" : "Se juntará"}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
-                        <span className="text-[var(--brand)]">{order.type}</span>
-                        <span className="text-white/20">·</span>
-                        <span className="tabular-nums">#{order.orderNumber}</span>
-                        {order.driver && (
-                          <>
-                            <span className="text-white/20">·</span>
-                            <span className="inline-flex items-center gap-1 text-blue-300 truncate">
-                              <Bike size={10} className="shrink-0" />
-                              <span className="truncate normal-case">{order.driver}</span>
-                            </span>
-                          </>
-                        )}
-                        {order.takenBy && (
-                          <>
-                            <span className="text-white/20">·</span>
-                            <span className="inline-flex items-center gap-1 text-white/55 truncate">
-                              <User size={10} className="shrink-0" />
-                              <span className="truncate normal-case">{order.takenBy}</span>
-                            </span>
-                          </>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold tracking-[0.05em] text-white/35">
-                        <Clock size={11} className="shrink-0 text-white/30" />
-                        <span className="tabular-nums normal-case">
-                          {formatDateTime(order.createdAt)}
-                        </span>
-                        {paidMode ? (
-                          <>
-                            <span className="text-white/20">·</span>
-                            <span className="inline-flex items-center gap-1 text-[#88D66C] normal-case">
-                              <Wallet size={11} className="shrink-0" />
-                              {payMethodLabel(order.paymentMethod)}
-                            </span>
-                          </>
+                      {selectionMode ? (
+                        isSelected ? (
+                          <CheckCircle2
+                            size={21}
+                            className="shrink-0 text-[var(--brand)]"
+                            strokeWidth={2.5}
+                          />
                         ) : (
-                          order.itemsCount > 0 && (
+                          <Circle size={21} className="shrink-0 text-white/30" />
+                        )
+                      ) : (
+                        <span
+                          className={`shrink-0 w-2.5 h-2.5 rounded-full ${tone.dot}`}
+                          aria-label={order.status}
+                        />
+                      )}
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <h3 className="text-[15px] font-semibold text-white truncate leading-tight">
+                            {order.customerName}
+                          </h3>
+                          {isSelected && canMergeOrders && (
+                            <span className="shrink-0 text-[8px] font-semibold uppercase tracking-[0.12em] text-[var(--brand)]">
+                              {selectedIndex === 0 ? "Cuenta final" : "Se juntará"}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
+                          <span className="text-[var(--brand)]">{order.type}</span>
+                          <span className="text-white/20">·</span>
+                          <span className="tabular-nums">#{order.orderNumber}</span>
+                          {order.driver && (
                             <>
                               <span className="text-white/20">·</span>
-                              <span className="tabular-nums normal-case">
-                                {order.itemsCount} art.
+                              <span className="inline-flex items-center gap-1 text-blue-300 truncate">
+                                <Bike size={10} className="shrink-0" />
+                                <span className="truncate normal-case">{order.driver}</span>
                               </span>
                             </>
-                          )
-                        )}
+                          )}
+                          {order.takenBy && (
+                            <>
+                              <span className="text-white/20">·</span>
+                              <span className="inline-flex items-center gap-1 text-white/55 truncate">
+                                <User size={10} className="shrink-0" />
+                                <span className="truncate normal-case">{order.takenBy}</span>
+                              </span>
+                            </>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold tracking-[0.05em] text-white/35">
+                          <Clock size={11} className="shrink-0 text-white/30" />
+                          <span className="tabular-nums normal-case">
+                            {formatDateTime(order.createdAt)}
+                          </span>
+                          {paidMode ? (
+                            <>
+                              <span className="text-white/20">·</span>
+                              <span className="inline-flex items-center gap-1 text-[#88D66C] normal-case">
+                                <Wallet size={11} className="shrink-0" />
+                                {payMethodLabel(order.paymentMethod)}
+                              </span>
+                              {order.itemsCount > 0 && (
+                                <>
+                                  <span className="text-white/20">·</span>
+                                  <span className="tabular-nums normal-case">
+                                    {order.itemsCount} art.
+                                  </span>
+                                </>
+                              )}
+                            </>
+                          ) : (
+                            order.itemsCount > 0 && (
+                              <>
+                                <span className="text-white/20">·</span>
+                                <span className="tabular-nums normal-case">
+                                  {order.itemsCount} art.
+                                </span>
+                              </>
+                            )
+                          )}
+                        </div>
                       </div>
+
+                      <span className="shrink-0 tabular-nums text-lg font-black tracking-tight text-white">
+                        ${order.total.toFixed(2)}
+                      </span>
                     </div>
 
-                    <span className="shrink-0 tabular-nums text-lg font-black tracking-tight text-white">
-                      ${order.total.toFixed(2)}
-                    </span>
-                    </div>
-
-                    {/* Modo "Cobradas": reimprimir el recibo (paid:true en el
-                        caller) y, con permiso, corregir el método de pago de un
-                        ticket ya cobrado (efectivo ↔ transferencia ↔ tarjeta). */}
+                    {/* Modo "Cobradas": ver detalle de platillos, reimprimir recibo,
+                        corregir método de pago o reembolsar. */}
                     {paidMode ? (
                       <div className="flex flex-col gap-2 w-full">
-                        <div className="flex items-stretch gap-2 w-full">
+                        <div className="flex items-stretch gap-1.5 w-full">
+                          <button
+                            type="button"
+                            aria-label={`Ver consumo de ${order.customerName}`}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              hapticMedium();
+                              void togglePaidDetail(order);
+                            }}
+                            className={`h-9 px-3 rounded-lg border text-[10px] font-semibold uppercase tracking-[0.08em] flex items-center justify-center gap-1 active:scale-95 transition-transform ${
+                              isDetailOpen
+                                ? "bg-white/15 border-white/30 text-white"
+                                : "bg-white/5 border-white/10 text-white/70"
+                            }`}
+                          >
+                            {isDetailOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            Detalle
+                          </button>
+
                           {!["CANCELLED", "DELIVERED"].includes(order.status) && (
-                            <button type="button" onPointerDown={e => e.stopPropagation()}
-                              onClick={e => { e.stopPropagation(); setPackagingOrder(order); }}
-                              className="min-h-[48px] rounded-xl px-3 bg-white/5 border border-white/10 text-white text-[10px] font-semibold">Empaques</button>
+                            <button
+                              type="button"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPackagingOrder(order);
+                              }}
+                              className="min-h-[36px] rounded-lg px-2.5 bg-white/5 border border-white/10 text-white text-[10px] font-semibold"
+                            >
+                              Empaques
+                            </button>
                           )}
+
                           <button
                             type="button"
                             aria-label={`Reimprimir recibo de ${order.customerName}`}
@@ -756,10 +1133,11 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                               hapticMedium();
                               onReprintOrder(order);
                             }}
-                            className="flex-1 h-9 rounded-lg bg-[#88D66C]/12 border border-[#88D66C]/30 text-[#88D66C] text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+                            className="flex-1 h-9 rounded-lg bg-[#88D66C]/12 border border-[#88D66C]/30 text-[#88D66C] text-[10px] font-semibold uppercase tracking-[0.08em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
                           >
-                            <Receipt size={15} strokeWidth={2.5} /> Reimprimir
+                            <Receipt size={14} strokeWidth={2.5} /> Reimprimir
                           </button>
+
                           {canCorrectPaymentMethod && onCorrectPaymentMethod && (
                             <button
                               type="button"
@@ -772,15 +1150,16 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                                   cur === order.id ? null : order.id,
                                 );
                               }}
-                              className={`flex-1 h-9 rounded-lg border text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform ${
+                              className={`flex-1 h-9 rounded-lg border text-[10px] font-semibold uppercase tracking-[0.08em] flex items-center justify-center gap-1 active:scale-95 transition-transform ${
                                 correctingId === order.id
                                   ? "bg-[var(--brand)] border-[var(--brand)] text-[var(--brand-fg)]"
                                   : "bg-white/5 border-white/10 text-white/75"
                               }`}
                             >
-                              <Wallet size={15} strokeWidth={2.5} /> Corregir cobro
+                              <Wallet size={14} strokeWidth={2.5} /> Método
                             </button>
                           )}
+
                           {canRefund && onRefund && (
                             <button
                               type="button"
@@ -792,22 +1171,67 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                                 setCorrectingId(null);
                                 setRefundingId((cur) => {
                                   if (cur === order.id) return null;
-                                  // Al abrir: prefijar el monto con el total.
                                   setRefundAmount(String(order.total ?? ""));
                                   setRefundReason("");
                                   return order.id;
                                 });
                               }}
-                              className={`flex-1 h-9 rounded-lg border text-[11px] font-semibold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5 active:scale-95 transition-transform ${
+                              className={`flex-1 h-9 rounded-lg border text-[10px] font-semibold uppercase tracking-[0.08em] flex items-center justify-center gap-1 active:scale-95 transition-transform ${
                                 refundingId === order.id
                                   ? "bg-red-500 border-red-500 text-white"
                                   : "bg-red-500/10 border-red-500/30 text-red-300"
                               }`}
                             >
-                              <Undo2 size={15} strokeWidth={2.5} /> Reembolsar
+                              <Undo2 size={14} strokeWidth={2.5} /> Reembolsar
                             </button>
                           )}
                         </div>
+
+                        {/* Panel expandible con el desglose de productos del ticket cobrado */}
+                        {isDetailOpen && (
+                          <div className="rounded-lg border border-white/10 bg-black/30 p-2.5 space-y-1.5">
+                            {order.orderedAt && order.orderedAt !== order.createdAt && (
+                              <div className="flex items-center justify-between text-[10px] text-white/45 pb-1 border-b border-white/10">
+                                <span>Pedido creado: {formatDateTime(order.orderedAt)}</span>
+                                <span>Cobrado: {formatDateTime(order.createdAt)}</span>
+                              </div>
+                            )}
+                            {loadingDetailId === order.id ? (
+                              <div className="flex items-center justify-center gap-2 py-3 text-white/50 text-xs">
+                                <Loader2 size={14} className="animate-spin" />
+                                Cargando consumo…
+                              </div>
+                            ) : !resolvedItems || resolvedItems.length === 0 ? (
+                              <p className="text-[11px] text-white/45 py-1">
+                                Sin desglose de productos disponible.
+                              </p>
+                            ) : (
+                              <ul className="space-y-1">
+                                {resolvedItems.map((it, idx) => (
+                                  <li
+                                    key={it.id || `${order.id}-it-${idx}`}
+                                    className="flex items-start justify-between gap-2 text-xs text-white/85"
+                                  >
+                                    <div className="min-w-0">
+                                      <span className="font-bold text-[#88D66C] tabular-nums">
+                                        {it.quantity}x
+                                      </span>{" "}
+                                      <span>{it.name}</span>
+                                      {it.notes && (
+                                        <span className="block text-[10px] text-white/45 italic">
+                                          {it.notes}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="shrink-0 font-mono text-white/75 tabular-nums">
+                                      ${Number(it.subtotal ?? it.price * it.quantity).toFixed(2)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
 
                         {/* Panel inline de reembolso (monto total/parcial + motivo). */}
                         {canRefund && onRefund && refundingId === order.id && (
@@ -889,8 +1313,6 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
                                       hapticMedium();
                                       setRefundSaveId(order.id);
                                       try {
-                                        // Sin monto explícito o igual al total ⇒
-                                        // el backend reembolsa el saldo restante.
                                         const isFull =
                                           Math.abs(amt - Number(order.total ?? 0)) < 0.005;
                                         await onRefund(order, {
@@ -1100,19 +1522,28 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
               <div className="flex items-baseline justify-between">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/40">
                   {visibleOrders.length} ticket{visibleOrders.length === 1 ? "" : "s"}
-                  {(payFilter !== "Todos" || activeFilter !== "Todos") ? " · filtrado" : ""}
+                  {payFilter !== "Todos" ||
+                  activeFilter !== "Todos" ||
+                  search ||
+                  dateFrom ||
+                  dateTo
+                    ? " · filtrado"
+                    : ""}
                 </span>
                 <span className="text-xl font-black tabular-nums text-[#88D66C]">
                   ${visibleTotal.toFixed(2)}
                 </span>
               </div>
               <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-white/25">
-                Cobrados del último mes · guardado local
+                {remotePaidOrders !== null
+                  ? "Búsqueda histórica en servidor"
+                  : "Cobrados del último mes · guardado local"}
               </p>
             </div>
           ) : (
             <button
               type="button"
+              onClick={() => onModeChange?.("paid")}
               className="w-full min-h-[48px] h-12 rounded-2xl bg-white/5 border border-white/10 text-white/80 text-[11px] font-semibold uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-transform"
             >
               Ver historial completo
@@ -1122,7 +1553,14 @@ const OrdersDrawer: React.FC<OrdersDrawerProps> = ({
         </div>
       </aside>
 
-      {packagingOrder && <OrderPackagingPanel key={packagingOrder.id} orderId={packagingOrder.id} orderNumber={packagingOrder.orderNumber} onClose={() => setPackagingOrder(null)} />}
+      {packagingOrder && (
+        <OrderPackagingPanel
+          key={packagingOrder.id}
+          orderId={packagingOrder.id}
+          orderNumber={packagingOrder.orderNumber}
+          onClose={() => setPackagingOrder(null)}
+        />
+      )}
 
       {showMergeConfirm && targetOrder && selectedOrders.length >= 2 && (
         <div className="absolute inset-0 z-[10] flex items-center justify-center p-5">

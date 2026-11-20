@@ -12,6 +12,7 @@ import {
 import OrderCard from "./_components/OrderCard";
 import OrdersKanban from "./_components/OrdersKanban";
 import OrderEvidenceModal from "./_components/OrderEvidenceModal";
+import TicketsHistoryPanel from "./_components/TicketsHistoryPanel";
 import { STATUSES, type Driver, type Order, type StatusKey } from "./_components/orders";
 
 export default function PedidosPage() {
@@ -20,7 +21,7 @@ export default function PedidosPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<"kanban" | "list">("list");
+  const [view, setView] = useState<"kanban" | "list" | "history">("list");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
   const [search, setSearch] = useState("");
@@ -159,106 +160,104 @@ export default function PedidosPage() {
   const hasFilters = filterStatus !== "all" || filterSource !== "all" || Boolean(search);
   const updatedLabel = lastUpdate.toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit" });
 
+  const viewOptions = [
+    { value: "list", label: "Lista" },
+    { value: "kanban", label: "Kanban" },
+    { value: "history", label: "Buscador / Historial" },
+  ] as const;
+
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Operación en vivo"
-        title="Pedidos"
-        subtitle="Recibe, avanza y entrega los pedidos de todos los canales."
+        eyebrow={view === "history" ? "Auditoría y consulta histórica" : "Operación en vivo"}
+        title={view === "history" ? "Buscador de Tickets" : "Pedidos"}
+        subtitle={
+          view === "history"
+            ? "Busca tickets cobrados o pendientes por cliente, rango de fechas, método de pago o platillo."
+            : "Recibe, avanza y entrega los pedidos de todos los canales."
+        }
         actions={
           <>
-            <Pill tone="ok" live>Actualizado {updatedLabel}</Pill>
+            {view !== "history" && <Pill tone="ok" live>Actualizado {updatedLabel}</Pill>}
             <Segmented
               value={view}
               onChange={setView}
-              options={[{ value: "list", label: "Lista" }, { value: "kanban", label: "Kanban" }] as const}
-              className="w-[220px]"
+              options={viewOptions}
+              className="w-[340px]"
             />
-            <IconButton icon={RotateCw} label="Refrescar" onClick={fetchData} size={44} />
-          </>
-        }
-      />
-
-      {/* indicador live + toggle de vista en móvil (el título lo pone MobileAdminChrome) */}
-      <div className="mb-3 flex items-center justify-between gap-2 md:hidden">
-        <Pill tone="ok" live>Actualizado {updatedLabel}</Pill>
-        <Segmented
-          value={view}
-          onChange={setView}
-          options={[{ value: "list", label: "Lista" }, { value: "kanban", label: "Kanban" }] as const}
-        />
-      </div>
-
-      {/* stats */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile icon={Flame} value={active.length} label="Activos" />
-        <StatTile icon={Inbox} value={pending} label="Pendientes" />
-        <StatTile icon={CheckCircle2} value={todayDelivered.length} label="Hoy entregados" />
-        <StatTile icon={Home} value={formatMoney(todayRevenue, false)} label="Ingresos hoy" />
-      </div>
-
-      {/* filtros */}
-      <Toolbar
-        className="mt-4"
-        search={{ value: search, onChange: setSearch, placeholder: "Buscar pedido, cliente…" }}
-        filters={
-          <>
-            <div className="min-w-[170px]">
-              <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                <option value="all">Todos los estados</option>
-                {STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-              </Select>
-            </div>
-            <div className="min-w-[170px]">
-              <Select value={filterSource} onChange={(e) => setFilterSource(e.target.value)}>
-                <option value="all">Todos los orígenes</option>
-                <option value="ONLINE">Online</option>
-                <option value="TPV">TPV</option>
-                <option value="WAITER">Mesero</option>
-              </Select>
-            </div>
-            {hasFilters && (
-              <Button
-                variant="danger"
-                icon={X}
-                onClick={() => { setFilterStatus("all"); setFilterSource("all"); setSearch(""); }}
-              >
-                Limpiar
-              </Button>
+            {view !== "history" && (
+              <IconButton icon={RotateCw} label="Refrescar" onClick={fetchData} size={44} />
             )}
           </>
         }
       />
 
-      {/* contenido */}
-      {loading ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-ds-lg" />)}
-        </div>
-      ) : view === "kanban" ? (
-        <OrdersKanban
-          orders={filtered}
-          drivers={drivers}
-          onStatusChange={changeStatus}
-          onAssignDriver={assignDriver}
-          onUnassignDriver={unassignDriver}
-          onCobrar={setCobrarOrder}
-          onPrint={printTicket}
-          onOpenConversation={openConversation}
-          onViewEvidence={setSelectedOrder}
+      {/* indicador live + toggle de vista en móvil (el título lo pone MobileAdminChrome) */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 md:hidden">
+        {view !== "history" && <Pill tone="ok" live>Actualizado {updatedLabel}</Pill>}
+        <Segmented
+          value={view}
+          onChange={setView}
+          options={viewOptions}
         />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={Inbox}
-          title="Sin pedidos que mostrar"
-          hint={hasFilters ? "Prueba quitar los filtros activos." : "Los nuevos pedidos aparecerán aquí en vivo."}
+      </div>
+
+      {view === "history" ? (
+        <TicketsHistoryPanel
+          onCobrarOrder={setCobrarOrder}
+          onPrintOrder={printTicket}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((o) => (
-            <OrderCard
-              key={o.id}
-              order={o}
+        <>
+          {/* stats */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <StatTile icon={Flame} value={active.length} label="Activos" />
+            <StatTile icon={Inbox} value={pending} label="Pendientes" />
+            <StatTile icon={CheckCircle2} value={todayDelivered.length} label="Hoy entregados" />
+            <StatTile icon={Home} value={formatMoney(todayRevenue, false)} label="Ingresos hoy" />
+          </div>
+
+          {/* filtros */}
+          <Toolbar
+            className="mt-4"
+            search={{ value: search, onChange: setSearch, placeholder: "Buscar pedido, cliente…" }}
+            filters={
+              <>
+                <div className="min-w-[170px]">
+                  <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                    <option value="all">Todos los estados</option>
+                    {STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                  </Select>
+                </div>
+                <div className="min-w-[170px]">
+                  <Select value={filterSource} onChange={(e) => setFilterSource(e.target.value)}>
+                    <option value="all">Todos los orígenes</option>
+                    <option value="ONLINE">Online</option>
+                    <option value="TPV">TPV</option>
+                    <option value="WAITER">Mesero</option>
+                  </Select>
+                </div>
+                {hasFilters && (
+                  <Button
+                    variant="danger"
+                    icon={X}
+                    onClick={() => { setFilterStatus("all"); setFilterSource("all"); setSearch(""); }}
+                  >
+                    Limpiar
+                  </Button>
+                )}
+              </>
+            }
+          />
+
+          {/* contenido */}
+          {loading ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-ds-lg" />)}
+            </div>
+          ) : view === "kanban" ? (
+            <OrdersKanban
+              orders={filtered}
               drivers={drivers}
               onStatusChange={changeStatus}
               onAssignDriver={assignDriver}
@@ -268,8 +267,31 @@ export default function PedidosPage() {
               onOpenConversation={openConversation}
               onViewEvidence={setSelectedOrder}
             />
-          ))}
-        </div>
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon={Inbox}
+              title="Sin pedidos que mostrar"
+              hint={hasFilters ? "Prueba quitar los filtros activos." : "Los nuevos pedidos aparecerán aquí en vivo."}
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((o) => (
+                <OrderCard
+                  key={o.id}
+                  order={o}
+                  drivers={drivers}
+                  onStatusChange={changeStatus}
+                  onAssignDriver={assignDriver}
+                  onUnassignDriver={unassignDriver}
+                  onCobrar={setCobrarOrder}
+                  onPrint={printTicket}
+                  onOpenConversation={openConversation}
+                  onViewEvidence={setSelectedOrder}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <OrderEvidenceModal

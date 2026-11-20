@@ -48,6 +48,42 @@ describe("OrdersDrawer multiselección", () => {
     expect(screen.queryByText('Rosa')).not.toBeInTheDocument();
   });
 
+  it("despliega el desglose de productos en cobradas al tocar Detalle", async () => {
+    const user = userEvent.setup();
+    render(
+      <OrdersDrawer
+        isOpen
+        mode="paid"
+        onClose={jest.fn()}
+        orders={[
+          {
+            id: "order-perusi",
+            orderNumber: "5704",
+            customerName: "Perusi",
+            type: "LLEVAR",
+            status: "PAID",
+            total: 310,
+            time: "hace 1d",
+            createdAt: "2026-10-26T23:42:27.520Z",
+            itemsCount: 2,
+            paymentMethod: "CASH",
+            items: [
+              { name: "Promo 10 Tacos", quantity: 1, price: 250, subtotal: 250 },
+              { name: "Papas a la Francesa", quantity: 1, price: 60, subtotal: 60 },
+            ],
+          },
+        ]}
+        onShowDetail={jest.fn()}
+        onConfirmPayment={jest.fn()}
+        onReprintOrder={jest.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Ver consumo de Perusi" }));
+    expect(screen.getByText("Promo 10 Tacos")).toBeInTheDocument();
+    expect(screen.getByText("Papas a la Francesa")).toBeInTheDocument();
+  });
+
   it("selecciona varios tickets y conserva el primero como cuenta final", async () => {
     const user = userEvent.setup();
     const onMergeOrders = jest.fn().mockResolvedValue(undefined);

@@ -32,16 +32,46 @@ export const SOURCE_LABELS: Record<string, string> = {
   ONLINE: "Online", TPV: "TPV", WAITER: "Mesero",
 };
 
-export interface OrderItem { id: string; name: string; quantity: number; price: number; notes?: string }
+export interface OrderItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+  unitPrice?: number;
+  subtotal?: number;
+  notes?: string;
+  menuItem?: { name?: string; categoryId?: string };
+}
 
 export interface Order {
-  id: string; orderNumber: string; status: StatusKey;
-  customerName?: string; customerPhone?: string; user?: { name?: string };
-  total?: number; source?: string; orderType?: string; paymentMethod?: string;
-  paymentStatus?: string; cashCollected?: boolean;
-  createdAt: string; updatedAt: string;
-  items?: OrderItem[]; deliveryAddress?: string; notes?: string;
+  id: string;
+  orderNumber: string;
+  status: StatusKey;
+  customerName?: string;
+  ticketName?: string;
+  customerPhone?: string;
+  user?: { name?: string; phone?: string };
+  subtotal?: number;
+  discount?: number;
+  deliveryFee?: number;
+  total?: number;
+  source?: string;
+  orderType?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  cashCollected?: boolean;
+  paidAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items?: OrderItem[];
+  deliveryAddress?: string;
+  notes?: string;
   deliveryDriverId?: string;
+  deliveryDriverName?: string | null;
+  createdById?: string;
+  createdByName?: string | null;
+  table?: { id: string; name: string } | null;
+  tableNumber?: string | null;
   pickupPin?: string;
   deliveryIncidents?: Array<{ id: string; type: string; loggedAt: string }>;
 }
