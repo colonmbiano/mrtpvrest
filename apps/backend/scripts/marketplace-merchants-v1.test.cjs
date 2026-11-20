@@ -295,3 +295,12 @@ test('C4: variantes con precio válido y grupos con opciones gratis y repetibles
   assert.deepEqual(drink.modifiers, [{ id: 'g-salsas', name: 'Salsas', required: true, min: 1, max: null, freeCount: 2,
     repeatable: true, options: [{ id: 's1', name: 'Verde', priceDelta: '5.00' }] }]);
 });
+
+test('el teléfono público se permite para WhatsApp y el contacto interno sigue fuera', async () => {
+  const merchants = MERCHANTS.map(row => ({ ...row, phone: '527221234567' }));
+  const result = await service(makeRepo({ merchants })).getMerchant('taqueria-centro');
+  assert.equal(result.phone, '527221234567');
+  assert.equal(JSON.stringify(result).includes('owner@example.com'), false);
+  const invalid = await service(makeRepo({ merchants: merchants.map(row => ({ ...row, phone: 'javascript:alert(1)' })) })).getMerchant('taqueria-centro');
+  assert.equal(invalid.phone, undefined);
+});

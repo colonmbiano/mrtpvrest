@@ -162,7 +162,7 @@ async function fixture(options = {}) {
 function http(f, options = {}) {
   let handler;
   // GET / y GET /:id/codes (Mis pedidos) se prueban en __tests__/marketplace-v1-buyer-orders.test.js.
-  createRouter({ Router: () => ({ get(route) { assert.ok(['/', '/:id/codes'].includes(route)); }, post(route, fn) { assert.equal(route, '/'); handler = fn; } }), service: f?.service,
+  createRouter({ Router: () => ({ get(route) { assert.ok(['/', '/:id/codes'].includes(route)); }, post(route, fn) { assert.ok(['/', '/:id/cancel'].includes(route)); if (route === '/') handler = fn; } }), service: f?.service,
     resolveAccount: () => ACCOUNT, ...options });
   return async ({ body = f?.input(), headers = { 'idempotency-key': KEY }, ...req } = {}) => {
     const res = { statusCode: 200, headers: {}, set(k, v) { this.headers[k.toLowerCase()] = v; return this; },

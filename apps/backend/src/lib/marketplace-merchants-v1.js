@@ -74,6 +74,7 @@ function discoverView(merchant, distanceKm) {
   return {
     id: merchant.id,
     slug: merchant.slug,
+    ...(typeof merchant.phone === "string" && /^[1-9]\d{7,14}$/.test(merchant.phone) ? { phone: merchant.phone } : {}),
     name: merchant.name,
     logo: text(merchant.logo),
     banner: text(merchant.banner),
