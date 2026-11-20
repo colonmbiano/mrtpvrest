@@ -139,6 +139,11 @@ function createMarketplaceIdentityRouter({
     await service.forgotPassword(req.body?.email);
     res.status(202).json({ message: 'Si la cuenta existe, recibirá instrucciones.' });
   }));
+  expressRouter.post('/password/change', authLimit, auth, guarded(async (req, res) => {
+    await service.changePassword(req.marketplaceIdentity.account.id, req.body?.currentPassword, req.body?.password);
+    res.clearCookie(name, cookies);
+    res.json({ success: true });
+  }));
   expressRouter.post('/password/reset', authLimit, guarded(async (req, res) => {
     await service.resetPassword(req.body?.token, req.body?.password);
     res.clearCookie(name, cookies);

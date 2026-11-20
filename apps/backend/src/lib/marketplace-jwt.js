@@ -46,7 +46,10 @@ function storeSecret(env = process.env) {
 function signMarketplaceToken(kind, claims, { env = process.env, expiresIn = '15m' } = {}) {
   const secret = dedicatedSecret(kind, env);
   if (!secret) throw new Error(`${context(kind).secretEnv} requerido (32+ bytes, distinto de JWT_SECRET)`);
-  return jwt.sign(claims, secret, { algorithm: 'HS256', issuer: ISSUER, audience: context(kind).audience, expiresIn });
+  // NumericDate admite fracciones. Se conserva el milisegundo para aceptar un
+  // login nuevo en el mismo segundo en que se cambió la contraseña.
+  const payload = kind === 'courier' && claims.iat === undefined ? { ...claims, iat: Date.now() / 1000 } : claims;
+  return jwt.sign(payload, secret, { algorithm: 'HS256', issuer: ISSUER, audience: context(kind).audience, expiresIn });
 }
 
 /** Verifica un token para el contexto. Primero como token del marketplace (clave

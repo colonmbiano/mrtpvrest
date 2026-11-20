@@ -3,7 +3,7 @@
 // Verifica un Bearer JWT de repartidor (clave dedicada + emisor + destinatario,
 // lib/marketplace-jwt.js contexto 'courier'). Es el camino de autenticacion para
 // apps nativas (APK) que NO pueden enviar la cookie same-site de identidad a la
-// API cross-site. No crea identidades ni toca la BD: solo traduce un token valido
+// API cross-site. Comprueba la cuenta y la revocación por cambio de contraseña.
 // en un actor con rol COURIER (la verificacion de MarketplaceNetworkCourier
 // ACTIVE/VERIFIED la hacen las rutas que lo consumen).
 //
@@ -17,6 +17,9 @@
 const COURIER_TOKEN_TTL_S = 24 * 60 * 60;
 
 function createCourierActorResolver({ verifyToken,
+  loadAccount = accountId => require('@mrtpvrest/database').prisma.marketplaceAccount.findUnique({
+    where: { id: accountId }, select: { passwordChangedAt: true, disabledAt: true, emailVerifiedAt: true },
+  }),
   marketplaceSecret = () => require('./marketplace-jwt').dedicatedSecret('courier', process.env),
   now = () => new Date() } = {}) {
   return async req => {
@@ -47,6 +50,11 @@ function createCourierActorResolver({ verifyToken,
     if (typeof accountId !== 'string' || !accountId || accountId.length > 128) return null;
     if (!Number.isFinite(claims.exp) || claims.exp <= timestamp) return null;
     if (claims.nbf !== undefined && (!Number.isFinite(claims.nbf) || claims.nbf > timestamp)) return null;
+    if (!Number.isFinite(claims.iat)) return null;
+    let account;
+    try { account = await loadAccount(accountId); } catch { return null; }
+    if (!account || account.disabledAt || !account.emailVerifiedAt) return null;
+    if (account.passwordChangedAt && claims.iat * 1000 < new Date(account.passwordChangedAt).getTime()) return null;
     return { id: accountId, accountId, roles: ['COURIER'], isActive: true, isDevice: false };
   };
 }
