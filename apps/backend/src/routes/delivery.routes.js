@@ -11,6 +11,7 @@ const { createStoreDeliveryPin, createPrismaPinAttempts, StoreDeliveryPinError }
 // Pedidos del marketplace que entregan los repartidores propios (política MANUAL).
 // Los de la red compartida no entran a la bolsa ni a la asignación de la tienda.
 const { NOT_DISPATCHABLE, PIPELINE_SELECT, networkMarketplace, courierView } = require('../lib/marketplace-store-delivery');
+const { SHIPPING_ITEMS_SELECT, shippingFeePending, manualShippingNotes } = require('../lib/delivery-shipping');
 const router = express.Router();
 // PIN de entrega de pedidos propios (STORE_DELIVERY_PIN_MODE). El freno de
 // intentos fallidos por pedido vive en PostgreSQL: vale para todas las instancias
@@ -126,13 +127,6 @@ function dispatchBlock(order) {
 // un pedido marcado NO puede salir a reparto (claim/assign/ON_THE_WAY) ni
 // cerrarse (DELIVERED) hasta que alguien capture el costo. OJO: envío $0 SIN
 // la marca es legítimo (freeDeliveryFrom / radio gratis) y no se bloquea.
-const SHIPPING_PENDING_RE = /ENV[IÍ]O POR ASIGNAR/i;
-
-function shippingFeePending(order) {
-  return order?.orderType === 'DELIVERY'
-    && !(Number(order.deliveryFee) > 0)
-    && SHIPPING_PENDING_RE.test(order.notes || '');
-}
 
 // Monto capturado a mano: acotado a un rango sano (evita typos tipo $2500).
 function parseFeeInput(value) {
@@ -273,6 +267,7 @@ router.post('/:driverId/claim/:orderId', authenticate, requireTenantAccess, asyn
     const preview = await prisma.order.findFirst({
       where: { id: req.params.orderId, restaurantId },
       select: { id: true, restaurantId: true, orderType: true, source: true, status: true, deliveryFee: true, notes: true,
+        items: SHIPPING_ITEMS_SELECT,
         marketplacePipeline: { select: PIPELINE_SELECT } },
     });
     if (!preview) return res.status(404).json({ error: 'Pedido no encontrado' });
@@ -298,6 +293,7 @@ router.post('/:driverId/claim/:orderId', authenticate, requireTenantAccess, asyn
       data: {
         deliveryDriverId: driver.id,
         status: 'ON_THE_WAY',
+        ...(manualShippingNotes(preview) !== preview.notes ? { notes: manualShippingNotes(preview) } : {}),
         // El envío capturado entra en el MISMO update atómico del claim: solo
         // el ganador lo aplica, y el total se ajusta server-side (fee era $0).
         ...(pendingFee && feeInput ? { deliveryFee: feeInput, total: { increment: feeInput } } : {}),
@@ -351,7 +347,7 @@ router.put('/orders/:orderId/delivery-fee', authenticate, requireTenantAccess, a
     if (!fee) return res.status(400).json({ error: 'Monto de envío inválido (1 a 1000).' });
     const order = await prisma.order.findFirst({
       where: { id: req.params.orderId, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
-      select: { id: true, orderType: true, status: true, paymentStatus: true, deliveryFee: true, notes: true, deliveryDriverId: true, locationId: true, restaurantId: true },
+      select: { id: true, orderType: true, status: true, paymentStatus: true, deliveryFee: true, notes: true, deliveryDriverId: true, locationId: true, restaurantId: true, items: SHIPPING_ITEMS_SELECT },
     });
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
     if (!shippingFeePending(order)) {
@@ -447,12 +443,18 @@ router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_RO
     const preview = await prisma.order.findFirst({
       where: { id: orderId, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
       select: { id: true, restaurantId: true, orderType: true, source: true, status: true, deliveryFee: true, notes: true,
+        items: SHIPPING_ITEMS_SELECT,
         marketplacePipeline: { select: PIPELINE_SELECT } },
     });
     if (!preview) return res.status(404).json({ error: 'Pedido no encontrado' });
     const blocked = dispatchBlock(preview);
     if (blocked) return res.status(409).json(blocked);
-    const pendingFee = shippingFeePending(preview);
+    // La asignación manual convierte un pedido para llevar en una entrega.
+    // Una cuenta de mesa debe cambiarse explícitamente desde el TPV.
+    if (!['TAKEOUT', 'DELIVERY'].includes(preview.orderType)) {
+      return res.status(409).json({ error: 'Cambia el tipo del pedido a domicilio antes de asignar un repartidor.', code: 'INVALID_DELIVERY_ORDER_TYPE' });
+    }
+    const pendingFee = shippingFeePending({ ...preview, orderType: 'DELIVERY' });
     const feeInput = parseFeeInput(req.body?.deliveryFee);
     if (pendingFee && !feeInput) {
       return res.status(409).json(SHIPPING_FEE_PENDING_ERROR);
@@ -460,9 +462,11 @@ router.put('/assign', authenticate, requireTenantAccess, requireRole(...STAFF_RO
 
     const order = await prisma.order.update({
       // El estado se vuelve a exigir en el mismo update: no sale si alguien lo regresó a "por aceptar".
-      where: { id: orderId, status: { notIn: NOT_DISPATCHABLE }, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
+      where: { id: orderId, orderType: preview.orderType, status: { notIn: NOT_DISPATCHABLE }, ...(req.user?.role !== 'SUPER_ADMIN' ? { restaurantId } : {}) },
       data: {
         deliveryDriverId: driverId,
+        orderType: 'DELIVERY',
+        ...(manualShippingNotes(preview) !== preview.notes ? { notes: manualShippingNotes(preview) } : {}),
         status: preview.status === 'DELIVERED' ? 'DELIVERED' : 'ON_THE_WAY',
         ...(pendingFee && feeInput ? {
           deliveryFee: feeInput,

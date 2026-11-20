@@ -8,6 +8,7 @@
 // contra su hash guardado en el pipeline (nunca se guarda ni viaja en claro).
 // Los pedidos de la red compartida (tarea con otra política) siguen en el despacho.
 
+const { manualShippingNotes } = require('./delivery-shipping');
 const { verifyPin } = require('./marketplace-dispatch');
 
 // Antes de que la tienda lo acepte (o de que se pague en línea) no sale a reparto.
@@ -37,6 +38,7 @@ function matchesMarketplacePin(order, pin) {
 function courierView(order) {
   if (!order || typeof order !== 'object') return order;
   const { marketplacePipeline, ...rest } = order;
+  if (manualShippingNotes(order) !== order.notes) rest.notes = manualShippingNotes(order);
   return storeDeliveredMarketplace(order) ? { ...rest, deliveredByStore: true } : rest;
 }
 

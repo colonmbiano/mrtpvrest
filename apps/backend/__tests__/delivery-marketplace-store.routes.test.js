@@ -140,3 +140,85 @@ test('/deliver (ruta antigua) no cierra pedidos del marketplace', async () => {
   expect(res.body.code).toBe('PIN_CONFIRMATION_REQUIRED');
   expect(prisma.order.update).not.toHaveBeenCalled();
 });
+
+test('asignar un pedido para llevar lo convierte a domicilio para que delivery pueda cobrarlo', async () => {
+  const takeout = { ...MARKET, source: 'WHATSAPP', marketplacePipeline: null, orderType: 'TAKEOUT', paymentStatus: 'PENDING', paymentMethod: 'CASH_ON_DELIVERY' };
+  prisma.order.findFirst.mockResolvedValueOnce(takeout);
+  prisma.order.update.mockResolvedValueOnce({ ...takeout, orderType: 'DELIVERY', deliveryDriverId: 'd1', status: 'ON_THE_WAY' });
+  const res = await request(makeApp()).put('/api/delivery/assign').send({ orderId: 'o1', driverId: 'd1' });
+  expect(res.status).toBe(200);
+  const { where, data } = prisma.order.update.mock.calls[0][0];
+  expect(where).toMatchObject({ id: 'o1', restaurantId: 'r1', orderType: 'TAKEOUT' });
+  expect(data).toMatchObject({ orderType: 'DELIVERY', deliveryDriverId: 'd1', status: 'ON_THE_WAY' });
+  for (const key of ['total', 'paymentStatus', 'paymentMethod', 'paidAt', 'cashCollected']) expect(data).not.toHaveProperty(key);
+});
+
+test('una cuenta de mesa no se manda a delivery ni se reporta como pedido inexistente', async () => {
+  prisma.order.findFirst.mockResolvedValueOnce({ ...MARKET, source: 'TPV', marketplacePipeline: null, orderType: 'DINE_IN' });
+  const res = await request(makeApp()).put('/api/delivery/assign').send({ orderId: 'o1', driverId: 'd1' });
+  expect(res.status).toBe(409);
+  expect(res.body.code).toBe('INVALID_DELIVERY_ORDER_TYPE');
+  expect(prisma.order.update).not.toHaveBeenCalled();
+});
+
+test('envío capturado como producto permite asignar y tomar sin sumarlo otra vez', async () => {
+  for (const action of ['assign', 'claim']) {
+    prisma.order.update.mockClear(); prisma.order.updateMany.mockClear();
+    const order = { ...MARKET, source: 'WHATSAPP', marketplacePipeline: null, deliveryFee: 0,
+      notes: 'Cliente llamó\n⚠️ ENVÍO POR ASIGNAR: sin GPS',
+      items: [{ name: 'Envíos', price: 30, quantity: 1 }], total: 415 };
+    prisma.order.findFirst.mockResolvedValueOnce(order);
+    const assigned = { ...order, status: 'ON_THE_WAY', deliveryDriverId: 'd1' };
+    if (action === 'assign') prisma.order.update.mockResolvedValueOnce(assigned);
+    else { prisma.order.updateMany.mockResolvedValueOnce({ count: 1 }); prisma.order.findFirst.mockResolvedValueOnce(assigned); }
+    const req = action === 'assign'
+      ? request(makeApp()).put('/api/delivery/assign').send({ orderId: 'o1', driverId: 'd1', deliveryFee: 30 })
+      : request(makeApp()).post('/api/delivery/d1/claim/o1').send({ deliveryFee: 30 });
+    expect((await req).status).toBe(200);
+    const write = action === 'assign' ? prisma.order.update : prisma.order.updateMany;
+    const { data } = write.mock.calls[0][0];
+    expect(data).not.toHaveProperty('total');
+    expect(data).not.toHaveProperty('deliveryFee');
+    expect(data.notes).not.toMatch(/ENVÍO POR ASIGNAR/i);
+    expect(data.notes).toContain('Cliente llamó');
+  }
+});
+
+test('sin producto de envío válido se sigue bloqueando y el costo nuevo se suma una sola vez', async () => {
+  for (const item of [{ name: 'Hamburguesa', price: 100, quantity: 1 }, { name: 'Envíos', price: 0, quantity: 1 }, { name: 'Envíos', price: 20, quantity: 0 }]) {
+    prisma.order.update.mockClear();
+    prisma.order.findFirst.mockResolvedValueOnce({ ...MARKET, source: 'WHATSAPP', marketplacePipeline: null,
+      deliveryFee: 0, notes: 'ENVÍO POR ASIGNAR', items: [item] });
+    const res = await request(makeApp()).put('/api/delivery/assign').send({ orderId: 'o1', driverId: 'd1' });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('SHIPPING_FEE_PENDING');
+    expect(prisma.order.update).not.toHaveBeenCalled();
+  }
+  prisma.order.findFirst.mockResolvedValueOnce({ ...MARKET, source: 'WHATSAPP', marketplacePipeline: null,
+    deliveryFee: 0, notes: 'ENVÍO POR ASIGNAR', items: [] });
+  prisma.order.update.mockResolvedValueOnce({ ...MARKET, status: 'ON_THE_WAY' });
+  expect((await request(makeApp()).put('/api/delivery/assign').send({ orderId: 'o1', driverId: 'd1', deliveryFee: 25 })).status).toBe(200);
+  expect(prisma.order.update.mock.calls[0][0].data).toMatchObject({ deliveryFee: 25, total: { increment: 25 } });
+});
+
+test('la bolsa y la lista del repartidor reconocen el envío del ticket y evitan volver a pedirlo', async () => {
+  const order = { ...MARKET, source: 'WHATSAPP', marketplacePipeline: null, deliveryFee: 0,
+    notes: 'ENVÍO POR ASIGNAR', items: [{ name: 'Envío Rincón Sifón', price: 25, quantity: 1 }], total: 185 };
+  for (const url of ['/api/delivery/available-orders', '/api/delivery/d1/orders']) {
+    prisma.order.findMany.mockResolvedValueOnce([order]);
+    const res = await request(makeApp()).get(url);
+    expect(res.status).toBe(200);
+    expect(res.body[0].notes).not.toMatch(/ENVÍO POR ASIGNAR/);
+    expect(res.body[0].total).toBe(185);
+    expect(res.body[0].deliveryFee).toBe(0);
+    expect(res.body[0].items).toEqual(order.items);
+  }
+});
+
+test('capturar otro costo sobre un envío que ya está como producto no cambia el total', async () => {
+  prisma.order.findFirst.mockResolvedValueOnce({ ...MARKET, source: 'WHATSAPP', marketplacePipeline: null,
+    deliveryFee: 0, notes: 'ENVÍO POR ASIGNAR', items: [{ name: 'Envíos', price: 30, quantity: 1 }] });
+  const res = await request(makeApp()).put('/api/delivery/orders/o1/delivery-fee').send({ amount: 30 });
+  expect(res.status).toBe(409);
+  expect(prisma.order.update).not.toHaveBeenCalled();
+});
