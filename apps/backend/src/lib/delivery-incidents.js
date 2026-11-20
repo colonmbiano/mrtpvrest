@@ -4,6 +4,8 @@ const marketplaceDeliveryOverride = require('./marketplace-delivery-override');
 const { createHash } = require('node:crypto');
 const { NOT_DISPATCHABLE, PIPELINE_SELECT, storeDeliveredMarketplace, networkMarketplace } = require('./marketplace-store-delivery');
 
+const { SHIPPING_ITEMS_SELECT, shippingFeePending, manualShippingNotes } = require('./delivery-shipping');
+
 const STAFF = new Set(['CASHIER', 'MANAGER', 'ADMIN', 'OWNER', 'SUPER_ADMIN']);
 const TYPES = new Set(['CUSTOMER_UNREACHABLE', 'WRONG_ADDRESS', 'DAMAGED_OR_REJECTED']);
 const METHODS = new Set(['CASH', 'CARD_PRESENT', 'TRANSFER', 'COURTESY', 'PENDING', 'CARD',
@@ -11,7 +13,7 @@ const METHODS = new Set(['CASH', 'CARD_PRESENT', 'TRANSFER', 'COURTESY', 'PENDIN
 const TX = { maxWait: 5000, timeout: 15000 };
 const ORDER_SELECT = { id: true, restaurantId: true, locationId: true, deliveryDriverId: true,
   orderType: true, source: true, status: true, deliveryFee: true, notes: true,
-  paymentMethod: true, paymentStatus: true,
+  paymentMethod: true, paymentStatus: true, items: SHIPPING_ITEMS_SELECT,
   restaurant: { select: { tenantId: true } },
   marketplacePipeline: { select: PIPELINE_SELECT } };
 const INCIDENT_SELECT = { id: true, orderId: true, courierId: true, actorId: true, type: true,
@@ -208,8 +210,7 @@ function createDeliveryIncidentsService({ now = () => new Date(), logger = conso
         check(paymentMethod == null || (existing.paymentStatus !== 'PAID' && paymentMethod === 'CASH'), 'INVALID_PAYMENT_METHOD',
           existing.paymentStatus === 'PAID' ? 'El pedido ya se pago en linea; no cobres nada' : 'Este pedido del marketplace se paga en efectivo', 409);
       }
-      check(!(existing.orderType === 'DELIVERY' && !(Number(existing.deliveryFee) > 0)
-        && /ENV[IÍ]O POR ASIGNAR/i.test(existing.notes || '')),
+      check(!shippingFeePending(existing),
       'SHIPPING_FEE_PENDING', 'Captura el costo de envio antes de continuar', 409);
       // PIN de entrega de pedidos propios: lo verifica el repartidor antes de
       // cualquier escritura. El personal de la tienda conserva su override y un
@@ -243,7 +244,7 @@ function createDeliveryIncidentsService({ now = () => new Date(), logger = conso
       }
       // A replay cannot undo a cashier's later reconciliation or duplicate income.
       if (!marketplace && existing.status !== 'DELIVERED') {
-        const data = { status };
+        const data = { status, ...(manualShippingNotes(existing) !== existing.notes ? { notes: manualShippingNotes(existing) } : {}) };
         if (paymentMethod) data.paymentMethod = paymentMethod === 'TRANSFER_PENDING' ? 'TRANSFER' : paymentMethod;
         // Pagado en línea (marketplace): la entrega no toca el cobro.
         if (status === 'DELIVERED' && !(byStore && existing.paymentStatus === 'PAID')) {

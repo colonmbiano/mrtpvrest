@@ -31,6 +31,7 @@ function setup() {
   }
   function project(row, select) {
     if (!row) return null;
+    if (Array.isArray(row)) return row.map(item => project(item, select));
     if (!select) return structuredClone(row);
     return Object.fromEntries(Object.entries(select).map(([key, value]) => [key,
       value === true ? structuredClone(row[key]) : row[key] == null ? null : project(row[key], value.select)]));
@@ -121,6 +122,7 @@ function http(f) {
     // Consumo de inventario al cobrar: fuera de alcance aquí (ver prueba del servicio abajo).
     '../services/order-inventory.service': { consumePaidOrder: async () => {} },
     '../lib/delivery-incidents': require('../src/lib/delivery-incidents'),
+    '../lib/delivery-shipping': require('../src/lib/delivery-shipping'),
     // PIN de pedidos propios: real; sin STORE_DELIVERY_PIN_MODE queda en off.
     '../lib/store-delivery-pin': require('../src/lib/store-delivery-pin'),
     // Marketplace que entregan los repartidores propios: real.
@@ -459,4 +461,20 @@ test('tenant guard enforces explicit restaurant scope for every incident/evidenc
       assert.equal(created.data.restaurantId, 'r1');
     });
   }
+});
+
+
+test('cobrar entrega con envío como producto conserva total y registra un solo ingreso', async () => {
+  const f = setup();
+  Object.assign(f.state.order[0], { deliveryFee: 0, notes: 'ENVÍO POR ASIGNAR', total: 415,
+    items: [{ name: 'Envíos', price: 30, quantity: 1 }] });
+  const result = await f.status({ status: 'DELIVERED', paymentMethod: 'CASH' });
+  assert.equal(result.order.status, 'DELIVERED');
+  assert.equal(result.order.total, 415);
+  assert.equal(result.order.deliveryFee, 0);
+  assert.doesNotMatch(result.order.notes, /ENVÍO POR ASIGNAR/);
+  assert.equal(f.state.driverCashMovement.length, 1);
+  assert.equal(f.state.driverCashMovement[0].amount, 415);
+  await f.status({ status: 'DELIVERED', paymentMethod: 'CASH' });
+  assert.equal(f.state.driverCashMovement.length, 1);
 });
