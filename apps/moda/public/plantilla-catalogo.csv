@@ -1,0 +1,3 @@
+﻿producto,categoria,marca,sku,codigo_barras,precio,costo,talla,color,material,estilo,unidad,piezas_por_caja,ubicacion,proveedor
+Camisa Oxford,Camisas,Zara,CAM-OXF-M-AZ,7501234567890,299.00,150.00,M,Azul,Algodón,,PZA,,P1-A2,
+Tornillo 1/4 x 2,Tornillería,Truper,TOR-14-2,,2.50,1.10,"1/4""",,Acero,Estándar,CAJA,100,A3-B1,PROV-44
