@@ -53,18 +53,6 @@ import { toast } from "sonner";
  * TAKEOUT y DELIVERY van directo a /pos/menu sin modales.
  */
 
-// Estados que cuentan como "cuenta abierta" (mismo set que el layout del menú).
-const ACTIVE_STATUSES = new Set([
-  "PENDING",
-  "CONFIRMED",
-  "PREPARING",
-  "READY",
-  "OPEN",
-  "ON_THE_WAY",
-  // Pedido del marketplace que espera que el comercio lo acepte.
-  "PENDING_MERCHANT",
-]);
-
 const ORDER_TYPE_OF = (t: unknown): ExtendedOrderType =>
   t === "DINE_IN" || t === "TAKEOUT" || t === "DELIVERY" ? t : "TAKEOUT";
 
@@ -132,7 +120,7 @@ export default function OrderTypePage() {
     try {
       // scope=active → el backend ya filtra a pedidos abiertos (payload chico).
       const list = await loadOpenOrders(setOpenOrders);
-      setOpenOrders(list.filter((o: any) => ACTIVE_STATUSES.has(o.status)));
+      setOpenOrders(list);
     } catch (err) {
       console.error("Error cargando cuentas abiertas:", err);
     }

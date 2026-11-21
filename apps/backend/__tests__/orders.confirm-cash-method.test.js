@@ -68,6 +68,16 @@ beforeEach(() => {
 });
 
 describe('PUT /api/orders/:id/confirm-cash', () => {
+  it('un depósito pendiente de un turno cerrado se cobra en el turno actual sin reabrir el anterior', async () => {
+    Object.assign(mockOrder, { shiftId: 'turno-cerrado', paymentMethod: 'TRANSFER' });
+    prisma.cashShift.findFirst.mockResolvedValue({ id: 'turno-actual' });
+    const response = await request(makeApp()).put('/api/orders/o1/confirm-cash').send({ paymentMethod: 'TRANSFER' });
+    expect(response.status).toBe(200);
+    expect(prisma.order.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ shiftId: 'turno-actual', paymentStatus: 'PAID', paymentMethod: 'TRANSFER', cashCollected: false }),
+    }));
+    expect(mockKick).not.toHaveBeenCalled();
+  });
   it('sin método: liquida como EFECTIVO (cashCollected) y abre el cajón', async () => {
     const res = await request(makeApp()).put('/api/orders/o1/confirm-cash').send({});
     expect(res.status).toBe(200);

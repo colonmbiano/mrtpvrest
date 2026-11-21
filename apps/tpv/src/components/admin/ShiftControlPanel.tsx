@@ -39,7 +39,7 @@ export default function ShiftControlPanel({ shiftId, onChange }: Props) {
       const raw = counts[d.driverId]; const n = Number(raw);
       return raw != null && raw.trim() !== "" && Number.isFinite(n) && n >= 0
         && (Math.abs(n - d.expectedCash) < 0.01 || (reasons[d.driverId] || "").trim().length >= 5);
-    }) && (!review?.warnings.length || reason.trim().length >= 5);
+    }) && (!review?.warnings.some((w) => w.code !== 'UNPAID_ORDERS') || reason.trim().length >= 5);
     onChange(receipts, reason, valid);
   }, [review, loading, busy, counts, reasons, reason, onChange]);
 
@@ -85,6 +85,9 @@ export default function ShiftControlPanel({ shiftId, onChange }: Props) {
     </div>)}
     {review && review.driverReceipts.length === 0 && <p className="text-sm">Repartidores: sin entregas de efectivo pendientes de corte.</p>}
     {review?.warnings.map((w) => <p key={w.code} className="text-sm text-amber-400">{w.label}: {w.count}{w.amount != null ? ` · $${w.amount.toFixed(2)}` : ""}</p>)}
+    {review?.warnings.some((w) => w.code === "UNPAID_ORDERS") && <p className="text-sm">
+      Puedes cerrar el turno. Los tickets sin cobrar seguirán pendientes; no se cancelan ni se marcan como pagados. Confirma el pago cuando lo recibas.
+    </p>}
     {review?.unverifiedPayments.map((p) => {
       const key = `${p.id}:${p.method}`;
       return <div key={key} className="space-y-2 rounded-xl border border-[var(--border)] p-3">
@@ -112,7 +115,7 @@ export default function ShiftControlPanel({ shiftId, onChange }: Props) {
       </ul>
       <p className="text-sm">Adjunta el comprobante o registra una excepción autorizada en Movimientos del repartidor. El gasto ya está descontado de caja.</p>
     </div>}
-    {!!review?.warnings.length && <>
+    {review?.warnings.some((w) => w.code !== 'UNPAID_ORDERS') && <>
       <label htmlFor="close-review-reason" className="block text-sm font-bold">Si quedan pendientes, explica por qué autorizas el cierre</label>
       <textarea id="close-review-reason" className={inputClass} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} rows={3} />
     </>}

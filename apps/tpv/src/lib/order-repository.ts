@@ -2,7 +2,7 @@ import api, { AUTH_TOKEN_MISSING, BACKEND_UNAVAILABLE } from '@/lib/api';
 import useOfflineStore from '@/store/useOfflineStore';
 import { getTenantIds } from '@/lib/tenant';
 import { isBackendCircuitOpen } from '@/lib/backend-availability';
-import { ACTIVE_ORDER_STATUSES, cacheServerOrder, findLocalOrder, pruneLocalOrders, reconcileLocalOrderQueue, sameOrderScope, type OrderScope } from '@/lib/local-order-model';
+import { isOpenTicket, cacheServerOrder, findLocalOrder, pruneLocalOrders, reconcileLocalOrderQueue, sameOrderScope, type OrderScope } from '@/lib/local-order-model';
 
 /** No aceptar escrituras ni lecturas operativas antes de recuperar IndexedDB. */
 export async function waitForOfflineHydration(): Promise<void> {
@@ -30,7 +30,7 @@ export function getLocalOrders(mode: 'active' | 'paid' = 'active'): any[] {
     // Un pedido del marketplace pagado en línea sigue abierto mientras espera que
     // el comercio lo acepte; si no, el TPV nunca se lo mostraría.
     .filter(o => mode === 'paid' ? o.paymentStatus === 'PAID'
-      : (o.paymentStatus !== 'PAID' || o.status === 'PENDING_MERCHANT') && ACTIVE_ORDER_STATUSES.has(o.status));
+      : isOpenTicket(o));
 }
 export function mergeLocalPaidOrders(tickets: any[]): any[] {
   const merged = new Map(tickets.map(o => [o.id, o]));
@@ -106,7 +106,7 @@ export async function loadOpenOrders(onCached?: (orders: any[]) => void): Promis
     // recupera PAID/DELIVERED y evita ocultar una cuenta todavía abierta.
     const staleIds = [...new Set(Object.values(useOfflineStore.getState().orders)
       .filter(r => sameOrderScope(r.scope, scope) && !r.pending.length && r.serverId &&
-        ACTIVE_ORDER_STATUSES.has(r.order.status) && !activeIds.has(r.serverId))
+        isOpenTicket(r.order) && !activeIds.has(r.serverId))
       .map(r => r.serverId!))];
     // Acotar concurrencia para no saturar la tablet al reparar datos antiguos.
     for (let offset = 0; offset < staleIds.length; offset += 4) {

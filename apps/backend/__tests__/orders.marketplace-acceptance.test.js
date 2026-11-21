@@ -92,9 +92,12 @@ describe('GET /api/orders/admin?scope=active', () => {
     prisma.order.findMany.mockResolvedValue([]);
     const res = await request(makeApp()).get('/api/orders/admin?scope=active');
     expect(res.status).toBe(200);
-    const statuses = prisma.order.findMany.mock.calls[0][0].where.status.in;
+    const where = prisma.order.findMany.mock.calls[0][0].where;
+    const statuses = where.OR[0].status.in;
     expect(statuses).toContain('PENDING_MERCHANT');
     expect(statuses).not.toContain('PENDING_PAYMENT');
+    expect(where.OR[1]).toEqual({ status: 'DELIVERED', paymentStatus: { in: ['PENDING', 'FAILED'] } });
+    expect(where).not.toHaveProperty('shiftId');
   });
 
   it('filtra por texto (q), rango de fechas (from/to) y estado de pago en búsqueda histórica', async () => {

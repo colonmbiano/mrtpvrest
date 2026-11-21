@@ -65,6 +65,12 @@ asume que Android, Windows 7 y navegadores puedan hospedar el mismo servicio.
    y se sella el corte en una transacción local. Los acumulados incrementales se
    cotejan con el registro de operaciones. El resumen mantiene las reglas actuales
    de pagos mixtos, atribución de entregas e inventario.
+   Las cuentas sin cobrar no impiden cerrar ni exigen saldarlas: permanecen
+   pendientes, con su folio y detalle, aunque su turno de origen ya haya cerrado.
+   No se cancelan, no se marcan pagadas y no entran como ingresos recibidos del
+   corte. Cuando llegue el depósito se confirma explícitamente en el turno de
+   cobro actual, sin reabrir ni reescribir el corte anterior. La pantalla de
+   tickets y la copia local incluyen los entregados pendientes de pago.
 3. Se distribuye un evento pequeño con turno, versión y estado CERRADO. Los equipos
    actualizan su estado sin descargar todos los tickets. Al reconectarse consultan
    la versión y recuperan eventos perdidos; el socket solo no garantiza entrega.
@@ -72,8 +78,10 @@ asume que Android, Windows 7 y navegadores puedan hospedar el mismo servicio.
    respaldo pendiente y respaldo confirmado. No anuncia un cierre definitivo
    global mientras faltan equipos; una excepción requiere conciliación explícita.
 
-Una venta tardía conserva el turno de origen y va a conciliación si ya fue sellado;
-nunca se reasigna automáticamente al siguiente turno. Un nuevo turno necesita un
+Una operación offline tardía conserva su turno de origen y va a conciliación si
+ya fue sellado; nunca se reasigna automáticamente al siguiente turno. Esto es
+distinto de recibir hoy el pago de una cuenta anterior: ese cobro confirmado
+pertenece al turno actual. Un nuevo turno necesita un
 identificador distinto y una transición explícita. La cola sigue drenando tras
 salir del PIN, bajo identidad de dispositivo y atribución original del empleado;
 actualmente el replay depende de una sesión autenticada de empleado.
@@ -81,7 +89,11 @@ actualmente el replay depende de una sesión autenticada de empleado.
 ## Entregas y validación
 
 1. Ajuste inmediato en esta rama: proyecciones de lectura para revisión y cierre,
-   preservando totales y detalle de transferencias. Reduce datos innecesarios;
+   preservando totales y detalle de transferencias. Los tickets sin cobrar son
+   informativos y no requieren motivo de cierre; los entregados pendientes de
+   pago se conservan en tickets abiertos y almacenamiento local. Solo las órdenes
+   cobradas entran al cálculo de ingresos del corte; las devoluciones conservan
+   su ingreso original y su egreso separado para no descontarlas dos veces. Reduce datos innecesarios;
    no implementa LAN ni demuestra la causa del incidente. Mantiene la transacción
    y todos los controles contables actuales.
 2. Instrumentar tiempos por etapa, número de tickets, tamaño de respuesta, esperas
