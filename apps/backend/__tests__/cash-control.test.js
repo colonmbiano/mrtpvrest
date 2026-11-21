@@ -13,6 +13,32 @@ const order = { id: 'o1', restaurantId: 'r1', locationId: 'l1', shiftId: 's1',
     { method: 'CARD', amount: 50, status: 'PAID' },
     { method: 'TRANSFER', amount: 999, status: 'REFUNDED' },
   ] };
+
+test('la proyección de revisión conserva verificación bancaria y pendientes sin cargar metadatos', async () => {
+  const fullOrder = { ...order, orderNumber: '100', customerName: 'Ana',
+    orderType: 'DELIVERY', status: 'DELIVERED', deliveryDriverId: null,
+    transferVerified: true, transferVerifiedAt: order.paidAt, transferVerifiedBy: 'Admin',
+    transferVerificationReference: 'SPEI-100', cardVerified: false,
+    metadata: 'x'.repeat(10000), notes: 'Texto ajeno al corte' };
+  tx.order.findMany.mockImplementation(async ({ select }) => {
+    expect(select).toBeDefined();
+    return [Object.fromEntries(Object.keys(select).map((key) => [key, fullOrder[key]]))];
+  });
+  const review = await shiftControlSummary(tx, { id: 's1', locationId: 'l1',
+    openedAt: new Date('2026-11-08T00:00:00Z') }, 'r1');
+  expect(review.unverifiedPayments).toEqual([expect.objectContaining({
+    id: 'o1', orderNumber: '100', customerName: 'Ana', method: 'CARD', amount: 50,
+  })]);
+  expect(review.unassignedDeliveries).toEqual([{ id: 'o1', orderNumber: '100', total: 300, status: 'DELIVERED' }]);
+  expect(review.warnings).toEqual(expect.arrayContaining([
+    expect.objectContaining({ code: 'UNVERIFIED_PAYMENTS', count: 1, amount: 50 }),
+    expect.objectContaining({ code: 'UNASSIGNED_DELIVERIES', count: 1 }),
+  ]));
+  const query = tx.order.findMany.mock.calls[0][0];
+  expect(query.include).toBeUndefined();
+  expect(query.select.metadata).toBeUndefined();
+  expect(query.select.notes).toBeUndefined();
+});
 let tx;
 beforeEach(() => {
   jest.clearAllMocks();

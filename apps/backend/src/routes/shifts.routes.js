@@ -395,7 +395,14 @@ async function performShiftClose(req, res, shift) {
         'Hay pendientes en el turno. Revísalos y explica por qué se cierra con ellos.') : null;
       const orders = await tx.order.findMany({
         where: shiftOrdersWhere({ ...current, closedAt: now }),
-        include: { payments: { select: { method: true, amount: true, status: true } } },
+        // El corte solo usa importes y el detalle de transferencias. Evitar
+        // cargar cada columna del ticket (notas, snapshots y metadatos) por
+        // cada venta mientras mantenemos abierta la transacción de caja.
+        select: {
+          paymentMethod: true, total: true,
+          orderNumber: true, customerName: true, paidAt: true, createdAt: true,
+          payments: { select: { method: true, amount: true, status: true } },
+        },
       });
       const totals = summarizePayments(orders);
       const totalExpenses = current.expenses.reduce((s, e) => s + e.amount, 0);

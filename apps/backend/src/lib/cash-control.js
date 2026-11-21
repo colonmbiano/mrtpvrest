@@ -96,7 +96,18 @@ async function shiftControlSummary(tx, shift, restaurantId) {
     where: { restaurantId, locationId: shift.locationId,
       OR: [{ paidAt: { gte: shift.openedAt, lte: end } },
         { createdAt: { gte: shift.openedAt, lte: end } }] },
-    include: { payments: { select: { method: true, amount: true, status: true } } },
+    // Revisión y cierre no necesitan el ticket completo. Proyectar solo los
+    // campos usados abajo evita duplicar snapshots/metadatos de cada orden.
+    select: {
+      id: true, orderNumber: true, orderType: true, deliveryDriverId: true,
+      paymentStatus: true, status: true, paymentMethod: true, total: true,
+      customerName: true, paidAt: true,
+      transferVerified: true, transferVerifiedAt: true, transferVerifiedBy: true,
+      transferVerificationReference: true,
+      cardVerified: true, cardVerifiedAt: true, cardVerifiedBy: true,
+      cardVerificationReference: true,
+      payments: { select: { method: true, amount: true, status: true } },
+    },
   });
   const unverified = orders.filter((o) => o.paymentStatus === 'PAID' && o.status !== 'CANCELLED')
     .flatMap(digitalPaymentEntries).filter((p) => !p.verified);
