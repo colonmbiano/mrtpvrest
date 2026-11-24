@@ -248,7 +248,7 @@ export default function DeliveryApp() {
       }
       setPrevOrderCount(data.length);
       setOrders(data);
-    } catch {}
+    } catch (err: any) { alert(err?.response?.data?.error || String(err)); }
   }, [driver, prevOrderCount]);
 
   const fetchAvailable = useCallback(async () => {

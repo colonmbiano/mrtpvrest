@@ -438,8 +438,8 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
     if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 50000) {
       return res.status(400).json({ error: 'amount invalido' });
     }
-    if (type === 'EXPENSE' && numericAmount > 500 && !isStaff(req.user) && !hasValidOverride(req, 'manage_driver_cash')) {
-      return res.status(402).json({ error: 'Este gasto requiere autorización del responsable de caja.', code: 'ADMIN_AUTH_REQUIRED', requiredPermission: 'manage_driver_cash', limit: 500 });
+    if (type === 'EXPENSE' && numericAmount > 5000 && !isStaff(req.user) && !hasValidOverride(req, 'manage_driver_cash')) {
+      return res.status(402).json({ error: 'Este gasto requiere autorización del responsable de caja.', code: 'ADMIN_AUTH_REQUIRED', requiredPermission: 'manage_driver_cash', limit: 5000 });
     }
 
     // Idempotencia: evita que un doble-tap o reintento de red cree movimientos
