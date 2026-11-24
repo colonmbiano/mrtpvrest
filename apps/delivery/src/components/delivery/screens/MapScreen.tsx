@@ -44,14 +44,28 @@ function orderMarkerHTML(label: string | number, color: string): string {
     font-family:'Outfit',system-ui,sans-serif;font-size:13px;cursor:pointer;">${label}</div>`;
 }
 
+// Escapa texto antes de interpolarlo en el HTML crudo del popup de Leaflet.
+// Sin esto, un nombre de cliente con etiquetas (<img onerror=…>) ejecutaría
+// JS en el DOM (XSS). Reemplaza los 5 caracteres sensibles por sus entidades.
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Popup HTML reutilizable
 function popupHTML(order: Order): string {
+  const orderNumber  = escapeHtml(String(order.orderNumber || ''));
+  const customerName = escapeHtml(String(order.customerName || ''));
   return `
     <div style="font-family:'Outfit',sans-serif;background:#ffffff;border:1px solid #d6e2da;
       border-radius:12px;padding:10px 14px;min-width:160px;box-shadow:0 8px 24px rgba(23,42,42,0.12);">
-      <div style="font-size:13px;font-weight:700;color:#172a2a;margin-bottom:4px">#${order.orderNumber}</div>
-      <div style="font-size:11px;color:#52665b">${order.customerName}</div>
-      <div style="font-size:16px;font-weight:700;color:#c6410c;margin-top:6px">$${order.total.toFixed(2)}</div>
+      <div style="font-size:13px;font-weight:700;color:#172a2a;margin-bottom:4px">#${orderNumber}</div>
+      <div style="font-size:11px;color:#52665b">${customerName}</div>
+      <div style="font-size:16px;font-weight:700;color:#c6410c;margin-top:6px">$${(order.total || 0).toFixed(2)}</div>
     </div>
   `;
 }

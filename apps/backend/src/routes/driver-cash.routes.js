@@ -450,6 +450,9 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
       where: {
         driverId: driver.id,
         type, category, amount: numericAmount,
+        // Incluir la descripción evita bloquear dos compras distintas del mismo
+        // monto (p.ej. "Cilantro" $50 y "Limón" $50) hechas en menos de 30s.
+        description: description || null,
         orderId: orderId || null,
         createdAt: { gte: dedupeFrom },
       },

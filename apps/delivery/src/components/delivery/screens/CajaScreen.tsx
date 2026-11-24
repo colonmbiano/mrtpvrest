@@ -107,7 +107,7 @@ export function CajaScreen({
             position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
             width: '60%', height: 2, background: 'linear-gradient(90deg, transparent, rgba(136,214,108,0.7), transparent)',
           }} />
-          <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(136,214,108,0.55)', letterSpacing: '0.22em', textTransform: 'uppercase', marginBottom: 12 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: C.green, letterSpacing: '0.22em', textTransform: 'uppercase', marginBottom: 12 }}>
             Efectivo en Mano
           </div>
           <div style={{ fontFamily: C.fontDisplay, fontSize: 60, fontWeight: 700, color: C.green, letterSpacing: '-0.03em', lineHeight: 1 }}>

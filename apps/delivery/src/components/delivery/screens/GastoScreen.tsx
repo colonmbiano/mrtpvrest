@@ -1,11 +1,11 @@
 'use client';
 // handoff/screens/GastoScreen.tsx
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { C, S } from '@/lib/tokens';
 
 interface GastoScreenProps {
   onBack: () => void;
-  onSave: (category: string, amount: string, description: string, pending: boolean) => void;
+  onSave: (category: string, amount: string, description: string, pending: boolean, photo?: File | null) => void;
 }
 
 // Categorías canónicas — alineadas al catálogo de gastos (OperatingExpenseCategory)
@@ -49,11 +49,14 @@ export function GastoScreen({ onBack, onSave }: GastoScreenProps) {
   // Gasto a crédito: NO baja tu corte; queda como cuenta por pagar del negocio.
   const [pending, setPending] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Foto opcional del ticket/comprobante (el backend ya la acepta vía upload.single('photo')).
+  const [photo, setPhoto] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSave = async () => {
     if (saving || !amount || !cat) return;
     setSaving(true);
-    try { await onSave(cat, amount, desc, pending); }
+    try { await onSave(cat, amount, desc, pending, photo); }
     finally { setSaving(false); }
   };
 
@@ -108,12 +111,12 @@ export function GastoScreen({ onBack, onSave }: GastoScreenProps) {
             <span style={{
               position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
               fontFamily: C.fontDisplay, fontSize: 26, fontWeight: 700,
-              color: amount ? C.amber : 'rgba(255,184,77,0.28)', pointerEvents: 'none',
+              color: amount ? C.amber : C.textMuted, pointerEvents: 'none',
             }}>$</span>
             <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
               placeholder="0.00" style={{
                 width: '100%', height: 64, background: C.bg,
-                border: `1px solid ${amount ? 'rgba(255,184,77,0.4)' : C.border}`,
+                border: `1px solid ${amount ? C.amber : C.border}`,
                 borderRadius: 14, paddingLeft: 38, paddingRight: 16,
                 fontFamily: C.fontDisplay, fontSize: 30, fontWeight: 700,
                 color: C.text, outline: 'none', letterSpacing: '-0.02em',
@@ -155,6 +158,54 @@ export function GastoScreen({ onBack, onSave }: GastoScreenProps) {
             }} />
         </div>
 
+        {/* Comprobante (opcional) */}
+        <div style={S.card}>
+          <div style={S.sectionLabel}>Comprobante (opcional)</div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: 'none' }}
+            onChange={e => setPhoto(e.target.files?.[0] || null)}
+          />
+          {photo ? (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: 10, padding: '12px 14px', borderRadius: 14,
+              border: `1px solid ${C.border}`, background: C.surf2,
+            }}>
+              <span style={{ fontSize: 12.5, color: C.text, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                📎 {photo.name}
+              </span>
+              <button
+                onClick={() => { setPhoto(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                style={{
+                  flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 11, fontWeight: 700, color: C.coral, fontFamily: C.fontBody,
+                }}
+              >Quitar</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                width: '100%', height: 52, borderRadius: 14, cursor: 'pointer',
+                border: `1px dashed ${C.border}`, background: C.surf2, color: C.textDim,
+                fontSize: 13, fontWeight: 600, fontFamily: C.fontBody,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+              Adjuntar foto del ticket
+            </button>
+          )}
+        </div>
+
         {/* Estado de pago */}
         <div style={S.card}>
           <div style={S.sectionLabel}>Estado de pago</div>
@@ -188,9 +239,9 @@ export function GastoScreen({ onBack, onSave }: GastoScreenProps) {
           disabled={!amount || !cat || saving}
           style={{
             ...S.btnPrimary,
-            background: (amount && cat && !saving) ? C.amber : C.amberSoft,
-            color: (amount && cat && !saving) ? '#090909' : 'rgba(255,184,77,0.35)',
-            boxShadow: (amount && cat && !saving) ? '0 16px 48px rgba(255,184,77,0.28)' : 'none',
+            background: (amount && cat && !saving) ? C.amber : C.surf3,
+            color: (amount && cat && !saving) ? '#FFFFFF' : C.textMuted,
+            boxShadow: (amount && cat && !saving) ? C.amberGlow : 'none',
           }}
         >{saving ? 'GUARDANDO…' : !cat ? 'ELIGE UNA CATEGORÍA' : 'GUARDAR MOVIMIENTO'}</button>
       </div>

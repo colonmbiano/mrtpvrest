@@ -135,7 +135,7 @@ export function CobrarScreen({ order, onBack, onConfirm }: CobrarScreenProps) {
               <span style={{
                 position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
                 fontFamily: C.fontDisplay, fontSize: 26, fontWeight: 700,
-                color: cashReceived ? C.amber : 'rgba(255,184,77,0.3)', pointerEvents: 'none',
+                color: cashReceived ? C.amber : C.textMuted, pointerEvents: 'none',
               }}>$</span>
               <input
                 type="number" value={cashReceived}
@@ -143,7 +143,7 @@ export function CobrarScreen({ order, onBack, onConfirm }: CobrarScreenProps) {
                 placeholder="0.00"
                 style={{
                   width: '100%', height: 64, background: C.bg,
-                  border: `1px solid ${cashReceived ? 'rgba(255,184,77,0.4)' : C.border}`,
+                  border: `1px solid ${cashReceived ? C.amber : C.border}`,
                   borderRadius: 14, paddingLeft: 38, paddingRight: 16,
                   fontFamily: C.fontDisplay, fontSize: 30, fontWeight: 700,
                   color: C.text, outline: 'none', letterSpacing: '-0.02em',

@@ -45,6 +45,7 @@ api.interceptors.response.use(
       // SetupScreen si no hay restaurantId/locationId, teclado de PIN si ya están.
       const hadToken = !!localStorage.getItem("accessToken");
       localStorage.removeItem("accessToken");
+      localStorage.removeItem("driverSession");
       localStorage.removeItem("user");
       // Si HABÍA sesión y expiró, recargamos la home para volver al PIN/SetupScreen.
       // Si NO había token (fetch de arranque sin sesión), no recargamos: la pantalla

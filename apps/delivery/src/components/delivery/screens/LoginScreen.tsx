@@ -4,6 +4,27 @@ import React, { useState } from 'react';
 import { C, S } from '@/lib/tokens';
 import VersionTag from '@/components/VersionTag';
 import { DeliveryLogo } from '@/components/delivery/BrandMark';
+import { useOfflineStore } from '@/store/useOfflineStore';
+
+// Solo las llaves de sesión/vinculación del terminal. NO se usa localStorage.clear()
+// porque eso destruiría la cola offline de entregas/gastos sin sincronizar.
+const SESSION_KEYS = [
+  'restaurantId', 'locationId', 'locationName', 'accessToken',
+  'driverSession', 'courierToken', 'courierTokenExp', 'deliveryMode',
+];
+
+function resetTerminal() {
+  const unsynced = useOfflineStore.getState().getUnsynced();
+  if (unsynced.length > 0) {
+    const ok = window.confirm(
+      `Tienes ${unsynced.length} acción(es) pendientes de sincronizar que se perderán. ` +
+      '¿Seguro que quieres restablecer la terminal?'
+    );
+    if (!ok) return;
+  }
+  SESSION_KEYS.forEach(k => localStorage.removeItem(k));
+  window.location.reload();
+}
 
 interface LoginScreenProps {
   locationName?: string;
@@ -114,9 +135,9 @@ export function LoginScreen({ locationName = 'Sucursal', onLogin, loggingIn, log
         disabled={loggingIn}
         style={{
           ...S.btnPrimary,
-          background: pin.length >= 4 ? C.amber : C.amberSoft,
-          color: pin.length >= 4 ? '#090909' : 'rgba(255,184,77,0.35)',
-          boxShadow: pin.length >= 4 ? '0 16px 48px rgba(255,184,77,0.35)' : 'none',
+          background: pin.length >= 4 ? C.amber : C.surf3,
+          color: pin.length >= 4 ? '#FFFFFF' : C.textMuted,
+          boxShadow: pin.length >= 4 ? C.amberGlow : 'none',
           marginBottom: 16,
           opacity: loggingIn ? 0.6 : 1,
         }}
@@ -156,7 +177,7 @@ export function LoginScreen({ locationName = 'Sucursal', onLogin, loggingIn, log
       )}
 
       <button
-        onClick={() => { localStorage.clear(); window.location.reload(); }}
+        onClick={resetTerminal}
         style={{
           background: 'none', border: 'none', cursor: 'pointer',
           fontSize: 9, color: C.textMuted, letterSpacing: '0.12em',
