@@ -9,7 +9,7 @@
 // diccionario es estático y conocido en build time. Meterlo en tabla costaría
 // migración + endpoints + CRUD a cambio de nada.
 
-export type Giro = "ROPA" | "FERRETERIA" | "REFACCIONARIA";
+export type Giro = "ROPA" | "FERRETERIA" | "REFACCIONARIA" | "ABARROTES";
 
 /** Columna real de `RetailSku` que respalda un atributo del giro. */
 export type SkuAttrKey = "size" | "color" | "material" | "style";
@@ -109,6 +109,24 @@ export const GIROS: Record<Giro, GiroConfig> = {
     crossRef: true,
     productPlaceholder: "Balata delantera cerámica",
     skuPlaceholder: "BAL-DEL-CER-01",
+  },
+  ABARROTES: {
+    id: "ABARROTES",
+    label: "Abarrotes y Retail",
+    icon: "Boxes",
+    attrs: [
+      { key: "size", label: "Contenido", suggest: ["100 g", "180 g", "100 ml", "700 ml", "1 L", "2.6 L", "3 L", "3.7 L", "4.8 L", "9 L", "12 pzas"] },
+      { key: "color", label: "Presentación", suggest: ["Botella", "Frasco", "Paquete", "Caja", "Galón", "Spray", "Tono"] },
+      { key: "style", label: "Detalle", suggest: ["Original", "Descafeinado", "Vainilla", "Fresca Primavera", "Cristalino"] },
+      { key: "material", label: "Departamento", suggest: ["Detergentes", "Limpieza", "Café y Despensa", "Perfumería", "Belleza", "Licores"] },
+    ],
+    useVariantMatrix: false,
+    unitOfMeasure: true,
+    wholesale: true,
+    fitment: false,
+    crossRef: false,
+    productPlaceholder: "Cloralex El Rendidor 3.7 L",
+    skuPlaceholder: "DET-CLOR-37L",
   },
 };
 

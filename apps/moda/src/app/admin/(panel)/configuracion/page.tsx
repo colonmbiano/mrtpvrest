@@ -7,6 +7,8 @@ import {
 import AdminTopbar from "@/components/admin/AdminTopbar";
 import { DataCard, SectionTabs, ToggleSwitch, StatusBadge, EmptyState } from "@/components/admin/atoms";
 import api from "@/lib/admin-api";
+import { DEFAULT_GIRO, GIROS, isGiro, type Giro } from "@/lib/giro";
+import { setGiro as cacheGiro } from "@/lib/tenant";
 
 const TABS = [
   { key: "tienda", label: "Tienda", sub: "Datos y preferencias", icon: Store },
@@ -46,6 +48,7 @@ type Config = {
   address?: string | null;
   timezone?: string | null;
   countryCode?: string | null;
+  retailGiro?: Giro;
   centralWarehouseEnabled?: boolean;
 };
 type Employee = { id: string; name: string; role: string; phone?: string | null; isActive?: boolean; hasPin?: boolean };
@@ -83,8 +86,10 @@ function TiendaTab({ toast }: { toast: (k: "ok" | "err", m: string) => void }) {
         address: res.data.address || "",
         timezone: res.data.timezone || "America/Mexico_City",
         countryCode: res.data.countryCode || "MX",
+        retailGiro: isGiro(res.data.retailGiro) ? res.data.retailGiro : DEFAULT_GIRO,
         centralWarehouseEnabled: Boolean(res.data.centralWarehouseEnabled),
       };
+      if (c.retailGiro) cacheGiro(c.retailGiro);
       setOrig(c); setForm(c);
     } catch {
       toast("err", "No se pudo cargar la configuración.");
@@ -100,6 +105,10 @@ function TiendaTab({ toast }: { toast: (k: "ok" | "err", m: string) => void }) {
     try {
       if ((form.name || "").trim() && form.name !== orig.name) {
         await api.put("/api/admin/brand", { name: (form.name || "").trim() });
+      }
+      if (form.retailGiro && form.retailGiro !== orig.retailGiro) {
+        await api.put("/api/retail/v1/config/giro", { giro: form.retailGiro });
+        cacheGiro(form.retailGiro);
       }
       await api.put("/api/admin/config", {
         phone: form.phone || "",
@@ -136,7 +145,12 @@ function TiendaTab({ toast }: { toast: (k: "ok" | "err", m: string) => void }) {
         <Field label="WhatsApp"><input className={inputCls} disabled={loading} value={form.whatsappNumber || ""} onChange={(e) => set("whatsappNumber")(e.target.value)} placeholder="55 1234 5678" /></Field>
         <Field label="País"><select className={inputCls} disabled={loading} value={form.countryCode || "MX"} onChange={(e) => set("countryCode")(e.target.value)}>{COUNTRIES.map((c) => <option key={c.v} value={c.v}>{c.l}</option>)}</select></Field>
         <div className="sm:col-span-2"><Field label="Dirección"><textarea className={`${inputCls} h-auto py-2.5`} disabled={loading} rows={2} value={form.address || ""} onChange={(e) => set("address")(e.target.value)} placeholder="Calle, número, colonia, ciudad, C.P." /></Field></div>
-        <div className="sm:col-span-2"><Field label="Zona horaria"><select className={inputCls} disabled={loading} value={form.timezone || "America/Mexico_City"} onChange={(e) => set("timezone")(e.target.value)}>{TIMEZONES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}</select></Field></div>
+        <Field label="Giro comercial (atributos de SKU y POS)">
+          <select className={inputCls} disabled={loading} value={form.retailGiro || DEFAULT_GIRO} onChange={(e) => set("retailGiro")(e.target.value as Giro)}>
+            {Object.values(GIROS).map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+          </select>
+        </Field>
+        <Field label="Zona horaria"><select className={inputCls} disabled={loading} value={form.timezone || "America/Mexico_City"} onChange={(e) => set("timezone")(e.target.value)}>{TIMEZONES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}</select></Field>
       </div>
 
       <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--bd-1)" }}>

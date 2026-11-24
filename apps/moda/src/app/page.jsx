@@ -94,6 +94,7 @@ const GIROS_UI = {
   ROPA:          { id:"ROPA",          label:giroConfig("ROPA").label,          storePlaceholder:"Boutique Aurora" },
   FERRETERIA:    { id:"FERRETERIA",    label:giroConfig("FERRETERIA").label,    storePlaceholder:"Ferretería El Tornillo" },
   REFACCIONARIA: { id:"REFACCIONARIA", label:giroConfig("REFACCIONARIA").label, storePlaceholder:"Refaccionaria Del Valle" },
+  ABARROTES:     { id:"ABARROTES",     label:giroConfig("ABARROTES").label,     storePlaceholder:"Colorines · Por Encargo" },
 };
 const swatch = { Beige:"#d8c4ab", Blanco:"#f1f1ee", "Verde Olivo":"#5a6b3e", Negro:"#23262a", Gris:"#9aa0a3", "Azul Claro":"#9db7d4", Camel:"#b08456", Perla:"#e8e3d8", Canela:"#9a5b33" };
 
@@ -264,6 +265,13 @@ function GhostBtn({ children, onClick, className="" }) {
   return <button onClick={onClick} className={"inline-flex items-center justify-center gap-2 h-11 px-4 rounded-xl border border-line hover:bg-surf text-ink-700 font-medium text-[13px] "+className}>{children}</button>;
 }
 function Thumb({ p, size=44 }) {
+  if (p?.imageUrl) {
+    return (
+      <div style={{width:size,height:size}} className="rounded-xl overflow-hidden bg-white grid place-items-center shrink-0 border border-black/10 p-0.5">
+        <img src={p.imageUrl} alt={p.name||""} className="w-full h-full object-contain" loading="lazy"/>
+      </div>
+    );
+  }
   return <div style={{background:p.tone,width:size,height:size}} className="rounded-xl grid place-items-center shrink-0 border border-black/5">
     <Icon n={p.cat==="Accesorios"?"bookmark":p.cat==="Calzado"?"tag":"tag"} s={size*0.42} cls="text-black/25"/></div>;
 }
@@ -474,7 +482,7 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
   const giro=useGiro();
   const { priceLists, priceListId, setPriceListId }=useData();
   const sizes=sizesFor(giro);
-  const addProduct=(p)=>{ const size=sizes.includes(p.size)?p.size:(p.live?p.size:(sizes[0]||"Única")); setCart(c=>[...c,{key:p.id+"-"+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,priceTiers:p.priceTiers,color:p.color,size,tone:p.tone,cat:p.cat,qty:1,unit:p.unit,unitsPerPackage:p.unitsPerPackage,byPackage:false,skuId:p.skuId||resolveSkuId(p,p.color,p.size)}]); };
+  const addProduct=(p)=>{ const size=sizes.includes(p.size)?p.size:(p.live?p.size:(sizes[0]||"Única")); setCart(c=>[...c,{key:p.id+"-"+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,priceTiers:p.priceTiers,color:p.color,size,tone:p.tone,imageUrl:p.imageUrl,cat:p.cat,qty:1,unit:p.unit,unitsPerPackage:p.unitsPerPackage,byPackage:false,skuId:p.skuId||resolveSkuId(p,p.color,p.size)}]); };
   // Resolución del escaneo, en orden de especificidad. El orden importa: la
   // pistola manda el código de barras, y un código que casualmente aparezca como
   // substring del nombre de otro producto agregaría el artículo equivocado.
@@ -603,7 +611,7 @@ function SaleScreen({ cart, setCart, sel, setSel, go, tickets, activeId, ticketI
           useState(p.color)/useEffect, así que un early-return por p==null
           rompería el orden de hooks. */}
       {sel
-        ? <ProductDetailPanel p={sel} onAdd={(p,color,size)=>setCart(c=>[...c,{key:p.id+color+size+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,priceTiers:p.priceTiers,color,size,tone:p.tone,cat:p.cat,qty:1,unit:p.unit,unitsPerPackage:p.unitsPerPackage,byPackage:false,skuId:p.skuId||resolveSkuId(p,color,size)}])}/>
+        ? <ProductDetailPanel p={sel} onAdd={(p,color,size)=>setCart(c=>[...c,{key:p.id+color+size+Date.now(),id:p.id,name:p.name,sku:p.sku,price:p.price,priceTiers:p.priceTiers,color,size,tone:p.tone,imageUrl:p.imageUrl,cat:p.cat,qty:1,unit:p.unit,unitsPerPackage:p.unitsPerPackage,byPackage:false,skuId:p.skuId||resolveSkuId(p,color,size)}])}/>
         : <EmptyDetailPanel/>}
       </div>
     </div>
@@ -652,7 +660,9 @@ function ProductDetailPanel({ p, onAdd }) {
         </div>
       </div>
       <div className="p-5 overflow-y-auto flex-1">
-        <div style={{background:p.tone}} className="w-full h-44 rounded-2xl grid place-items-center border border-black/5"><Icon n="tag" s={56} cls="text-black/15"/></div>
+        <div style={{background:p.imageUrl?"#ffffff":p.tone}} className="w-full h-44 rounded-2xl grid place-items-center border border-black/5 overflow-hidden p-2">
+          {p.imageUrl ? <img src={p.imageUrl} alt={p.name} className="w-full h-full object-contain"/> : <Icon n="tag" s={56} cls="text-black/15"/>}
+        </div>
         <div className="flex items-end justify-between mt-4">
           <div><div className="tnum text-2xl font-bold text-ink-900">{mx(p.price)}</div>
             <div className="text-[12px] text-brand-600 font-medium mt-0.5">En stock: {stock} {unitLabel}</div></div></div>
@@ -1080,7 +1090,8 @@ function CatalogScreen({ setSel, go }) {
   const [color,setColor]=useState("Todos"); const [stock,setStock]=useState("Todos");
   const [sort,setSort]=useState("Recientes"); const [quick,setQuick]=useState(null); const [label,setLabel]=useState(null);
   const products=useProducts();
-  const cats=["Todas","Mujer","Hombre","Accesorios","Calzado","Outlet","Nueva colección"];
+  const dynamicCats=Array.from(new Set(products.map(p=>p.cat).filter(Boolean)));
+  const cats=["Todas",...(dynamicCats.length?dynamicCats:["Mujer","Hombre","Accesorios","Calzado"])];
   const allColors=["Todos",...Array.from(new Set(products.flatMap(p=>p.colors)))];
   let list=products.filter(p=>(cat==="Todas"||p.cat===cat)&&(color==="Todos"||p.colors.includes(color))&&(!q||(p.name+p.sku).toLowerCase().includes(q.toLowerCase())));
   if(stock==="Bajo") list=list.filter(p=>totalStock(p)<30);
@@ -1103,20 +1114,22 @@ function CatalogScreen({ setSel, go }) {
     </Card>
     <div className="grid grid-cols-4 gap-4">{list.map(p=>{const st=totalStock(p);const low=st>0&&st<30;return(
       <Card key={p.id} className="overflow-hidden hover:border-brand-200 transition-colors group">
-        <div style={{background:p.tone}} className="h-40 grid place-items-center relative">
-          <Icon n="tag" s={44} cls="text-black/15"/>
+        <div style={{background:p.imageUrl?"#ffffff":p.tone}} className="h-40 grid place-items-center relative overflow-hidden p-2">
+          {p.imageUrl ? <img src={p.imageUrl} alt={p.name} className="w-full h-full object-contain" loading="lazy"/> : <Icon n="tag" s={44} cls="text-black/15"/>}
           <button onClick={()=>setQuick(p)} className="absolute inset-0 bg-black/0 group-hover:bg-black/5 grid place-items-center opacity-0 group-hover:opacity-100 transition">
             <span className="bg-card/95 text-ink-900 text-[12px] font-medium px-3 py-1.5 rounded-lg shadow-sm">Vista rápida</span></button>
           <span className={"absolute top-2 left-2 text-[10px] font-medium px-2 py-0.5 rounded "+(st===0?"bg-red-100 text-red-600":low?"bg-amber-100 text-amber-700":"bg-card/90 text-brand-700")}>{st===0?"Sin stock":st+" pzas."}</span>
         </div>
         <div className="p-3"><div className="text-[13px] font-semibold text-ink-900 truncate">{p.name}</div><div className="tnum text-[11px] text-ink-400">{p.sku}</div>
-          <div className="flex items-center justify-between mt-2"><span className="tnum text-base font-bold text-ink-900">{mx(p.price)}</span><span className="text-[11px] text-ink-400">{p.cat}</span></div>
-          <div className="flex gap-1 mt-2">{p.colors.slice(0,5).map(c=><span key={c} style={{background:swatch[c]}} className="w-4 h-4 rounded-full border border-black/10"/>)}</div>
+          <div className="flex items-center justify-between mt-2"><span className="tnum text-base font-bold text-ink-900">{mx(p.price)}</span><span className="text-[11px] text-ink-400 truncate max-w-[110px]">{p.cat}</span></div>
+          <div className="flex gap-1 mt-2 min-h-[16px] items-center">{p.colors.slice(0,5).map(c=>swatch[c]?<span key={c} style={{background:swatch[c]}} className="w-4 h-4 rounded-full border border-black/10"/>:<span key={c} className="text-[10px] text-ink-500 bg-surf px-1.5 py-0.5 rounded truncate max-w-[140px]">{c}</span>)}</div>
           <button onClick={()=>{setSel(p);go("venta");}} className="w-full h-9 mt-3 rounded-lg bg-brand-100 text-brand-700 text-[13px] font-medium hover:bg-brand-200 inline-flex items-center justify-center gap-1.5"><Icon n="plus" s={15}/>Agregar</button></div>
       </Card>);})}</div>
     {quick&&<Modal title="Vista rápida" onClose={()=>setQuick(null)}>
       <div className="grid grid-cols-[180px_1fr] gap-5">
-        <div style={{background:quick.tone}} className="h-48 rounded-2xl grid place-items-center border border-black/5"><Icon n="tag" s={48} cls="text-black/15"/></div>
+        <div style={{background:quick.imageUrl?"#ffffff":quick.tone}} className="h-48 rounded-2xl grid place-items-center border border-black/5 overflow-hidden p-2">
+          {quick.imageUrl ? <img src={quick.imageUrl} alt={quick.name} className="w-full h-full object-contain"/> : <Icon n="tag" s={48} cls="text-black/15"/>}
+        </div>
         <div><h3 className="text-lg font-semibold text-ink-900">{quick.name}</h3><div className="tnum text-[12px] text-ink-400">{quick.sku}</div>
           <div className="tnum text-2xl font-bold text-ink-900 mt-2">{mx(quick.price)}</div>
           <div className="text-[12px] text-brand-600 font-medium">{totalStock(quick)} pzas. disponibles</div>

@@ -143,14 +143,14 @@ function ReverseModal({ sale, action, onClose, onDone }: {
         <div className="mt-4 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-[12px]" style={{ borderColor: "var(--warn-soft)", background: "var(--warn-soft)", color: "var(--warn)" }}>
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
           <span>{isCancel
-            ? "Se repone el stock de las prendas y se registra el reembolso de cada pago. Esta acción no se puede deshacer."
-            : "Se reingresa el stock de las prendas y se asienta la devolución del dinero. Esta acción no se puede deshacer."}</span>
+            ? "Se repone el stock de los artículos y se registra el reembolso de cada pago. Esta acción no se puede deshacer."
+            : "Se reingresa el stock de los artículos y se asienta la devolución del dinero. Esta acción no se puede deshacer."}</span>
         </div>
 
         <label className="mt-4 block text-[12px] font-semibold text-[var(--tx-mut)]">Motivo (opcional)</label>
         <textarea
           value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} disabled={busy}
-          placeholder={isCancel ? "Ej. error de captura, cliente canceló…" : "Ej. talla equivocada, prenda con defecto…"}
+          placeholder={isCancel ? "Ej. error de captura, cliente canceló…" : "Ej. variante equivocada, artículo con defecto…"}
           className="mt-1.5 w-full resize-none rounded-xl border bg-[var(--surf-1)] px-3 py-2 text-[13px] text-[var(--tx-hi)] outline-none focus:border-[var(--brand-primary)]"
           style={{ borderColor: "var(--bd-1)" }}
         />

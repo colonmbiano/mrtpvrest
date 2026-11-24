@@ -35,7 +35,7 @@ const variantLabelFor = (giro: Giro, s: Partial<Record<SkuAttrKey, string | null
   giroConfig(giro).attrs.map((a) => s[a.key]).filter(Boolean).join(" / ") || "Variante única";
 // Ícono por giro. Mapa explícito: lucide no resuelve por nombre en runtime sin
 // arrastrar el paquete entero al bundle.
-const GIRO_ICON = { Shirt, Wrench, Car } as const;
+const GIRO_ICON = { Shirt, Wrench, Car, Boxes } as const;
 const giroIcon = (giro: Giro) => GIRO_ICON[giroConfig(giro).icon as keyof typeof GIRO_ICON] ?? Shirt;
 const errMsg = (e: unknown) => (e as { response?: { data?: { error?: string } } })?.response?.data?.error || (e instanceof Error ? e.message : "No se pudo completar la acción");
 const stockStatus = (qty: number, minQty: number) => (qty <= 0 ? "sin_stock" : minQty > 0 && qty <= minQty ? "stock_bajo" : "disponible");

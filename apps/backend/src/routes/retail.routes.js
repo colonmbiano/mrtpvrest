@@ -758,7 +758,7 @@ async function assertOwnedProduct(restaurantId, productId) {
 // La columna es texto libre (agregar un giro no cuesta migración), pero la
 // ESCRITURA sí se valida: un valor arbitrario dejaría a la app cayendo al
 // default ROPA sin explicar por qué.
-const GIROS = ['ROPA', 'FERRETERIA', 'REFACCIONARIA'];
+const GIROS = ['ROPA', 'FERRETERIA', 'REFACCIONARIA', 'ABARROTES'];
 
 router.put('/config/giro', requireRole(...ADMIN_ROLES), async (req, res) => {
   try {

@@ -17,6 +17,7 @@ export interface BackendSku {
   style?: string | null;
   price: number | string;
   cost?: number | string | null;
+  imageUrl?: string | null;
   // Campos genéricos de inventario (Fase 1). Opcionales: un backend anterior a
   // la migración simplemente no los manda.
   unitOfMeasure?: string | null;
@@ -68,6 +69,7 @@ export interface UiProduct {
   prov: string;
   desc: string;
   detail: string;
+  imageUrl: string | null;
   colors: string[];
   color: string;
   size: string;
@@ -196,6 +198,7 @@ function mapAsMatrix(products: BackendProduct[], giro: Giro): UiProduct[] {
       prov: p.brand || "—",
       desc: p.description || "",
       detail: [first.material, p.brand].filter(Boolean).join(" · ") || "—",
+      imageUrl: first.imageUrl || p.imageUrl || null,
       colors: colors.length ? colors : ["Único"],
       color: first.color || "Único",
       size: first.size || "Única",
@@ -241,6 +244,7 @@ function mapAsFlatSkus(products: BackendProduct[], giro: Giro): UiProduct[] {
         prov: p.brand || "—",
         desc: p.description || "",
         detail: [variantLabel, p.brand].filter(Boolean).join(" · ") || "—",
+        imageUrl: s.imageUrl || p.imageUrl || null,
         colors: [color],
         color,
         size,
