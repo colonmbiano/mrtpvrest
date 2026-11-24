@@ -177,6 +177,9 @@ export default function DeliveryApp() {
   const [networkError, setNetworkError] = useState('');
   const lastPresenceRef = useRef<{ lat: number; lng: number; accuracy: number; at: number } | null>(null);
   const presenceGenerationRef = useRef(0);
+  // Posición real del repartidor para el mapa. Sin esto, MapScreen trazaba la
+  // ruta siempre desde el Zócalo de CDMX (coordenadas por defecto).
+  const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const selectedOrderIdRef = useRef<string | null>(null);
@@ -230,8 +233,24 @@ export default function DeliveryApp() {
     }
     const restId = localStorage.getItem('restaurantId');
     const locId  = localStorage.getItem('locationId');
-    if (!restId || !locId) setScreen('setup');
+    if (!restId || !locId) { setScreen('setup'); return removeNetworkListeners; }
+
+    // Sesión de repartidor vigente (token + driver guardado): restaurar la home
+    // tras recargar el WebView en vez de volver al teclado de PIN.
+    const savedToken  = localStorage.getItem('accessToken');
+    const savedDriver = localStorage.getItem('driverSession');
+    if (savedToken && savedDriver) {
+      try {
+        const parsed = JSON.parse(savedDriver);
+        if (parsed?.id) {
+          setDriver(parsed);
+          setScreen('home');
+          void fetchOrders(parsed);
+        }
+      } catch { localStorage.removeItem('driverSession'); }
+    }
     return removeNetworkListeners;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -459,6 +478,8 @@ export default function DeliveryApp() {
       setLoginError('');
       clearCourierSession();
       localStorage.setItem('accessToken', data.token);
+      // Persistir la sesión para restaurar la pantalla activa tras recargar el WebView.
+      localStorage.setItem('driverSession', JSON.stringify(data.employee));
       setScreen('home');
       fetchOrders(data.employee);
     } catch (err: any) {
@@ -561,12 +582,27 @@ export default function DeliveryApp() {
     new Promise((resolve, reject) => {
       if (!navigator.geolocation) { reject(new Error('Tu dispositivo no permite obtener ubicación.')); return; }
       navigator.geolocation.getCurrentPosition(
-        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude,
-          accuracy: Number.isFinite(pos.coords.accuracy) ? Math.max(0, pos.coords.accuracy) : 0 }),
+        pos => {
+          const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setDriverPos(coords); // alimenta el mapa con la posición real
+          resolve({ ...coords,
+            accuracy: Number.isFinite(pos.coords.accuracy) ? Math.max(0, pos.coords.accuracy) : 0 });
+        },
         () => reject(new Error('Para conectarte, activa el GPS y concede permiso de ubicación.')),
         { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 },
       );
     }), []);
+
+  // Al abrir el mapa, obtener la posición actual (aunque la red compartida esté
+  // apagada) para trazar la ruta desde donde está el repartidor.
+  useEffect(() => {
+    if (screen !== 'map' || typeof navigator === 'undefined' || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      pos => setDriverPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => { /* sin permiso: MapScreen cae a su posición por defecto */ },
+      { enableHighAccuracy: true, maximumAge: 30000, timeout: 12000 },
+    );
+  }, [screen]);
 
   const toggleSharedCourier = useCallback(async (enabled: boolean) => {
     if (!driver || networkBusy) return;
@@ -657,7 +693,7 @@ export default function DeliveryApp() {
     void fetchOrders();
   }, [fetchOrders]);
 
-  async function saveExpense(cat: string, amount: string, desc: string, pending = false) {
+  async function saveExpense(cat: string, amount: string, desc: string, pending = false, photo?: File | null) {
     if (!amount || Number(amount) <= 0) return;
     // Clave de idempotencia estable por captura: dedupea doble-tap y replays de
     // la cola offline (el middleware global la cubre) para no duplicar el gasto.
@@ -670,6 +706,8 @@ export default function DeliveryApp() {
     };
 
     if (!navigator.onLine) {
+      // La cola offline solo persiste datos serializables; la foto (File) no se
+      // puede guardar, así que el gasto se encola sin comprobante.
       useOfflineStore.getState().addToQueue({ type: 'LOG_EXPENSE', data: expenseData });
       setScreen('caja');
       return;
@@ -677,9 +715,11 @@ export default function DeliveryApp() {
     try {
       const formData = new FormData();
       Object.entries(expenseData).forEach(([k, v]) => formData.append(k, v as string));
+      if (photo) formData.append('photo', photo);
       await api.post(`/api/driver-cash/${driver.id}/movements`, formData, {
         headers: { 'Idempotency-Key': movementId },
       });
+      if (pending) alert('Gasto registrado como cuenta por pagar del negocio. No baja tu corte.');
       setScreen('caja');
     } catch {}
   }
@@ -815,6 +855,7 @@ export default function DeliveryApp() {
               lastPresenceRef.current = null;
               setDriver(null);
               localStorage.removeItem('accessToken');
+              localStorage.removeItem('driverSession');
             }
             if (s === 'weekly') fetchHistory();
             setScreen(s as Screen);
@@ -897,8 +938,8 @@ export default function DeliveryApp() {
       {screen === 'map' && (
         <MapScreen
           orders={orders}
-          driverLat={undefined}
-          driverLng={undefined}
+          driverLat={driverPos?.lat}
+          driverLng={driverPos?.lng}
           onBack={() => setScreen('home')}
         />
       )}

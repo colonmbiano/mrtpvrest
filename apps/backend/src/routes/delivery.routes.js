@@ -1,5 +1,6 @@
 const { consumePaidOrder } = require('../services/order-inventory.service');
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('@mrtpvrest/database');
@@ -172,11 +173,33 @@ async function ensureCashOnDeliveryMovement(order) {
   });
 }
 
+// El rate-limiter global (index.js) ignora /api/delivery/, así que este login
+// quedaba sin freno. Limitador propio: 15 intentos por IP cada 15 min para
+// frenar fuerza bruta de PINs de 4 dígitos.
+const deliveryLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos de acceso. Espera unos minutos.' },
+});
+
 // Legacy login by phone + PIN. New clients should prefer /api/employees/login.
-router.post('/login', async (req, res) => {
+router.post('/login', deliveryLoginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     const restaurantId = req.restaurantId || req.headers['x-restaurant-id'] || null;
+    // Validación de entrada: sin esto, { email: "", password: "..." } hacía match
+    // contra repartidores con phone: "" y permitía fuerza bruta cross-tenant.
+    if (typeof email !== 'string' || email.trim().length < 7) {
+      return res.status(400).json({ error: 'Teléfono inválido' });
+    }
+    if (typeof password !== 'string' || password.trim().length < 4) {
+      return res.status(400).json({ error: 'PIN inválido' });
+    }
+    if (!restaurantId) {
+      return res.status(400).json({ error: 'Restaurante no identificado' });
+    }
     const driver = await prisma.employee.findFirst({
       where: {
         role: 'DELIVERY',

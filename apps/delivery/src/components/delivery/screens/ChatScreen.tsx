@@ -63,7 +63,7 @@ export function ChatScreen({ order, messages, onBack, onSend }: ChatScreenProps)
               borderBottomRightRadius: m.fromDriver ? 4 : 18,
               borderBottomLeftRadius: m.fromDriver ? 18 : 4,
               background: m.fromDriver ? C.amber : C.surf2,
-              color: m.fromDriver ? '#090909' : C.text,
+              color: m.fromDriver ? '#FFFFFF' : C.text,
               border: m.fromDriver ? 'none' : `1px solid ${C.border}`,
               boxShadow: m.fromDriver ? '0 4px 20px rgba(255,184,77,0.2)' : 'none',
             }}>
@@ -77,12 +77,12 @@ export function ChatScreen({ order, messages, onBack, onSend }: ChatScreenProps)
         <div ref={endRef} />
       </div>
 
-      <div style={{ flexShrink: 0, padding: '10px 14px', background: 'rgba(9,9,9,0.96)', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, alignItems: 'center' }}>
+      <div style={{ flexShrink: 0, padding: '10px 14px', background: C.surf1, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, alignItems: 'center' }}>
         <input value={msg} onChange={e => setMsg(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()}
           placeholder="Escribe un mensaje…"
           style={{ flex: 1, height: 46, background: C.surf1, border: `1px solid ${C.border}`, borderRadius: 14, padding: '0 14px', fontSize: 13, color: C.text, fontFamily: C.fontBody, outline: 'none' }} />
         <button onClick={send} style={{ width: 46, height: 46, borderRadius: 14, background: C.amber, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(255,184,77,0.32)', flexShrink: 0 }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#090909" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
             <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
           </svg>
         </button>

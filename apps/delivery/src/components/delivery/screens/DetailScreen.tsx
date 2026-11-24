@@ -54,6 +54,18 @@ export function DetailScreen({
   // antes de cobrar (requiresDeliveryPin).
   const isMarketplaceOrder = isNetworkOrder(order);
 
+  // Abre Google Maps: ruta a las coordenadas si existen, o búsqueda por dirección.
+  const openInMaps = () => {
+    const lat = order?.deliveryLat ?? order?.lat;
+    const lng = order?.deliveryLng ?? order?.lng;
+    const url = (lat != null && lng != null)
+      ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+      : order?.deliveryAddress
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.deliveryAddress)}`
+        : null;
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   const handlePickupPinConfirm = async (pin: string) => {
     const result = await confirmPickupPin(order.courierId || '', order.taskId || order.id, pin);
     if (result.success) {
@@ -141,7 +153,7 @@ export function DetailScreen({
               {order?.deliveryAddress || 'Sin dirección registrada'}
             </span>
           </div>
-          <button style={{ ...S.btnSecondary, width: '100%', height: 42, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <button onClick={openInMaps} style={{ ...S.btnSecondary, width: '100%', height: 42, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
               strokeLinecap="round" width="13" height="13">
               <polygon points="3 11 22 2 13 21 11 13 3 11"/>
