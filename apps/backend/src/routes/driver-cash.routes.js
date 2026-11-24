@@ -485,7 +485,7 @@ router.post('/:driverId/movements', authenticate, requireTenantAccess, upload.si
       // Tope: una deuda grande creada por el propio repartidor requiere
       // autorización de admin (mismo espíritu que CASHIER_LIMIT en /api/expenses).
       // El staff (admin/manager o manage_driver_cash) no tiene tope.
-      const DRIVER_PAYABLE_LIMIT = 500;
+      const DRIVER_PAYABLE_LIMIT = 5000;
       if (numericAmount > DRIVER_PAYABLE_LIMIT && !isStaff(req.user) && !hasValidOverride(req, 'manage_driver_cash')) {
         return res.status(402).json({
           error: `La deuda excede el límite del repartidor ($${DRIVER_PAYABLE_LIMIT}). Se requiere autorización de admin.`,
