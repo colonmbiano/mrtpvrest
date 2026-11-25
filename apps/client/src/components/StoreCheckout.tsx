@@ -505,7 +505,7 @@ export default function StoreCheckout({
   if (v1Tracking) {
     return (
       <MarketplaceTrackingModal orderId={v1Tracking.orderId} orderNumber={v1Tracking.orderNumber}
-        trackingToken={v1Tracking.trackingToken} fulfillment={v1Tracking.fulfillment ?? null} pickupPin={v1Tracking.pickupPin ?? null} deliveryPin={v1Tracking.deliveryPin ?? null} checkoutUrl={v1Tracking.checkoutUrl ?? null} apiUrl={getMarketplaceApiUrl()} primary={primary}
+        merchantPhone={marketplaceMerchant?.phone} trackingToken={v1Tracking.trackingToken} fulfillment={v1Tracking.fulfillment ?? null} pickupPin={v1Tracking.pickupPin ?? null} deliveryPin={v1Tracking.deliveryPin ?? null} checkoutUrl={v1Tracking.checkoutUrl ?? null} apiUrl={getMarketplaceApiUrl()} primary={primary}
         onClose={() => { setV1Tracking(null); onClose(); }} />
     );
   }

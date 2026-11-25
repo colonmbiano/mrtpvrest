@@ -6,7 +6,7 @@
 // pedidos), consulta con el token de la cuenta del comprador.
 import { useEffect, useState } from 'react';
 import { fetchTracking, isCheckoutUrl, pinForFulfillment, type Fulfillment, type V1Tracking } from '../lib/marketplaceV1Checkout';
-import { fetchTrackingForAccount, FINAL_ORDER_STATUSES as FINAL_STATUSES, ORDER_STATUS_LABEL as STATUS_LABEL } from '../lib/marketplaceOrders';
+import { cancelMyOrder, canCancelOrder, storeWhatsAppUrl, fetchTrackingForAccount, FINAL_ORDER_STATUSES as FINAL_STATUSES, ORDER_STATUS_LABEL as STATUS_LABEL } from '../lib/marketplaceOrders';
 import MarketplaceTrackingMap from './MarketplaceTrackingMap';
 
 const POLL_MS = 15000;
@@ -24,11 +24,14 @@ type Props = {
   checkoutUrl?: string | null;
   apiUrl: string | null;
   primary: string;
+  merchantPhone?: string | null;
   onClose: () => void;
 };
 
-export default function MarketplaceTrackingModal({ orderId, orderNumber, trackingToken, fulfillment, pickupPin, deliveryPin, checkoutUrl, apiUrl, primary, onClose }: Props) {
+export default function MarketplaceTrackingModal({ orderId, orderNumber, trackingToken, fulfillment, pickupPin, deliveryPin, checkoutUrl, apiUrl, primary, merchantPhone, onClose }: Props) {
   const [tracking, setTracking] = useState<V1Tracking | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -48,6 +51,17 @@ export default function MarketplaceTrackingModal({ orderId, orderNumber, trackin
     load();
     return () => { stopped = true; clearInterval(id); };
   }, [apiUrl, orderId, trackingToken]);
+
+  const cancel = async () => {
+    if (cancelling) return;
+    setCancelling(true);
+    const result = await cancelMyOrder(orderId, { apiUrl });
+    setCancelling(false);
+    if ('ok' in result) { setError(result.message); return; }
+    setConfirmCancel(false);
+    setError('');
+    setTracking(current => current ? { ...current, status: 'CANCELLED', courierLocation: null } : current);
+  };
 
   // A domicilio, "listo" significa que la tienda espera al repartidor.
   const label = tracking ? (tracking.status === 'READY' && fulfillment === 'DELIVERY' ? 'Listo, esperando al repartidor'
@@ -93,6 +107,16 @@ export default function MarketplaceTrackingModal({ orderId, orderNumber, trackin
         {tracking?.isStale && (
           <p className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">La ubicación del repartidor no está actualizada.</p>
         )}
+        {storeWhatsAppUrl(merchantPhone) && <a href={storeWhatsAppUrl(merchantPhone)!} target="_blank" rel="noopener noreferrer"
+          className="mb-3 inline-flex min-h-12 items-center rounded-xl border px-4 text-sm font-bold">WhatsApp de la tienda</a>}
+        {tracking && canCancelOrder(tracking.status) && <div className="mb-3">
+          {!confirmCancel ? <button type="button" onClick={() => setConfirmCancel(true)} className="min-h-12 rounded-xl border px-4 font-bold text-red-700">Cancelar pedido</button>
+            : <div className="rounded-xl bg-amber-50 p-3">
+              <p className="text-sm">¿Quieres cancelar este pedido?</p>
+              <button type="button" disabled={cancelling} onClick={cancel} className="mr-3 min-h-12 font-bold text-red-700">Confirmar cancelación</button>
+              <button type="button" disabled={cancelling} onClick={() => setConfirmCancel(false)} className="min-h-12 font-bold">Volver</button>
+            </div>}
+        </div>}
         {error && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {!final && (
           <>

@@ -15,7 +15,7 @@ export type BuyerOrder = {
   currency: string;
   fulfillment: Fulfillment | null;
   placedAt: string;
-  merchant: { name: string; slug: string | null };
+  merchant: { name: string; slug: string | null; phone?: string };
   items: BuyerOrderItem[];
 };
 export type BuyerOrdersPage = { orders: BuyerOrder[]; nextBefore: string | null };
@@ -62,20 +62,22 @@ function parseOrder(value: unknown): BuyerOrder | null {
     fulfillment: value.fulfillment === 'PICKUP' || value.fulfillment === 'DELIVERY' ? value.fulfillment : null,
     placedAt: value.placedAt,
     merchant: { name: typeof merchant.name === 'string' ? merchant.name : '',
-      slug: typeof merchant.slug === 'string' && merchant.slug ? merchant.slug : null },
+      slug: typeof merchant.slug === 'string' && merchant.slug ? merchant.slug : null,
+      ...(typeof merchant.phone === 'string' && /^[1-9]\d{7,14}$/.test(merchant.phone) ? { phone: merchant.phone } : {}) },
     items: items.map(it => ({ menuItemId: it.menuItemId, name: it.name, quantity: it.quantity })),
   };
 }
 
 type Options = { apiUrl: string | null; fetchImpl?: FetchLike };
 
-async function authedGet(path: string, { apiUrl, fetchImpl = fetch }: Options): Promise<{ ok: true; json: unknown } | V1Failure> {
+async function authedGet(path: string, { apiUrl, fetchImpl = fetch }: Options, method = 'GET'): Promise<{ ok: true; json: unknown } | V1Failure> {
   if (!apiUrl) return failure('config', 'Tus pedidos no están disponibles en este entorno.');
   const token = await getBuyerToken({ apiUrl, fetchImpl });
   if (!token) return failure('rejected', 'Inicia sesión para ver tus pedidos.');
   let res: Response;
   try {
     res = await fetchImpl(`${apiUrl}/api/marketplace/v1${path}`, {
+      method,
       cache: 'no-store',
       headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(8000),
@@ -116,4 +118,20 @@ export async function fetchTrackingForAccount(orderId: string, options: Options)
   const result = await authedGet(`/orders/${encodeURIComponent(orderId)}/tracking`, options);
   if (!result.ok) return result.reason === 'rejected' ? failure('rejected', 'No pudimos consultar el seguimiento.') : result;
   return parseTracking(result.json) ?? failure('unavailable', 'Respuesta de seguimiento fuera de contrato.');
+}
+
+
+export const canCancelOrder = (status: string) => status === 'PENDING_PAYMENT' || status === 'PENDING_MERCHANT';
+
+export function storeWhatsAppUrl(phone?: string | null): string | null {
+  return typeof phone === 'string' && /^[1-9]\d{7,14}$/.test(phone) ? 'https://wa.me/' + phone : null;
+}
+
+export async function cancelMyOrder(orderId: string, options: Options): Promise<{ cancelled: true } | V1Failure> {
+  const result = await authedGet(`/orders/${encodeURIComponent(orderId)}/cancel`, options, 'POST');
+  if (!result.ok) return result;
+  if (!isRecord(result.json) || result.json.id !== orderId || result.json.status !== 'CANCELLED') {
+    return failure('unavailable', 'No pudimos confirmar la cancelación. Actualiza el pedido.');
+  }
+  return { cancelled: true };
 }

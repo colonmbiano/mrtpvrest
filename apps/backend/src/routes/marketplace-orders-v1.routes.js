@@ -7,7 +7,7 @@ const { defaultMarketplaceV1Services } = require('../lib/marketplace-v1-prisma')
 // Bearer customer tokens or explicit guest-session buyer handles are supported.
 // Staff sessions and accountId/restaurantId in a body never confer ownership.
 // `buyerOrders` (listForAccount): inyectable en pruebas; si no, el de los servicios v1.
-function createMarketplaceOrdersV1Router({ Router, service, resolveAccount, orchestratorOptions, buyerOptions, buyerOrders } = {}) {
+function createMarketplaceOrdersV1Router({ Router, service, resolveAccount, orchestratorOptions, buyerOptions, buyerOrders, buyerCancellation } = {}) {
   const router = (Router || require('express').Router)();
   const accountFor = resolveAccount || createBuyerAccountResolver({ ...buyerOptions, allowGuest: false });
   let defaultService;
@@ -56,6 +56,25 @@ function createMarketplaceOrdersV1Router({ Router, service, resolveAccount, orch
         return res.status(error.statusCode).json({ error: error.message, errorCode: error.code });
       }
       return res.status(503).json({ error: 'Pedidos temporalmente no disponibles', errorCode: 'ORDERS_UNAVAILABLE' });
+    }
+  });
+
+  router.post('/:id/cancel', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.set('Vary', 'Authorization');
+    const { createBuyerCancellation, BuyerCancelError } = require('../lib/marketplace-buyer-cancel');
+    try {
+      const accountId = req.headers?.authorization !== undefined ? await accountFor(req) : null;
+      if (typeof accountId !== 'string' || accountId.startsWith('guest:')) {
+        throw new BuyerIdentityError('INVALID_BUYER_IDENTITY', 'Inicia sesión para cancelar');
+      }
+      const cancel = buyerCancellation || createBuyerCancellation();
+      return res.json(await cancel({ accountId, orderId: req.params.id, io: req.app?.get?.('io') }));
+    } catch (error) {
+      if (error instanceof BuyerIdentityError || error instanceof BuyerCancelError) {
+        return res.status(error.statusCode).json({ error: error.message, errorCode: error.code });
+      }
+      return res.status(503).json({ error: 'No se pudo procesar la cancelación. Intenta de nuevo.', errorCode: 'CANCELLATION_UNAVAILABLE' });
     }
   });
 
