@@ -15,6 +15,13 @@ export const LOCAL_ORDER_PREFIX = 'local-order-';
 // PENDING_MERCHANT: pedido del marketplace que espera que el comercio lo acepte.
 export const ACTIVE_ORDER_STATUSES = new Set(['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PACKING', 'OPEN', 'ON_THE_WAY', 'PENDING_MERCHANT']);
 
+/** La entrega física no cierra el saldo pendiente de un ticket. */
+export function isOpenTicket(order: { status?: string; paymentStatus?: string }): boolean {
+  return (order.status === 'PENDING_MERCHANT') ||
+    (order.paymentStatus !== 'PAID' && ACTIVE_ORDER_STATUSES.has(order.status ?? '')) ||
+    (order.status === 'DELIVERED' && ['PENDING', 'FAILED'].includes(order.paymentStatus ?? ''));
+}
+
 export function sameOrderScope(a: OrderScope, b: OrderScope): boolean {
   return !!a.restaurantId && !!a.locationId && a.restaurantId === b.restaurantId && a.locationId === b.locationId;
 }
@@ -229,7 +236,7 @@ export function cacheServerOrder(orders: LocalOrders, scope: OrderScope, order: 
 /** Limita SOLO copias de cuentas cerradas ya confirmadas; nunca outbox ni abiertas. */
 export function pruneLocalOrders(orders: LocalOrders): LocalOrders {
   const closed = Object.entries(orders).filter(([, r]) => !r.pending.length &&
-    (r.order.paymentStatus === 'PAID' || !ACTIVE_ORDER_STATUSES.has(r.order.status)))
+    !isOpenTicket(r.order))
     .sort(([, a], [, b]) => Date.parse(b.order.paidAt || b.order.createdAt || '') - Date.parse(a.order.paidAt || a.order.createdAt || ''));
   if (closed.length <= 1000) return orders;
   const expiredKeys = new Set(closed.slice(1000).map(([key]) => key));

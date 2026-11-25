@@ -61,21 +61,6 @@ import ChangeOrderTypeModal from "@/components/pos/ChangeOrderTypeModal";
 import { ORDER_TYPE_BADGE as ORDER_TYPE_LABEL } from "@/lib/orderTypes";
 import { ONLINE_SOURCES, chargeBlockedLabel, isMarketplaceOrder, itemsLocked, kitchenPrintReady } from "@/lib/webOrders";
 
-const ACTIVE_STATUSES = new Set([
-  "PENDING",
-  "CONFIRMED",
-  "PREPARING",
-  "READY",
-  "OPEN",
-  // ON_THE_WAY = pedido asignado a repartidor y en camino. Es el valor real
-  // del enum OrderStatus (antes se listaba "OUT_FOR_DELIVERY", un nombre
-  // fantasma que nunca coincidía, por lo que el pedido asignado desaparecía
-  // de "Tickets abiertos"). Sigue abierto hasta DELIVERED/CANCELLED.
-  "ON_THE_WAY",
-  // Pedido del marketplace que espera que el comercio lo acepte.
-  "PENDING_MERCHANT",
-]);
-
 // Orígenes que cuentan como "pedido web" (tienda en línea, WhatsApp y
 // marketplace): lib/webOrders. WHATSAPP entra para que los pedidos del bridge
 // (packages/wa-orders) aparezcan en el panel "Pedidos Web" y el cajero los
@@ -195,9 +180,9 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
   const fetchOpenOrders = useCallback(async () => {
     try {
       // scope=active → el backend ya filtra a pedidos abiertos (payload chico).
-      // Mantenemos el filtro cliente como red de seguridad.
+      // El repositorio también conserva tickets entregados pendientes de pago.
       const list = await loadOpenOrders(setOpenOrders);
-      setOpenOrders(list.filter((o: any) => ACTIVE_STATUSES.has(o.status)));
+      setOpenOrders(list);
     } catch (err) {
       console.error("Error cargando órdenes abiertas:", err);
     }

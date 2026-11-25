@@ -5,6 +5,29 @@ jest.mock("@/lib/api", () => ({ __esModule: true, default: { get: jest.fn(), pat
 const review = { driverReceipts: [{ driverId: "polo", name: "Polo", expectedCash: 300 }],
   warnings: [], unverifiedPayments: [], unassignedDeliveries: [], missingReceipts: [], responsibles: [] };
 beforeEach(() => { jest.clearAllMocks(); (api.get as jest.Mock).mockResolvedValue({ data: review }); });
+test("permite cerrar con tickets sin cobrar sin obligar a saldarlos ni explicar su permanencia", async () => {
+  (api.get as jest.Mock).mockResolvedValue({ data: { ...review, driverReceipts: [],
+    warnings: [{ code: "UNPAID_ORDERS", count: 2, amount: 500, label: "Pedidos sin cobrar" }] } });
+  const onChange = jest.fn();
+  render(<ShiftControlPanel shiftId="s1" onChange={onChange} />);
+  await waitFor(() => expect(onChange).toHaveBeenLastCalledWith([], "", true));
+  expect(screen.getByText(/Los tickets sin cobrar seguirán pendientes/)).toBeInTheDocument();
+  expect(screen.queryByLabelText(/explica por qué autorizas/)).not.toBeInTheDocument();
+  expect(api.put).not.toHaveBeenCalled();
+  expect(api.patch).not.toHaveBeenCalled();
+});
+
+test("los demás controles del cierre conservan el motivo requerido", async () => {
+  (api.get as jest.Mock).mockResolvedValue({ data: { ...review, driverReceipts: [],
+    warnings: [{ code: "UNPAID_ORDERS", count: 1, label: "Pedidos sin cobrar" },
+      { code: "MISSING_RECEIPTS", count: 1, label: "Gastos sin comprobante" }] } });
+  const onChange = jest.fn();
+  render(<ShiftControlPanel shiftId="s1" onChange={onChange} />);
+  const reason = await screen.findByLabelText(/explica por qué autorizas/);
+  expect(onChange).toHaveBeenLastCalledWith([], "", false);
+  fireEvent.change(reason, { target: { value: "Comprobante pendiente por entregar" } });
+  await waitFor(() => expect(onChange).toHaveBeenLastCalledWith([], "Comprobante pendiente por entregar", true));
+});
 test("no prellena efectivo; exige motivo del faltante y envía el conteo real", async () => {
   const onChange = jest.fn();
   render(<ShiftControlPanel shiftId="s1" onChange={onChange} />);

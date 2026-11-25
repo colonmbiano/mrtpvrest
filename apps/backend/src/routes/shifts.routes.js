@@ -286,6 +286,10 @@ function shiftOrdersWhere(shift) {
   return {
     locationId: shift.locationId,
     status: 'DELIVERED',
+    // Un ticket entregado que sigue esperando depósito no es ingreso del corte.
+    // Los ya reembolsados conservan su ingreso: la devolución se descuenta por
+    // ShiftExpense y excluirlos aquí descontaría ese dinero dos veces.
+    paymentStatus: { in: ['PAID', 'REFUNDED'] },
     // Todas las fuentes de venta real entran al corte (TPV, mesero, tienda
     // online, WhatsApp, kiosko). Dejarlas fuera hacía que su efectivo apareciera
     // como sobrante inexplicable y las ventas totales salieran cortas.
@@ -391,11 +395,18 @@ async function performShiftClose(req, res, shift) {
         if (cut) driversCut += 1;
       }
       const controls = await shiftControlSummary(tx, { ...current, closedAt: now }, restaurantId);
-      const reviewReason = controls.warnings.length ? requiredReason(req.body.closeReviewReason,
+      const reviewReason = controls.warnings.some((w) => w.code !== 'UNPAID_ORDERS') ? requiredReason(req.body.closeReviewReason,
         'Hay pendientes en el turno. Revísalos y explica por qué se cierra con ellos.') : null;
       const orders = await tx.order.findMany({
         where: shiftOrdersWhere({ ...current, closedAt: now }),
-        include: { payments: { select: { method: true, amount: true, status: true } } },
+        // El corte solo usa importes y el detalle de transferencias. Evitar
+        // cargar cada columna del ticket (notas, snapshots y metadatos) por
+        // cada venta mientras mantenemos abierta la transacción de caja.
+        select: {
+          paymentMethod: true, total: true,
+          orderNumber: true, customerName: true, paidAt: true, createdAt: true,
+          payments: { select: { method: true, amount: true, status: true } },
+        },
       });
       const totals = summarizePayments(orders);
       const totalExpenses = current.expenses.reduce((s, e) => s + e.amount, 0);

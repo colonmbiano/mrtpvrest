@@ -150,7 +150,12 @@ router.get('/admin', authenticate, requireTenantAccess, requireRole('ADMIN', 'SU
     );
 
     if (req.query.scope === 'active' || req.query.status === 'active') {
-      where.status = { in: ACTIVE_ORDER_STATUSES };
+      // Los entregados cuyo depósito no ha llegado siguen siendo tickets
+      // pendientes, incluso después del cierre del turno que los creó.
+      where.OR = [
+        { status: { in: ACTIVE_ORDER_STATUSES } },
+        { status: 'DELIVERED', paymentStatus: { in: ['PENDING', 'FAILED'] } },
+      ];
     } else if (isPaidScope && !hasCustomFilter) {
       // `?scope=paid`: tickets ya cobrados del último mes para la pestaña
       // "Cobradas" del TPV. Ventana rodante de 31 días por `paidAt`; si la orden
