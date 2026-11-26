@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Loader2, Mic, MicOff } from "lucide-react";
 import { toast } from "sonner";
 import { Capacitor } from "@capacitor/core";
@@ -13,6 +12,7 @@ import VoiceDictationReviewSheet, {
   type VoiceDictationItem,
   type VoiceReviewHandle,
 } from "./VoiceDictationReviewSheet";
+import BodyPortal from "@/components/ui/BodyPortal";
 
 type SpeechRecognition = any;
 type Status = "idle" | "listening" | "processing" | "error";
@@ -269,9 +269,8 @@ export default function VoiceOrderDictation() {
           como flex item con z-10 crea su propio stacking context. Renderizada
           ahí, la hoja (fixed z-[60]) quedaba atrapada debajo del panel del
           ticket (z-20) y se cortaba a la derecha. */}
-      {reviewOpen &&
-        typeof document !== "undefined" &&
-        createPortal(
+      {reviewOpen && (
+        <BodyPortal>
           <VoiceDictationReviewSheet
             ref={sheetRef}
             transcript={reviewTranscript}
@@ -282,9 +281,9 @@ export default function VoiceOrderDictation() {
             onConfirm={handleConfirm}
             onClose={closeReview}
             onDictateMore={() => startListening(true)}
-          />,
-          document.body,
-        )}
+          />
+        </BodyPortal>
+      )}
     </>
   );
 }

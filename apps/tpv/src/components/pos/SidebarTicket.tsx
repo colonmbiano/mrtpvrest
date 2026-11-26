@@ -9,6 +9,7 @@ import GuestCountModal from "@/components/pos/GuestCountModal";
 import ConfirmModal from "@/components/pos/ConfirmModal";
 import ManagerOverrideModal from "@/components/ManagerOverrideModal";
 import OrderTypeToggle from "@/components/pos/OrderTypeToggle";
+import BodyPortal from "@/components/ui/BodyPortal";
 import { buildOrderItemsPayload, comboPartsFromCartItem, comboPartsFromOrderItem, quantityModifierSummary } from "@/lib/modifiers";
 import { useAuthStore } from "@/store/authStore";
 import { useTicketStore, type CartItem } from "@/store/ticketStore";
@@ -1489,6 +1490,11 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
           </div>
         </div>
 
+        {/* Modales del ticket → portal a <body>. Este <aside> es z-20 y crea su
+            propio stacking context: montados aquí, sus z-[100..170] solo
+            competían dentro del panel y quedaban DEBAJO de capas globales
+            (OfflineIndicator z-[60] tapaba la X del cobro; FAB móvil z-50). */}
+        <BodyPortal>
         <PaymentModal
           isOpen={showPayment && !isLoanMode}
           orderId={activeOrderId}
@@ -1620,6 +1626,7 @@ export default function SidebarTicket({ onOpenShift, isShiftOpen = true, isLoanM
             if (item) await performRemovePreviousItem(item);
           }}
         />
+        </BodyPortal>
 
       </div>
     </aside>
