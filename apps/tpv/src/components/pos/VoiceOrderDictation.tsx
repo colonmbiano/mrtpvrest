@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, Mic, MicOff } from "lucide-react";
 import { toast } from "sonner";
 import { Capacitor } from "@capacitor/core";
@@ -264,19 +265,26 @@ export default function VoiceOrderDictation() {
         )}
       </button>
 
-      {reviewOpen && (
-        <VoiceDictationReviewSheet
-          ref={sheetRef}
-          transcript={reviewTranscript}
-          items={reviewItems}
-          unresolved={reviewUnresolved}
-          catalog={catalog}
-          listening={active}
-          onConfirm={handleConfirm}
-          onClose={closeReview}
-          onDictateMore={() => startListening(true)}
-        />
-      )}
+      {/* Portal a <body>: este botón vive dentro del header del catálogo, que
+          como flex item con z-10 crea su propio stacking context. Renderizada
+          ahí, la hoja (fixed z-[60]) quedaba atrapada debajo del panel del
+          ticket (z-20) y se cortaba a la derecha. */}
+      {reviewOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <VoiceDictationReviewSheet
+            ref={sheetRef}
+            transcript={reviewTranscript}
+            items={reviewItems}
+            unresolved={reviewUnresolved}
+            catalog={catalog}
+            listening={active}
+            onConfirm={handleConfirm}
+            onClose={closeReview}
+            onDictateMore={() => startListening(true)}
+          />,
+          document.body,
+        )}
     </>
   );
 }
