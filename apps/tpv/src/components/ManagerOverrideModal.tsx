@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Permission, useAuthStore } from '@/store/authStore';
 import useOfflineStore from '@/store/useOfflineStore';
 import NumpadPIN from './NumpadPIN';
+import BodyPortal from '@/components/ui/BodyPortal';
 import { hashPin } from '@/lib/hash';
 import api from '@/lib/api';
 import { setPendingOverride } from '@/lib/overrideTokens';
@@ -110,8 +111,13 @@ export default function ManagerOverrideModal({
     }
   };
 
+  // Portal a <body> + z-[210]: este modal de PIN se abre ENCIMA de otros
+  // modales (Descuento z-[150] dentro del cobro, Compras/Gastos z-[100]) y se
+  // monta como hermano o dentro de ellos. Con z-50 en el árbol quedaba DEBAJO
+  // y el cajero no podía teclear el PIN de autorización.
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <BodyPortal>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[210] p-4">
       <div className="glass rounded-3xl p-8 w-full max-w-sm border border-border shadow-lg glow-orange">
         <h2 className="text-xl font-bold text-foreground mb-2">
           Autorización de Supervisor
@@ -140,5 +146,6 @@ export default function ManagerOverrideModal({
         </button>
       </div>
     </div>
+    </BodyPortal>
   );
 }

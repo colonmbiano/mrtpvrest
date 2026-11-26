@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import useOfflineStore from '@/store/useOfflineStore';
 import NumpadPIN from './NumpadPIN';
+import BodyPortal from '@/components/ui/BodyPortal';
 import { hashPin } from '@/lib/hash';
 import { ShieldCheck } from 'lucide-react';
 
@@ -75,8 +76,13 @@ export default function AdminPinGuardModal({
     }
   };
 
+  // Portal a <body> + z-[210]: se abre ENCIMA de otros modales (p. ej. el de
+  // usuarios en admin, z-[200], que además tiene backdrop-blur) y de paneles
+  // del inicio (z-[100..150]). Con z-50 en el árbol podía quedar debajo.
+  // Mismo criterio que ManagerOverrideModal.
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <BodyPortal>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[210] p-4">
       <div className="glass rounded-3xl p-8 w-full max-w-sm border border-border shadow-lg glow-orange">
         <div className="flex items-center gap-3 mb-2">
           <div
@@ -113,5 +119,6 @@ export default function AdminPinGuardModal({
         </button>
       </div>
     </div>
+    </BodyPortal>
   );
 }
