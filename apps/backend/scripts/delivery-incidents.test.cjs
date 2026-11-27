@@ -117,6 +117,8 @@ function http(f) {
   for (const method of ['get', 'post', 'put', 'delete', 'patch']) router[method] = (route, ...handlers) => routes.push({ method, route, handlers });
   load('../src/routes/delivery.routes.js', {
     express: { Router: () => router }, bcryptjs: {}, jsonwebtoken: {}, '@mrtpvrest/database': { prisma: f.prisma },
+    // Limitador del /login (fuera de alcance aquí): passthrough.
+    'express-rate-limit': () => (req, res, next) => next(),
     '../middleware/auth.middleware': auth, '../utils/dayRange': {},
     '../services/notifications.service': { notifyOrderStatus: async () => {}, sendPushToDriver: async () => {}, notifyDriversNewDeliveryOrder: async () => {} },
     // Consumo de inventario al cobrar: fuera de alcance aquí (ver prueba del servicio abajo).
