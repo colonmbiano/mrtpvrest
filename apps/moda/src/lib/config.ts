@@ -6,6 +6,11 @@
 const FALLBACK = "https://api.mrtpvrest.com";
 const API_KEY = "moda-api-url";
 
+// Origen público del sitio web de MRTPV Retail. Dentro del APK la app corre en
+// https://localhost, así que los archivos que el usuario debe poder descargar
+// (p. ej. la plantilla CSV) se abren desde aquí en el navegador del sistema.
+export const PUBLIC_WEB_URL = (process.env.NEXT_PUBLIC_WEB_URL || "https://moda.mrtpvrest.com").replace(/\/+$/, "");
+
 function isPrivateHost(hostname: string): boolean {
   if (hostname === "localhost" || hostname === "127.0.0.1") return true;
   if (hostname.startsWith("10.") || hostname.startsWith("192.168.")) return true;
